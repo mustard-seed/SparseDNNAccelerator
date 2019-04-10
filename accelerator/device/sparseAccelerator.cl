@@ -19,7 +19,7 @@ typedef struct {
 	int numEncodingBlocksInFilter;
 	int numWeightsInFilter;
 
-	uint1_t fillBankNumber; //Which bank to fill. Either 0 or 1;
+	uint1_t fillSetNumber; //Which bank to fill. Either 0 or 1;
 } t_tokenFillWeightCache;
 
 
@@ -27,16 +27,13 @@ typedef struct {
 	Token used to command draining of the sparse weight cache
 */
 typedef struct {
-	int laneStart; //First lane to be streamed
-	int laneEnd; //Last lane to be streamed
-	int cbStart; //Index of the first encoder block inside each channel to be streamed
-	int cbEnd; //Index of the last encoder block insider each channel to be streamed
+	char laneStart; //First lane to be streamed
+	char laneEnd; //Last lane to be streamed
+	int cbStart; //Index of the first encoder block inside each filter to be streamed
+	int cbEnd; //Index of the last encoder block insider each filter to be streamed
+	int rsIndexOffset; //Index of the start of the filter index stripe (r, s) in the index tensor 
 
-	int R; //Height of the kernel
-	int S; //width of the kernel
-	int CB; //Number of encoding blocks along the channel per filter
-
-	uint1_t drainBankNumber; //Which bank to drain. Either 0 or 1;
+	uint1_t drainSetNumber; //Which bank to drain. Either 0 or 1;
 } t_tokenDrainWeightCache;
 
 
@@ -46,14 +43,16 @@ channel bool channel_tokenFillWeightCacheFinish __attribute__((depth(0)));
 channel t_tokenDrainWeightCache channel_tokenDrainWeightCacheControl __attribute__((depth(0)));
 channel bool channel_tokenDrainWeightCacheFinish __attribute__((depth(0)));
 
+channel t_spWeight channel_sparseWeights[PE_ROWS][PE_COLS] __attribute__((depth(0)));
+
 
 
 /*! Kernel. kernelSparseWeightCache
 	\brief The multibank sparse weight and indices cache 
 */
 __kernel void kernelSparseWeightCache(
-	__global t_spWeight * restrict pSpWeight,
-	__global t_spOffset * restrict pSpOffset 
+	__global short * restrict pSpWeight,
+	__global short * restrict pSpOffset 
 	) 
 {
 	//Declare the buffers
@@ -86,7 +85,7 @@ __kernel void kernelSparseWeightCache(
 			int fillNumWeightsInFilter = tokenFill.numWeightsInFilter;
 			int ddrIndexOffset = ddrIndexStartOffset + (fillNumEncodingBlocksInFilter+1)*fillfilterStart;
 			int ddrWeightOffset = ddrWeightStartOffset + fillNumWeightsInFilter*fillfilterStart;
-			uint1_t fillNumber = tokenFill.fillBankNumber;
+			uint1_t fillSetNumber = tokenFill.fillSetNumber;
 
 			//Move the pointers and the values from the DDR to each lane.
 			for (int iterFilter=fillfilterStart, iterLane=0;
@@ -104,15 +103,15 @@ __kernel void kernelSparseWeightCache(
 					t_spOffset index = pSpOffset[ddrIndexOffset + iterEncodingBlocks]; 
 
 					//Steer to the correct buffer
-					if (fillNumber) {
+					if (fillSetNumber) {
 						bufferWeightIndex1
 						[iterEncodingBlocks & KERNEL_INDEX_CACHE_DEPTH_MASK][iterLane & KERNEL_CACHE_LANE_MASK] 
-						= index;
+						= (t_spOffset) index;
 					}
 					else {
 						bufferWeightIndex0
 						[iterEncodingBlocks & KERNEL_INDEX_CACHE_DEPTH_MASK][iterLane & KERNEL_CACHE_LANE_MASK]
-						 = index;
+						 = (t_spOffset) index;
 					}
 				}
 				offsetFilterEnd = pSpOffset[ddrIndexOffset + iterEncodingBlocks];
@@ -125,19 +124,58 @@ __kernel void kernelSparseWeightCache(
 					 t_spWeight weight = pSpWeight[ddrWeightOffset + iterWeight];
 
 					//Steer to the correct buffer
-					if (fillNumber){
+					if (fillSetNumber){
 						bufferWeightValues1
 						[iterWeight & KERNEL_CACHE_DEPTH_MASK][iterLane & KERNEL_CACHE_LANE_MASK] 
-						= weight;
+						= (t_spWeight) weight;
 					}
 					else {
 						bufferWeightValues0
 						[iterWeight & KERNEL_CACHE_DEPTH_MASK][iterLane & KERNEL_CACHE_LANE_MASK] 
-						= weight;
+						= (t_spWeight) weight;
 					}
 				}
 			}
-			write_channel_nb_intel(channel_tokenFillWeightCacheFinish, true);
+			write_channel_nb_intel(channel_tokenFillWeightCacheFinish, true & 0x1);
+		}
+
+		if (requestDrain){
+			//Unpack the control information required for draining
+			int drainRSIndexOffset = tokenDrain.rsIndexOffset;
+			char drainLaneStart = tokenDrain.laneStart;
+			char drainLaneEnd = tokenDrain.laneEnd;
+			char drainCbStart = tokenDrain.cbStart;
+			char drainCbEnd = tokenDrain.cbEnd;
+			char drainSetNumber = tokenDrain.drainSetNumber;
+
+			for (char iterLane=0; iterLane<KERNEL_CACHE_LANES; iterLane++){
+				//if (iterLane>=drainLaneStart && iterLane<drainLaneEnd){
+					for (int iterIndex=drainRSIndexOffset+drainCbStart;
+							iterIndex<drainRSIndexOffset+drainLaneEnd;
+							iterIndex++
+						) {
+						if (drainSetNumber) {
+							t_spOffset index = bufferWeightIndex1
+							[iterIndex & KERNEL_INDEX_CACHE_DEPTH_MASK][iterLane & KERNEL_CACHE_LANE_MASK];
+							t_spWeight weight = bufferWeightValues1
+							[index & KERNEL_INDEX_CACHE_DEPTH_MASK][iterLane & KERNEL_CACHE_LANE_MASK];
+							write_channel_intel(channel_sparseWeights[iterLane & KERNEL_CACHE_LANE_MASK][0]
+								, weight);
+
+						} 
+						else {
+							t_spOffset index = bufferWeightIndex0
+							[iterIndex & KERNEL_INDEX_CACHE_DEPTH_MASK][iterLane & KERNEL_CACHE_LANE_MASK];
+							t_spWeight weight = bufferWeightValues0
+							[index & KERNEL_INDEX_CACHE_DEPTH_MASK][iterLane & KERNEL_CACHE_LANE_MASK];
+							write_channel_intel(channel_sparseWeights[iterLane & KERNEL_CACHE_LANE_MASK][0]
+								, weight);
+
+						}
+					}
+				//}
+			}
+			write_channel_nb_intel(channel_tokenDrainWeightCacheFinish, true & 0x1);
 		}
 	}
 }
