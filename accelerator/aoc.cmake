@@ -14,7 +14,8 @@ function(add_hw_emulation_target)
 
     list (APPEND occflags -v -report -march=emulator -emulator-channel-depth-model=strict -fp-relaxed -DEMULATOR
                 -o ${target_name_local}
-                -I ${add_hw_emulation_target_HEADER_DIR})
+                -I ${add_hw_emulation_target_HEADER_DIR}
+                -I $ENV{INTELFPGAOCLSDKROOT}/include/kernel_headers)
 
     if ("${add_hw_emulation_target_RTL_LIB}" STREQUAL "")
     else()
@@ -45,7 +46,8 @@ function(add_hw_report_target)
     
     list (APPEND occflags -v -report -c -fp-relaxed
                 -o ${target_name_local}
-                -I ${add_hw_report_target_HEADER_DIR})
+                -I ${add_hw_report_target_HEADER_DIR}
+                -I $ENV{INTELFPGAOCLSDKROOT}/include/kernel_headers)
 
     if ("${add_hw_report_target_RTL_LIB}" STREQUAL "")
     else()
@@ -76,7 +78,8 @@ function(add_hw_profile_target)
     
     list (APPEND occflags -v -report -fp-relaxed -profile -high-effort
                 -o ${target_name_local}
-                -I ${add_hw_profile_target_HEADER_DIR})
+                -I ${add_hw_profile_target_HEADER_DIR}
+                -I $ENV{INTELFPGAOCLSDKROOT}/include/kernel_headers)
 
     if ("${add_hw_emulation_target_RTL_LIB}" STREQUAL "")
     else()
@@ -107,7 +110,8 @@ function(add_hw_release_target)
     
     list (APPEND occflags -v -report -fp-relaxed -high-effort
                 -o ${target_name_local}
-                -I ${add_hw_release_target_HEADER_DIR})
+                -I ${add_hw_release_target_HEADER_DIR}
+                -I $ENV{INTELFPGAOCLSDKROOT}/include/kernel_headers)
 
     if ("${add_hw_release_target_RTL_LIB}" STREQUAL "")
     else()

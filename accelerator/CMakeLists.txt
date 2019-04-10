@@ -131,31 +131,34 @@ file(GLOB_RECURSE kernel_files
 add_hw_emulation_target (
     TARGET_NAME ${PROJECT_NAME} 
     SOURCES_LIST ${kernel_files} 
-    HEADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/common/include 
+    HEADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/common/inc 
     RTL_DIR ${rtl_directory} 
     #RTL_LIB ${rtl_lib})
+    )
 
 add_hw_report_target (
     TARGET_NAME ${PROJECT_NAME} 
     SOURCES_LIST ${kernel_files} 
-    HEADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/common/include 
+    HEADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/common/inc
     RTL_DIR ${rtl_directory} 
     #RTL_LIB ${rtl_lib})
+    )
 
 add_hw_profile_target (
     TARGET_NAME ${PROJECT_NAME} 
     SOURCES_LIST ${kernel_files} 
-    HEADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/common/include
+    HEADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/common/inc
     RTL_DIR ${rtl_directory} 
     #RTL_LIB ${rtl_lib})
+    )
 
 add_hw_release_target (
     TARGET_NAME ${PROJECT_NAME} 
     SOURCES_LIST ${kernel_files} 
-    HEADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/common/include
+    HEADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/common/inc
     RTL_DIR ${rtl_directory} 
     #RTL_LIB ${rtl_lib})
-
+    )
 
 
 
