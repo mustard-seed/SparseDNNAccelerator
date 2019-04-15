@@ -54,7 +54,7 @@ typedef struct {
 	*/
 	int cbStart; 
 	/*
-	Index of the last encoder block plus one inside the each lane's index cache line to be streamed
+    Index of the last encoder block plus one inside each lane's index cache line to be streamed
 	*/
 	int cbEnd; //Index of the last encoder block insider each filter to be streamed 
 
@@ -93,7 +93,7 @@ __kernel void kernelSparseWeightDMA()
         short numFiltersToStream = token.numFiltersToStream;
         unsigned int filterStart = token.filterStart;
         unsigned int cbStart = token.cbStart;
-        unsigned int cbEnd = token.cbEnd;
+        unsigned int cbEnd = token.cbEnd + 1;
         unsigned short numCbToStream = (unsigned short)(cbEnd- cbStart + 1);
         unsigned int numEncodingBlocksInFilter = token.numEncodingBlocksInFilter;
         unsigned int numWeightsInFilter = token.numWeightsInFilter;
@@ -200,17 +200,12 @@ __kernel void kernelSparseWeightFeeder()
 	//Unpack the control information required for draining
 	short drainCbStartReg;
 	short drainCbEndReg;
-	int drainWeightIndexStartReg;
-	int drainWeightIndexEndReg;
 
 	t_tokenDrainWeightCache tokenDrain;
 	uint1_t requestDrainSelect;
-	t_packetDMAToWeightFeeder inputPacket;
 
 	t_spOffset laneHeadOffset;
-
 	t_spOffset drainIterIndexReg;
-
 	t_spOffset drainEndIndexReg;
 
 	#pragma ivdep array(bufferWeightValues)
