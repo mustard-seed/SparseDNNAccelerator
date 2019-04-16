@@ -1,79 +1,9 @@
-#include "ihc_apint.h"
+#ifndef WEIGHT_MEMORY_KERNEL_DEF
+#define WEIGHT_MEMORY_KERNEL_DEF
 #include "params.hpp"
+#include "device_structures.hpp"
+#include "channels.cl"
 
-//Must include the following line in order to use channel
-#pragma OPENCL EXTENSION cl_intel_channels : enable
-
-typedef short t_spWeight;
-typedef ushort t_spOffset;
-
-/*! t_tokenFillWeightCache
-	Token used to command filling of the sparse weight cache
-*/
-typedef struct {
-	__global volatile short * restrict pMem; //Pointer to the start of the global memory
-    unsigned int ddrKernelIndexStartOffset; //Word offset of the indices of the kernel relative to the start of the global memory
-    unsigned int ddrKernelWeightStartOffset; //Word offset of the weights of the kernel relative to the start of the global memory
-    unsigned int filterStart; //Index of the first filter to be streamed into the cache
-    short int numFiltersToStream;
-    unsigned int cbStart; //The first encoded block to be streamed. Index 0 corresponds to the beginning of the row
-    unsigned int cbEnd; //The last encoded block to be streamed. Index 0 corresponds to the beginning of the row
-
-    unsigned int numEncodingBlocksInFilter; //Number of encoding blocks in a filter. R*S*CB
-    unsigned int numWeightsInFilter; //Number of weights in a filter, if no compression is applied. R*S*C
-
-	//uint1_t fillSetNumber; //Which bank to fill. Either 0 or 1;
-} t_tokenFillWeightCache;
-
-
-typedef union {
-	t_spWeight weightAndOffset;
-	t_spOffset offset;
-} u_index_data;
-
-/*! t_packetDMAToWeightFeeder
-	Structure encapsulating the data from the Sparse Weight DMA to the Sparse Weight feeders
-*/
-typedef struct {
-	u_index_data packet;
-	short laneNumber;
-	short depth;
-	uint1_t isIndex;
-} t_packetDMAToWeightFeeder;
-
-
-/*! t_tokenDrainWeightCache
-	Token used to command draining of the sparse weight cache
-*/
-typedef struct {
-	char laneStart; //First lane to be streamed
-	char laneEnd; //Last lane to be streamed
-	/*
-	Index of the first encoder block inside each lane's index cache line to be streamed. 
-	The block at the start of the cache line has index 0
-	*/
-	int cbStart; 
-	/*
-    Index of the last encoder block plus one inside each lane's index cache line to be streamed
-	*/
-	int cbEnd; //Index of the last encoder block insider each filter to be streamed 
-
-	//uint1_t drainSetNumber; //Which bank to drain. Either 0 or 1;
-} t_tokenDrainWeightCache;
-
-
-channel t_tokenFillWeightCache channel_spWeightDMA __attribute__((depth(0)));
-
-channel t_packetDMAToWeightFeeder channel_packetDMAToWeightFeeder [KERNEL_CACHE_LANES] __attribute__((depth(0)));
-channel uint1_t channel_packetDMAToWeightFeederLoopBack __attribute__((depth(0)));
-
-channel t_tokenDrainWeightCache channel_tokenDrainWeightCacheControl[KERNEL_CACHE_LANES] __attribute__((depth(0)));
-channel bool channel_tokenDrainWeightCacheFinish[KERNEL_CACHE_LANES] __attribute__((depth(0)));
-
-channel uint1_t channel_spWeightFeederDrainSelect [KERNEL_CACHE_LANES] __attribute__((depth(0)));
-channel uint1_t channel_spWeightFeederDrainSelectLoopBack __attribute__((depth(0)));
-
-channel t_spWeight channel_sparseWeights[PE_ROWS][PE_COLS] __attribute__((depth(0)));
 
 
 
@@ -81,26 +11,28 @@ channel t_spWeight channel_sparseWeights[PE_ROWS][PE_COLS] __attribute__((depth(
 */
 
 __attribute__((max_global_work_dim(0)))
-__attribute__((autorun))
-__kernel void kernelSparseWeightDMA()
+
+__kernel void kernelSparseWeightDMA(
+        __global volatile short * restrict pMem)
 {
 	bool request;
 	t_tokenFillWeightCache token = read_channel_nb_intel(channel_spWeightDMA, &request);
 	if (request){
-		__global volatile short * restrict pMem = token.pMem;
         unsigned int ddrKernelIndexStartOffset = token.ddrKernelIndexStartOffset;
         unsigned int ddrKernelWeightStartOffset = token.ddrKernelWeightStartOffset;
-        short numFiltersToStream = token.numFiltersToStream;
-        unsigned int filterStart = token.filterStart;
-        unsigned int cbStart = token.cbStart;
-        unsigned int cbEnd = token.cbEnd + 1;
+        unsigned char numFiltersToStream = token.numFiltersToStream;
+        unsigned short filterStart = token.filterStart;
+        unsigned short cbStart = token.cbStart;
+        unsigned short cbEnd = token.cbEnd + 1;
         unsigned short numCbToStream = (unsigned short)(cbEnd- cbStart + 1);
-        unsigned int numEncodingBlocksInFilter = token.numEncodingBlocksInFilter;
+        unsigned short numEncodingBlocksInFilter = token.numEncodingBlocksInFilter;
         unsigned int numWeightsInFilter = token.numWeightsInFilter;
 
         unsigned int tokenCount=0;
         unsigned int numTokenToCollect=0;
-        for (unsigned int laneID=0, iterFilter=filterStart;
+        unsigned char laneID = 0;
+        unsigned short iterFilter;
+        for (laneID=0, iterFilter=filterStart;
             laneID < numFiltersToStream;
 			laneID++, iterFilter++){
 
@@ -108,13 +40,13 @@ __kernel void kernelSparseWeightDMA()
             t_spOffset offsetEnd;
             t_spOffset numWeightsToStream;
 
-            short depth;
+            unsigned short depth;
 
 			//	First obtain the indicies, then stream it
 			//	Then obtain the weights
             depth=0;
             for (unsigned int ddrAddress=ddrKernelIndexStartOffset+iterFilter*numEncodingBlocksInFilter+cbStart;
-                depth < (short) numCbToStream;
+                depth < (unsigned short) numCbToStream;
                 depth++, ddrAddress++)
 			{
                 bool loopBackTokenRead;
@@ -186,7 +118,7 @@ __attribute__((num_compute_units(KERNEL_CACHE_LANES)))
 __kernel void kernelSparseWeightFeeder() 
 {
 	enum e_states {IDLE, STREAM_HEAD_SETUP, STREAM_START_SETUP, STREAM_END_SETUP, STREAM, STREAM_COMMIT_WAIT, STREAM_COMMIT_WRITE};
-	enum e_states state = IDLE, next_state;
+    enum e_states state = IDLE;
 	int laneID = get_compute_id(0);
 
 	//Declare the buffers
@@ -198,8 +130,8 @@ __kernel void kernelSparseWeightFeeder()
 
 	//Internal registers
 	//Unpack the control information required for draining
-	short drainCbStartReg;
-	short drainCbEndReg;
+    unsigned short drainCbStartReg;
+    unsigned short drainCbEndReg;
 
 	t_tokenDrainWeightCache tokenDrain;
 	uint1_t requestDrainSelect;
@@ -273,10 +205,13 @@ __kernel void kernelSparseWeightFeeder()
 					}
 
 					if (laneID>=tokenDrain.laneStart && laneID<tokenDrain.laneEnd){
-						drainCbStartReg = tokenDrain.cbStart;
-						drainCbEndReg = tokenDrain.cbEnd;
+                        drainCbStartReg = (unsigned short) tokenDrain.cbStart;
+                        drainCbEndReg = (unsigned short) tokenDrain.cbEnd;
 						state = STREAM_HEAD_SETUP; //State update
 					}
+                    else {
+                        state = STREAM_COMMIT_WAIT;
+                    }
 				}
 				break;
 			case (STREAM_HEAD_SETUP):
@@ -318,3 +253,4 @@ __kernel void kernelSparseWeightFeeder()
 
 		}
 }
+#endif
