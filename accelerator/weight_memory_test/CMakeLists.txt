@@ -104,7 +104,7 @@ if ("${intelfpga_host_libraries}" STREQUAL "")
         )
     #Need to remove the newline, or the make file will complain "missing separator"
     string(REGEX REPLACE "\n$" "" aocl_link_config "${aocl_link_config}")
-    set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${aocl_link_config}")
+    target_link_libraries(${TEST_NAME}_host ${aocl_link_config})
 else()
     target_link_libraries(${TEST_NAME}_host
          ${intelfpga_host_libraries}
@@ -127,12 +127,13 @@ include (${PROJECT_SOURCE_DIR}/aoc.cmake)
 
 # Find the kernel source files. Note, GLOB isn't the recommended way. One needs to touch the CMakesList.txt to effect changes
 file(GLOB_RECURSE kernel_files
-     ${PROJECT_SOURCE_DIR}/device/*.cl
+     ${PROJECT_SOURCE_DIR}/device/sparseWeightMemory.cl
      ${CMAKE_CURRENT_SOURCE_DIR}/sparseWeightMemoryTest.cl
 )
 
-add_hw_emulation_target (
+add_aoc_target (
     TARGET_NAME ${TEST_NAME}
+    TARGET_TYPE EMULATION
     SOURCES_LIST ${kernel_files} 
     HEADER_DIR ${PROJECT_SOURCE_DIR}/device
     RTL_DIR ${rtl_directory}
@@ -140,8 +141,9 @@ add_hw_emulation_target (
     #RTL_LIB ${rtl_lib})
     )
 
-add_hw_report_target (
+add_aoc_target (
     TARGET_NAME ${TEST_NAME}
+    TARGET_TYPE RTL_ONLY
     SOURCES_LIST ${kernel_files} 
     HEADER_DIR ${PROJECT_SOURCE_DIR}/device
     RTL_DIR ${rtl_directory} 
@@ -149,8 +151,9 @@ add_hw_report_target (
     #RTL_LIB ${rtl_lib})
     )
 
-add_hw_profile_target (
+add_aoc_target (
     TARGET_NAME ${TEST_NAME}
+    TARGET_TYPE NORMAL_HW
     SOURCES_LIST ${kernel_files} 
     HEADER_DIR ${PROJECT_SOURCE_DIR}/device
     RTL_DIR ${rtl_directory} 
@@ -158,8 +161,9 @@ add_hw_profile_target (
     #RTL_LIB ${rtl_lib})
     )
 
-add_hw_release_target (
+add_aoc_target (
     TARGET_NAME ${TEST_NAME}
+    TARGET_TYPE PROFILE_HW
     SOURCES_LIST ${kernel_files} 
     HEADER_DIR ${PROJECT_SOURCE_DIR}/device
     RTL_DIR ${rtl_directory} 
