@@ -4,9 +4,9 @@
 #include "device_structures.hpp"
 #include "channels.cl"
 
+#pragma OPENCL EXTENSION cl_intel_channels : enable
 
-
-
+//channel t_spWeightAndOffset channel_sparseWeights[PE_ROWS] __attribute__((depth(0)));
 /*! Kernel. DMA for the kernelSparseWeightCache
 */
 
@@ -69,6 +69,7 @@ __kernel void kernelSparseWeightDMA(
                 if (loopBackTokenRead){
                     tokenCount++;
                 }
+                mem_fence(CLK_CHANNEL_MEM_FENCE);
 			}
             numTokenToCollect += (unsigned int) numCbToStream;
             numWeightsToStream = offsetEnd - offsetHead;
@@ -78,7 +79,7 @@ __kernel void kernelSparseWeightDMA(
                  depth < (short) numWeightsToStream;
                  depth++, ddrAddress++) {
                 bool loopBackTokenRead;
-                t_spWeight weight = (t_spWeight) pMem[ddrAddress];
+                t_spWeightAndOffset weight = (t_spWeightAndOffset) pMem[ddrAddress];
                 u_index_data data;
                 data.weightAndOffset = weight;
                 t_packetDMAToWeightFeeder packet;
@@ -91,6 +92,7 @@ __kernel void kernelSparseWeightDMA(
                 if (loopBackTokenRead){
                     tokenCount++;
                 }
+                mem_fence(CLK_CHANNEL_MEM_FENCE);
             }
 
             numTokenToCollect += (unsigned int) numWeightsToStream;
@@ -102,7 +104,9 @@ __kernel void kernelSparseWeightDMA(
             if (loopBackTokenRead){
                 tokenCount++;
             }
+            mem_fence(CLK_CHANNEL_MEM_FENCE);
         }
+        write_channel_intel(channel_spWeightDMACommit, 0x1);
 	} 
 
 }
@@ -122,7 +126,7 @@ __kernel void kernelSparseWeightFeeder()
 	int laneID = get_compute_id(0);
 
 	//Declare the buffers
-	__local t_spWeight  __attribute__ ((numbanks(2), bankwidth(2))) bufferWeightValues [KERNEL_CACHE_DEPTH][2];
+	__local t_spWeightAndOffset  __attribute__ ((numbanks(2), bankwidth(2))) bufferWeightValues [KERNEL_CACHE_DEPTH][2];
 	__local t_spOffset __attribute__ ((numbanks(2), bankwidth(2))) bufferWeightIndex [KERNEL_INDEX_CACHE_DEPTH][2];
 
 	//Register controlling the drain select
@@ -134,7 +138,7 @@ __kernel void kernelSparseWeightFeeder()
     unsigned short drainCbEndReg;
 
 	t_tokenDrainWeightCache tokenDrain;
-	uint1_t requestDrainSelect;
+	//uint1_t requestDrainSelect;
 
 	t_spOffset laneHeadOffset;
 	t_spOffset drainIterIndexReg;
@@ -183,19 +187,19 @@ __kernel void kernelSparseWeightFeeder()
 					, &requestDrain
 				);
 
-				requestDrainSelect = read_channel_nb_intel(
+				read_channel_nb_intel(
 					channel_spWeightFeederDrainSelect[laneID]
 					, &isDrainSelect
 				);
 
 						//Swap the drain/fill side if requested
 				if (isDrainSelect){
-					drainSelectReg = requestDrainSelect;
+					drainSelectReg = ~drainSelectReg;
 					if (laneID < KERNEL_CACHE_LANES-1) {
-						write_channel_intel(channel_spWeightFeederDrainSelect[laneID+1], requestDrainSelect);
+						write_channel_intel(channel_spWeightFeederDrainSelect[laneID+1], 0x1);
 					}
 					else {
-						write_channel_intel(channel_spWeightFeederDrainSelectLoopBack, 1);
+						write_channel_intel(channel_spWeightFeederDrainSelectCommit, 1);
 					}
 				}
 
@@ -229,10 +233,13 @@ __kernel void kernelSparseWeightFeeder()
 				state = STREAM;
 				break;
 			case (STREAM):
-
+#ifndef INCLUDE_COMPUTE_CORE
+				write_channel_intel(channel_sparseWeights[laneID & KERNEL_CACHE_LANE_MASK]
+						, bufferWeightValues [drainIterIndexReg & KERNEL_INDEX_CACHE_DEPTH_MASK][drainSelectReg & 0x1]);
+#else
 				write_channel_intel(channel_sparseWeights[laneID & KERNEL_CACHE_LANE_MASK][0]
 						, bufferWeightValues [drainIterIndexReg & KERNEL_INDEX_CACHE_DEPTH_MASK][drainSelectReg & 0x1]);
-
+#endif
 				if (drainIterIndexReg+1 == drainEndIndexReg) {
 					state = STREAM_COMMIT_WAIT;
 				}
@@ -240,12 +247,17 @@ __kernel void kernelSparseWeightFeeder()
 				break;
 			case (STREAM_COMMIT_WAIT):
 				if (laneID > 0){
-					read_channel_intel(channel_tokenDrainWeightCacheFinish[laneID-1 & KERNEL_CACHE_LANE_MASK]);
+					read_channel_intel(channel_drainWeightCacheInternalCommit[laneID-1 & KERNEL_CACHE_LANE_MASK]);
 				}
 				state = STREAM_COMMIT_WRITE;
 				break;
 			case (STREAM_COMMIT_WRITE):
-				write_channel_intel(channel_tokenDrainWeightCacheFinish[laneID & KERNEL_CACHE_LANE_MASK], true & 0x1);
+				if (laneID < KERNEL_CACHE_LANES - 1){
+					write_channel_intel(channel_drainWeightCacheInternalCommit[laneID & KERNEL_CACHE_LANE_MASK], true & 0x1);
+				}
+				else{
+					write_channel_intel(channel_drainWeightCacheCommit, true & 0x1);
+				}
 				state = IDLE;
 				break;
 			}

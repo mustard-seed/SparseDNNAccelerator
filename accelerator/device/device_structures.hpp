@@ -1,9 +1,12 @@
 #ifndef STRUCTURES_HPP_DEF
 #define STRUCTURES_HPP_DEF
 #include "ihc_apint.h"
+#include "params.hpp"
 
-typedef short t_spWeight;
+typedef short t_spWeightAndOffset;
 typedef unsigned short t_spOffset;
+typedef uint4_t t_zCount;
+typedef uint12_t t_weight;
 
 /*! t_tokenFillWeightCache
     Token used to command filling of the sparse weight cache
@@ -24,7 +27,7 @@ typedef struct {
 
 
 typedef union {
-    t_spWeight weightAndOffset;
+    t_spWeightAndOffset weightAndOffset;
     t_spOffset offset;
 } u_index_data;
 
@@ -57,4 +60,21 @@ typedef struct {
 
     //uint1_t drainSetNumber; //Which bank to drain. Either 0 or 1;
 } t_tokenDrainWeightCache;
+
+/*! t_instruction
+ * \brief VLIW instructions for controlling the accelerator
+ */
+typedef struct {
+    unsigned char words[INSTRUCTION_SIZE];
+} t_instruction;
+
+#ifdef WEIGHT_MEMORY_TEST
+typedef struct {
+  unsigned int ddrKernelWeightStartOffset; //Offset of the start of the tensor in DDR
+  unsigned short filterStart; //The first filter (i.e. matrix row) to be collected
+  unsigned short numFiltersToCollect; //Number of filters (i.e. matrix row to collect)
+  uint18_t numWeightsInFilter; //Number of weights in the filter if it were uncompressed 
+
+  } t_weightCollectToken;
+#endif
 #endif

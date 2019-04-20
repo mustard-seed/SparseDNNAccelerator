@@ -1,9 +1,641 @@
 #include "params.hpp"
 #include "device_structures.hpp"
 #include "channels.cl"
+#include "ihc_apint.h"
 //Must include the following line in order to use channel
 #pragma OPENCL EXTENSION cl_intel_channels : enable
 
+#if KERNEL_CACHE_LANES > 8
+#error "Too many cache lanes for the test case! Maximal is 8"
+#endif
+#if MAX_INSTRUCTION_TYPE_BITS == 16
+#elif MAX_INSTRUCTION_TYPE_BITS == 8
+#else
+#error "Invalid number of inflight instructions. Only supports 8 or 16"    
+#endif 
 
 
 
+
+void checkCommits (uint2_t* pInstrInFlightCount) {
+  bool read;
+  read_channel_nb_intel(channel_spWeightDMACommit, &read);
+  if (read) {
+    pInstrInFlightCount[OPCODE_FILL_WEIGHT_BUFFER] -= 0x1; 
+  }
+
+  read_channel_nb_intel(channel_drainWeightCacheCommit, &read);
+  if (read) {
+    pInstrInFlightCount[OPCODE_DRAIN_WEIGHT_BUFFER] -= 0x1; 
+  }
+
+  read_channel_nb_intel(channel_spWeightFeederDrainSelectCommit, &read);
+  if (read) {
+    pInstrInFlightCount[OPCODE_SWAP_WEIGHT_BUFFER] -= 0x1; 
+  }
+
+  read_channel_nb_intel(channel_weightCollectControlCommit, &read);
+  if (read) {
+    pInstrInFlightCount[OPCODE_COLLECT_WEIGHT] -= 0x1; 
+  }
+}
+
+__attribute__((max_global_work_dim(0)))
+__kernel void kernelSequencer(
+        __global volatile t_instruction* restrict pInstruction,
+        unsigned short numInstructions
+        )
+{
+
+      uint2_t instructionInFlightCount[MAX_INSTRUCTION_TYPE_BITS];
+
+      //Initialization loop
+      for (unsigned char iter=0;
+          iter < MAX_INSTRUCTION_TYPE_BITS;
+          iter++) {
+        instructionInFlightCount[iter] = 0x0;
+      }
+
+      //Read the instructions sequentially
+      for (unsigned short iterInstruction=0;
+           iterInstruction<numInstructions;
+           iterInstruction++) {
+
+          t_instruction instruction = pInstruction[iterInstruction];
+
+          //Scan the dependency and the header
+          //Then wait for the dependency to be met before issuing the instruction
+          unsigned short dependency =
+          ((unsigned short) instruction.words[INSTRUCTION_DEPENDENCY_HIGH_OFFSET]) << 8 &   
+          (unsigned short) instruction.words[INSTRUCTION_DEPENDENCY_LOW_OFFSET];
+
+          unsigned char header = 
+          (unsigned char) instruction.words[INSTRUCTION_HEADER_OFFSET];
+
+          uint1_t wait = 0x1;
+          while (wait){
+            uint1_t wait_next = 0;
+
+            checkCommits(instructionInFlightCount);
+
+            //Check the dependency
+            #pragma unroll
+            for (unsigned char iter=0;
+                iter < MAX_INSTRUCTION_TYPE_BITS;
+                iter++){
+              wait_next |= 
+                ((dependency & (0x1 << iter)) >> iter) & 
+                (instructionInFlightCount[iter] > 0);   
+            }
+            wait = wait_next || (instructionInFlightCount[header] == 3);
+          }
+
+          mem_fence(CLK_CHANNEL_MEM_FENCE);
+
+          //Issue the instructions minus the dependency
+          instructionInFlightCount[header] += 0x1;
+          for (unsigned char iter=INSTRUCTION_SIZE-1;
+            iter > INSTRUCTION_DEPENDENCY_HIGH_OFFSET;
+            iter-- ){
+
+            checkCommits(instructionInFlightCount);
+
+            //Send the instructions
+            write_channel_intel(channel_instructions[0], instruction.words[iter]);
+            mem_fence(CLK_CHANNEL_MEM_FENCE);
+          }
+      }
+
+      //Wait for outstanding commands to finish
+      uint1_t wait = 0x1;
+      while (wait){
+        uint1_t wait_next = 0;
+        checkCommits(instructionInFlightCount);
+
+        //Check the dependency
+        #pragma unroll
+        for (unsigned char iter=0;
+            iter < MAX_INSTRUCTION_TYPE_BITS;
+            iter++){
+          wait_next |= 
+            (instructionInFlightCount[iter] > 0);   
+        }
+        wait = wait_next;
+      }
+}
+
+/*! Kernel. weightCollector
+    \brief Collects the sparse weights and store them to cache
+*/
+ void weightCollector(
+      __global short * restrict pMem,
+      unsigned char laneID
+    )
+{
+    enum e_states {IDLE, STREAM, COMMIT_WAIT, COMMIT};
+    enum e_states state=IDLE;
+
+    uint18_t weightIndexLast;
+    uint18_t weightIndexTracker;
+    unsigned int weightAddressOffset;
+    bool collectWeightRequest;
+    bool previousCollectCommit;
+    bool weightReadSuccess;
+    bool commitSuccess;
+
+    t_spWeightAndOffset weightAndOffset;
+    t_zCount zCount;
+    short weight;
+
+    while (1) {
+      t_weightCollectToken controlToken
+           = read_channel_nb_intel(channel_weightCollectControl[laneID], &collectWeightRequest);
+      
+      if (collectWeightRequest && (laneID < KERNEL_CACHE_LANES - 1)) {
+          write_channel_intel(channel_weightCollectControl[laneID+1], controlToken);
+      }
+
+      switch (state) {
+        case (IDLE):
+          if (collectWeightRequest && laneID < controlToken.numFiltersToCollect) {
+
+              weightAddressOffset = 
+                controlToken.ddrKernelWeightStartOffset
+                + (unsigned int) controlToken.numWeightsInFilter 
+                * ( (unsigned int) controlToken.filterStart + (unsigned int) laneID );
+
+              weightIndexTracker=0;
+              weightIndexLast = controlToken.numWeightsInFilter;
+
+              state = STREAM;
+          } 
+          break;
+        case (STREAM):
+              //Wait for weight-offset tuple to arrive
+              weightAndOffset = 
+                read_channel_nb_intel(channel_sparseWeights[laneID], &weightReadSuccess);
+
+              if (weightReadSuccess){
+                //Parse the offset and the weight
+                zCount = (weightAndOffset & WEIGHT_ZCOUNT_MASK)
+                                    >> WEIGHT_ZCOUNT_BITOFFSET;
+                weight = (weightAndOffset & WEIGHT_MASK)
+                                    >> WEIGHT_BITOFFSET;
+
+                
+                //Move the weight 
+                pMem[weightAddressOffset] = weight;
+
+                //Update the index tracker
+                weightIndexTracker += weightIndexTracker 
+                              + (uint18_t) 0X1
+                              + (uint18_t) zCount;
+                weightAndOffset++;
+
+                if (weightIndexTracker == weightIndexLast){
+                  state = COMMIT_WAIT;
+                }
+              }
+          break;
+        case (COMMIT_WAIT):
+              if (laneID > 0){
+                read_channel_nb_intel (
+                  channel_weightCollectControlCommitInternal[laneID-1],
+                  &previousCollectCommit);
+                if (previousCollectCommit) {
+                  state = COMMIT;
+                }
+              }
+        case (COMMIT):
+              if (laneID < KERNEL_CACHE_LANES - 1) {
+                  commitSuccess = write_channel_nb_intel(
+                    channel_weightCollectControlCommitInternal[laneID],
+                    0x1);
+                }
+              else {
+                  commitSuccess = write_channel_nb_intel(
+                    channel_weightCollectControlCommit,
+                    0x1);
+              }
+              if (commitSuccess){
+                  state = IDLE;
+              }
+          break;
+      }
+    }
+}
+
+#define COLLECTOR_GEN(copy) \
+\
+__kernel void kernelWeightCollector ## copy  (\
+    __global short * restrict pMem \
+    ) { \
+    weightCollector(pMem, copy); \
+  }
+
+COLLECTOR_GEN(0)
+
+#if KERNEL_CACHE_LANES > 1
+  COLLECTOR_GEN(1)
+#endif
+#if KERNEL_CACHE_LANES > 2
+  COLLECTOR_GEN(2)
+#endif
+#if KERNEL_CACHE_LANES > 3
+  COLLECTOR_GEN(3)
+#endif
+#if KERNEL_CACHE_LANES > 4
+  COLLECTOR_GEN(4)
+#endif
+#if KERNEL_CACHE_LANES > 5
+  COLLECTOR_GEN(5)
+#endif
+#if KERNEL_CACHE_LANES > 6
+  COLLECTOR_GEN(6)
+#endif
+#if KERNEL_CACHE_LANES > 7
+  COLLECTOR_GEN(7)
+#endif
+
+/*! transport_fill_weight_buffer
+    \brief The instruction transport module of fill_weight_buffer command
+    \details Assumption of the order in which instruction arrive
+    Each instruction contains 25 bytes
+    t0  Insruction[24], Header (1)
+    t1 - t4: Instruction[23] - Instruction[20], numWeightsInFilter (4)
+    t5 - t8: Instruction[19]-[18], numEncodingBlocks (2)
+    t9 - t10: Instruction[17]-[16], cbEnd (2)
+    t11 - t12: Instruction[15]-[14], cbStart (2)
+    t13: Instruction[13], numFilterToStream (1)
+    t14: Instruction[12]-[11], filterStart (2)
+    t15: Instruction[10]-[7], ddrKernelWeightStartOffset (4)
+    t16: Instruction[6]-[3], ddrKernelIndexStartOffset (4)
+
+*/
+__attribute__((max_global_work_dim(0)))
+__attribute__((autorun))
+__kernel void transport_fill_weight_buffer ()
+{
+  unsigned char wordCount=0;
+  unsigned char header = 0x0;
+  bool readNewByte;
+
+   while (1) {
+      unsigned char word = read_channel_nb_intel(channel_instructions[TRANSPORT_ID_FILL_WEIGHT_BUFFER], &readNewByte);
+      
+      t_tokenFillWeightCache token;
+
+      if (readNewByte) {
+        if (TRANSPORT_ID_FILL_WEIGHT_BUFFER + 0x1 < NUM_TRANSPORTS) {
+            write_channel_intel(channel_instructions[TRANSPORT_ID_FILL_WEIGHT_BUFFER + 0x1], word);
+        }
+
+        switch (wordCount) {
+          case 0:
+            header = word;
+            if (header == OPCODE_FILL_WEIGHT_BUFFER) {
+              wordCount +=0x1;
+            }
+            break;
+
+          case 1:
+            token.numWeightsInFilter = ((unsigned int) word) << 24;
+            wordCount += 0x1;
+            break;
+
+          case 2:
+            token.numWeightsInFilter = token.numWeightsInFilter | ( ((unsigned int) word) << 16 );
+            wordCount += 0x1;
+            break;
+
+          case 3:
+            token.numWeightsInFilter = token.numWeightsInFilter | ( ((unsigned int) word) << 8 );
+            wordCount += 0x1;
+            break;
+
+          case 4:
+            token.numWeightsInFilter = token.numWeightsInFilter | ( ((unsigned int) word) );
+            wordCount += 0x1;
+            break;
+
+          case 5:
+            token.numEncodingBlocksInFilter = ((unsigned short) word) << 8;
+            wordCount += 0x1;
+            break;
+
+          case 6:
+            token.numEncodingBlocksInFilter = token.numWeightsInFilter | ( ((unsigned short) word) );
+            wordCount += 0x1;
+            break;
+
+          case 7:
+            token.cbEnd = ((unsigned short) word) << 8;
+            wordCount += 0x1;
+            break;
+
+          case 8:
+            token.cbEnd = token.cbEnd | ( ((unsigned short) word) );
+            wordCount += 0x1;
+            break;
+
+          case 9:
+            token.cbStart = ((unsigned short) word) << 8;
+            wordCount += 0x1;
+            break;
+
+          case 10:
+            token.cbStart = token.cbStart | ( ((unsigned short) word) );
+            wordCount += 0x1;
+            break;
+
+          case 11:
+            token.numFiltersToStream =  (unsigned char) word;
+            wordCount += 0x1;
+            break;
+
+          case 12:
+            token.filterStart = ((unsigned short) word) << 8;
+            wordCount += 0x1;
+            break;
+
+          case 13:
+            token.filterStart = token.filterStart | ( ((unsigned short) word) );
+            wordCount += 0x1;
+            break;
+
+          case 14:
+            token.ddrKernelWeightStartOffset = ((unsigned int) word) << 24;
+            wordCount += 0x1;
+            break;
+
+          case 15:
+            token.ddrKernelWeightStartOffset = token.ddrKernelWeightStartOffset | ( ((unsigned int) word) << 16 );
+            wordCount += 0x1;
+            break;
+
+          case 16:
+            token.ddrKernelWeightStartOffset = token.ddrKernelWeightStartOffset | ( ((unsigned int) word) << 8 );
+            wordCount += 0x1;
+            break;
+
+          case 17:
+            token.ddrKernelWeightStartOffset = token.ddrKernelWeightStartOffset | ( ((unsigned int) word) );
+            wordCount += 0x1;
+            break;
+
+          case 18:
+            token.ddrKernelWeightStartOffset = ((unsigned int) word) << 24;
+            wordCount += 0x1;
+            break;
+
+          case 19:
+            token.ddrKernelIndexStartOffset = token.ddrKernelIndexStartOffset | ( ((unsigned int) word) << 16 );
+            wordCount += 0x1;
+            break;
+
+          case 20:
+            token.ddrKernelIndexStartOffset = token.ddrKernelIndexStartOffset | ( ((unsigned int) word) << 8 );
+            wordCount += 0x1;
+            break;
+
+          case 21:
+            token.ddrKernelIndexStartOffset = token.ddrKernelIndexStartOffset | ( ((unsigned int) word) );
+            wordCount = 0x0;
+
+            write_channel_intel(channel_spWeightDMA, token);
+            wordCount = 0x0;
+            break;
+
+          case (COMMAND_SIZE_BYTES-1):
+            wordCount = 0x0;
+            break;
+
+          default:
+            wordCount += 0x1; 
+
+        }
+      }
+   }
+}
+
+/*! transport_drain_weight_buffer
+    \brief The instruction transport module of drain_weight_buffer command
+
+*/
+__attribute__((max_global_work_dim(0)))
+__attribute__((autorun))
+__kernel void transport_drain_weight_buffer ()
+{
+  unsigned char wordCount=0;
+  unsigned char header = 0x0;
+  bool readNewByte;
+
+   while (1) {
+      unsigned char word = read_channel_nb_intel(channel_instructions[TRANSPORT_ID_DRAIN_WEIGHT_BUFFER], &readNewByte);
+      
+      t_tokenDrainWeightCache token;
+
+      if (readNewByte) {
+        if (TRANSPORT_ID_DRAIN_WEIGHT_BUFFER + 0x1 < NUM_TRANSPORTS) {
+            write_channel_intel(channel_instructions[TRANSPORT_ID_DRAIN_WEIGHT_BUFFER + 0x1], word);
+        }
+
+        switch (wordCount) {
+          case 0:
+            header = word;
+            if (header == OPCODE_DRAIN_WEIGHT_BUFFER) {
+              wordCount += 0x1;
+            }
+            break;
+
+          case 1:
+            token.cbEnd = ((unsigned short) word) << 8;
+            wordCount += 0x1;
+            break;
+
+          case 2:
+            token.cbEnd = token.cbEnd | ((unsigned short) word);
+            wordCount += 0x1;
+            break;
+
+          case 3:
+            token.cbStart = ((unsigned short) word) << 8;
+            wordCount += 0x1;
+            break;
+
+          case 4:
+            token.cbStart = token.cbStart | ( ((unsigned short) word) );
+            wordCount += 0x1;
+            break;
+
+          case 5:
+            token.laneEnd = ((unsigned char) word);
+            wordCount += 0x1;
+            break;
+
+          case 6:
+            token.laneStart = ((unsigned char) word);
+            wordCount += 0x1;
+
+            write_channel_intel(channel_tokenDrainWeightCacheControl[0], token);
+            break;
+
+          case (COMMAND_SIZE_BYTES-1):
+            wordCount = 0x0;
+            break;
+
+          default:
+            wordCount += 0x1; 
+
+        }
+      }
+   }
+}
+
+/*! transport_collect_weights
+    \brief The instruction transport module of collect_weights command
+
+*/
+__attribute__((max_global_work_dim(0)))
+__attribute__((autorun))
+__kernel void transport_collect_weights ()
+{
+  unsigned char wordCount=0;
+  unsigned char header = 0x0;
+  bool readNewByte;
+
+   while (1) {
+      unsigned char word = read_channel_nb_intel(channel_instructions[TRANSPORT_ID_COLLECT_WEIGHT], &readNewByte);
+      
+      t_weightCollectToken token;
+
+      if (readNewByte) {
+        if (TRANSPORT_ID_COLLECT_WEIGHT + 0x1 < NUM_TRANSPORTS) {
+            write_channel_intel(channel_instructions[TRANSPORT_ID_COLLECT_WEIGHT + 0x1], word);
+        }
+
+        switch (wordCount) {
+          case 0:
+            header = word;
+            if (header == OPCODE_COLLECT_WEIGHT) {
+              wordCount += 0x1;
+            }
+            break;
+
+          case 1:
+            token.numWeightsInFilter = (uint18_t) (((unsigned int) word) << 16);
+            wordCount += 0x1;
+            break;
+
+          case 2:
+            token.numWeightsInFilter = token.numWeightsInFilter | 
+                            (uint18_t) (((unsigned int) word) << 8);
+            wordCount += 0x1;
+            break;
+
+          case 3:
+            token.numWeightsInFilter = token.numWeightsInFilter | 
+                            ((uint18_t) word);
+            wordCount += 0x1;
+            break;
+
+          case 4:
+            token.numFiltersToCollect = ((unsigned short) word) << 0x8;
+            wordCount += 0x1;
+            break;
+
+          case 5:
+            token.numFiltersToCollect = token.numFiltersToCollect 
+                                        | ((unsigned short) word);
+            wordCount += 0x1;
+            break;
+
+          case 6:
+            token.filterStart = ((unsigned short) word) << 0x8;
+            wordCount += 0x1;
+            break;
+
+          case 7:
+            token.filterStart = token.filterStart 
+                                        | ((unsigned short) word);
+            wordCount += 0x1;
+            break;
+
+          case 8:
+            token.ddrKernelWeightStartOffset = ((unsigned int) word) << 24;
+            wordCount += 0x1;
+            break;
+
+          case 9:
+            token.ddrKernelWeightStartOffset 
+                    = token.ddrKernelWeightStartOffset | (((unsigned int) word) << 16);
+            wordCount += 0x1;
+            break;
+
+          case 10:
+            token.ddrKernelWeightStartOffset 
+                    = token.ddrKernelWeightStartOffset | (((unsigned int) word) << 8);
+            wordCount += 0x1;
+            break;
+
+          case 11:
+            token.ddrKernelWeightStartOffset 
+                    = token.ddrKernelWeightStartOffset | ((unsigned int) word);
+            wordCount += 0x1;
+            write_channel_intel(channel_weightCollectControl[0], token);
+            break;
+
+          case (COMMAND_SIZE_BYTES-1):
+            wordCount = 0x0;
+            break;
+
+          default:
+            wordCount += 0x1; 
+
+        }
+      }
+   }
+}
+
+/*! transport_drain_weight_select
+    \brief The instruction transport module of drain_weight_swap command
+
+*/
+__attribute__((max_global_work_dim(0)))
+__attribute__((autorun))
+__kernel void transport_drain_weights_select ()
+{
+  unsigned char wordCount=0;
+  unsigned char header = 0x0;
+  bool readNewByte;
+
+   while (1) {
+      unsigned char word = read_channel_nb_intel(channel_instructions[TRANSPORT_ID_SWAP_WEIGHT_BUFFER], &readNewByte);
+      
+      uint1_t token;
+
+      if (readNewByte) {
+        if (TRANSPORT_ID_SWAP_WEIGHT_BUFFER + 0x1 < NUM_TRANSPORTS) {
+            write_channel_intel(channel_instructions[TRANSPORT_ID_SWAP_WEIGHT_BUFFER + 0x1], word);
+        }
+
+        switch (wordCount) {
+          case 0:
+            header = word;
+            if (header == OPCODE_SWAP_WEIGHT_BUFFER) {
+              wordCount += 0x1;
+              write_channel_intel(channel_spWeightFeederDrainSelect[0], 0x1);
+            }
+            break;
+
+          case (COMMAND_SIZE_BYTES-1):
+            wordCount = 0x0;
+            break;
+
+          default:
+            wordCount += 0x1; 
+
+        }
+      }
+   }
+}
