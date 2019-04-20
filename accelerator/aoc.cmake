@@ -1,5 +1,24 @@
-# Functions used to generate the hardware targets
-
+# Function: add_aoc_target
+# Purpose: Generates Intel FPGA aoc compiler targets
+# TARGET_NAME: Single valued, required. Prefix assigned to the compiler target
+# TARGET_TYPE: Single valued, required. Type of the aoc target. Valid options are EMULATION, RTL_ONLY, PROFILE_HW, and NORMAL_HW, and RELEASE_HW.
+#              EMULATION -- The OpenCL kernels will be compiled as an x86 program with debug symbols to be executed on the CPU. 
+#                           Useful for validating the correctness of the kernels.
+#                           The target's name and the output aocx name end with "_aoc_emulation"
+#              RTL_ONLY -- The aoc compiler will stop after generating the RTL and the early compilation report.
+#                          The target's name and the output aocx name end with "_aoc_rtl_only"
+#              PROFILE_HW -- The aoc compiler will add performance counters and go through place and route to generate an FPGA
+#                            bitstream. The target's name and the output aocx name end with "_aoc_profile_hw"
+#              NORMAL_HW -- The aoc compiler will go through place and route to generate an FPGA
+#                            bitstream. The target's name and the output aocx name end with "_aoc_normal_hw"
+#              RELEASE_HW -- The aoc compiler will go through place and route to generate an FPGA
+#                            bitstream with high placement and routing effort. The target's name and the output aocx name end with
+#                            "_aoc_normal_hw" 
+# HEADER_DIR:  Single valued, optional. Custom header include path for the compiler to see. There is no need to pass <INTELFPGAOCLSDKROOT>/include/kernel_headers via this argument
+# RTL_DIR:     Single valued, optional. Directory of the custom RTL library path. Must be supplied if RTL_LIB is specified
+# RTL_LIB:     Single valued, optional. Name of the RTL library. Must be supplied if RTL_DIR is specified.
+# SOURCES_LIST: List, required. List of OpenCL kernel files (*.cl) to be compiled.
+# PREPROCESSOR_DEFS_LIST: List, optional. List of preprocessor definition flags. e.g. {-DMY_MACRO1=xxxx -DMY_MACRO2=yyy}             
 function (add_aoc_target)
     set (options )
     set (oneValueArgs TARGET_NAME TARGET_TYPE HEADER_DIR RTL_DIR RTL_LIB)
@@ -10,8 +29,13 @@ function (add_aoc_target)
     #Initialize the aoc compilation flags with the common elements for all compilation targets
     list (APPEND occflags -v -report -fp-relaxed
             ${add_aoc_target_PREPROCESSOR_DEFS_LIST}
-            -I ${add_aoc_target_HEADER_DIR}
-            -I $ENV{INTELFPGAOCLSDKROOT}/include/kernel_headers)       
+            -I $ENV{INTELFPGAOCLSDKROOT}/include/kernel_headers)   
+
+    # Add the custom header if needed to
+    if ("${add_aoc_target_HEADER_DIR}" STREQUAL "")
+    else()
+        list (APPEND occflags -I ${add_aoc_target_HEADER_DIR} )
+    endif()    
     
     #Check whether a valid build type is selected
     if ("${add_aoc_target_TARGET_TYPE}" STREQUAL "EMULATION")
@@ -21,6 +45,7 @@ function (add_aoc_target)
                 -march=emulator 
                 -emulator-channel-depth-model=strict
                 -DEMULATOR
+                -g
                 -o ${target_name_local}
              )
     elseif("${add_aoc_target_TARGET_TYPE}" STREQUAL "RTL_ONLY")
@@ -59,6 +84,7 @@ function (add_aoc_target)
     list(REMOVE_DUPLICATES add_aoc_target_SOURCES_LIST)
     list(SORT add_aoc_target_SOURCES_LIST)
 
+    #Add the library for custom RTL if needed
     if ("${add_hw_emulation_target_RTL_LIB}" STREQUAL "")
     else()
         list (APPEND occflags -I ${add_hw_profile_target_RTL_DIR} -L ${add_hw_profile_target_RTL_DIR}
