@@ -65,7 +65,7 @@ __kernel void kernelSparseWeightDMA(
                 if (depth == (short) (numCbToStream - 1)) {
                     offsetEnd = index;
                 }
-                read_channel_nb_intel(channel_packetDMAToWeightFeederLoopBack, &loopBackTokenRead);
+                uint1_t token = read_channel_nb_intel(channel_packetDMAToWeightFeederLoopBack, &loopBackTokenRead);
                 if (loopBackTokenRead){
                     tokenCount++;
                 }
@@ -88,7 +88,7 @@ __kernel void kernelSparseWeightDMA(
                 packet.laneNumber = (short) laneID;
                 packet.packet = data;
                 write_channel_intel(channel_packetDMAToWeightFeeder[0], packet);
-                read_channel_nb_intel(channel_packetDMAToWeightFeederLoopBack, &loopBackTokenRead);
+                uint1_t token = read_channel_nb_intel(channel_packetDMAToWeightFeederLoopBack, &loopBackTokenRead);
                 if (loopBackTokenRead){
                     tokenCount++;
                 }
@@ -100,7 +100,7 @@ __kernel void kernelSparseWeightDMA(
         //Wait for all the tokens to arrive
         while (tokenCount < numTokenToCollect){
             bool loopBackTokenRead;
-            read_channel_nb_intel(channel_packetDMAToWeightFeederLoopBack, &loopBackTokenRead);
+            uint1_t token = read_channel_nb_intel(channel_packetDMAToWeightFeederLoopBack, &loopBackTokenRead);
             if (loopBackTokenRead){
                 tokenCount++;
             }
@@ -187,7 +187,7 @@ __kernel void kernelSparseWeightFeeder()
 					, &requestDrain
 				);
 
-				read_channel_nb_intel(
+				uint1_t token = read_channel_nb_intel(
 					channel_spWeightFeederDrainSelect[laneID]
 					, &isDrainSelect
 				);
@@ -247,7 +247,7 @@ __kernel void kernelSparseWeightFeeder()
 				break;
 			case (STREAM_COMMIT_WAIT):
 				if (laneID > 0){
-					read_channel_intel(channel_drainWeightCacheInternalCommit[laneID-1 & KERNEL_CACHE_LANE_MASK]);
+					uint1_t token = read_channel_intel(channel_drainWeightCacheInternalCommit[laneID-1 & KERNEL_CACHE_LANE_MASK]);
 				}
 				state = STREAM_COMMIT_WRITE;
 				break;

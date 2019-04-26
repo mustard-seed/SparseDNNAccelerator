@@ -65,7 +65,10 @@ typedef struct {
  * \brief VLIW instructions for controlling the accelerator
  */
 typedef struct {
-    unsigned char words[INSTRUCTION_SIZE];
+    unsigned char header;
+    unsigned char instructionSizeBytes;
+    unsigned char dependencyList[DEPENDENCY_LIST_SIZE_BYTE];
+    unsigned char words[INSTRUCTION_SIZE_BYTE];
 } t_instruction;
 
 #ifdef WEIGHT_MEMORY_TEST

@@ -26,7 +26,7 @@ channel t_spWeightAndOffset channel_sparseWeights[PE_ROWS] __attribute__((depth(
 
 #ifdef WEIGHT_MEMORY_TEST
 // In the weight memory test, there are 4 types of instructions
-channel char channel_instructions[4] __attribute__((depth(16)));
+channel unsigned short channel_instructions[4] __attribute__((depth(16)));
 
 channel t_weightCollectToken channel_weightCollectControl[KERNEL_CACHE_LANES] __attribute__((depth(0)));
 channel uint1_t channel_weightCollectControlCommitInternal[KERNEL_CACHE_LANES-1] __attribute__((depth(0))); 
