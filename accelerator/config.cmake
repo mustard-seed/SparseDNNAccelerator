@@ -18,7 +18,7 @@ if (NOT GLOBAL_CONFIG_SET)
 # RelWithDebInfo
 ###############################################
 
-    set(CMAKE_BUILD_TYPE Release)
+    set(CMAKE_BUILD_TYPE Debug)
     
     set(CMAKE_EXPORT_COMPILE_COMMANDS TRUE)
     if (CMAKE_BUILD_TYPE MATCHES "Debug")
@@ -37,7 +37,7 @@ if (NOT GLOBAL_CONFIG_SET)
     set(WARNING_FLAGS "-Wall -W -Wno-unused-parameter -Werror=format-security -Werror=implicit-function-declaration -Wl,-z,now -Wl,-z,relro") #  -Wl,-z,defs would prevent underlinking, but doesn't play nice with ROS/Catkin
     #set(OPTIMIZATION_FLAGS "-pipe -Og") # -O2 is required for -D_FORTIFY_SOURCE=2, but would obfuscate debugging
     if (CMAKE_BUILD_TYPE MATCHES "Debug")
-        set(OPTIMIZATION_DEBUG_FLAGS "-pipe -Og")
+        set(OPTIMIZATION_DEBUG_FLAGS "-pipe -Og -g")
     else(CMAKE_BUILD_TYPE MATCHES "Debug")
         set(OPTIMIZATION_DEBUG_FLAGS "-pipe -O3")
     endif(CMAKE_BUILD_TYPE MATCHES "Debug")

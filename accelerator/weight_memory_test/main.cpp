@@ -1,437 +1,746 @@
-// Copyright (C) 2013-2017 Altera Corporation, San Jose, California, USA. All rights reserved.
-// Permission is hereby granted, free of charge, to any person obtaining a copy of this
-// software and associated documentation files (the "Software"), to deal in the Software
-// without restriction, including without limitation the rights to use, copy, modify, merge,
-// publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to
-// whom the Software is furnished to do so, subject to the following conditions:
-// The above copyright notice and this permission notice shall be included in all copies or
-// substantial portions of the Software.
-// 
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
-// OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-// NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
-// HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
-// WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
-// OTHER DEALINGS IN THE SOFTWARE.
-// 
-// This agreement shall be governed in all respects by the laws of the State of California and
-// by the laws of the United States of America.
-
-///////////////////////////////////////////////////////////////////////////////////
-// This host program executes a vector addition kernel to perform:
-//  C = A + B
-// where A, B and C are vectors with N elements.
-//
-// This host program supports partitioning the problem across multiple OpenCL
-// devices if available. If there are M available devices, the problem is
-// divided so that each device operates on N/M points. The host program
-// assumes that all devices are of the same type (that is, the same binary can
-// be used), but the code can be generalized to support different device types
-// easily.
-//
-// Verification is performed against the same computation on the host CPU.
-///////////////////////////////////////////////////////////////////////////////////
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include "CL/opencl.h"
-#include "AOCLUtils/aocl_utils.h"
+#include "CL/cl.hpp"
+#include "AOCLUtilsCpp/aocl_utils_cpp.hpp"
+#include "params.hpp"
+#include <vector>
+#include <algorithm>
+#include <cassert>
+#include <iostream>
+#include <string> //for std::to_string
+#include "device_structures.hpp"
+#include "boost/align/aligned_allocator.hpp"
+#include <unistd.h> //usleep
+#include <random>
 
-using namespace aocl_utils;
+#define MATRIX_ROWS 100
+#define MATRIX_COLS 100
+#define SEED 10
+#define BERN_P 0.1
 
-// OpenCL runtime configuration
-cl_platform_id platform = NULL;
-unsigned num_devices = 0;
-scoped_array<cl_device_id> device; // num_devices elements
-cl_context context = NULL;
-scoped_array<cl_command_queue> queue; // num_devices elements
-cl_program program = NULL;
-scoped_array<cl_kernel> kernel; // num_devices elements
-#if USE_SVM_API == 0
-scoped_array<cl_mem> input_a_buf; // num_devices elements
-scoped_array<cl_mem> input_b_buf; // num_devices elements
-scoped_array<cl_mem> output_buf; // num_devices elements
-#endif /* USE_SVM_API == 0 */
+typedef
+std::vector<unsigned short, boost::alignment::aligned_allocator<unsigned short, aocl_utils_cpp::AOCL_ALIGNMENT>>
+aligned_short_vector;
 
-// Problem data.
-unsigned N = 1000000; // problem size
-#if USE_SVM_API == 0
-scoped_array<scoped_aligned_ptr<float> > input_a, input_b; // num_devices elements
-scoped_array<scoped_aligned_ptr<float> > output; // num_devices elements
-#else
-scoped_array<scoped_SVM_aligned_ptr<float> > input_a, input_b; // num_devices elements
-scoped_array<scoped_SVM_aligned_ptr<float> > output; // num_devices elements
-#endif /* USE_SVM_API == 0 */
-scoped_array<scoped_array<float> > ref_output; // num_devices elements
-scoped_array<unsigned> n_per_device; // num_devices elements
 
-// Function prototypes
-float rand_float();
-bool init_opencl();
-void init_problem();
-void run();
+/*! \brief Initialize the matrix
+*/
+void matrix_initialization ( std::vector<char> & _matrix);
+
+/*! \brief Compresses a given 2D matrix.
+*/
+void matrix_compression (std::vector<char> & _matrix,
+    unsigned int numberOfWeightsPerRow,
+    unsigned int numberOfRows,
+    unsigned int cbPerRow,
+    aligned_short_vector &outEffectualValues,
+    aligned_short_vector &outCBOffets
+  );
+
+/*! \brief Comppare the output matrix with the original matrix
+    \return True if the two matrices match. False otherwise.
+*/
+bool check_matrix (aligned_short_vector &originalMatrix,
+  aligned_short_vector &originalIndex,
+  aligned_short_vector &outputMatrix,
+  unsigned int numberOfRow,
+  unsigned int numberOfWeightsPerRow,
+  unsigned int cbPerRow
+  );
+
+/*!
+ * \brief clInit
+ * \details Set up the OpenCL context, creates the command queue, and create the kernels
+ * \param binaryFile
+ * \return The status code
+ */
+cl_int clInit (const std::string binaryFile,
+               cl::Platform &clPlatform,
+               cl::Context & clContext,
+               cl::Device & clDevice,
+               cl::CommandQueue & clDMAQueue,
+               cl::CommandQueue & clSequencerQueue,
+               std::vector<cl::CommandQueue> & clCollectorQueue,
+               cl::Kernel & krnSpWDMA,
+               cl::Kernel & krnSequencer,
+               std::vector<cl::Kernel> & krnWeightCollectorVec);
+
+t_instruction cmdGenFillWeightBuffer(
+        unsigned int ddrIndexOffset,
+        unsigned int ddrWeightOffset,
+        unsigned short filterStart,
+        unsigned char numFilterToStream,
+        unsigned short cbStart,
+        unsigned short cbEnd,
+        unsigned short numCbInFilter,
+        unsigned int nWInFilter
+        );
+
+
+t_instruction cmdGenDrainWeightBuffer(
+        unsigned char laneStart,
+        unsigned char laneEnd,
+        unsigned short cbStart,
+        unsigned short cbEnd
+        );
+
+t_instruction cmdGenCollectWeight(
+        unsigned int ddrWeightOffset,
+        unsigned short filterStart,
+        unsigned short numFiltersToCollect,
+        unsigned int numWeightInFilter
+        );
+
+t_instruction cmdGentWeightBufferSwap();
+
 void cleanup();
 
-// Entry point.
-int main(int argc, char **argv) {
-  Options options(argc, argv);
+int main(int argc, char* argv[]) {
 
-  // Optional argument to specify the problem size.
-  if(options.has("n")) {
-    N = options.get<unsigned>("n");
-  }
+    aocl_utils_cpp::Options options(argc, argv);
 
-  // Initialize OpenCL.
-  if(!init_opencl()) {
-    return -1;
-  }
+    std::string binaryFile;
 
-  // Initialize the problem data.
-  // Requires the number of devices to be known.
-  init_problem();
-
-  // Run the kernel.
-  run();
-
-  // Free the resources allocated
-  cleanup();
-
-  return 0;
-}
-
-/////// HELPER FUNCTIONS ///////
-
-// Randomly generate a floating-point number between -10 and 10.
-float rand_float() {
-  return float(rand()) / float(RAND_MAX) * 20.0f - 10.0f;
-}
-
-// Initializes the OpenCL objects.
-bool init_opencl() {
-  cl_int status;
-
-  printf("Initializing OpenCL\n");
-
-  if(!setCwdToExeDir()) {
-    return false;
-  }
-
-  // Get the OpenCL platform.
-  platform = findPlatform("Intel");
-  if(platform == NULL) {
-    printf("ERROR: Unable to find Intel FPGA OpenCL platform.\n");
-    return false;
-  }
-
-  // Query the available OpenCL device.
-  device.reset(getDevices(platform, CL_DEVICE_TYPE_ALL, &num_devices));
-  printf("Platform: %s\n", getPlatformName(platform).c_str());
-  printf("Using %d device(s)\n", num_devices);
-  for(unsigned i = 0; i < num_devices; ++i) {
-    printf("  %s\n", getDeviceName(device[i]).c_str());
-  }
-
-  // Create the context.
-  context = clCreateContext(NULL, num_devices, device, &oclContextCallback, NULL, &status);
-  checkError(status, "Failed to create context");
-
-  // Create the program for all device. Use the first device as the
-  // representative device (assuming all device are of the same type).
-  std::string binary_file = getBoardBinaryFile("vector_add", device[0]);
-  printf("Using AOCX: %s\n", binary_file.c_str());
-  program = createProgramFromBinary(context, binary_file.c_str(), device, num_devices);
-
-  // Build the program that was just created.
-  status = clBuildProgram(program, 0, NULL, "", NULL, NULL);
-  checkError(status, "Failed to build program");
-
-  // Create per-device objects.
-  queue.reset(num_devices);
-  kernel.reset(num_devices);
-  n_per_device.reset(num_devices);
-#if USE_SVM_API == 0
-  input_a_buf.reset(num_devices);
-  input_b_buf.reset(num_devices);
-  output_buf.reset(num_devices);
-#endif /* USE_SVM_API == 0 */
-
-  for(unsigned i = 0; i < num_devices; ++i) {
-    // Command queue.
-    queue[i] = clCreateCommandQueue(context, device[i], CL_QUEUE_PROFILING_ENABLE, &status);
-    checkError(status, "Failed to create command queue");
-
-    // Kernel.
-    const char *kernel_name = "vector_add";
-    kernel[i] = clCreateKernel(program, kernel_name, &status);
-    checkError(status, "Failed to create kernel");
-
-    // Determine the number of elements processed by this device.
-    n_per_device[i] = N / num_devices; // number of elements handled by this device
-
-    // Spread out the remainder of the elements over the first
-    // N % num_devices.
-    if(i < (N % num_devices)) {
-      n_per_device[i]++;
+    if(options.has("help")) {
+        std::cout<<"Usage: "<<argv[0]
+        <<" -aocx=<abs path to .aocx>"<<std::endl;
+        return 1;
     }
 
-#if USE_SVM_API == 0
-    // Input buffers.
-    input_a_buf[i] = clCreateBuffer(context, CL_MEM_READ_ONLY, 
-        n_per_device[i] * sizeof(float), NULL, &status);
-    checkError(status, "Failed to create buffer for input A");
+    if (options.has("aocx")) {
+        binaryFile = options.get<std::string>("aocx");
+      }
+      else {
+        std::cout<<"Error: aocx file path is not supplied"<<std::endl;
+        return 1;
+      }
 
-    input_b_buf[i] = clCreateBuffer(context, CL_MEM_READ_ONLY, 
-        n_per_device[i] * sizeof(float), NULL, &status);
-    checkError(status, "Failed to create buffer for input B");
 
-    // Output buffer.
-    output_buf[i] = clCreateBuffer(context, CL_MEM_WRITE_ONLY, 
-        n_per_device[i] * sizeof(float), NULL, &status);
-    checkError(status, "Failed to create buffer for output");
-#else
-    cl_device_svm_capabilities caps = 0;
+    std::cout <<"Prepare the test matrix"<<std::endl;
+    std::vector<char> matrix;
 
-    status = clGetDeviceInfo(
-      device[i],
-      CL_DEVICE_SVM_CAPABILITIES,
-      sizeof(cl_device_svm_capabilities),
-      &caps,
-      0
-    );
-    checkError(status, "Failed to get device info");
+    aligned_short_vector effectualValues (MATRIX_ROWS * MATRIX_COLS, 0);
+    //effectualValues.reserve(MATRIX_ROWS * MATRIX_COLS);
 
-    if (!(caps & CL_DEVICE_SVM_COARSE_GRAIN_BUFFER)) {
-      printf("The host was compiled with USE_SVM_API, however the device currently being targeted does not support SVM.\n");
-      // Free the resources allocated
-      cleanup();
-      return false;
+
+    aligned_short_vector outputEffectualValues (MATRIX_ROWS * MATRIX_COLS, 0);
+    //outputEffectualValues.reserve(MATRIX_ROWS * MATRIX_COLS);
+
+    unsigned int numberOfWeightsPerRow = MATRIX_COLS;
+
+    unsigned int CBPerRow =
+    (unsigned int) std::ceil( (double) numberOfWeightsPerRow / (double) ENCODING_LENGTH);
+
+    aligned_short_vector cbOffsets ((CBPerRow+1) * MATRIX_ROWS, 0);
+    //cbOffsets.reserve((CBPerRow+1) * MATRIX_COLS);
+
+
+
+
+    matrix_initialization(matrix);
+    matrix_compression(matrix, numberOfWeightsPerRow, MATRIX_ROWS, CBPerRow,
+    effectualValues, cbOffsets);
+
+    /*
+    for (unsigned short j=cbOffsets[98*(CBPerRow+1)]; j<cbOffsets[99*(CBPerRow+1)-1]; j++) {
+    unsigned short valueAndZero = effectualValues[98*numberOfWeightsPerRow + (unsigned int) j];
+    std::cout <<"("<<( (valueAndZero & WEIGHT_ZCOUNT_MASK) >> WEIGHT_ZCOUNT_BITOFFSET )
+              <<" "
+              <<( (valueAndZero & WEIGHT_MASK) >> WEIGHT_BITOFFSET )
+              <<") ";
     }
-#endif /* USE_SVM_API == 0 */
-  }
+    std::cout <<std::endl;
+    */
 
-  return true;
+        std::cout <<"Check the self-consistency of the generated matrix"<<std::endl;
+
+    bool checkResult =
+    check_matrix(
+      effectualValues,
+      cbOffsets,
+      effectualValues,
+      MATRIX_ROWS,
+      MATRIX_COLS,
+      CBPerRow
+      );
+    assert (checkResult);
+
+    //Generate the instructions
+    unsigned int numInstructions;
+    std::vector<t_instruction,
+            boost::alignment::aligned_allocator<t_instruction, aocl_utils_cpp::AOCL_ALIGNMENT>
+            > instructionVector;
+    for (unsigned int r=0; r<MATRIX_ROWS; r+=KERNEL_CACHE_LANES) {
+            t_instruction instructionCollect =
+                cmdGenCollectWeight(
+                    0, //ddrWeightOffset
+                    (unsigned short) r, //filterStart
+                    (unsigned short) (std::min((unsigned short) KERNEL_CACHE_LANES, (unsigned short) (MATRIX_ROWS-r))), //numFiltersToCollect
+                    (unsigned int) MATRIX_COLS //number of uncompressed weights in the filter
+                );
+            instructionVector.push_back(instructionCollect);
+        for (unsigned int c=0; c<CBPerRow; c+= KERNEL_INDEX_CACHE_DEPTH) {
+            t_instruction instructionFill =
+                    cmdGenFillWeightBuffer(
+                            0, //ddrIndexOffset
+                            0, //ddrWeightOffset
+                            (unsigned short) r, //Filter start
+                            (unsigned char) std::min((unsigned char) KERNEL_CACHE_LANES, (unsigned char) (MATRIX_ROWS-r)), //numFilterToStream
+                            (unsigned char) c, //cbStart
+                            (unsigned short) (c + (unsigned int) std::min((unsigned int)KERNEL_INDEX_CACHE_DEPTH - 1, (unsigned int) CBPerRow - c) - 1), //cbEnd
+                            CBPerRow,
+                            MATRIX_COLS
+                        );
+            instructionVector.push_back(instructionFill);
+
+            t_instruction instructionSwap = cmdGentWeightBufferSwap();
+            instructionVector.push_back(instructionSwap);
+
+            t_instruction instructionDrain =
+                   cmdGenDrainWeightBuffer(
+                        0, //laneStart
+                        (unsigned char) std::min((unsigned char) KERNEL_CACHE_LANES, (unsigned char) (MATRIX_ROWS-r)), //laneEnd
+                        0, //cbStart
+                        (unsigned short) (std::min((unsigned int)KERNEL_INDEX_CACHE_DEPTH - 1, (unsigned int) CBPerRow - c) - 1) //cbEnd
+                    );
+            instructionVector.push_back(instructionDrain);
+        }
+    }
+
+    numInstructions = instructionVector.size();
+
+    try{
+        cl_int status = CL_SUCCESS;
+        //Platform
+        cl::Platform clPlatform;
+
+        //Device ID. Assumes that there is only one device.
+        cl::Device clDevice;
+
+        //Context
+        cl::Context clContext;
+
+        //Command queue used for data transfer
+        cl::CommandQueue clDMAQueue, clSequencerQueue;
+        std::vector<cl::CommandQueue> vecClCollectorQueues;
+        for (unsigned int i=0; i < KERNEL_CACHE_LANES; i++) {
+            vecClCollectorQueues.emplace_back();
+        }
+
+        //The sparse weight feeder DMA kernel
+        cl::Kernel krnSpWDMA;
+
+        //The sequencer kernel
+        cl::Kernel krnSequencer;
+
+        //The weight collector kernel
+        std::vector<cl::Kernel> krnWeightCollectorVec;
+
+        //Set up the OpenCL environment and create the kernels
+        clInit(binaryFile,
+               clPlatform,
+               clContext,
+               clDevice,
+               clDMAQueue,
+               clSequencerQueue,
+               vecClCollectorQueues,
+               krnSpWDMA,
+               krnSequencer,
+               krnWeightCollectorVec);
+
+        //Create the buffers
+        cl::Buffer inputSpWBuffer(
+                    clContext,
+                    CL_MEM_READ_ONLY,
+                    MATRIX_ROWS * MATRIX_COLS * sizeof(unsigned short),
+                    NULL,
+                    &status
+                    );
+        aocl_utils_cpp::checkError(status, "Failed to create the input sparse weight buffer");
+
+        cl::Buffer inputPointerBuffer(
+                    clContext,
+                    CL_MEM_READ_ONLY,
+                    (CBPerRow+1) * MATRIX_COLS * sizeof(unsigned short),
+                    NULL,
+                    &status
+                    );
+        aocl_utils_cpp::checkError(status, "Failed to create the input block pointer buffer");
+
+        cl::Buffer outputSpWBuffer(
+                    clContext,
+                    CL_MEM_WRITE_ONLY,
+                    MATRIX_ROWS * MATRIX_COLS * sizeof(unsigned short),
+                    NULL,
+                    &status
+                    );
+        aocl_utils_cpp::checkError(status, "Failed to create the output sparse weight buffer");
+
+        cl::Buffer inputInstructionBuffer (
+                    clContext,
+                    CL_MEM_READ_ONLY,
+                    1024 * sizeof(t_instruction),
+                    NULL,
+                    &status
+                    );
+        aocl_utils_cpp::checkError(status, "Failed to create the input sparse weight buffer");
+
+        std::cout <<"Set up the kernel arguments"<<std::endl;
+        status = krnSequencer.setArg(0, inputInstructionBuffer);
+        status = krnSequencer.setArg(1, (unsigned short) numInstructions);
+        aocl_utils_cpp::checkError(status, "Failed to set up arguments for the instruction sequencer");
+
+        for (auto iter=krnWeightCollectorVec.begin();
+             iter < krnWeightCollectorVec.end();
+             iter++) {
+            status = iter->setArg(0, outputSpWBuffer);
+        }
+        aocl_utils_cpp::checkError(status, "Failed to set up arguments for the weight collector");
+
+        status = krnSpWDMA.setArg(0, inputSpWBuffer);
+        status = krnSpWDMA.setArg(1, inputPointerBuffer);
+        aocl_utils_cpp::checkError(status, "Failed to set up arguments for the sparse weight DMA");
+
+        std::cout <<"Transer data to the accelerator"<<std::endl;
+        cl::Event inputTransferEvent, inputPointerTransferEvent, instructionTransferEvent;
+        status = clSequencerQueue.enqueueWriteBuffer(
+                    inputSpWBuffer,
+                    CL_FALSE,
+                    0,
+                    sizeof(unsigned short) * effectualValues.size(),
+                    &effectualValues[0],
+                    NULL,
+                    &inputTransferEvent
+                    );
+        aocl_utils_cpp::checkError(status, "Failed to transfer sparse weights to the accelerator");
+        status = clSequencerQueue.enqueueWriteBuffer(
+                    inputPointerBuffer,
+                    CL_FALSE,
+                    0,
+                    sizeof(unsigned short) * cbOffsets.size(),
+                    &cbOffsets[0],
+                    NULL,
+                    &inputPointerTransferEvent
+                    );
+        aocl_utils_cpp::checkError(status, "Failed to transfer weight pointers to the accelerator");
+        status = clSequencerQueue.enqueueWriteBuffer(
+                    inputInstructionBuffer,
+                    CL_FALSE,
+                    0,
+                    sizeof(t_instruction) * instructionVector.size(),
+                    &instructionVector[0],
+                    NULL,
+                    &instructionTransferEvent
+                    );
+        std::cout <<"Number of instruction is "<<instructionVector.size()<<std::endl;
+        aocl_utils_cpp::checkError(status, "Failed to transfer instructions to the accelerator");
+
+        std::vector<cl::Event> transferEvents{
+            inputTransferEvent, inputPointerTransferEvent, inputPointerTransferEvent};
+
+        std::cout <<"Launching the kernels"<<std::endl;
+        for (unsigned int i = 0;
+             i < krnWeightCollectorVec.size();
+             i ++) {
+            status = vecClCollectorQueues[i].enqueueTask(
+                        krnWeightCollectorVec[i]
+                        );
+        }
+        status = clDMAQueue.enqueueTask(krnSpWDMA);
+        status = clSequencerQueue.enqueueTask(krnSequencer);
+        aocl_utils_cpp::checkError(status, "Failed to launch at least one kernel");
+        //usleep (1000000);
+        std::cout <<"Wait for result to be transferred back"<<std::endl;
+        status = clSequencerQueue.enqueueReadBuffer(outputSpWBuffer,
+                                  CL_TRUE
+                                  ,0
+                                  ,sizeof(unsigned short) * outputEffectualValues.size()
+                                  , &outputEffectualValues[0]
+                                  );
+        aocl_utils_cpp::checkError(status, "Failed to read the results back");
+      }
+    catch (const std::runtime_error & e) {
+        std::cout <<e.what()<<std::endl;
+        return 1;
+    }
+    catch (...) {
+        std::cout <<"Unspecified error occured!"<<std::endl;
+        return 1;
+    }
+
+    std::cout <<"Checking the output matrix"<<std::endl;
+    checkResult =
+        check_matrix(
+          effectualValues,
+          cbOffsets,
+          outputEffectualValues,
+          MATRIX_ROWS,
+          MATRIX_COLS,
+          CBPerRow
+          );
+
+    if (!checkResult) {
+        std::cout <<"FAILED: Values do not match"<<std::endl;
+    }
+    else {
+        std::cout <<"SUCCESS!"<<std::endl;
+    }
+
+
+    return 0;
 }
 
-// Initialize the data for the problem. Requires num_devices to be known.
-void init_problem() {
-  if(num_devices == 0) {
-    checkError(-1, "No devices");
-  }
-
-  input_a.reset(num_devices);
-  input_b.reset(num_devices);
-  output.reset(num_devices);
-  ref_output.reset(num_devices);
-
-  // Generate input vectors A and B and the reference output consisting
-  // of a total of N elements.
-  // We create separate arrays for each device so that each device has an
-  // aligned buffer.
-  for(unsigned i = 0; i < num_devices; ++i) {
-#if USE_SVM_API == 0
-    input_a[i].reset(n_per_device[i]);
-    input_b[i].reset(n_per_device[i]);
-    output[i].reset(n_per_device[i]);
-    ref_output[i].reset(n_per_device[i]);
-
-    for(unsigned j = 0; j < n_per_device[i]; ++j) {
-      input_a[i][j] = rand_float();
-      input_b[i][j] = rand_float();
-      ref_output[i][j] = input_a[i][j] + input_b[i][j];
+void matrix_initialization ( std::vector<char> & _matrix)
+{
+  std::mt19937 generator (SEED);
+  std::bernoulli_distribution distribution (BERN_P);
+  for (unsigned int i=0; i<MATRIX_ROWS; i++){
+    for (unsigned int j=0; j<MATRIX_COLS; j++) {
+//      if (j==i) {
+//        _matrix.push_back((char) 1);
+//      }
+//      else {
+//        _matrix.push_back(0);
+//      }
+        bool result = distribution(generator);
+        unsigned char number = result ? 1 : 0;
+        _matrix.push_back(number);
     }
-#else
-    input_a[i].reset(context, n_per_device[i]);
-    input_b[i].reset(context, n_per_device[i]);
-    output[i].reset(context, n_per_device[i]);
-    ref_output[i].reset(n_per_device[i]);
-
-    cl_int status;
-
-    status = clEnqueueSVMMap(queue[i], CL_TRUE, CL_MAP_WRITE,
-        (void *)input_a[i], n_per_device[i] * sizeof(float), 0, NULL, NULL);
-    checkError(status, "Failed to map input A");
-    status = clEnqueueSVMMap(queue[i], CL_TRUE, CL_MAP_WRITE,
-        (void *)input_b[i], n_per_device[i] * sizeof(float), 0, NULL, NULL);
-    checkError(status, "Failed to map input B");
-
-    for(unsigned j = 0; j < n_per_device[i]; ++j) {
-      input_a[i][j] = rand_float();
-      input_b[i][j] = rand_float();
-      ref_output[i][j] = input_a[i][j] + input_b[i][j];
-    }
-
-    status = clEnqueueSVMUnmap(queue[i], (void *)input_a[i], 0, NULL, NULL);
-    checkError(status, "Failed to unmap input A");
-    status = clEnqueueSVMUnmap(queue[i], (void *)input_b[i], 0, NULL, NULL);
-    checkError(status, "Failed to unmap input B");
-#endif /* USE_SVM_API == 0 */
   }
 }
 
-void run() {
-  cl_int status;
+void matrix_compression (std::vector<char> & _matrix,
+    unsigned int numberOfWeightsPerRow,
+    unsigned int numberOfRows,
+    unsigned int cbPerRow,
+    aligned_short_vector &outEffectualValues,
+    aligned_short_vector &outCBOffets
+  )
+{
+  
+  for (unsigned int iRow=0; iRow < numberOfRows; iRow++){
+    unsigned short jCol=0;
+    unsigned int jCBIter = 0;
+    unsigned int effectualValueIdx = iRow * numberOfWeightsPerRow;
+    unsigned short effectualValueColIdx = 0;
+    unsigned char zeroCount=0;
+    unsigned int CBOffsetIdx = iRow * (cbPerRow + 1);
+    bool isFirst = true;
 
-  const double start_time = getCurrentTimestamp();
+    while (jCol < numberOfWeightsPerRow) {
+      char value = _matrix[iRow * numberOfWeightsPerRow + jCol];
+      if (value != 0 
+          || zeroCount == WEIGHT_ZCOUNT_MAX 
+          || jCol == (numberOfWeightsPerRow-1) 
+          || jCBIter == ENCODING_LENGTH - 1) {
+        //Four cases for preserving the value
+        //1) it is not 0
+        //2) the consecutive number of preceeding zero has reached the max
+        //3) it is the last value in a filter strip
+        //4) it is the last value in an encoding block
+        unsigned short effectualWeightAndZCount
+          = ((unsigned short) zeroCount << WEIGHT_ZCOUNT_BITOFFSET)
+          | (( (unsigned short) value & WEIGHT_MASK) << WEIGHT_BITOFFSET);
+        outEffectualValues[effectualValueIdx] = effectualWeightAndZCount;
 
-  // Launch the problem for each device.
-  scoped_array<cl_event> kernel_event(num_devices);
-  scoped_array<cl_event> finish_event(num_devices);
+        //Insert a new element to the offset array if this is the first
+        //effectual element in the encoding block.
+        if (isFirst) {
+          outCBOffets[CBOffsetIdx] = effectualValueColIdx;
+          //std::cout <<"effectualValueColIdx: "<<effectualValueColIdx<<std::endl;
 
-  for(unsigned i = 0; i < num_devices; ++i) {
+          CBOffsetIdx++;
+          isFirst=false;
+        }
 
-#if USE_SVM_API == 0
-    // Transfer inputs to each device. Each of the host buffers supplied to
-    // clEnqueueWriteBuffer here is already aligned to ensure that DMA is used
-    // for the host-to-device transfer.
-    cl_event write_event[2];
-    status = clEnqueueWriteBuffer(queue[i], input_a_buf[i], CL_FALSE,
-        0, n_per_device[i] * sizeof(float), input_a[i], 0, NULL, &write_event[0]);
-    checkError(status, "Failed to transfer input A");
+        effectualValueIdx++;
+        effectualValueColIdx++;
+        zeroCount=0;
+      }
+      else {
+        zeroCount++;
+      }
 
-    status = clEnqueueWriteBuffer(queue[i], input_b_buf[i], CL_FALSE,
-        0, n_per_device[i] * sizeof(float), input_b[i], 0, NULL, &write_event[1]);
-    checkError(status, "Failed to transfer input B");
-#endif /* USE_SVM_API == 0 */
+      jCol++;  
+      jCBIter++;
+      jCBIter =  (jCBIter == ENCODING_LENGTH) ? 0 : jCBIter;
+      isFirst = (jCBIter == 0) ? true:isFirst;
+    } //while
 
-    // Set kernel arguments.
-    unsigned argi = 0;
+    //CAUTION: Add the extra encodiing index block at the end of the row
+    outCBOffets[CBOffsetIdx] = effectualValueColIdx;
+    CBOffsetIdx++;
 
-#if USE_SVM_API == 0
-    status = clSetKernelArg(kernel[i], argi++, sizeof(cl_mem), &input_a_buf[i]);
-    checkError(status, "Failed to set argument %d", argi - 1);
+    assert(CBOffsetIdx == (iRow+1) * (cbPerRow+1));
 
-    status = clSetKernelArg(kernel[i], argi++, sizeof(cl_mem), &input_b_buf[i]);
-    checkError(status, "Failed to set argument %d", argi - 1);
+  } //for
+}
 
-    status = clSetKernelArg(kernel[i], argi++, sizeof(cl_mem), &output_buf[i]);
-    checkError(status, "Failed to set argument %d", argi - 1);
-#else
-    status = clSetKernelArgSVMPointer(kernel[i], argi++, (void*)input_a[i]);
-    checkError(status, "Failed to set argument %d", argi - 1);
-
-    status = clSetKernelArgSVMPointer(kernel[i], argi++, (void*)input_b[i]);
-    checkError(status, "Failed to set argument %d", argi - 1);
-
-    status = clSetKernelArgSVMPointer(kernel[i], argi++, (void*)output[i]);
-    checkError(status, "Failed to set argument %d", argi - 1);
-#endif /* USE_SVM_API == 0 */
-
-    // Enqueue kernel.
-    // Use a global work size corresponding to the number of elements to add
-    // for this device.
-    //
-    // We don't specify a local work size and let the runtime choose
-    // (it'll choose to use one work-group with the same size as the global
-    // work-size).
-    //
-    // Events are used to ensure that the kernel is not launched until
-    // the writes to the input buffers have completed.
-    const size_t global_work_size = n_per_device[i];
-    printf("Launching for device %d (%zd elements)\n", i, global_work_size);
-
-#if USE_SVM_API == 0
-    status = clEnqueueNDRangeKernel(queue[i], kernel[i], 1, NULL,
-        &global_work_size, NULL, 2, write_event, &kernel_event[i]);
-#else
-    status = clEnqueueNDRangeKernel(queue[i], kernel[i], 1, NULL,
-        &global_work_size, NULL, 0, NULL, &kernel_event[i]);
-#endif /* USE_SVM_API == 0 */
-    checkError(status, "Failed to launch kernel");
-
-#if USE_SVM_API == 0
-    // Read the result. This the final operation.
-    status = clEnqueueReadBuffer(queue[i], output_buf[i], CL_FALSE,
-        0, n_per_device[i] * sizeof(float), output[i], 1, &kernel_event[i], &finish_event[i]);
-
-    // Release local events.
-    clReleaseEvent(write_event[0]);
-    clReleaseEvent(write_event[1]);
-#else
-    status = clEnqueueSVMMap(queue[i], CL_TRUE, CL_MAP_READ,
-        (void *)output[i], n_per_device[i] * sizeof(float), 0, NULL, NULL);
-    checkError(status, "Failed to map output");
-	clFinish(queue[i]);
-#endif /* USE_SVM_API == 0 */
-  }
-
-  // Wait for all devices to finish.
-  clWaitForEvents(num_devices, finish_event);
-
-  const double end_time = getCurrentTimestamp();
-
-  // Wall-clock time taken.
-  printf("\nTime: %0.3f ms\n", (end_time - start_time) * 1e3);
-
-  // Get kernel times using the OpenCL event profiling API.
-  for(unsigned i = 0; i < num_devices; ++i) {
-    cl_ulong time_ns = getStartEndTime(kernel_event[i]);
-    printf("Kernel time (device %d): %0.3f ms\n", i, double(time_ns) * 1e-6);
-  }
-
-  // Release all events.
-  for(unsigned i = 0; i < num_devices; ++i) {
-    clReleaseEvent(kernel_event[i]);
-    clReleaseEvent(finish_event[i]);
-  }
-
-  // Verify results.
-  bool pass = true;
-  for(unsigned i = 0; i < num_devices && pass; ++i) {
-    for(unsigned j = 0; j < n_per_device[i] && pass; ++j) {
-      if(fabsf(output[i][j] - ref_output[i][j]) > 1.0e-5f) {
-        printf("Failed verification @ device %d, index %d\nOutput: %f\nReference: %f\n",
-            i, j, output[i][j], ref_output[i][j]);
-        pass = false;
+bool check_matrix (
+      aligned_short_vector & originalMatrix,
+      aligned_short_vector & originalIndex,
+      aligned_short_vector & outputMatrix,
+      unsigned int numberOfRow,
+      unsigned int numberOfWeightsPerRow,
+      unsigned int cbPerRow
+  )
+{
+   bool result = true;
+   for (unsigned int iterRow = 0;
+        iterRow < numberOfRow;
+        iterRow++) {
+    unsigned int beginOffset = originalIndex[iterRow*(cbPerRow+1)];
+    unsigned int endOffset = originalIndex[iterRow*(cbPerRow+1) + cbPerRow];
+    for (unsigned int weightAddress = numberOfWeightsPerRow * iterRow + beginOffset;
+           weightAddress < numberOfWeightsPerRow * iterRow + endOffset;
+           weightAddress++
+        ) {
+      if ( (originalMatrix[weightAddress] & WEIGHT_MASK) >> WEIGHT_BITOFFSET
+              != (outputMatrix[weightAddress] & WEIGHT_MASK) ) {
+        std::cout <<"Mismatch detected! Row is "<<iterRow<<std::endl;
+        std::cout <<"Displaying the mismatched filter."<<std::endl;
+        std::cout <<"The expected filter row: "<<std::endl;
+        for (unsigned int weightAddress = numberOfWeightsPerRow * iterRow + beginOffset;
+               weightAddress < numberOfWeightsPerRow * iterRow + endOffset;
+               weightAddress++
+             ){
+            std::cout << ((originalMatrix[weightAddress] & WEIGHT_MASK) >> WEIGHT_BITOFFSET )<<" ";
+            }
+        std::cout << std::endl;
+        std::cout <<"The actual output"<<std::endl;
+        for (unsigned int weightAddress = numberOfWeightsPerRow * iterRow + beginOffset;
+               weightAddress < numberOfWeightsPerRow * iterRow + endOffset;
+               weightAddress++
+             ) {
+            std::cout <<( (outputMatrix[weightAddress] & WEIGHT_MASK) )<<" ";
+            }
+        std::cout << std::endl;
+        result = false;
+        break;
       }
     }
-  }
 
-#if USE_SVM_API == 1
-  for (unsigned i = 0; i < num_devices; ++i) {
-    status = clEnqueueSVMUnmap(queue[i], (void *)output[i], 0, NULL, NULL);
-    checkError(status, "Failed to unmap output");
-  }
-#endif /* USE_SVM_API == 1 */
-  printf("\nVerification: %s\n", pass ? "PASS" : "FAIL");
+   }
+
+   return result;
 }
 
-// Free the resources allocated during initialization
-void cleanup() {
-  for(unsigned i = 0; i < num_devices; ++i) {
-    if(kernel && kernel[i]) {
-      clReleaseKernel(kernel[i]);
-    }
-    if(queue && queue[i]) {
-      clReleaseCommandQueue(queue[i]);
-    }
-#if USE_SVM_API == 0
-    if(input_a_buf && input_a_buf[i]) {
-      clReleaseMemObject(input_a_buf[i]);
-    }
-    if(input_b_buf && input_b_buf[i]) {
-      clReleaseMemObject(input_b_buf[i]);
-    }
-    if(output_buf && output_buf[i]) {
-      clReleaseMemObject(output_buf[i]);
-    }
-#else
-    if(input_a[i].get())
-      input_a[i].reset();
-    if(input_b[i].get())
-      input_b[i].reset();
-    if(output[i].get())
-      output[i].reset();
-#endif /* USE_SVM_API == 0 */
-  }
+cl_int clInit (const std::string binaryFile,
+               cl::Platform &clPlatform,
+               cl::Context & clContext,
+               cl::Device & clDevice,
+               cl::CommandQueue & clDMAQueue,
+               cl::CommandQueue & clSequencerQueue,
+               std::vector<cl::CommandQueue> & clCollectorQueue,
+               cl::Kernel & krnSpWDMA,
+               cl::Kernel & krnSequencer,
+               std::vector<cl::Kernel> & krnWeightCollectorVec)
+{
+    cl_int status = CL_SUCCESS;
+    clPlatform = aocl_utils_cpp::findPlatform("Intel(R) FPGA SDK for OpenCL(TM)");
+    std::vector<cl::Device> devices;
+    status = clPlatform.getDevices(CL_DEVICE_TYPE_ALL, &devices);
+    aocl_utils_cpp::checkError(status, "Failed to query the devices");
 
-  if(program) {
-    clReleaseProgram(program);
-  }
-  if(context) {
-    clReleaseContext(context);
-  }
+    std::cout <<"Selecting the device[0]"<<std::endl;
+    clDevice = devices[0];
+    clContext = cl::Context({devices[0]}
+                            ,NULL
+                            ,&aocl_utils_cpp::oclContextCallback
+                            ,NULL
+                            ,&status);
+    aocl_utils_cpp::checkError(status, "Failed to create context");
+
+    clDMAQueue = cl::CommandQueue(
+                clContext,
+                clDevice,
+                CL_QUEUE_PROFILING_ENABLE,
+                &status
+                );
+
+    clSequencerQueue = cl::CommandQueue(
+                clContext,
+                clDevice,
+                CL_QUEUE_PROFILING_ENABLE,
+                &status
+                );
+
+    for (auto iter = clCollectorQueue.begin();
+         iter != clCollectorQueue.end();
+         iter++) {
+        *iter = cl::CommandQueue(
+                    clContext,
+                    clDevice,
+                    CL_QUEUE_PROFILING_ENABLE,
+                    &status
+                    );
+    }
+    aocl_utils_cpp::checkError(status, "Failed to create at least one command queue");
+
+    std::cout <<"Using AOCX: "<<binaryFile<<std::endl;
+    cl::Program program = aocl_utils_cpp::createProgramFromBinary(
+                clContext,
+                binaryFile.c_str(),
+                {clDevice}
+                );
+    status = program.build({clDevice});
+    aocl_utils_cpp::checkError(status, "Failed to build program");
+
+    //Instantiate the kernels
+    krnSequencer = cl::Kernel(program, "kernelSequencer", &status);
+    aocl_utils_cpp::checkError(status, "Failed to create the squencer kernel");
+
+    krnSpWDMA = cl::Kernel(program, "kernelSparseWeightDMA", &status);
+    aocl_utils_cpp::checkError(status, "Failed to create the sparse weight DMA kernel");
+
+    for (unsigned int i=0; i<KERNEL_CACHE_LANES; i++){
+        std::string kernelName = "kernelWeightCollector"+std::to_string(i);
+        krnWeightCollectorVec.push_back(
+                    cl::Kernel(program, kernelName.c_str(), &status)
+                    );
+    }
+    aocl_utils_cpp::checkError(status, "Failed to create at least one of the weight collector kernel");
+
+    return status;
 }
 
+t_instruction cmdGenFillWeightBuffer(
+        unsigned int ddrIndexOffset,
+        unsigned int ddrWeightOffset,
+        unsigned short filterStart,
+        unsigned char numFilterToStream,
+        unsigned short cbStart,
+        unsigned short cbEnd,
+        unsigned short numCbInFilter,
+        unsigned int nWInFilter
+        ){
+    t_instruction instruction;
+    instruction.header = OPCODE_FILL_WEIGHT_BUFFER;
+    instruction.instructionSizeBytes = 21;
+
+    //Generate the dependeny list
+    //Should wait for the previous command of the same type to finish
+    //Should wait for all previous swap to finish
+    unsigned short dependency =
+            (1 << (OPCODE_FILL_WEIGHT_BUFFER)) | (1 << OPCODE_SWAP_WEIGHT_BUFFER);
+    instruction.dependencyList[0] = (unsigned char) (dependency & 0xFF);
+    instruction.dependencyList[1] = (unsigned char) ((dependency & 0XFF00) >> 8);
+
+    //Generate the instruction themselves
+    instruction.words[0] = (unsigned char) (ddrIndexOffset & 0xFF);
+    instruction.words[1] = (unsigned char) ( (ddrIndexOffset & 0xFF00) >> 8);
+    instruction.words[2] = (unsigned char) ( (ddrIndexOffset & 0xFF0000) >> 16);
+    instruction.words[3] = (unsigned char) ( (ddrIndexOffset & 0xFF000000) >> 24);
+
+    instruction.words[4] = (unsigned char) (ddrWeightOffset & 0xFF);
+    instruction.words[5] = (unsigned char) ( (ddrWeightOffset & 0xFF00) >> 8);
+    instruction.words[6] = (unsigned char) ( (ddrWeightOffset & 0xFF0000) >> 16);
+    instruction.words[7] = (unsigned char) ( (ddrWeightOffset & 0xFF000000) >> 24);
+
+    instruction.words[8] = (unsigned char) ( filterStart & 0xFF );
+    instruction.words[9] = (unsigned char) ( (filterStart & 0xFF00) >> 8 );
+
+    instruction.words[10] = (unsigned char) numFilterToStream;
+
+    instruction.words[11] = (unsigned char) (cbStart & 0xFF);
+    instruction.words[12] = (unsigned char) ( (cbStart & 0xFF00) >> 8);
+
+    instruction.words[13] = (unsigned char) (cbEnd & 0xFF);
+    instruction.words[14] = (unsigned char) ( (cbEnd & 0xFF00) >> 8);
+
+    instruction.words[15] = (unsigned char) (numCbInFilter & 0xFF);
+    instruction.words[16] = (unsigned char) ( (numCbInFilter & 0xFF00) >> 8);
+
+    instruction.words[17] = (unsigned char) (nWInFilter & 0xFF);
+    instruction.words[18] = (unsigned char) ( (nWInFilter & 0xFF00) >> 8);
+    instruction.words[19] = (unsigned char) ( (nWInFilter & 0xFF0000) >> 16);
+    instruction.words[20] = (unsigned char) ( (nWInFilter & 0xFF000000) >> 24);
+
+    return instruction;
+}
+
+t_instruction cmdGenDrainWeightBuffer(
+        unsigned char laneStart,
+        unsigned char laneEnd,
+        unsigned short cbStart,
+        unsigned short cbEnd
+        ){
+    t_instruction instruction;
+    instruction.header = OPCODE_DRAIN_WEIGHT_BUFFER;
+    instruction.instructionSizeBytes = 6;
+
+    //Generate the dependeny list
+    //Should wait for the previous command of the same type to finish
+    //Should wait for all previous swap to finish
+    unsigned short dependency =
+            (1 << (OPCODE_DRAIN_WEIGHT_BUFFER)) | (1 << OPCODE_SWAP_WEIGHT_BUFFER);
+    instruction.dependencyList[0] = (unsigned char) (dependency & 0xFF);
+    instruction.dependencyList[1] = (unsigned char) ((dependency & 0XFF00) >> 8);
+
+    //Generate the instruction themselves
+    instruction.words[0] = (unsigned char) (laneStart & 0xFF);
+
+    instruction.words[1] = (unsigned char) ( (laneEnd & 0xFF) );
+
+
+    instruction.words[2] = (unsigned char) (cbStart & 0xFF);
+    instruction.words[3] = (unsigned char) ((cbStart & 0xFF00) >> 8);
+
+    instruction.words[4] = (unsigned char) (cbEnd & 0xFF);
+    instruction.words[5] = (unsigned char) ((cbEnd & 0xFF00) >> 8);
+
+    return instruction;
+}
+
+t_instruction cmdGenCollectWeight(
+        unsigned int ddrWeightOffset,
+        unsigned short filterStart,
+        unsigned short numFiltersToCollect,
+        unsigned int numWeightInFilter
+        ){
+    t_instruction instruction;
+    instruction.header = OPCODE_COLLECT_WEIGHT;
+    instruction.instructionSizeBytes = 11;
+
+    //Generate the dependeny list
+    //Should wait for the previous command of the same type to finish
+    unsigned short dependency =
+            (1 << (OPCODE_COLLECT_WEIGHT));
+    instruction.dependencyList[0] = (unsigned char) (dependency & 0xFF);
+    instruction.dependencyList[1] = (unsigned char) ((dependency & 0XFF00) >> 8);
+
+    //Generate the instruction themselves
+    instruction.words[0] = (unsigned char) (ddrWeightOffset & 0xFF);
+    instruction.words[1] = (unsigned char) ( (ddrWeightOffset & 0xFF00) >> 8);
+    instruction.words[2] = (unsigned char) ( (ddrWeightOffset & 0xFF0000) >> 16);
+    instruction.words[3] = (unsigned char) ( (ddrWeightOffset & 0xFF000000) >> 24);
+
+    instruction.words[4] = (unsigned char) ( filterStart & 0xFF );
+    instruction.words[5] = (unsigned char) ( (filterStart & 0xFF00) >> 8 );
+
+    instruction.words[6] = (unsigned char) ( numFiltersToCollect & 0xFF );
+    instruction.words[7] = (unsigned char) ( (numFiltersToCollect & 0xFF00) >> 8 );
+
+
+    instruction.words[8] = (unsigned char) (numWeightInFilter & 0xFF);
+    instruction.words[9] = (unsigned char) ( (numWeightInFilter & 0xFF00) >> 8);
+    instruction.words[10] = (unsigned char) ( (numWeightInFilter & 0xFF0000) >> 16);
+
+    return instruction;
+}
+
+t_instruction cmdGentWeightBufferSwap(){
+    t_instruction instruction;
+    instruction.header = OPCODE_SWAP_WEIGHT_BUFFER;
+    instruction.instructionSizeBytes = 1;
+
+    //Generate the dependeny list
+    //Should wait for the previous command of the same type to finish
+    unsigned short dependency =
+            (1 << (OPCODE_DRAIN_WEIGHT_BUFFER)) | (1 << OPCODE_FILL_WEIGHT_BUFFER);
+    instruction.dependencyList[0] = (unsigned char) (dependency & 0xFF);
+    instruction.dependencyList[1] = (unsigned char) ((dependency & 0XFF00) >> 8);
+
+    return instruction;
+}

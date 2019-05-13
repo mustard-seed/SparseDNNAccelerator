@@ -15,28 +15,36 @@
 #endif 
 
 
+#ifdef EMULATOR
+  #define EMULATOR_PRINT(format) printf format
+#else
+  #define EMULATOR_PRINT(format)
+#endif
 
 
 void checkCommits (uint4_t* pInstrInFlightCount) {
   bool read;
-  uint1_t token;
-  token = read_channel_nb_intel(channel_spWeightDMACommit, &read);
+  read_channel_nb_intel(channel_spWeightDMACommit, &read);
   if (read) {
+    EMULATOR_PRINT ( ("[Kernel Sequencer]: COMMIT. Header is %u.\n", OPCODE_FILL_WEIGHT_BUFFER));
     pInstrInFlightCount[OPCODE_FILL_WEIGHT_BUFFER & 0x1F]--; 
   }
 
-  token = read_channel_nb_intel(channel_drainWeightCacheCommit, &read);
+  read_channel_nb_intel(channel_drainWeightCacheCommit, &read);
   if (read) {
+    EMULATOR_PRINT ( ("[Kernel Sequencer]: COMMIT. Header is %u.\n", OPCODE_DRAIN_WEIGHT_BUFFER));
     pInstrInFlightCount[OPCODE_DRAIN_WEIGHT_BUFFER & 0x1F]--; 
   }
 
-  token = read_channel_nb_intel(channel_spWeightFeederDrainSelectCommit, &read);
+  read_channel_nb_intel(channel_spWeightFeederDrainSelectCommit, &read);
   if (read) {
+    EMULATOR_PRINT ( ("[Kernel Sequencer]: COMMIT. Header is %u.\n", OPCODE_SWAP_WEIGHT_BUFFER));
     pInstrInFlightCount[OPCODE_SWAP_WEIGHT_BUFFER & 0x1F]--; 
   }
 
-  token = read_channel_nb_intel(channel_weightCollectControlCommit, &read);
+  read_channel_nb_intel(channel_weightCollectControlCommit, &read);
   if (read) {
+    EMULATOR_PRINT ( ("[Kernel Sequencer]: COMMIT. Header is %u.\n", OPCODE_COLLECT_WEIGHT));
     pInstrInFlightCount[OPCODE_COLLECT_WEIGHT & 0x1F]--; 
   }
 }
@@ -49,11 +57,12 @@ __kernel void kernelSequencer(
         )
 {
 
+      EMULATOR_PRINT ( ("[Kernel Sequencer]: Launched\n") );
       uint4_t instructionInFlightCount[MAX_INSTRUCTION_TYPE_BITS];
 
       //Initialize the inflight instruction count of each instruction type to
       //0
-      for (unsigned char iter=0;
+      for (uint5_t iter=0;
           iter < MAX_INSTRUCTION_TYPE_BITS;
           iter++) {
         instructionInFlightCount[iter] = 0x0;
@@ -69,15 +78,17 @@ __kernel void kernelSequencer(
           //Scan the dependency and the header
           //Then wait for the dependency to be met before issuing the instruction
           unsigned short dependency =
-          ((unsigned short) instruction.dependencyList[1]) << 8 &   
+          ((unsigned short) instruction.dependencyList[1]) << 8 |   
           ((unsigned short) instruction.dependencyList[0]);
 
           unsigned char header = instruction.header;
           unsigned char instructionSizeBytes = instruction.instructionSizeBytes;
 
           uint1_t wait = 0x1;
+
+           EMULATOR_PRINT ( ("[Kernel Sequencer]: Wait to send instruction %u. Header is %u.\n", iterInstruction, header));
           while (wait){
-            uint1_t wait_next = 0;
+            uint1_t wait_next = 0x0;
 
             checkCommits(instructionInFlightCount);
 
@@ -100,12 +111,16 @@ __kernel void kernelSequencer(
 
           mem_fence(CLK_CHANNEL_MEM_FENCE);
 
+          //CAUTION: Sending the header just by itself is strictly not required, unless the transports waste the first payload
+          write_channel_intel(channel_instructions[0], header << 8);
           //Issue the instructions minus the dependency
           instructionInFlightCount[header]++;
-          for (uint5_t iter=instructionSizeBytes;
+
+          for (unsigned char iter=instructionSizeBytes;
             iter > 0;
             iter-- ){
 
+            //Still need to perform the commit check in every cycle
             checkCommits(instructionInFlightCount);
 
             //Send the instructions
@@ -116,6 +131,8 @@ __kernel void kernelSequencer(
 
             mem_fence(CLK_CHANNEL_MEM_FENCE);
           }
+          EMULATOR_PRINT ( ("[Kernel Sequencer]: Sent instruction %u. Header is %u No. Bytes is %u.\n"
+            , iterInstruction, header, instructionSizeBytes));
       }
 
       //Wait for outstanding commands to finish
@@ -126,7 +143,7 @@ __kernel void kernelSequencer(
 
         //Check the dependency
         #pragma unroll
-        for (unsigned char iter=0;
+        for (uint5_t iter=0;
             iter < MAX_INSTRUCTION_TYPE_BITS;
             iter++){
           wait_next |= 
@@ -140,15 +157,16 @@ __kernel void kernelSequencer(
     \brief Collects the sparse weights and store them to cache
 */
  void weightCollector(
-      __global short * restrict pMem,
+      __global short * pMem,
       unsigned char laneID
     )
 {
+    EMULATOR_PRINT (("[Weight Collector %u]: Launched\n", laneID));
     enum e_states {IDLE, STREAM, COMMIT_WAIT, COMMIT};
     enum e_states state=IDLE;
 
-    uint18_t weightIndexLast;
-    uint18_t weightIndexTracker;
+    uint24_t weightIndexLast;
+    uint24_t weightIndexTracker;
     unsigned int weightAddressOffset;
     bool collectWeightRequest;
     bool previousCollectCommit;
@@ -169,17 +187,23 @@ __kernel void kernelSequencer(
 
       switch (state) {
         case (IDLE):
-          if (collectWeightRequest && laneID < controlToken.numFiltersToCollect) {
+          if (collectWeightRequest) {
+              if (laneID < controlToken.numFiltersToCollect) { //For each collector in the activate range
 
-              weightAddressOffset = 
-                controlToken.ddrKernelWeightStartOffset
-                + (unsigned int) controlToken.numWeightsInFilter 
-                * ( (unsigned int) controlToken.filterStart + (unsigned int) laneID );
+                weightAddressOffset = 
+                  controlToken.ddrKernelWeightStartOffset
+                  + (unsigned int) controlToken.numWeightsInFilter 
+                  * ( (unsigned int) controlToken.filterStart + (unsigned int) laneID );
 
-              weightIndexTracker=0;
-              weightIndexLast = controlToken.numWeightsInFilter;
+                weightIndexTracker=0;
+                weightIndexLast = controlToken.numWeightsInFilter;
 
-              state = STREAM;
+                state = STREAM;
+                EMULATOR_PRINT (("[Weight Collector %u]: Starting to collect weights! Number of weights in uncompressed row: %u\n", laneID, weightIndexLast));
+              }
+              else { //Inactivate collectors should start waiting for commits
+                  state = COMMIT_WAIT;
+              }
           } 
           break;
         case (STREAM):
@@ -199,10 +223,10 @@ __kernel void kernelSequencer(
                 pMem[weightAddressOffset] = weight;
 
                 //Update the index tracker
-                weightIndexTracker += weightIndexTracker 
-                              + (uint18_t) 0X1
-                              + (uint18_t) zCount;
-                weightAndOffset++;
+                weightIndexTracker += ((uint24_t) 0X01
+                              + (uint24_t) zCount);
+
+                weightAddressOffset++;
 
                 if (weightIndexTracker == weightIndexLast){
                   state = COMMIT_WAIT;
@@ -211,27 +235,40 @@ __kernel void kernelSequencer(
           break;
         case (COMMIT_WAIT):
               if (laneID > 0){
-                uint1_t token = read_channel_nb_intel (
+                read_channel_nb_intel (
                   channel_weightCollectControlCommitInternal[laneID-1],
                   &previousCollectCommit);
                 if (previousCollectCommit) {
                   state = COMMIT;
                 }
               }
+              else {
+                state = COMMIT;
+              }
+          break;
         case (COMMIT):
               if (laneID < KERNEL_CACHE_LANES - 1) {
-                  commitSuccess = write_channel_nb_intel(
+//                  commitSuccess = write_channel_nb_intel(
+//                    channel_weightCollectControlCommitInternal[laneID],
+//                    0x1);
+                  write_channel_intel(
                     channel_weightCollectControlCommitInternal[laneID],
                     0x1);
                 }
               else {
-                  commitSuccess = write_channel_nb_intel(
+//                  commitSuccess = write_channel_nb_intel(
+//                    channel_weightCollectControlCommit,
+//                    0x1);
+                  write_channel_intel(
                     channel_weightCollectControlCommit,
                     0x1);
               }
-              if (commitSuccess){
-                  state = IDLE;
-              }
+//              if (commitSuccess){
+//                  EMULATOR_PRINT (("[Weight Collector %u]: Committed! Number of weights in uncompressed row: %u\n", laneID, weightIndexLast));
+//                  state = IDLE;
+//              }
+              EMULATOR_PRINT (("[Weight Collector %u]: Committed! Number of weights in uncompressed row: %u\n", laneID, weightIndexLast));
+              state = IDLE;
           break;
       }
     }
@@ -288,6 +325,7 @@ __attribute__((max_global_work_dim(0)))
 __attribute__((autorun))
 __kernel void transport_fill_weight_buffer ()
 {
+  EMULATOR_PRINT (("[transport_fill_weight_buffer]: Launched\n"));
   uint5_t wordCount=0;
   unsigned char header = 0x0;
   bool readNewPacket;
@@ -298,6 +336,7 @@ __kernel void transport_fill_weight_buffer ()
       t_tokenFillWeightCache token;
 
       if (readNewPacket) {
+        //EMULATOR_PRINT (("[transport_fill_weight_buffer]: New word!\n"));
         //Pass the packet to the next one, if this transport isn't the last
         if (TRANSPORT_ID_FILL_WEIGHT_BUFFER + 0x1 < NUM_TRANSPORTS) {
             write_channel_intel(channel_instructions[TRANSPORT_ID_FILL_WEIGHT_BUFFER + 0x1], word);
@@ -309,6 +348,7 @@ __kernel void transport_fill_weight_buffer ()
         switch (wordCount) {
           case 0:
             if (header == OPCODE_FILL_WEIGHT_BUFFER) {
+              EMULATOR_PRINT (("[transport_fill_weight_buffer]: Detected message \n"));
               wordCount++;
             }
             break;
@@ -339,7 +379,7 @@ __kernel void transport_fill_weight_buffer ()
             break;
 
           case 6:
-            token.numEncodingBlocksInFilter = token.numWeightsInFilter | ( ((unsigned short) instruction) );
+            token.numEncodingBlocksInFilter = token.numEncodingBlocksInFilter | ( ((unsigned short) instruction) );
             wordCount++;
             break;
 
@@ -416,7 +456,9 @@ __kernel void transport_fill_weight_buffer ()
           case 21:
             token.ddrKernelIndexStartOffset = token.ddrKernelIndexStartOffset | ( ((unsigned int) instruction) );
 
+            EMULATOR_PRINT ( ("[SpW Fill Transport]: Sending instruction to SpW DMA.....\n") );
             write_channel_intel(channel_spWeightDMA, token);
+            EMULATOR_PRINT ( ("[SpW Fill Transport]: Sent instruction to SpW DMA!\n") );
             wordCount = 0x0;
             break;
 
@@ -424,6 +466,7 @@ __kernel void transport_fill_weight_buffer ()
             wordCount++; 
 
         }
+       //EMULATOR_PRINT (("[transport_fill_weight_buffer]: WordCount is %u \n", wordCount));
       }
    }
 }
@@ -436,6 +479,7 @@ __attribute__((max_global_work_dim(0)))
 __attribute__((autorun))
 __kernel void transport_drain_weight_buffer ()
 {
+  EMULATOR_PRINT (("[transport_drain_weight_buffer]: Launched\n"));
   uint5_t wordCount=0;
   unsigned char header = 0x0;
   bool readNewPacket;
@@ -456,6 +500,7 @@ __kernel void transport_drain_weight_buffer ()
         switch (wordCount) {
           case 0:
             if (header == OPCODE_DRAIN_WEIGHT_BUFFER) {
+              EMULATOR_PRINT ( ("[SpW Drain Transport]: Message detected!\n") );
               wordCount++;
             }
             break;
@@ -490,6 +535,7 @@ __kernel void transport_drain_weight_buffer ()
             wordCount = 0x0;
 
             write_channel_intel(channel_tokenDrainWeightCacheControl[0], token);
+            EMULATOR_PRINT ( ("[SpW Drain Transport]: Message sent to the SpW Feeders!\n") );
             break;
 
           default:
@@ -508,6 +554,7 @@ __attribute__((max_global_work_dim(0)))
 __attribute__((autorun))
 __kernel void transport_collect_weights ()
 {
+  EMULATOR_PRINT (("[Transport_collect_weights]: Launched\n"));
   uint5_t wordCount=0;
   bool readNewPacket;
 
@@ -517,6 +564,7 @@ __kernel void transport_collect_weights ()
       t_weightCollectToken token;
 
       if (readNewPacket) {
+        //EMULATOR_PRINT (("[Transport_collect_weights]: New word!\n"));
         if (TRANSPORT_ID_COLLECT_WEIGHT + 0x1 < NUM_TRANSPORTS) {
             write_channel_intel(channel_instructions[TRANSPORT_ID_COLLECT_WEIGHT + 0x1], word);
         }
@@ -527,24 +575,25 @@ __kernel void transport_collect_weights ()
         switch (wordCount) {
           case 0:
             if (header == OPCODE_COLLECT_WEIGHT) {
+              EMULATOR_PRINT (("[Transport_collect_weights]: Message detected!\n"));
               wordCount++;
             }
             break;
 
           case 1:
-            token.numWeightsInFilter = (uint18_t) (((unsigned int) instruction) << 16);
+            token.numWeightsInFilter = (uint24_t) (((unsigned int) instruction) << 16);
             wordCount++;
             break;
 
           case 2:
             token.numWeightsInFilter = token.numWeightsInFilter | 
-                            (uint18_t) (((unsigned int) instruction) << 8);
+                            (uint24_t) (((unsigned int) instruction) << 8);
             wordCount++;
             break;
 
           case 3:
             token.numWeightsInFilter = token.numWeightsInFilter | 
-                            ((uint18_t) instruction);
+                            ((uint24_t) instruction);
             wordCount++;
             break;
 
@@ -592,12 +641,14 @@ __kernel void transport_collect_weights ()
                     = token.ddrKernelWeightStartOffset | ((unsigned int) instruction);
             wordCount = 0x0;
             write_channel_intel(channel_weightCollectControl[0], token);
+            EMULATOR_PRINT (("[Transport_collect_weights]: Message sent to the collectors!\n"));
             break;
 
           default:
             wordCount++; 
 
         }
+        //EMULATOR_PRINT (("[Transport_collect_weights]: WordCount is %u \n", wordCount));
       }
    }
 }
@@ -610,13 +661,13 @@ __attribute__((max_global_work_dim(0)))
 __attribute__((autorun))
 __kernel void transport_drain_weights_select ()
 {
+  EMULATOR_PRINT (("[transport_drain_weights_select]: Launched\n"));
   //uint5_t wordCount=0;
   bool readNewPacket;
+  uint1_t wordCount=0;
 
    while (1) {
       unsigned short word = read_channel_nb_intel(channel_instructions[TRANSPORT_ID_SWAP_WEIGHT_BUFFER], &readNewPacket);
-
-      uint1_t token;
 
       if (readNewPacket) {
         if (TRANSPORT_ID_SWAP_WEIGHT_BUFFER + 0x1 < NUM_TRANSPORTS) {
@@ -626,10 +677,24 @@ __kernel void transport_drain_weights_select ()
         unsigned char header = (unsigned char) (word >> 8);
         unsigned char instruction = (unsigned char) (0x0FF & word);
 
-         if (header == OPCODE_SWAP_WEIGHT_BUFFER) {
-                write_channel_intel(channel_spWeightFeederDrainSelect[0], 0x1);
-          }
-
+        switch (wordCount) {
+          case 0:
+              if (header == OPCODE_SWAP_WEIGHT_BUFFER) {
+                EMULATOR_PRINT (("[transport_drain_weights_select]: Message detected!\n"));
+                wordCount++;
+              }
+              break;
+          case 1:
+              write_channel_intel(channel_spWeightFeederDrainSelect[0], 0x1);
+              EMULATOR_PRINT (("[transport_drain_weights_select]: Swap sent!\n"));
+              wordCount=0;
+              break;
+          default:
+              wordCount++;
         }
+
+         
+
       }
+    }
 }

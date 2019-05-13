@@ -17,7 +17,7 @@ endif()
 #########################
 file(GLOB HOST_SRC
         ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp
-        ${PROJECT_SOURCE_DIR}/common/src/AOCLUtils/*.cpp
+        ${PROJECT_SOURCE_DIR}/common/src/AOCLUtilsCpp/*.cpp
 )
 
 ###########################
@@ -86,15 +86,25 @@ endif()
 ##Add extra library for the host below
 ######################################
 #set (OpenCV_DIR /home/jamesliu/arm_opencv/Build CACHE STRING "Path of OpenCV" FORCE)
-find_package (OpenCV REQUIRED )
+#find_package (OpenCV REQUIRED )
 
-include_directories(${OpenCV_INCLUDE_DIRS})
-add_definitions(-DUSE_OPENCV)
+#include_directories(${OpenCV_INCLUDE_DIRS})
+#add_definitions(-DUSE_OPENCV)
+
+find_package (Boost 1.56 REQUIRED)
+INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIRS})
 #####################################
 ##Add unit test for the host library below
 #####################################
 add_definitions(-DFPGA_DEVICE)
 add_executable (${TEST_NAME}_host ${HOST_SRC})
+target_link_libraries(${TEST_NAME}_host ${Boost_LIBRARIES})
+target_compile_definitions(
+    ${TEST_NAME}_host
+    PUBLIC
+    ${PREPROCESSOR_DEFS}
+    )
+
 
 if ("${intelfpga_host_libraries}" STREQUAL "")
     #Hack for non arm boards

@@ -4,6 +4,13 @@
 #include "device_structures.hpp"
 #include "channels.cl"
 
+#ifdef EMULATOR
+	#define EMULATOR_PRINT(format) printf format
+#else
+	#define EMULATOR_PRINT(format)
+#endif
+
+
 #pragma OPENCL EXTENSION cl_intel_channels : enable
 
 //channel t_spWeightAndOffset channel_sparseWeights[PE_ROWS] __attribute__((depth(0)));
@@ -13,101 +20,112 @@
 __attribute__((max_global_work_dim(0)))
 
 __kernel void kernelSparseWeightDMA(
-        __global volatile short * restrict pMem)
+        __global volatile short * restrict pWeightMem
+        ,__global volatile short * restrict pIndexMem)
 {
-	bool request;
-	t_tokenFillWeightCache token = read_channel_nb_intel(channel_spWeightDMA, &request);
-	if (request){
-        unsigned int ddrKernelIndexStartOffset = token.ddrKernelIndexStartOffset;
-        unsigned int ddrKernelWeightStartOffset = token.ddrKernelWeightStartOffset;
-        unsigned char numFiltersToStream = token.numFiltersToStream;
-        unsigned short filterStart = token.filterStart;
-        unsigned short cbStart = token.cbStart;
-        unsigned short cbEnd = token.cbEnd + 1;
-        unsigned short numCbToStream = (unsigned short)(cbEnd- cbStart + 1);
-        unsigned short numEncodingBlocksInFilter = token.numEncodingBlocksInFilter;
-        unsigned int numWeightsInFilter = token.numWeightsInFilter;
+	EMULATOR_PRINT ( ("[Kernel SpW DMA]: Launched\n") );
+	while (1){
+		bool request = false;
+		t_tokenFillWeightCache token = read_channel_nb_intel(channel_spWeightDMA, &request);
+		//mem_fence(CLK_CHANNEL_MEM_FENCE);
+		if (request){
+			EMULATOR_PRINT ( ("[Kernel SpW DMA]: Request received!\n") );
+	        unsigned int ddrKernelIndexStartOffset = token.ddrKernelIndexStartOffset;
+	        unsigned int ddrKernelWeightStartOffset = token.ddrKernelWeightStartOffset;
+	        unsigned char numFiltersToStream = token.numFiltersToStream;
+	        unsigned short filterStart = token.filterStart;
+	        unsigned short cbStart = token.cbStart;
+	        unsigned short cbEnd = token.cbEnd;
+            unsigned short numCbToStream = (unsigned short)(cbEnd- cbStart + 1);
+	        unsigned short numEncodingBlocksInFilter = token.numEncodingBlocksInFilter;
+	        unsigned int numWeightsInFilter = token.numWeightsInFilter;
 
-        unsigned int tokenCount=0;
-        unsigned int numTokenToCollect=0;
-        unsigned char laneID = 0;
-        unsigned short iterFilter;
-        for (laneID=0, iterFilter=filterStart;
-            laneID < numFiltersToStream;
-			laneID++, iterFilter++){
+	        unsigned int tokenCount=0;
+	        unsigned int numTokenToCollect=0;
+	        unsigned char laneID = 0;
+	        unsigned short iterFilter;
+	        for (laneID=0, iterFilter=filterStart;
+	            laneID < numFiltersToStream;
+				laneID++, iterFilter++){
 
-            t_spOffset offsetHead;
-            t_spOffset offsetEnd;
-            t_spOffset numWeightsToStream;
+	            t_spOffset offsetHead;
+	            t_spOffset offsetEnd;
+	            t_spOffset numWeightsToStream;
 
-            unsigned short depth;
+	            unsigned short depth;
 
-			//	First obtain the indicies, then stream it
-			//	Then obtain the weights
-            depth=0;
-            for (unsigned int ddrAddress=ddrKernelIndexStartOffset+iterFilter*numEncodingBlocksInFilter+cbStart;
-                depth < (unsigned short) numCbToStream;
-                depth++, ddrAddress++)
-			{
-                bool loopBackTokenRead;
-                t_spOffset index = (t_spOffset) pMem[ddrAddress];
-				u_index_data data;
-				data.offset = index;
-				t_packetDMAToWeightFeeder packet;
-                packet.depth = depth;
-                packet.isIndex = 1;
-                packet.laneNumber = (short) laneID;
-                packet.packet = data;
-                write_channel_intel(channel_packetDMAToWeightFeeder[0], packet);
-                if (depth==0){
-                    offsetHead = index;
-                }
-                if (depth == (short) (numCbToStream - 1)) {
-                    offsetEnd = index;
-                }
-                uint1_t token = read_channel_nb_intel(channel_packetDMAToWeightFeederLoopBack, &loopBackTokenRead);
-                if (loopBackTokenRead){
-                    tokenCount++;
-                }
-                mem_fence(CLK_CHANNEL_MEM_FENCE);
+				//	First obtain the indicies, then stream it
+				//	Then obtain the weights
+				//  CONFUSION; numEncodingBlocksInFilter or numEncodingBlocksInFilterSrip?
+	            depth=0;
+                for (unsigned int ddrAddress=ddrKernelIndexStartOffset+iterFilter*(numEncodingBlocksInFilter + 1)+cbStart;
+                    depth <= (unsigned short) numCbToStream; //CAUTION: Need to be <=, because the extra cb contains the pointer!
+	                depth++, ddrAddress++)
+				{
+	                bool loopBackTokenRead = false;
+	                t_spOffset index = (t_spOffset) pIndexMem[ddrAddress];
+					u_index_data data;
+					data.offset = index;
+					t_packetDMAToWeightFeeder packet;
+	                packet.depth = depth;
+	                packet.isIndex = 1;
+	                packet.laneNumber = (unsigned short) laneID;
+	                packet.packet = data;
+
+	                write_channel_intel(channel_packetDMAToWeightFeeder[0], packet);
+
+	                if (depth==0){
+	                    offsetHead = index;
+	                }
+                    if (depth == (unsigned short) (numCbToStream)) {//Pointer of the next cb, which marks the end of this stream run!
+	                    offsetEnd = index;
+	                }
+	                read_channel_nb_intel(channel_packetDMAToWeightFeederLoopBack, &loopBackTokenRead);
+	                if (loopBackTokenRead){
+	                    tokenCount++;
+	                }
+	                mem_fence(CLK_CHANNEL_MEM_FENCE);
+				}
+	            numTokenToCollect += ((unsigned int)  numCbToStream + 1); //CAUTION: Need to be +1 , because the extra cb contains the pointer!
+	            numWeightsToStream = offsetEnd - offsetHead;
+
+	            depth=0;
+	            for (unsigned int ddrAddress=ddrKernelWeightStartOffset+iterFilter*numWeightsInFilter+ (unsigned int) offsetHead;
+	                 depth < (unsigned short) numWeightsToStream;
+	                 depth++, ddrAddress++) {
+	                bool loopBackTokenRead;
+	                t_spWeightAndOffset weight = (t_spWeightAndOffset) pWeightMem[ddrAddress];
+	                u_index_data data;
+	                data.weightAndOffset = weight;
+	                t_packetDMAToWeightFeeder packet;
+	                packet.depth = depth;
+	                packet.isIndex = 0;
+	                packet.laneNumber = (unsigned short) laneID;
+	                packet.packet = data;
+	                write_channel_intel(channel_packetDMAToWeightFeeder[0], packet);
+	                read_channel_nb_intel(channel_packetDMAToWeightFeederLoopBack, &loopBackTokenRead);
+	                if (loopBackTokenRead){
+	                    tokenCount++;
+	                }
+	                mem_fence(CLK_CHANNEL_MEM_FENCE);
+	            }
+
+	            numTokenToCollect += (unsigned int) numWeightsToStream;
 			}
-            numTokenToCollect += (unsigned int) numCbToStream;
-            numWeightsToStream = offsetEnd - offsetHead;
-
-            depth=0;
-            for (unsigned int ddrAddress=ddrKernelWeightStartOffset+iterFilter*numWeightsInFilter+ (unsigned int) offsetHead;
-                 depth < (short) numWeightsToStream;
-                 depth++, ddrAddress++) {
-                bool loopBackTokenRead;
-                t_spWeightAndOffset weight = (t_spWeightAndOffset) pMem[ddrAddress];
-                u_index_data data;
-                data.weightAndOffset = weight;
-                t_packetDMAToWeightFeeder packet;
-                packet.depth = depth;
-                packet.isIndex = 0;
-                packet.laneNumber = (short) laneID;
-                packet.packet = data;
-                write_channel_intel(channel_packetDMAToWeightFeeder[0], packet);
-                uint1_t token = read_channel_nb_intel(channel_packetDMAToWeightFeederLoopBack, &loopBackTokenRead);
-                if (loopBackTokenRead){
-                    tokenCount++;
-                }
-                mem_fence(CLK_CHANNEL_MEM_FENCE);
-            }
-
-            numTokenToCollect += (unsigned int) numWeightsToStream;
-		}
-        //Wait for all the tokens to arrive
-        while (tokenCount < numTokenToCollect){
-            bool loopBackTokenRead;
-            uint1_t token = read_channel_nb_intel(channel_packetDMAToWeightFeederLoopBack, &loopBackTokenRead);
-            if (loopBackTokenRead){
-                tokenCount++;
-            }
-            mem_fence(CLK_CHANNEL_MEM_FENCE);
-        }
-        write_channel_intel(channel_spWeightDMACommit, 0x1);
-	} 
+	        //Wait for all the tokens to arrive
+	        while (tokenCount < numTokenToCollect){
+	            bool loopBackTokenRead;
+	            read_channel_nb_intel(channel_packetDMAToWeightFeederLoopBack, &loopBackTokenRead);
+	            if (loopBackTokenRead){
+	                tokenCount++;
+	            }
+	            mem_fence(CLK_CHANNEL_MEM_FENCE);
+	        }
+	        EMULATOR_PRINT ( ("[Kernel SpW DMA]: Commiting the reqeust!\n") );
+	        write_channel_intel(channel_spWeightDMACommit, 0x1);
+	        EMULATOR_PRINT ( ("[Kernel SpW DMA]: Request serviced!\n") );
+		} 
+	}
 
 }
 
@@ -124,7 +142,7 @@ __kernel void kernelSparseWeightFeeder()
 	enum e_states {IDLE, STREAM_HEAD_SETUP, STREAM_START_SETUP, STREAM_END_SETUP, STREAM, STREAM_COMMIT_WAIT, STREAM_COMMIT_WRITE};
     enum e_states state = IDLE;
 	int laneID = get_compute_id(0);
-
+	EMULATOR_PRINT( ("[SpW Feeder %i]: Launching\n", laneID) );
 	//Declare the buffers
 	__local t_spWeightAndOffset  __attribute__ ((numbanks(2), bankwidth(2))) bufferWeightValues [KERNEL_CACHE_DEPTH][2];
 	__local t_spOffset __attribute__ ((numbanks(2), bankwidth(2))) bufferWeightIndex [KERNEL_INDEX_CACHE_DEPTH][2];
@@ -134,20 +152,20 @@ __kernel void kernelSparseWeightFeeder()
 
 	//Internal registers
 	//Unpack the control information required for draining
-    unsigned short drainCbStartReg;
-    unsigned short drainCbEndReg;
+    unsigned short drainCbStartReg = 0;
+    unsigned short drainCbEndReg = 0;
 
 	t_tokenDrainWeightCache tokenDrain;
 	//uint1_t requestDrainSelect;
 
-	t_spOffset laneHeadOffset;
-	t_spOffset drainIterIndexReg;
-	t_spOffset drainEndIndexReg;
+	t_spOffset laneHeadOffset = 0;
+	t_spOffset drainIterIndexReg = 0;
+	t_spOffset drainEndIndexReg = 0;
 
 	#pragma ivdep array(bufferWeightValues)
 	#pragma ivdep array(bufferWeightIndex)
 	while (true){
-		bool isDataInput, isDrainSelect, requestDrain;
+		bool isDataInput=0, isDrainSelect=0, requestDrain=0;
 
 		t_packetDMAToWeightFeeder inputPacket = read_channel_nb_intel(
 				channel_packetDMAToWeightFeeder [laneID]
@@ -157,13 +175,13 @@ __kernel void kernelSparseWeightFeeder()
 		if (isDataInput) {
 			//Unpack the packet
 			u_index_data packet = inputPacket.packet;
-			short dstLaneNumber = inputPacket.laneNumber;
-			short dstDepth = inputPacket.depth;
+			unsigned short dstLaneNumber = inputPacket.laneNumber;
+			unsigned short dstDepth = inputPacket.depth;
 			uint1_t isIndex = inputPacket.isIndex;
 
-			if (laneID == dstLaneNumber){
+			if (laneID == (int) dstLaneNumber){
 				switch(isIndex){
-					case 0:
+					case 1:
 						bufferWeightIndex[dstDepth][(~drainSelectReg) & 0x1] = packet.offset;
 						break;
 					default:
@@ -176,7 +194,9 @@ __kernel void kernelSparseWeightFeeder()
 				write_channel_intel(channel_packetDMAToWeightFeeder [laneID+1 & KERNEL_CACHE_LANE_MASK], inputPacket);
 			}
 			else {
+				EMULATOR_PRINT( ("[SpW Feeder %i]: Waiting to acknowledge the write reqeust from the DMA!\n", laneID) );
 				write_channel_intel(channel_packetDMAToWeightFeederLoopBack, 1);
+				EMULATOR_PRINT( ("[SpW Feeder %i]: Acknowledge to write reqeust from the DMA!\n", laneID) );
 			}
 		}
 
@@ -187,28 +207,35 @@ __kernel void kernelSparseWeightFeeder()
 					, &requestDrain
 				);
 
-				uint1_t token = read_channel_nb_intel(
+				//EMULATOR_PRINT ( ("[SpWFeeder %i]: State IDLE\n", laneID));
+
+				read_channel_nb_intel(
 					channel_spWeightFeederDrainSelect[laneID]
 					, &isDrainSelect
 				);
 
 						//Swap the drain/fill side if requested
 				if (isDrainSelect){
+					EMULATOR_PRINT( ("[SpW Feeder %i]: Swap request received!\n", laneID) );
 					drainSelectReg = ~drainSelectReg;
+					//EMULATOR_PRINT ( ("[SpWFeeder %i]: State IDLE. Servicing swap.\n", laneID));
 					if (laneID < KERNEL_CACHE_LANES-1) {
 						write_channel_intel(channel_spWeightFeederDrainSelect[laneID+1], 0x1);
+						EMULATOR_PRINT( ("[SpW Feeder %i]: Sending the swap request down the daisy chain, to %u!\n", laneID, laneID+1) );
 					}
 					else {
 						write_channel_intel(channel_spWeightFeederDrainSelectCommit, 1);
+						EMULATOR_PRINT( ("[SpW Feeder %i]: Last SpW feeder. Commited Swap Request!\n", laneID) );
 					}
 				}
 
 				if (requestDrain){
+					EMULATOR_PRINT ( ("[SpW Feeder %i]: State IDLE. Received request to drain.\n", laneID));
 					if (laneID < KERNEL_CACHE_LANES-1){
 						write_channel_intel(channel_tokenDrainWeightCacheControl[laneID+1 & KERNEL_CACHE_LANE_MASK], tokenDrain);
 					}
 
-					if (laneID>=tokenDrain.laneStart && laneID<tokenDrain.laneEnd){
+                    if ( ((unsigned char) laneID) >=tokenDrain.laneStart && ((unsigned char) laneID) <tokenDrain.laneEnd){
                         drainCbStartReg = (unsigned short) tokenDrain.cbStart;
                         drainCbEndReg = (unsigned short) tokenDrain.cbEnd;
 						state = STREAM_HEAD_SETUP; //State update
@@ -217,22 +244,27 @@ __kernel void kernelSparseWeightFeeder()
                         state = STREAM_COMMIT_WAIT;
                     }
 				}
+				//EMULATOR_PRINT ( ("[SpWFeeder %i]: State will remain IDLE\n", laneID));
 				break;
 			case (STREAM_HEAD_SETUP):
+				EMULATOR_PRINT( ("[SpW Feeder %i]: State is STREAM_HEAD_SETUP\n", laneID) );
 				laneHeadOffset = bufferWeightIndex[0][drainSelectReg];
 				state = STREAM_START_SETUP;
 				break;
 			case (STREAM_START_SETUP):
+				EMULATOR_PRINT( ("[SpW Feeder %i]: State is STREAM_START_SETUP\n", laneID) );
 				drainIterIndexReg = bufferWeightIndex
 				[drainCbStartReg & KERNEL_INDEX_CACHE_DEPTH_MASK][drainSelectReg & 0x1] - laneHeadOffset;
 				state = STREAM_END_SETUP;
 				break;
 			case (STREAM_END_SETUP):
+				EMULATOR_PRINT( ("[SpW Feeder %i]: State is STREAM_END_SETUP\n", laneID) );
 				drainEndIndexReg = bufferWeightIndex
 				[(drainCbEndReg + 1) & KERNEL_INDEX_CACHE_DEPTH_MASK][drainSelectReg & 0x1] - laneHeadOffset;
 				state = STREAM;
 				break;
 			case (STREAM):
+				EMULATOR_PRINT( ("[SpW Feeder %i]: State is STREAM\n", laneID) );
 #ifndef INCLUDE_COMPUTE_CORE
 				write_channel_intel(channel_sparseWeights[laneID & KERNEL_CACHE_LANE_MASK]
 						, bufferWeightValues [drainIterIndexReg & KERNEL_INDEX_CACHE_DEPTH_MASK][drainSelectReg & 0x1]);
@@ -246,12 +278,14 @@ __kernel void kernelSparseWeightFeeder()
 				drainIterIndexReg++;
 				break;
 			case (STREAM_COMMIT_WAIT):
+				EMULATOR_PRINT( ("[SpW Feeder %i]: State is STREAM_COMMIT_WAIT\n", laneID) );
 				if (laneID > 0){
-					uint1_t token = read_channel_intel(channel_drainWeightCacheInternalCommit[laneID-1 & KERNEL_CACHE_LANE_MASK]);
+					read_channel_intel(channel_drainWeightCacheInternalCommit[laneID-1 & KERNEL_CACHE_LANE_MASK]);
 				}
 				state = STREAM_COMMIT_WRITE;
 				break;
 			case (STREAM_COMMIT_WRITE):
+				EMULATOR_PRINT( ("[SpW Feeder %i]: State is STREAM_COMMIT_WRITE\n", laneID) );
 				if (laneID < KERNEL_CACHE_LANES - 1){
 					write_channel_intel(channel_drainWeightCacheInternalCommit[laneID & KERNEL_CACHE_LANE_MASK], true & 0x1);
 				}
@@ -260,6 +294,10 @@ __kernel void kernelSparseWeightFeeder()
 				}
 				state = IDLE;
 				break;
+
+			default:
+				EMULATOR_PRINT( ("[SpW Feeder %i]: State is UNDEFINED!\n", laneID) );
+				state = IDLE;
 			}
 
 

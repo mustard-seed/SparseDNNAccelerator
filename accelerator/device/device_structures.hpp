@@ -1,8 +1,20 @@
 #ifndef STRUCTURES_HPP_DEF
 #define STRUCTURES_HPP_DEF
-#include "ihc_apint.h"
+
 #include "params.hpp"
 
+/*! t_instruction
+ * \brief VLIW instructions for controlling the accelerator
+ */
+typedef struct __attribute__((aligned(32))) __attribute__((packed)) {
+    unsigned char header;
+    unsigned char instructionSizeBytes;
+    unsigned char dependencyList[DEPENDENCY_LIST_SIZE_BYTE];
+    unsigned char words[INSTRUCTION_SIZE_BYTE];
+} t_instruction;
+
+#ifdef INTELFPGA_CL
+#include "ihc_apint.h"
 typedef short t_spWeightAndOffset;
 typedef unsigned short t_spOffset;
 typedef uint4_t t_zCount;
@@ -11,7 +23,7 @@ typedef uint12_t t_weight;
 /*! t_tokenFillWeightCache
     Token used to command filling of the sparse weight cache
 */
-typedef struct {
+typedef struct __attribute__((packed)){
     unsigned int ddrKernelIndexStartOffset; //Word offset of the indices of the kernel relative to the start of the global memory
     unsigned int ddrKernelWeightStartOffset; //Word offset of the weights of the kernel relative to the start of the global memory
     unsigned short filterStart; //Index of the first filter to be streamed into the cache
@@ -34,10 +46,10 @@ typedef union {
 /*! t_packetDMAToWeightFeeder
     Structure encapsulating the data from the Sparse Weight DMA to the Sparse Weight feeders
 */
-typedef struct {
+typedef struct __attribute__((packed)){
     u_index_data packet;
-    short laneNumber;
-    short depth;
+    unsigned short laneNumber;
+    unsigned short depth;
     uint1_t isIndex;
 } t_packetDMAToWeightFeeder;
 
@@ -45,9 +57,9 @@ typedef struct {
 /*! t_tokenDrainWeightCache
     Token used to command draining of the sparse weight cache
 */
-typedef struct {
+typedef struct __attribute__((packed)){
     unsigned char laneStart; //First lane to be streamed
-    unsigned char laneEnd; //Last lane to be streamed
+    unsigned char laneEnd; //One plus the last lane to be streamed
     /*
     Index of the first encoder block inside each lane's index cache line to be streamed.
     The block at the start of the cache line has index 0
@@ -61,18 +73,8 @@ typedef struct {
     //uint1_t drainSetNumber; //Which bank to drain. Either 0 or 1;
 } t_tokenDrainWeightCache;
 
-/*! t_instruction
- * \brief VLIW instructions for controlling the accelerator
- */
-typedef struct {
-    unsigned char header;
-    unsigned char instructionSizeBytes;
-    unsigned char dependencyList[DEPENDENCY_LIST_SIZE_BYTE];
-    unsigned char words[INSTRUCTION_SIZE_BYTE];
-} t_instruction;
-
 #ifdef WEIGHT_MEMORY_TEST
-typedef struct {
+typedef struct __attribute__((packed)){
   unsigned int ddrKernelWeightStartOffset; //Offset of the start of the tensor in DDR
   unsigned short filterStart; //The first filter (i.e. matrix row) to be collected
   unsigned short numFiltersToCollect; //Number of filters (i.e. matrix row to collect)
@@ -80,4 +82,7 @@ typedef struct {
 
   } t_weightCollectToken;
 #endif
-#endif
+
+#endif //INTELFPGA_CL
+
+#endif //STRUCTURES_HPP_DEF
