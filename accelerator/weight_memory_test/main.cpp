@@ -15,7 +15,7 @@
 #include <random>
 
 #define MATRIX_ROWS 100
-#define MATRIX_COLS 100
+#define MATRIX_COLS 2048
 #define SEED 10
 #define BERN_P 0.1
 

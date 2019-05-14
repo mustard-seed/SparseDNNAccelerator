@@ -144,8 +144,8 @@ __kernel void kernelSparseWeightFeeder()
 	int laneID = get_compute_id(0);
 	EMULATOR_PRINT( ("[SpW Feeder %i]: Launching\n", laneID) );
 	//Declare the buffers
-	__local t_spWeightAndOffset  __attribute__ ((numbanks(2), bankwidth(2))) bufferWeightValues [KERNEL_CACHE_DEPTH][2];
-	__local t_spOffset __attribute__ ((numbanks(2), bankwidth(2))) bufferWeightIndex [KERNEL_INDEX_CACHE_DEPTH][2];
+	__private t_spWeightAndOffset  __attribute__ ((numbanks(2), bankwidth(2))) bufferWeightValues [KERNEL_CACHE_DEPTH][2];
+	__private t_spOffset __attribute__ ((numbanks(2), bankwidth(2))) bufferWeightIndex [KERNEL_INDEX_CACHE_DEPTH][2];
 
 	//Register controlling the drain select
 	uint1_t drainSelectReg = 0x1;
