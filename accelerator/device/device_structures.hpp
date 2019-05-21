@@ -6,12 +6,21 @@
 /*! t_instruction
  * \brief VLIW instructions for controlling the accelerator
  */
+#ifdef INTELFPGA_CL
 typedef struct __attribute__((aligned(32))) __attribute__((packed)) {
     unsigned char header;
     unsigned char instructionSizeBytes;
     unsigned char dependencyList[DEPENDENCY_LIST_SIZE_BYTE];
     unsigned char words[INSTRUCTION_SIZE_BYTE];
 } t_instruction;
+#else
+typedef struct __attribute__((aligned(32))) __attribute__((packed)) {
+    cl_uchar header;
+    cl_uchar instructionSizeBytes;
+    cl_uchar dependencyList[DEPENDENCY_LIST_SIZE_BYTE];
+    cl_uchar words[INSTRUCTION_SIZE_BYTE];
+} t_instruction;
+#endif
 
 #ifdef INTELFPGA_CL
 #include "ihc_apint.h"
@@ -78,7 +87,7 @@ typedef struct __attribute__((packed)){
   unsigned int ddrKernelWeightStartOffset; //Offset of the start of the tensor in DDR
   unsigned short filterStart; //The first filter (i.e. matrix row) to be collected
   unsigned short numFiltersToCollect; //Number of filters (i.e. matrix row to collect)
-  uint18_t numWeightsInFilter; //Number of weights in the filter if it were uncompressed 
+  uint24_t numWeightsInFilter; //Number of weights in the filter if it were uncompressed 
 
   } t_weightCollectToken;
 #endif

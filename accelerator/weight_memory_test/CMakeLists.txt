@@ -67,14 +67,18 @@ if (BOARD_NAME MATCHES "DE10Standard")
     file (GLOB intelfpga_device_libraries
         $ENV{INTELFPGAOCLSDKROOT}/board/de10_standard/arm32/lib/*.so
         )
+    add_definitions(-DC5SOC)
 
 elseif (BOARD_NAME MATCHES "A10REF")
     ##Add library directories for a10_ref
+    add_definitions(-DARRIA10)
     message (STATUS "Linking against A10-Ref libraries")
 elseif (BOARD_NAME MATCHES "A10PAC")
+    add_definitions(-DARRIA10)
     ##Add library directories for a10_pac
     message (STATUS "Linking against A10-Pac libraries")
 elseif (BOARD_NAME MATCHES "DE5ANET")
+    add_definitions(-DC5SOC)
     ##Add library directories for de5a_net
     message (STATUS "Linking against DE5A-NET libraries")
 else()
@@ -173,10 +177,30 @@ add_aoc_target (
 
 add_aoc_target (
     TARGET_NAME ${TEST_NAME}
+    TARGET_TYPE RELEASE_HW
+    SOURCES_LIST ${kernel_files}
+    HEADER_DIR ${PROJECT_SOURCE_DIR}/device
+    RTL_DIR ${rtl_directory}
+    PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}
+    #RTL_LIB ${rtl_lib})
+    )
+
+add_aoc_target (
+    TARGET_NAME ${TEST_NAME}
     TARGET_TYPE PROFILE_HW
     SOURCES_LIST ${kernel_files} 
     HEADER_DIR ${PROJECT_SOURCE_DIR}/device
     RTL_DIR ${rtl_directory} 
+    PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}
+    #RTL_LIB ${rtl_lib})
+    )
+
+add_aoc_target (
+    TARGET_NAME ${TEST_NAME}
+    TARGET_TYPE FAST_COMPILE_HW
+    SOURCES_LIST ${kernel_files}
+    HEADER_DIR ${PROJECT_SOURCE_DIR}/device
+    RTL_DIR ${rtl_directory}
     PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}
     #RTL_LIB ${rtl_lib})
     )

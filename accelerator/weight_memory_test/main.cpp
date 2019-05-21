@@ -14,13 +14,19 @@
 #include <unistd.h> //usleep
 #include <random>
 
-#define MATRIX_ROWS 100
-#define MATRIX_COLS 2048
+#define MATRIX_ROWS 1
+#define MATRIX_COLS 10
 #define SEED 10
-#define BERN_P 0.1
+#define BERN_P 1.0
 
 typedef
-std::vector<unsigned short, boost::alignment::aligned_allocator<unsigned short, aocl_utils_cpp::AOCL_ALIGNMENT>>
+//std::vector<cl_ushort, boost::alignment::aligned_allocator<cl_ushort, aocl_utils_cpp::AOCL_ALIGNMENT>>
+std::vector<cl_ushort>
+aligned_ushort_vector;
+
+typedef
+//std::vector<cl_short, boost::alignment::aligned_allocator<cl_short, aocl_utils_cpp::AOCL_ALIGNMENT>>
+std::vector<cl_short>
 aligned_short_vector;
 
 
@@ -35,14 +41,14 @@ void matrix_compression (std::vector<char> & _matrix,
     unsigned int numberOfRows,
     unsigned int cbPerRow,
     aligned_short_vector &outEffectualValues,
-    aligned_short_vector &outCBOffets
+    aligned_ushort_vector &outCBOffets
   );
 
 /*! \brief Comppare the output matrix with the original matrix
     \return True if the two matrices match. False otherwise.
 */
 bool check_matrix (aligned_short_vector &originalMatrix,
-  aligned_short_vector &originalIndex,
+  aligned_ushort_vector &originalIndex,
   aligned_short_vector &outputMatrix,
   unsigned int numberOfRow,
   unsigned int numberOfWeightsPerRow,
@@ -120,11 +126,11 @@ int main(int argc, char* argv[]) {
     std::cout <<"Prepare the test matrix"<<std::endl;
     std::vector<char> matrix;
 
-    aligned_short_vector effectualValues (MATRIX_ROWS * MATRIX_COLS, 0);
+    aligned_short_vector effectualValues (MATRIX_ROWS * MATRIX_COLS, 3);
     //effectualValues.reserve(MATRIX_ROWS * MATRIX_COLS);
 
 
-    aligned_short_vector outputEffectualValues (MATRIX_ROWS * MATRIX_COLS, 0);
+    aligned_short_vector outputEffectualValues (MATRIX_ROWS * MATRIX_COLS, 4);
     //outputEffectualValues.reserve(MATRIX_ROWS * MATRIX_COLS);
 
     unsigned int numberOfWeightsPerRow = MATRIX_COLS;
@@ -132,7 +138,7 @@ int main(int argc, char* argv[]) {
     unsigned int CBPerRow =
     (unsigned int) std::ceil( (double) numberOfWeightsPerRow / (double) ENCODING_LENGTH);
 
-    aligned_short_vector cbOffsets ((CBPerRow+1) * MATRIX_ROWS, 0);
+    aligned_ushort_vector cbOffsets ((CBPerRow+1) * MATRIX_ROWS, 0);
     //cbOffsets.reserve((CBPerRow+1) * MATRIX_COLS);
 
 
@@ -168,9 +174,10 @@ int main(int argc, char* argv[]) {
 
     //Generate the instructions
     unsigned int numInstructions;
-    std::vector<t_instruction,
-            boost::alignment::aligned_allocator<t_instruction, aocl_utils_cpp::AOCL_ALIGNMENT>
-            > instructionVector;
+//    std::vector<t_instruction,
+//            boost::alignment::aligned_allocator<t_instruction, aocl_utils_cpp::AOCL_ALIGNMENT>
+//            > instructionVector;
+    std::vector<t_instruction> instructionVector;
     for (unsigned int r=0; r<MATRIX_ROWS; r+=KERNEL_CACHE_LANES) {
             t_instruction instructionCollect =
                 cmdGenCollectWeight(
@@ -187,7 +194,7 @@ int main(int argc, char* argv[]) {
                             0, //ddrWeightOffset
                             (unsigned short) r, //Filter start
                             (unsigned char) std::min((unsigned char) KERNEL_CACHE_LANES, (unsigned char) (MATRIX_ROWS-r)), //numFilterToStream
-                            (unsigned char) c, //cbStart
+                            (unsigned short) c, //cbStart
                             (unsigned short) (c + (unsigned int) std::min((unsigned int)KERNEL_INDEX_CACHE_DEPTH - 1, (unsigned int) CBPerRow - c) - 1), //cbEnd
                             CBPerRow,
                             MATRIX_COLS
@@ -252,8 +259,8 @@ int main(int argc, char* argv[]) {
         //Create the buffers
         cl::Buffer inputSpWBuffer(
                     clContext,
-                    CL_MEM_READ_ONLY,
-                    MATRIX_ROWS * MATRIX_COLS * sizeof(unsigned short),
+                    CL_MEM_READ_WRITE,
+                    MATRIX_ROWS * MATRIX_COLS * sizeof(typeof(effectualValues.at(0))),
                     NULL,
                     &status
                     );
@@ -261,8 +268,8 @@ int main(int argc, char* argv[]) {
 
         cl::Buffer inputPointerBuffer(
                     clContext,
-                    CL_MEM_READ_ONLY,
-                    (CBPerRow+1) * MATRIX_COLS * sizeof(unsigned short),
+                    CL_MEM_READ_WRITE,
+                    (CBPerRow+1) * MATRIX_ROWS * sizeof(typeof(cbOffsets.at(0))),
                     NULL,
                     &status
                     );
@@ -270,8 +277,8 @@ int main(int argc, char* argv[]) {
 
         cl::Buffer outputSpWBuffer(
                     clContext,
-                    CL_MEM_WRITE_ONLY,
-                    MATRIX_ROWS * MATRIX_COLS * sizeof(unsigned short),
+                    CL_MEM_READ_WRITE,
+                    MATRIX_ROWS * MATRIX_COLS * sizeof(typeof(outputEffectualValues.at(0))),
                     NULL,
                     &status
                     );
@@ -279,7 +286,7 @@ int main(int argc, char* argv[]) {
 
         cl::Buffer inputInstructionBuffer (
                     clContext,
-                    CL_MEM_READ_ONLY,
+                    CL_MEM_READ_WRITE,
                     1024 * sizeof(t_instruction),
                     NULL,
                     &status
@@ -288,7 +295,7 @@ int main(int argc, char* argv[]) {
 
         std::cout <<"Set up the kernel arguments"<<std::endl;
         status = krnSequencer.setArg(0, inputInstructionBuffer);
-        status = krnSequencer.setArg(1, (unsigned short) numInstructions);
+        status = krnSequencer.setArg(1, (cl_ushort) numInstructions);
         aocl_utils_cpp::checkError(status, "Failed to set up arguments for the instruction sequencer");
 
         for (auto iter=krnWeightCollectorVec.begin();
@@ -306,33 +313,43 @@ int main(int argc, char* argv[]) {
         cl::Event inputTransferEvent, inputPointerTransferEvent, instructionTransferEvent;
         status = clSequencerQueue.enqueueWriteBuffer(
                     inputSpWBuffer,
-                    CL_FALSE,
+                    CL_TRUE,
                     0,
-                    sizeof(unsigned short) * effectualValues.size(),
-                    &effectualValues[0],
+                    sizeof(typeof(effectualValues.at(0))) * effectualValues.size(),
+                    effectualValues.data(),
                     NULL,
                     &inputTransferEvent
                     );
+
+        //CAUTION: Specail trick. Pollut the output region with all 4s, and see whether the FPGA pollute it.
+        status = clSequencerQueue.enqueueWriteBuffer(outputSpWBuffer,
+                                  CL_TRUE
+                                  ,0
+                                  ,sizeof(typeof(outputEffectualValues.at(0))) * outputEffectualValues.size()
+                                  , outputEffectualValues.data()
+                                  );
+
         aocl_utils_cpp::checkError(status, "Failed to transfer sparse weights to the accelerator");
         status = clSequencerQueue.enqueueWriteBuffer(
                     inputPointerBuffer,
-                    CL_FALSE,
+                    CL_TRUE,
                     0,
-                    sizeof(unsigned short) * cbOffsets.size(),
-                    &cbOffsets[0],
+                    sizeof(typeof(cbOffsets.at(0))) * cbOffsets.size(),
+                    cbOffsets.data(),
                     NULL,
                     &inputPointerTransferEvent
                     );
         aocl_utils_cpp::checkError(status, "Failed to transfer weight pointers to the accelerator");
         status = clSequencerQueue.enqueueWriteBuffer(
                     inputInstructionBuffer,
-                    CL_FALSE,
+                    CL_TRUE,
                     0,
-                    sizeof(t_instruction) * instructionVector.size(),
-                    &instructionVector[0],
+                    sizeof(typeof(instructionVector.at(0))) * instructionVector.size(),
+                    instructionVector.data(),
                     NULL,
                     &instructionTransferEvent
                     );
+        clSequencerQueue.finish();
         std::cout <<"Number of instruction is "<<instructionVector.size()<<std::endl;
         aocl_utils_cpp::checkError(status, "Failed to transfer instructions to the accelerator");
 
@@ -343,21 +360,23 @@ int main(int argc, char* argv[]) {
         for (unsigned int i = 0;
              i < krnWeightCollectorVec.size();
              i ++) {
-            status = vecClCollectorQueues[i].enqueueTask(
-                        krnWeightCollectorVec[i]
+            status = vecClCollectorQueues.at(i).enqueueTask(
+                        krnWeightCollectorVec.at(i)
                         );
         }
         status = clDMAQueue.enqueueTask(krnSpWDMA);
         status = clSequencerQueue.enqueueTask(krnSequencer);
         aocl_utils_cpp::checkError(status, "Failed to launch at least one kernel");
-        //usleep (1000000);
+        //usleep (10000000);
         std::cout <<"Wait for result to be transferred back"<<std::endl;
+        clSequencerQueue.finish();
         status = clSequencerQueue.enqueueReadBuffer(outputSpWBuffer,
                                   CL_TRUE
                                   ,0
-                                  ,sizeof(unsigned short) * outputEffectualValues.size()
-                                  , &outputEffectualValues[0]
+                                  ,sizeof(typeof(outputEffectualValues.at(0))) * outputEffectualValues.size()
+                                  , outputEffectualValues.data()
                                   );
+       clSequencerQueue.finish();
         aocl_utils_cpp::checkError(status, "Failed to read the results back");
       }
     catch (const std::runtime_error & e) {
@@ -382,6 +401,20 @@ int main(int argc, char* argv[]) {
 
     if (!checkResult) {
         std::cout <<"FAILED: Values do not match"<<std::endl;
+        std::cout <<"Content of the output buffer"<<std::endl;
+        unsigned int rowIter=0, colIter=0;
+        for (auto value : outputEffectualValues) {
+            if (colIter == 0) {
+                std::cout <<"[Row "<<rowIter<<"]: ";
+            }
+            std::cout <<value<<" ";
+            colIter++;
+            if (colIter == MATRIX_COLS) {
+                colIter = 0;
+                rowIter++;
+                std::cout<<std::endl;
+            }
+        }
     }
     else {
         std::cout <<"SUCCESS!"<<std::endl;
@@ -415,7 +448,7 @@ void matrix_compression (std::vector<char> & _matrix,
     unsigned int numberOfRows,
     unsigned int cbPerRow,
     aligned_short_vector &outEffectualValues,
-    aligned_short_vector &outCBOffets
+    aligned_ushort_vector &outCBOffets
   )
 {
   
@@ -477,10 +510,9 @@ void matrix_compression (std::vector<char> & _matrix,
   } //for
 }
 
-bool check_matrix (
-      aligned_short_vector & originalMatrix,
-      aligned_short_vector & originalIndex,
-      aligned_short_vector & outputMatrix,
+bool check_matrix (aligned_short_vector & originalMatrix,
+      aligned_ushort_vector & originalIndex,
+      aligned_short_vector &outputMatrix,
       unsigned int numberOfRow,
       unsigned int numberOfWeightsPerRow,
       unsigned int cbPerRow
