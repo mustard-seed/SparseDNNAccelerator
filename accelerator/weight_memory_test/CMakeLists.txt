@@ -2,7 +2,10 @@ include (${PROJECT_SOURCE_DIR}/config.cmake)
 
 set (TEST_NAME "sparseMemoryTest")
 
-set (PREPROCESSOR_DEFS "-DWEIGHT_MEMORY_TEST")
+set (PREPROCESSOR_DEFS
+        -DWEIGHT_MEMORY_TEST
+        -DHW_DEBUG
+        )
 
 ############################################
 #First, we must be able to find Intel FPGA OpenCL SDK
@@ -204,6 +207,16 @@ add_aoc_target (
     PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}
     #RTL_LIB ${rtl_lib})
     )
+
+#add_aoc_target (
+#    TARGET_NAME ${TEST_NAME}
+#    TARGET_TYPE SIMULATION
+#    SOURCES_LIST ${kernel_files}
+#    HEADER_DIR ${PROJECT_SOURCE_DIR}/device
+#    RTL_DIR ${rtl_directory}
+#    PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}
+#    #RTL_LIB ${rtl_lib})
+#    )
 
 
 

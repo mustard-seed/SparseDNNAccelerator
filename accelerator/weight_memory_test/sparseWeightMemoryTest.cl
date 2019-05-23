@@ -21,6 +21,12 @@
   #define EMULATOR_PRINT(format)
 #endif
 
+#ifdef HW_DEBUG
+  #define DEBUG_PRINT(format) printf format
+#else
+  #define DEBUG_PRINT(format)
+#endif
+
 
 void checkCommits (uint4_t* pInstrInFlightCount) {
   bool dmaCommitRead=false, drainCacheCommitRead=false, CacheSelectCommitRead=false, collectCommitRead=false;
@@ -45,8 +51,8 @@ void checkCommits (uint4_t* pInstrInFlightCount) {
 
   read_channel_nb_intel(channel_weightCollectControlCommit, &collectCommitRead);
   if (collectCommitRead) {
-    //EMULATOR_PRINT ( ("[Kernel Sequencer]: COMMIT. Header is %u.\n", OPCODE_COLLECT_WEIGHT));
-    printf("[Kernel Sequencer]: COMMIT. Header is %u.\n", OPCODE_COLLECT_WEIGHT);
+    EMULATOR_PRINT ( ("[Kernel Sequencer]: COMMIT. Header is %u.\n", OPCODE_COLLECT_WEIGHT));
+    //DEBUG_PRINT ( ("[Kernel Sequencer]: COMMIT. Header is %u.\n", OPCODE_COLLECT_WEIGHT) );
     pInstrInFlightCount[OPCODE_COLLECT_WEIGHT & 0x1F]--; 
   }
 }
@@ -72,7 +78,7 @@ __kernel void kernelSequencer(
       }
 
       //Read the instructions sequentially
-      #pragma unroll 1
+      #pragma max_concurrency 1
       for (unsigned short iterInstruction=0;
            iterInstruction<numInstructions;
            iterInstruction++) {
@@ -115,39 +121,33 @@ __kernel void kernelSequencer(
           }
 
 
-          bool instructionSent = false;
-          do {
-            //CAUTION: Sending the header just by itself is strictly not required, unless the transports waste the first payload
-            instructionSent = write_channel_nb_intel(channel_instructions[0], ((unsigned short) header) << 8) ;
-
-            checkCommits(instructionInFlightCount);
-          }
-          while (!instructionSent);
-
           //Issue the instructions minus the dependency
           instructionInFlightCount[header]++;
 
-          for (unsigned char iter=instructionSizeBytes;
+          for (unsigned char iter=instructionSizeBytes+1;
             iter > 0;
             iter--
             ){
 
             bool instructionSent = false;
 
+            unsigned short payload = (iter == instructionSizeBytes+1) ? 
+                ((unsigned short) header) << 8 : ((unsigned short) header << 8 )| (instruction.words[(iter-1) & 0x01F]);
+
             do {
               //Send the instructions
               //The header occupies the upper byte,
               //The receiver occupies the lower byte
               instructionSent = write_channel_nb_intel(channel_instructions[0], 
-                      ( (unsigned short) header) << 8 | (instruction.words[(iter-1) & 0x01F])) ;
+                      payload) ;
 
               checkCommits(instructionInFlightCount);
 
              }
             while (!instructionSent);
 
-            printf("[Kernel Sequencer]: Sent instruction %u byte %u. Header is %u. Packet is %u.\n",
-                iterInstruction, iter, header, (instruction.words[(iter-1) & 0x01F])
+            DEBUG_PRINT( ("[Kernel Sequencer]: Sent instruction %u byte %u. Header is %u. Packet is %u.\n",
+                iterInstruction, iter, header, (instruction.words[(iter-1) & 0x01F]) );
             );
           }
           EMULATOR_PRINT ( ("[Kernel Sequencer]: Sent instruction %u. Header is %u No. Bytes is %u.\n"
@@ -156,7 +156,7 @@ __kernel void kernelSequencer(
 
       //Wait for outstanding commands to finish
       uint1_t wait = 0x1;
-      #pragma unroll 1
+      #pragma max_concurrency 1
       while (wait){
         uint1_t wait_next = 0;
         checkCommits(instructionInFlightCount);
@@ -190,8 +190,8 @@ __kernel void kernelSequencer(
     )
 {
     EMULATOR_PRINT (("[Weight Collector %u]: Launched\n", laneID));
-    printf ("[Weight Collector %u]: Launched\n", laneID);
-    mem_fence(CLK_GLOBAL_MEM_FENCE);
+    //DEBUG_PRINT ( ("[Weight Collector %u]: Launched\n", laneID) );
+    //mem_fence(CLK_GLOBAL_MEM_FENCE);
 
 
     enum e_states {IDLE, STREAM, COMMIT_WAIT, COMMIT};
@@ -202,7 +202,6 @@ __kernel void kernelSequencer(
     unsigned int weightAddressOffset;
     bool collectWeightRequest = false;
     bool previousCollectCommit = false;
-    bool weightReadSuccess = false;
     bool commitSuccess = false;
 
     bool keepGoing = true;
@@ -213,7 +212,7 @@ __kernel void kernelSequencer(
     short weight;
 
     //Used in unit teset. Delete this later!
-    unsigned short testCount = 0;
+    unsigned int timeOutCount = 0;
 
     #pragma unroll 1
     while (keepGoing) {
@@ -235,7 +234,7 @@ __kernel void kernelSequencer(
           if (laneID < KERNEL_CACHE_LANES - 1) {
             write_channel_intel (channel_weightCollectorStop[laneID+1], 0x1);
           }
-          printf ("[Weight Collector %u] Shutting down\n", laneID);
+         // DEBUG_PRINT( ("[Weight Collector %u] Shutting down\n", laneID) );
           keepGoing = false;
 
       }
@@ -251,15 +250,15 @@ __kernel void kernelSequencer(
                   * ( (unsigned int) controlToken.filterStart + (unsigned int) laneID );
 
                 weightIndexTracker=0;
-                testCount = 0;
+                timeOutCount = 0;
                 weightIndexLast = controlToken.numWeightsInFilter;
 
                 state = STREAM;
                 EMULATOR_PRINT (("[Weight Collector %u]: Starting to collect weights! Number of weights in uncompressed row: %u\n", laneID, weightIndexLast));
-                printf ("[Weight Collector %u]: Starting to collect weights! Number of weights in uncompressed row: %u\n", laneID, weightIndexLast);
+                DEBUG_PRINT ( ("[Weight Collector %u]: Starting to collect weights! Number of weights in uncompressed row: %u\n", laneID, weightIndexLast) );
               }
               else { //Inactivate collectors should start waiting for commits
-                  printf("[Weight Collector %u]: Collector is skipped.\n", laneID);
+                  //DEBUG_PRINT( ("[Weight Collector %u]: Collector is skipped.\n", laneID) );
                   //printf("Number of filters to collect is: %u\n", controlToken.numFiltersToCollect);
                   //printf("Number of weights in the filter is %u\n", controlToken.numWeightsInFilter);
                   //printf("Filter start is %u\n", controlToken.filterStart);
@@ -270,47 +269,57 @@ __kernel void kernelSequencer(
           } 
           break;
         case (STREAM):
+              {
+                  bool weightReadSuccess = false;
 
-              //Wait for weight-offset tuple to arrive
-              weightAndOffset = 
-                read_channel_nb_intel(channel_sparseWeights[laneID], &weightReadSuccess);
+                  //Wait for weight-offset tuple to arrive
+                  weightAndOffset = 
+                    read_channel_nb_intel(channel_sparseWeights[laneID], &weightReadSuccess);
 
-
-
-              if (weightReadSuccess){
-                //Parse the offset and the weight
-                zCount = (weightAndOffset & WEIGHT_ZCOUNT_MASK)
-                                    >> WEIGHT_ZCOUNT_BITOFFSET;
-                weight = (weightAndOffset & WEIGHT_MASK)
-                                    >> WEIGHT_BITOFFSET;
-
-                
-                //Move the weight 
-                //TODO: RESTORE THIS LINE!!!!
-                //pMem[weightAddressOffset] = weight;
+                  //Timeout counter
+                  timeOutCount++;  
 
 
-                pMem[weightAddressOffset] = 0x3;
+                  if (weightReadSuccess){
+                    //Parse the offset and the weight
+                    zCount = (weightAndOffset & WEIGHT_ZCOUNT_MASK)
+                                        >> WEIGHT_ZCOUNT_BITOFFSET;
+                    weight = (weightAndOffset & WEIGHT_MASK)
+                                        >> WEIGHT_BITOFFSET;
 
-                printf("[Weight Collector %u] Writing 0x3 to %u \n", laneID, weightAddressOffset);
+                    
+                    //Move the weight 
+                    //TODO: RESTORE THIS LINE!!!!
+                    pMem[weightAddressOffset] = weight;
 
-                //Update the index tracker
-                weightIndexTracker += ((uint24_t) 0X01
-                              + (uint24_t) zCount);
 
-                weightAddressOffset++;
-                testCount++;
+                    //pMem[weightAddressOffset] = 0x3;
 
-                //Need to make sure the DDR write commits before proceeding
-                //mem_fence(CLK_GLOBAL_MEM_FENCE | CLK_CHANNEL_MEM_FENCE);
+                    //DEBUG_PRINT( ("[Weight Collector %u] Writing %u to %u \n", laneID, weight, weightAddressOffset) );
 
-              // if (weightIndexTracker == weightIndexLast){
-              //    state = COMMIT_WAIT;
-              //  }
-               if (testCount == 10){
-                  state = COMMIT_WAIT;
-                }
-             }
+                    //Update the index tracker
+                    weightIndexTracker += ((uint24_t) 0X01
+                                  + (uint24_t) zCount);
+
+                    weightAddressOffset++;
+
+                    //Need to make sure the DDR write commits before proceeding
+                    //mem_fence(CLK_GLOBAL_MEM_FENCE | CLK_CHANNEL_MEM_FENCE);
+
+                  // if (testCount == 10){
+                  //    state = COMMIT_WAIT;
+                  //  }
+                 }
+
+                 //Caution: >=
+                 if (weightIndexTracker == weightIndexLast || timeOutCount == 0xFFFFFFF){
+                      state = COMMIT_WAIT;
+                      if (timeOutCount == 0xFFFFFFF) {
+                        DEBUG_PRINT ( ("[Weight Collector %u] Read weight timeout. weightIndexTracker is %u\n", laneID, weightIndexTracker) );
+                      }
+                    }
+              }
+
           break;
         case (COMMIT_WAIT):
               if (laneID > 0){
@@ -332,26 +341,26 @@ __kernel void kernelSequencer(
 //                  commitSuccess = write_channel_nb_intel(
 //                    channel_weightCollectControlCommitInternal[laneID],
 //                    0x1);
-                  write_channel_intel(
+                  commitSuccess = write_channel_nb_intel(
                     channel_weightCollectControlCommitInternal[laneID],
                     0x1);
 
                 }
               else {
-//                  commitSuccess = write_channel_nb_intel(
-//                    channel_weightCollectControlCommit,
-//                    0x1);
-
-                  write_channel_intel(
+                  commitSuccess = write_channel_nb_intel(
                     channel_weightCollectControlCommit,
                     0x1);
+
+//                  write_channel_intel(
+//                   channel_weightCollectControlCommit,
+//                    0x1);
               }
-//              if (commitSuccess){
-//                  EMULATOR_PRINT (("[Weight Collector %u]: Committed! Number of weights in uncompressed row: %u\n", laneID, weightIndexLast));
-//                  state = IDLE;
-//              }
-              EMULATOR_PRINT (("[Weight Collector %u]: Committed! Number of weights in uncompressed row: %u\n", laneID, weightIndexLast));
-              state = IDLE;
+              if (commitSuccess){
+                  EMULATOR_PRINT (("[Weight Collector %u]: Committed! Number of weights in uncompressed row: %u\n", laneID, weightIndexLast));
+                  state = IDLE;
+              }
+//              EMULATOR_PRINT (("[Weight Collector %u]: Committed! Number of weights in uncompressed row: %u\n", laneID, weightIndexLast));
+//              state = IDLE;
           break;
       }
     }
@@ -412,8 +421,8 @@ __kernel void transport_fill_weight_buffer ()
 {
   EMULATOR_PRINT (("[transport_fill_weight_buffer]: Launched\n"));
   uint5_t wordCount=0;
-  unsigned char header = 0x0;
-  t_tokenFillWeightCache token;
+  //unsigned char header = 0x0;
+  t_tokenFillWeightCache token = {};
 
   #pragma unroll 1
    while (1) {
@@ -431,126 +440,127 @@ __kernel void transport_fill_weight_buffer ()
         unsigned char header = (unsigned char) (word >> 8);
         unsigned char instruction = (unsigned char) (0x0FF & word);
 
-        switch (wordCount) {
-          case 0:
-            if (header == OPCODE_FILL_WEIGHT_BUFFER) {
-              EMULATOR_PRINT (("[transport_fill_weight_buffer]: Detected message \n"));
+        if (header == OPCODE_FILL_WEIGHT_BUFFER) {
+          switch (wordCount) {
+            case 0:
+              
+                EMULATOR_PRINT (("[transport_fill_weight_buffer]: Detected message \n"));
+                wordCount++;
+              break;
+
+            case 1:
+              token.numWeightsInFilter = ((unsigned int) instruction) << 24;
               wordCount++;
-            }
-            break;
+              break;
 
-          case 1:
-            token.numWeightsInFilter = ((unsigned int) instruction) << 24;
-            wordCount++;
-            break;
+            case 2:
+              token.numWeightsInFilter = token.numWeightsInFilter | ( ((unsigned int) instruction) << 16 );
+              wordCount++;
+              break;
 
-          case 2:
-            token.numWeightsInFilter = token.numWeightsInFilter | ( ((unsigned int) instruction) << 16 );
-            wordCount++;
-            break;
+            case 3:
+              token.numWeightsInFilter = token.numWeightsInFilter | ( ((unsigned int) instruction) << 8 );
+              wordCount++;
+              break;
 
-          case 3:
-            token.numWeightsInFilter = token.numWeightsInFilter | ( ((unsigned int) instruction) << 8 );
-            wordCount++;
-            break;
+            case 4:
+              token.numWeightsInFilter = token.numWeightsInFilter | ( ((unsigned int) instruction ) );
+              wordCount++;
+              break;
 
-          case 4:
-            token.numWeightsInFilter = token.numWeightsInFilter | ( ((unsigned int) instruction ) );
-            wordCount++;
-            break;
+            case 5:
+              token.numEncodingBlocksInFilter = ((unsigned short) instruction) << 8;
+              wordCount++;
+              break;
 
-          case 5:
-            token.numEncodingBlocksInFilter = ((unsigned short) instruction) << 8;
-            wordCount++;
-            break;
+            case 6:
+              token.numEncodingBlocksInFilter = token.numEncodingBlocksInFilter | ( ((unsigned short) instruction) );
+              wordCount++;
+              break;
 
-          case 6:
-            token.numEncodingBlocksInFilter = token.numEncodingBlocksInFilter | ( ((unsigned short) instruction) );
-            wordCount++;
-            break;
+            case 7:
+              token.cbEnd = ((unsigned short) instruction) << 8;
+              wordCount++;
+              break;
 
-          case 7:
-            token.cbEnd = ((unsigned short) instruction) << 8;
-            wordCount++;
-            break;
+            case 8:
+              token.cbEnd = token.cbEnd | ( ((unsigned short) instruction) );
+              wordCount++;
+              break;
 
-          case 8:
-            token.cbEnd = token.cbEnd | ( ((unsigned short) instruction) );
-            wordCount++;
-            break;
+            case 9:
+              token.cbStart = ((unsigned short) instruction) << 8;
+              wordCount++;
+              break;
 
-          case 9:
-            token.cbStart = ((unsigned short) instruction) << 8;
-            wordCount++;
-            break;
+            case 10:
+              token.cbStart = token.cbStart | ( ((unsigned short) instruction) );
+              wordCount++;
+              break;
 
-          case 10:
-            token.cbStart = token.cbStart | ( ((unsigned short) instruction) );
-            wordCount++;
-            break;
+            case 11:
+              token.numFiltersToStream =  (unsigned char) instruction;
+              wordCount++;
+              break;
 
-          case 11:
-            token.numFiltersToStream =  (unsigned char) instruction;
-            wordCount++;
-            break;
+            case 12:
+              token.filterStart = ((unsigned short) instruction) << 8;
+              wordCount++;
+              break;
 
-          case 12:
-            token.filterStart = ((unsigned short) instruction) << 8;
-            wordCount++;
-            break;
+            case 13:
+              token.filterStart = token.filterStart | ( ((unsigned short) instruction) );
+              wordCount++;
+              break;
 
-          case 13:
-            token.filterStart = token.filterStart | ( ((unsigned short) instruction) );
-            wordCount++;
-            break;
+            case 14:
+              token.ddrKernelWeightStartOffset = ((unsigned int) instruction) << 24;
+              wordCount++;
+              break;
 
-          case 14:
-            token.ddrKernelWeightStartOffset = ((unsigned int) instruction) << 24;
-            wordCount++;
-            break;
+            case 15:
+              token.ddrKernelWeightStartOffset = token.ddrKernelWeightStartOffset | ( ((unsigned int) instruction) << 16 );
+              wordCount++;
+              break;
 
-          case 15:
-            token.ddrKernelWeightStartOffset = token.ddrKernelWeightStartOffset | ( ((unsigned int) instruction) << 16 );
-            wordCount++;
-            break;
+            case 16:
+              token.ddrKernelWeightStartOffset = token.ddrKernelWeightStartOffset | ( ((unsigned int) instruction) << 8 );
+              wordCount++;
+              break;
 
-          case 16:
-            token.ddrKernelWeightStartOffset = token.ddrKernelWeightStartOffset | ( ((unsigned int) instruction) << 8 );
-            wordCount++;
-            break;
+            case 17:
+              token.ddrKernelWeightStartOffset = token.ddrKernelWeightStartOffset | ( ((unsigned int) instruction) );
+              wordCount++;
+              break;
 
-          case 17:
-            token.ddrKernelWeightStartOffset = token.ddrKernelWeightStartOffset | ( ((unsigned int) instruction) );
-            wordCount++;
-            break;
+            case 18:
+              token.ddrKernelIndexStartOffset = ((unsigned int) instruction) << 24;
+              wordCount++;
+              break;
 
-          case 18:
-            token.ddrKernelWeightStartOffset = ((unsigned int) instruction) << 24;
-            wordCount++;
-            break;
+            case 19:
+              token.ddrKernelIndexStartOffset = token.ddrKernelIndexStartOffset | ( ((unsigned int) instruction) << 16 );
+              wordCount++;
+              break;
 
-          case 19:
-            token.ddrKernelIndexStartOffset = token.ddrKernelIndexStartOffset | ( ((unsigned int) instruction) << 16 );
-            wordCount++;
-            break;
+            case 20:
+              token.ddrKernelIndexStartOffset = token.ddrKernelIndexStartOffset | ( ((unsigned int) instruction) << 8 );
+              wordCount++;
+              break;
 
-          case 20:
-            token.ddrKernelIndexStartOffset = token.ddrKernelIndexStartOffset | ( ((unsigned int) instruction) << 8 );
-            wordCount++;
-            break;
+            case 21:
+              token.ddrKernelIndexStartOffset = token.ddrKernelIndexStartOffset | ( ((unsigned int) instruction) );
 
-          case 21:
-            token.ddrKernelIndexStartOffset = token.ddrKernelIndexStartOffset | ( ((unsigned int) instruction) );
+              EMULATOR_PRINT ( ("[SpW Fill Transport]: Sending instruction to SpW DMA.....\n") );
+              write_channel_intel(channel_spWeightDMA, token);
+              EMULATOR_PRINT ( ("[SpW Fill Transport]: Sent instruction to SpW DMA!\n") );
+              wordCount = 0x0;
+              break;
 
-            EMULATOR_PRINT ( ("[SpW Fill Transport]: Sending instruction to SpW DMA.....\n") );
-            write_channel_intel(channel_spWeightDMA, token);
-            EMULATOR_PRINT ( ("[SpW Fill Transport]: Sent instruction to SpW DMA!\n") );
-            wordCount = 0x0;
-            break;
+            default:
+              wordCount++; 
 
-          default:
-            wordCount++; 
-
+          }
         }
        //EMULATOR_PRINT (("[transport_fill_weight_buffer]: WordCount is %u \n", wordCount));
       }
@@ -567,8 +577,8 @@ __kernel void transport_drain_weight_buffer ()
 {
   EMULATOR_PRINT (("[transport_drain_weight_buffer]: Launched\n"));
   uint5_t wordCount=0;
-  unsigned char header = 0x0;
-  t_tokenDrainWeightCache token;
+  //unsigned char header = 0x0;
+  t_tokenDrainWeightCache token = {};
 
   #pragma unroll 1
    while (1) {
@@ -584,50 +594,50 @@ __kernel void transport_drain_weight_buffer ()
         unsigned char header = (unsigned char) (word >> 8);
         unsigned char instruction = (unsigned char) (0x0FF & word);
 
-        switch (wordCount) {
-          case 0:
-            if (header == OPCODE_DRAIN_WEIGHT_BUFFER) {
-              EMULATOR_PRINT ( ("[SpW Drain Transport]: Message detected!\n") );
+        if (header == OPCODE_DRAIN_WEIGHT_BUFFER) {
+          switch (wordCount) {
+            case 0:
+                EMULATOR_PRINT ( ("[SpW Drain Transport]: Message detected!\n") );
+                wordCount++;
+              break;
+
+            case 1:
+              token.cbEnd = ((unsigned short) instruction) << 8;
               wordCount++;
-            }
-            break;
+              break;
 
-          case 1:
-            token.cbEnd = ((unsigned short) instruction) << 8;
-            wordCount++;
-            break;
+            case 2:
+              token.cbEnd = token.cbEnd | ((unsigned short) instruction);
+              wordCount++;
+              break;
 
-          case 2:
-            token.cbEnd = token.cbEnd | ((unsigned short) instruction);
-            wordCount++;
-            break;
+            case 3:
+              token.cbStart = ((unsigned short) instruction) << 8;
+              wordCount++;
+              break;
 
-          case 3:
-            token.cbStart = ((unsigned short) instruction) << 8;
-            wordCount++;
-            break;
+            case 4:
+              token.cbStart = token.cbStart | ( ((unsigned short) instruction) );
+              wordCount++;
+              break;
 
-          case 4:
-            token.cbStart = token.cbStart | ( ((unsigned short) instruction) );
-            wordCount++;
-            break;
+            case 5:
+              token.laneEnd = ((unsigned char) instruction);
+              wordCount++;
+              break;
 
-          case 5:
-            token.laneEnd = ((unsigned char) instruction);
-            wordCount++;
-            break;
+            case 6:
+              token.laneStart = ((unsigned char) instruction);
+              wordCount = 0x0;
 
-          case 6:
-            token.laneStart = ((unsigned char) instruction);
-            wordCount = 0x0;
+              write_channel_intel(channel_tokenDrainWeightCacheControl[0], token);
+              EMULATOR_PRINT ( ("[SpW Drain Transport]: Message sent to the SpW Feeders!\n") );
+              break;
 
-            write_channel_intel(channel_tokenDrainWeightCacheControl[0], token);
-            EMULATOR_PRINT ( ("[SpW Drain Transport]: Message sent to the SpW Feeders!\n") );
-            break;
+            default:
+              wordCount++; 
 
-          default:
-            wordCount++; 
-
+          }
         }
       }
    }
@@ -644,9 +654,9 @@ __kernel void transport_collect_weights ()
   EMULATOR_PRINT (("[Transport_collect_weights]: Launched\n"));
 
   //uint5_t wordCount=0;
-  unsigned char wordCount = 0;
+  uint5_t wordCount = 0;
 
-  t_weightCollectToken token;
+  t_weightCollectToken token = {};
 
   #pragma unroll 1
    while (1) {
@@ -664,83 +674,83 @@ __kernel void transport_collect_weights ()
         unsigned char header = (unsigned char) (word >> 8);
         unsigned char instruction = (unsigned char) (0x0FF & word);
 
-        switch (wordCount) {
-          case 0:
-            if (header == OPCODE_COLLECT_WEIGHT) {
-              EMULATOR_PRINT (("[Transport_collect_weights]: Message detected!\n"));
+         if (header == OPCODE_COLLECT_WEIGHT) {
+          switch (wordCount) {
+            case 0:
+                EMULATOR_PRINT (("[Transport_collect_weights]: Message detected!\n"));
+                wordCount++;
+              break;
+
+            case 1:
+              token.numWeightsInFilter = ((uint24_t) instruction) << 16;
               wordCount++;
-            }
-            break;
+              break;
 
-          case 1:
-            token.numWeightsInFilter = ((uint24_t) instruction) << 16;
-            wordCount++;
-            break;
+            case 2:
+              token.numWeightsInFilter = token.numWeightsInFilter | 
+                              (((uint24_t) instruction) << 8);
+              wordCount++;
+              break;
 
-          case 2:
-            token.numWeightsInFilter = token.numWeightsInFilter | 
-                            (((uint24_t) instruction) << 8);
-            wordCount++;
-            break;
+            case 3:
+              token.numWeightsInFilter = token.numWeightsInFilter | 
+                              ((uint24_t) instruction);
+              wordCount++;
+              break;
 
-          case 3:
-            token.numWeightsInFilter = token.numWeightsInFilter | 
-                            ((uint24_t) instruction);
-            wordCount++;
-            break;
+            case 4:
+              token.numFiltersToCollect = ((unsigned short) instruction) << 0x8;
+              wordCount++;
+              break;
 
-          case 4:
-            token.numFiltersToCollect = ((unsigned short) instruction) << 0x8;
-            wordCount++;
-            break;
+            case 5:
+              token.numFiltersToCollect = token.numFiltersToCollect 
+                                          | ((unsigned short) instruction);
+              wordCount++;
+              break;
 
-          case 5:
-            token.numFiltersToCollect = token.numFiltersToCollect 
-                                        | ((unsigned short) instruction);
-            wordCount++;
-            break;
+            case 6:
+              token.filterStart = ((unsigned short) instruction) << 0x8;
+              wordCount++;
+              break;
 
-          case 6:
-            token.filterStart = ((unsigned short) instruction) << 0x8;
-            wordCount++;
-            break;
+            case 7:
+              token.filterStart = token.filterStart 
+                                          | ((unsigned short) instruction);
+              wordCount++;
+              break;
 
-          case 7:
-            token.filterStart = token.filterStart 
-                                        | ((unsigned short) instruction);
-            wordCount++;
-            break;
+            case 8:
+              token.ddrKernelWeightStartOffset = ((unsigned int) instruction) << 24;
+              wordCount++;
+              break;
 
-          case 8:
-            token.ddrKernelWeightStartOffset = ((unsigned int) instruction) << 24;
-            wordCount++;
-            break;
+            case 9:
+              token.ddrKernelWeightStartOffset 
+                      = token.ddrKernelWeightStartOffset | (((unsigned int) instruction) << 16);
+              wordCount++;
+              break;
 
-          case 9:
-            token.ddrKernelWeightStartOffset 
-                    = token.ddrKernelWeightStartOffset | (((unsigned int) instruction) << 16);
-            wordCount++;
-            break;
+            case 10:
+              token.ddrKernelWeightStartOffset 
+                      = token.ddrKernelWeightStartOffset | (((unsigned int) instruction) << 8);
+              wordCount++;
+              break;
 
-          case 10:
-            token.ddrKernelWeightStartOffset 
-                    = token.ddrKernelWeightStartOffset | (((unsigned int) instruction) << 8);
-            wordCount++;
-            break;
+            case 11:
+              token.ddrKernelWeightStartOffset 
+                      = token.ddrKernelWeightStartOffset | ((unsigned int) instruction);
+              wordCount = 0x0;
+              write_channel_intel(channel_weightCollectControl[0], token);
+              EMULATOR_PRINT (("[Transport_collect_weights]: Message sent to the collectors!\n"));
+              break;
 
-          case 11:
-            token.ddrKernelWeightStartOffset 
-                    = token.ddrKernelWeightStartOffset | ((unsigned int) instruction);
-            wordCount = 0x0;
-            write_channel_intel(channel_weightCollectControl[0], token);
-            EMULATOR_PRINT (("[Transport_collect_weights]: Message sent to the collectors!\n"));
-            break;
+            default:
+              wordCount++; 
 
-          default:
-            wordCount++; 
-
-        }
+          }
         //EMULATOR_PRINT (("[Transport_collect_weights]: WordCount is %u \n", wordCount));
+        }
       }
    }
 }
@@ -770,22 +780,23 @@ __kernel void transport_drain_weights_select ()
         unsigned char header = (unsigned char) (word >> 8);
         unsigned char instruction = (unsigned char) (0x0FF & word);
 
-        switch (wordCount) {
-          case 0:
-              if (header == OPCODE_SWAP_WEIGHT_BUFFER) {
+        if (header == OPCODE_SWAP_WEIGHT_BUFFER) {
+
+          switch (wordCount) {
+            case 0:
                 EMULATOR_PRINT (("[transport_drain_weights_select]: Message detected!\n"));
                 wordCount++;
-              }
-              break;
-          case 1:
-              write_channel_intel(channel_spWeightFeederDrainSelect[0], 0x1);
-              EMULATOR_PRINT (("[transport_drain_weights_select]: Swap sent!\n"));
-              wordCount=0;
-              break;
-          default:
-              wordCount++;
-        }
+                break;
+            case 1:
+                write_channel_intel(channel_spWeightFeederDrainSelect[0], 0x1);
+                EMULATOR_PRINT (("[transport_drain_weights_select]: Swap sent!\n"));
+                wordCount=0;
+                break;
+            default:
+                wordCount++;
+          }
 
+        }
          
 
       }

@@ -15,18 +15,18 @@
 #include <random>
 
 #define MATRIX_ROWS 1
-#define MATRIX_COLS 10
+#define MATRIX_COLS 1900
 #define SEED 10
-#define BERN_P 1.0
+#define BERN_P 0.5
 
 typedef
-//std::vector<cl_ushort, boost::alignment::aligned_allocator<cl_ushort, aocl_utils_cpp::AOCL_ALIGNMENT>>
-std::vector<cl_ushort>
+std::vector<cl_ushort, boost::alignment::aligned_allocator<cl_ushort, aocl_utils_cpp::AOCL_ALIGNMENT>>
+//std::vector<cl_ushort>
 aligned_ushort_vector;
 
 typedef
-//std::vector<cl_short, boost::alignment::aligned_allocator<cl_short, aocl_utils_cpp::AOCL_ALIGNMENT>>
-std::vector<cl_short>
+std::vector<cl_short, boost::alignment::aligned_allocator<cl_short, aocl_utils_cpp::AOCL_ALIGNMENT>>
+//std::vector<cl_short>
 aligned_short_vector;
 
 
@@ -287,7 +287,7 @@ int main(int argc, char* argv[]) {
         cl::Buffer inputInstructionBuffer (
                     clContext,
                     CL_MEM_READ_WRITE,
-                    1024 * sizeof(t_instruction),
+                    instructionVector.size() * sizeof(t_instruction),
                     NULL,
                     &status
                     );
@@ -524,22 +524,28 @@ bool check_matrix (aligned_short_vector & originalMatrix,
         iterRow++) {
     unsigned int beginOffset = originalIndex[iterRow*(cbPerRow+1)];
     unsigned int endOffset = originalIndex[iterRow*(cbPerRow+1) + cbPerRow];
+
+    unsigned int iterCSRColIndex = 0;
     for (unsigned int weightAddress = numberOfWeightsPerRow * iterRow + beginOffset;
            weightAddress < numberOfWeightsPerRow * iterRow + endOffset;
-           weightAddress++
+           weightAddress++, iterCSRColIndex++
         ) {
       if ( (originalMatrix[weightAddress] & WEIGHT_MASK) >> WEIGHT_BITOFFSET
               != (outputMatrix[weightAddress] & WEIGHT_MASK) ) {
         std::cout <<"Mismatch detected! Row is "<<iterRow<<std::endl;
+        std::cout <<"Index of the first non-matching element in the compressed row is "<<iterCSRColIndex<<std::endl;
         std::cout <<"Displaying the mismatched filter."<<std::endl;
         std::cout <<"The expected filter row: "<<std::endl;
+        unsigned int numEffectualWeights = 0;
         for (unsigned int weightAddress = numberOfWeightsPerRow * iterRow + beginOffset;
                weightAddress < numberOfWeightsPerRow * iterRow + endOffset;
                weightAddress++
              ){
             std::cout << ((originalMatrix[weightAddress] & WEIGHT_MASK) >> WEIGHT_BITOFFSET )<<" ";
+            numEffectualWeights++;
             }
         std::cout << std::endl;
+        std::cout <<"Number of expected effectual weights is "<<numEffectualWeights<<std::endl;
         std::cout <<"The actual output"<<std::endl;
         for (unsigned int weightAddress = numberOfWeightsPerRow * iterRow + beginOffset;
                weightAddress < numberOfWeightsPerRow * iterRow + endOffset;
@@ -656,8 +662,8 @@ t_instruction cmdGenFillWeightBuffer(
     //Should wait for all previous swap to finish
     unsigned short dependency =
             (1 << (OPCODE_FILL_WEIGHT_BUFFER)) | (1 << OPCODE_SWAP_WEIGHT_BUFFER);
-    instruction.dependencyList[0] = (unsigned char) (dependency & 0xFF);
-    instruction.dependencyList[1] = (unsigned char) ((dependency & 0XFF00) >> 8);
+    instruction.dependencyList[0] = (unsigned char) (dependency & 0x0FF);
+    instruction.dependencyList[1] = (unsigned char) ((dependency & 0X0FF00) >> 8);
 
     //Generate the instruction themselves
     instruction.words[0] = (unsigned char) (ddrIndexOffset & 0xFF);
@@ -711,16 +717,16 @@ t_instruction cmdGenDrainWeightBuffer(
     instruction.dependencyList[1] = (unsigned char) ((dependency & 0XFF00) >> 8);
 
     //Generate the instruction themselves
-    instruction.words[0] = (unsigned char) (laneStart & 0xFF);
+    instruction.words[0] = (unsigned char) (laneStart & 0x0FF);
 
-    instruction.words[1] = (unsigned char) ( (laneEnd & 0xFF) );
+    instruction.words[1] = (unsigned char) ( (laneEnd & 0x0FF) );
 
 
-    instruction.words[2] = (unsigned char) (cbStart & 0xFF);
-    instruction.words[3] = (unsigned char) ((cbStart & 0xFF00) >> 8);
+    instruction.words[2] = (unsigned char) (cbStart & 0x0FF);
+    instruction.words[3] = (unsigned char) ((cbStart & 0x0FF00) >> 8);
 
-    instruction.words[4] = (unsigned char) (cbEnd & 0xFF);
-    instruction.words[5] = (unsigned char) ((cbEnd & 0xFF00) >> 8);
+    instruction.words[4] = (unsigned char) (cbEnd & 0x0FF);
+    instruction.words[5] = (unsigned char) ((cbEnd & 0x0FF00) >> 8);
 
     return instruction;
 }
@@ -739,25 +745,25 @@ t_instruction cmdGenCollectWeight(
     //Should wait for the previous command of the same type to finish
     unsigned short dependency =
             (1 << (OPCODE_COLLECT_WEIGHT));
-    instruction.dependencyList[0] = (unsigned char) (dependency & 0xFF);
-    instruction.dependencyList[1] = (unsigned char) ((dependency & 0XFF00) >> 8);
+    instruction.dependencyList[0] = (unsigned char) (dependency & 0x0FF);
+    instruction.dependencyList[1] = (unsigned char) ((dependency & 0X0FF00) >> 8);
 
     //Generate the instruction themselves
-    instruction.words[0] = (unsigned char) (ddrWeightOffset & 0xFF);
-    instruction.words[1] = (unsigned char) ( (ddrWeightOffset & 0xFF00) >> 8);
-    instruction.words[2] = (unsigned char) ( (ddrWeightOffset & 0xFF0000) >> 16);
-    instruction.words[3] = (unsigned char) ( (ddrWeightOffset & 0xFF000000) >> 24);
+    instruction.words[0] = (unsigned char) (ddrWeightOffset & 0x0FF);
+    instruction.words[1] = (unsigned char) ( (ddrWeightOffset & 0x0FF00) >> 8);
+    instruction.words[2] = (unsigned char) ( (ddrWeightOffset & 0x0FF0000) >> 16);
+    instruction.words[3] = (unsigned char) ( (ddrWeightOffset & 0x0FF000000) >> 24);
 
-    instruction.words[4] = (unsigned char) ( filterStart & 0xFF );
-    instruction.words[5] = (unsigned char) ( (filterStart & 0xFF00) >> 8 );
+    instruction.words[4] = (unsigned char) ( filterStart & 0x0FF );
+    instruction.words[5] = (unsigned char) ( (filterStart & 0x0FF00) >> 8 );
 
-    instruction.words[6] = (unsigned char) ( numFiltersToCollect & 0xFF );
-    instruction.words[7] = (unsigned char) ( (numFiltersToCollect & 0xFF00) >> 8 );
+    instruction.words[6] = (unsigned char) ( numFiltersToCollect & 0x0FF );
+    instruction.words[7] = (unsigned char) ( (numFiltersToCollect & 0x0FF00) >> 8 );
 
 
-    instruction.words[8] = (unsigned char) (numWeightInFilter & 0xFF);
-    instruction.words[9] = (unsigned char) ( (numWeightInFilter & 0xFF00) >> 8);
-    instruction.words[10] = (unsigned char) ( (numWeightInFilter & 0xFF0000) >> 16);
+    instruction.words[8] = (unsigned char) (numWeightInFilter & 0x0FF);
+    instruction.words[9] = (unsigned char) ( (numWeightInFilter & 0x0FF00) >> 8);
+    instruction.words[10] = (unsigned char) ( (numWeightInFilter & 0x0FF0000) >> 16);
 
     return instruction;
 }
@@ -771,8 +777,8 @@ t_instruction cmdGentWeightBufferSwap(){
     //Should wait for the previous command of the same type to finish
     unsigned short dependency =
             (1 << (OPCODE_DRAIN_WEIGHT_BUFFER)) | (1 << OPCODE_FILL_WEIGHT_BUFFER);
-    instruction.dependencyList[0] = (unsigned char) (dependency & 0xFF);
-    instruction.dependencyList[1] = (unsigned char) ((dependency & 0XFF00) >> 8);
+    instruction.dependencyList[0] = (unsigned char) (dependency & 0x0FF);
+    instruction.dependencyList[1] = (unsigned char) ((dependency & 0X0FF00) >> 8);
 
     return instruction;
 }

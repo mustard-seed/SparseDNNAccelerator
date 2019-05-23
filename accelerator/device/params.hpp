@@ -43,7 +43,7 @@
 
 #define PACKET_SIZE 1
 
-#define PE_ROWS 1
+#define PE_ROWS 4
 #define PE_COLS 2
 
 //Encoding weight length

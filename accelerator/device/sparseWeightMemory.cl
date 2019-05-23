@@ -10,6 +10,12 @@
 	#define EMULATOR_PRINT(format)
 #endif
 
+#ifdef HW_DEBUG
+	#define DEBUG_PRINT(format) printf format
+#else
+	#define DEBUG_PRINT(format)
+#endif
+
 
 #pragma OPENCL EXTENSION cl_intel_channels : enable
 
@@ -87,17 +93,37 @@ __kernel void kernelSparseWeightDMA(
 	                packet.laneNumber = (unsigned short) laneID;
 	                packet.packet = data;
 
+	                //DEBUG_PRINT ( ("[Kernel SpW DMA]: Read index from address %u\n", ddrAddress) );
+	                //DEBUG_PRINT ( ("[Kernel SpW DMA]: Sending index %u to lane %u\n", index, laneID) );
+
 	               	bool packetSent = false;
 	               	while (packetSent == false) {
 	               		packetSent = write_channel_nb_intel(channel_packetDMAToWeightFeeder[0], packet);
 
 	               		read_channel_nb_intel(channel_packetDMAToWeightFeederLoopBack, &loopBackTokenRead);
 
-		                if (loopBackTokenRead){
+		              if (loopBackTokenRead){
 		                    tokenCount++;
 		                }
 	               	}
-	                //write_channel_intel(channel_packetDMAToWeightFeeder[0], packet);
+	                
+//	                bool packetSent = false;
+//	                unsigned char attempCount = 0;
+//	                do { 
+//	                	packetSent = write_channel_nb_intel(channel_packetDMAToWeightFeeder[0], packet);
+//	                	attempCount++;
+//	                }
+//	                while (!packetSent && attempCount < 0xFF);
+//
+//	                if (attempCount == 0xFF) {
+//	                	DEBUG_PRINT ( ("[KERNEL SpW DMA]: Write to channel_packetDMAToWeightFeeder[0] timeout\n") );
+//	                }
+
+//	                read_channel_nb_intel(channel_packetDMAToWeightFeederLoopBack, &loopBackTokenRead);
+
+					//if (loopBackTokenRead){
+		            //        tokenCount++;
+		            //    }
 
 	                if (depth==0){
 	                    offsetHead = index;
@@ -105,6 +131,7 @@ __kernel void kernelSparseWeightDMA(
                     if (depth == (unsigned short) (numCbToStream)) {//Pointer of the next cb, which marks the end of this stream run!
 	                    offsetEnd = index;
 	                }
+
 
 				}
 	            numTokenToCollect += ((unsigned int)  numCbToStream + 1); //CAUTION: Need to be +1 , because the extra cb contains the pointer!
@@ -127,16 +154,38 @@ __kernel void kernelSparseWeightDMA(
 	                packet.laneNumber = (unsigned short) laneID;
 	                packet.packet = data;
 
+	                //DEBUG_PRINT ( ("[Kernel SpW DMA]: Read weight and offset from address %u\n", ddrAddress) );
+
+	                //DEBUG_PRINT ( ("[Kernel SpW DMA]: Sending weight & offset %u to lane %u\n", weight, laneID) );
+
 	                bool packetSent = false;
 	               	while (packetSent == false) {
 	               		packetSent = write_channel_nb_intel(channel_packetDMAToWeightFeeder[0], packet);
-	               		
+	               	
 	               		read_channel_nb_intel(channel_packetDMAToWeightFeederLoopBack, &loopBackTokenRead);
 
 		                if (loopBackTokenRead){
 		                    tokenCount++;
 		                }
 	               	}
+
+	               	//bool packetSent = false;
+	                //unsigned char attempCount = 0;
+	                //do { 
+	                //	packetSent = write_channel_nb_intel(channel_packetDMAToWeightFeeder[0], packet);
+	                //	attempCount++;
+	                //}
+	                //while (!packetSent && attempCount < 0xFF);
+
+	                //if (attempCount == 0xFF) {
+	                //	DEBUG_PRINT ( ("[KERNEL SpW DMA]: Write to channel_packetDMAToWeightFeeder[0] timeout\n") );
+	                //}
+
+	                //read_channel_nb_intel(channel_packetDMAToWeightFeederLoopBack, &loopBackTokenRead);
+
+					//if (loopBackTokenRead){
+		            //       tokenCount++;
+		            //}
 	            }
 
 	            numTokenToCollect += (unsigned int) numWeightsToStream;
@@ -193,6 +242,8 @@ __kernel void kernelSparseWeightFeeder()
 	t_spOffset laneHeadOffset = 0;
 	t_spOffset drainIterIndexReg = 0;
 	t_spOffset drainEndIndexReg = 0;
+
+	unsigned int timeOutCount = 0x0;
 
 	#pragma ivdep array(bufferWeightValues)
 	#pragma ivdep array(bufferWeightIndex)
@@ -284,6 +335,8 @@ __kernel void kernelSparseWeightFeeder()
 
 					}
 
+					timeOutCount = 0x0;
+
                     if ( ((unsigned char) laneID) >=tokenDrain.laneStart && ((unsigned char) laneID) <tokenDrain.laneEnd){
                         drainCbStartReg = (unsigned short) tokenDrain.cbStart;
                         drainCbEndReg = (unsigned short) tokenDrain.cbEnd;
@@ -320,44 +373,65 @@ __kernel void kernelSparseWeightFeeder()
 				break;
 			case (STREAM):
 				EMULATOR_PRINT( ("[SpW Feeder %i]: State is STREAM\n", laneID) );
+					{
+						bool spwWriteSuccess = false;
 #ifndef INCLUDE_COMPUTE_CORE
 
-				write_channel_intel(channel_sparseWeights[laneID & KERNEL_CACHE_LANE_MASK]
-						, bufferWeightValues [drainIterIndexReg & KERNEL_INDEX_CACHE_DEPTH_MASK][drainSelectReg & 0x1]);
-
+						spwWriteSuccess = write_channel_nb_intel(channel_sparseWeights[laneID & KERNEL_CACHE_LANE_MASK]
+								, bufferWeightValues [drainIterIndexReg & KERNEL_INDEX_CACHE_DEPTH_MASK][drainSelectReg & 0x1]);
 #else
 
-				write_channel_intel(channel_sparseWeights[laneID & KERNEL_CACHE_LANE_MASK][0]
-						, bufferWeightValues [drainIterIndexReg & KERNEL_INDEX_CACHE_DEPTH_MASK][drainSelectReg & 0x1]);
+						spwWriteSuccess = write_channel_nb_intel(channel_sparseWeights[laneID & KERNEL_CACHE_LANE_MASK][0]
+								, bufferWeightValues [drainIterIndexReg & KERNEL_INDEX_CACHE_DEPTH_MASK][drainSelectReg & 0x1]);
 
 #endif
-				if (drainIterIndexReg+1 == drainEndIndexReg) {
-					state = STREAM_COMMIT_WAIT;
-				}
-				drainIterIndexReg++;
+						if (spwWriteSuccess){
+							drainIterIndexReg++;
+						}
+
+						timeOutCount++;
+
+						if (drainIterIndexReg == drainEndIndexReg || timeOutCount == 0xFFFFFFFF) {
+								state = STREAM_COMMIT_WAIT;
+						}
+					}
 				break;
 			case (STREAM_COMMIT_WAIT):
 				EMULATOR_PRINT( ("[SpW Feeder %i]: State is STREAM_COMMIT_WAIT\n", laneID) );
-				if (laneID > 0){
+				{
+					if (laneID > 0){
+						bool commitReadSuccess = false;
 
-					read_channel_intel(channel_drainWeightCacheInternalCommit[laneID-1 & KERNEL_CACHE_LANE_MASK]);
+						read_channel_nb_intel(channel_drainWeightCacheInternalCommit[laneID-1 & KERNEL_CACHE_LANE_MASK], 
+							&commitReadSuccess);
 
+						if (commitReadSuccess) {state = STREAM_COMMIT_WRITE;}
+
+					}
+					else {
+						state = STREAM_COMMIT_WRITE;
+					}
 				}
-				state = STREAM_COMMIT_WRITE;
 				break;
 			case (STREAM_COMMIT_WRITE):
-				EMULATOR_PRINT( ("[SpW Feeder %i]: State is STREAM_COMMIT_WRITE\n", laneID) );
-				if (laneID < KERNEL_CACHE_LANES - 1){
+				{
+					bool commitSuccess = false;
+					EMULATOR_PRINT( ("[SpW Feeder %i]: State is STREAM_COMMIT_WRITE\n", laneID) );
+					if (laneID < KERNEL_CACHE_LANES - 1){
 
-					write_channel_intel(channel_drainWeightCacheInternalCommit[laneID & KERNEL_CACHE_LANE_MASK], true & 0x1);
+						commitSuccess = write_channel_nb_intel
+							(channel_drainWeightCacheInternalCommit[laneID & KERNEL_CACHE_LANE_MASK], true & 0x1);
 
+					}
+					else{
+
+						commitSuccess = write_channel_nb_intel
+							(channel_drainWeightCacheCommit, true & 0x1);
+
+					}
+
+					if (commitSuccess) {state = IDLE;}
 				}
-				else{
-
-					write_channel_intel(channel_drainWeightCacheCommit, true & 0x1);
-
-				}
-				state = IDLE;
 				break;
 
 			default:

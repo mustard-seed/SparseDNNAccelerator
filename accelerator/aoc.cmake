@@ -17,6 +17,10 @@
 #              FAST_COMPILE_HW -- The aoc compiler will go through place and route to generate an FPGA
 #                            bitstream with minimal placement and routing effort. The target's name and the output aocx name end with
 #                            "_aoc_fast_compile_hw"
+#              SIMULATION -- The aoc compiler will generate a cycle accurate simulation library for the kernels
+#                            Use this only on AOCL 19.1 or above.
+#                            The target's name and the output aocx name end with
+#                            "_aoc_simulation"
 # HEADER_DIR:  Single valued, optional. Custom header include path for the compiler to see. There is no need to pass <INTELFPGAOCLSDKROOT>/include/kernel_headers via this argument
 # RTL_DIR:     Single valued, optional. Directory of the custom RTL library path. Must be supplied if RTL_LIB is specified
 # RTL_LIB:     Single valued, optional. Name of the RTL library. Must be supplied if RTL_DIR is specified.
@@ -51,6 +55,14 @@ function (add_aoc_target)
                 -g
                 -o ${target_name_local}
              )
+    elseif ("${add_aoc_target_TARGET_TYPE}" STREQUAL "SIMULATION")
+             message (STATUS "Generating the simulation AOC target")
+             set (target_name_local "${add_aoc_target_TARGET_NAME}_aoc_simulation")
+             list (APPEND occflags
+                     -march=simulator
+                     -ghdl
+                    # -o ${target_name_local}
+                  )
     elseif("${add_aoc_target_TARGET_TYPE}" STREQUAL "RTL_ONLY")
         message (STATUS "Generating the RTL_ONLY AOC target")
         set (target_name_local "${add_aoc_target_TARGET_NAME}_aoc_rtl_only")
