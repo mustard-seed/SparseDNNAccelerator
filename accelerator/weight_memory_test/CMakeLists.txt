@@ -4,7 +4,7 @@ set (TEST_NAME "sparseMemoryTest")
 
 set (PREPROCESSOR_DEFS
         -DWEIGHT_MEMORY_TEST
-        -DHW_DEBUG
+#        -DHW_DEBUG
         )
 
 ############################################

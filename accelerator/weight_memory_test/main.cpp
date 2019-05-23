@@ -14,8 +14,8 @@
 #include <unistd.h> //usleep
 #include <random>
 
-#define MATRIX_ROWS 1
-#define MATRIX_COLS 1900
+#define MATRIX_ROWS 64
+#define MATRIX_COLS 10
 #define SEED 10
 #define BERN_P 0.5
 
@@ -473,8 +473,9 @@ void matrix_compression (std::vector<char> & _matrix,
         //3) it is the last value in a filter strip
         //4) it is the last value in an encoding block
         unsigned short effectualWeightAndZCount
-          = ((unsigned short) zeroCount << WEIGHT_ZCOUNT_BITOFFSET)
-          | (( (unsigned short) value & WEIGHT_MASK) << WEIGHT_BITOFFSET);
+          = ((unsigned short) (zeroCount & 0X0F) << WEIGHT_ZCOUNT_BITOFFSET)
+          | (( (unsigned short) (value & WEIGHT_MASK) ) << WEIGHT_BITOFFSET);
+
         outEffectualValues[effectualValueIdx] = effectualWeightAndZCount;
 
         //Insert a new element to the offset array if this is the first
@@ -537,22 +538,35 @@ bool check_matrix (aligned_short_vector & originalMatrix,
         std::cout <<"Displaying the mismatched filter."<<std::endl;
         std::cout <<"The expected filter row: "<<std::endl;
         unsigned int numEffectualWeights = 0;
+        std::cout <<"["<<numEffectualWeights<<"] ";
         for (unsigned int weightAddress = numberOfWeightsPerRow * iterRow + beginOffset;
                weightAddress < numberOfWeightsPerRow * iterRow + endOffset;
                weightAddress++
              ){
             std::cout << ((originalMatrix[weightAddress] & WEIGHT_MASK) >> WEIGHT_BITOFFSET )<<" ";
             numEffectualWeights++;
+
+            if (numEffectualWeights % 50 == 0) {
+                std::cout <<std::endl<<"["<<numEffectualWeights<<"] ";
             }
+         }
         std::cout << std::endl;
         std::cout <<"Number of expected effectual weights is "<<numEffectualWeights<<std::endl;
+
+        numEffectualWeights = 0;
+        std::cout <<"["<<numEffectualWeights<<"] ";
         std::cout <<"The actual output"<<std::endl;
         for (unsigned int weightAddress = numberOfWeightsPerRow * iterRow + beginOffset;
                weightAddress < numberOfWeightsPerRow * iterRow + endOffset;
                weightAddress++
              ) {
             std::cout <<( (outputMatrix[weightAddress] & WEIGHT_MASK) )<<" ";
+            numEffectualWeights++;
+
+            if (numEffectualWeights % 50 == 0) {
+                std::cout <<std::endl<<"["<<numEffectualWeights<<"] ";
             }
+         }
         std::cout << std::endl;
         result = false;
         break;

@@ -121,9 +121,10 @@ __kernel void kernelSequencer(
           }
 
 
-          //Issue the instructions minus the dependency
+          //Issue the instructions
           instructionInFlightCount[header]++;
 
+          //Need +1 cycle to send the header
           for (unsigned char iter=instructionSizeBytes+1;
             iter > 0;
             iter--
@@ -148,8 +149,8 @@ __kernel void kernelSequencer(
 
             DEBUG_PRINT( ("[Kernel Sequencer]: Sent instruction %u byte %u. Header is %u. Packet is %u.\n",
                 iterInstruction, iter, header, (instruction.words[(iter-1) & 0x01F]) );
-            );
-          }
+            ); //do-while
+          } // for
           EMULATOR_PRINT ( ("[Kernel Sequencer]: Sent instruction %u. Header is %u No. Bytes is %u.\n"
             , iterInstruction, header, instructionSizeBytes));
       }
@@ -160,9 +161,6 @@ __kernel void kernelSequencer(
       while (wait){
         uint1_t wait_next = 0;
         checkCommits(instructionInFlightCount);
-
-        //CAUTION: EXPERIMENT
-        //mem_fence(CLK_CHANNEL_MEM_FENCE | CLK_LOCAL_MEM_FENCE);
 
         //Check the dependency
         #pragma unroll
@@ -175,6 +173,7 @@ __kernel void kernelSequencer(
         wait = wait_next;
       }
        
+      //Send the stop signals
       write_channel_intel(channel_weightCollectorStop[0], 0x1);
 
       write_channel_intel(channel_spWDMAStop, 0x1);
@@ -197,19 +196,17 @@ __kernel void kernelSequencer(
     enum e_states {IDLE, STREAM, COMMIT_WAIT, COMMIT};
     enum e_states state=IDLE;
 
-    uint24_t weightIndexLast;
-    uint24_t weightIndexTracker;
-    unsigned int weightAddressOffset;
+    uint24_t weightIndexLast = 0x0;
+    uint24_t weightIndexTracker = 0x0;
+    unsigned int weightAddressOffset = 0x0;
     bool collectWeightRequest = false;
-    bool previousCollectCommit = false;
-    bool commitSuccess = false;
 
     bool keepGoing = true;
     bool stopSignal = false;
 
-    t_spWeightAndOffset weightAndOffset;
-    t_zCount zCount;
-    short weight;
+    t_spWeightAndOffset weightAndOffset = 0x0;
+    t_zCount zCount = 0x0;
+    short weight = 0x0;
 
     //Used in unit teset. Delete this later!
     unsigned int timeOutCount = 0;
@@ -288,55 +285,59 @@ __kernel void kernelSequencer(
                                         >> WEIGHT_BITOFFSET;
 
                     
-                    //Move the weight 
-                    //TODO: RESTORE THIS LINE!!!!
+                    //Store the weight
                     pMem[weightAddressOffset] = weight;
-
-
-                    //pMem[weightAddressOffset] = 0x3;
 
                     //DEBUG_PRINT( ("[Weight Collector %u] Writing %u to %u \n", laneID, weight, weightAddressOffset) );
 
                     //Update the index tracker
-                    weightIndexTracker += ((uint24_t) 0X01
-                                  + (uint24_t) zCount);
+                    //weightIndexTracker += ( (uint24_t) 0X01
+                    //              + ((uint24_t) zCount) & 0x0F );
+                    //CAUTION: BIT-wise AND has LOWER precedence than + !!!!
+                    weightIndexTracker += ( (uint24_t) 0X01
+                                  + ( (uint24_t) zCount & 0x0F) );
+
+                    //EMULATOR_PRINT( ("[Weight Collector %u] zCount %u weightIndexTracker %u, increment %u\n", 
+                    //  laneID, ((uint24_t) zCount) & 0x0F, weightIndexTracker, (  1 
+                    //              + ( ((uint24_t) zCount) & 0x0F ) ) ) );
 
                     weightAddressOffset++;
-
-                    //Need to make sure the DDR write commits before proceeding
-                    //mem_fence(CLK_GLOBAL_MEM_FENCE | CLK_CHANNEL_MEM_FENCE);
-
-                  // if (testCount == 10){
-                  //    state = COMMIT_WAIT;
-                  //  }
                  }
 
-                 //Caution: >=
-                 if (weightIndexTracker == weightIndexLast || timeOutCount == 0xFFFFFFF){
+                 if (weightIndexTracker == weightIndexLast || timeOutCount == TIMEOUT){
                       state = COMMIT_WAIT;
-                      if (timeOutCount == 0xFFFFFFF) {
+                      if (timeOutCount == TIMEOUT) {
                         DEBUG_PRINT ( ("[Weight Collector %u] Read weight timeout. weightIndexTracker is %u\n", laneID, weightIndexTracker) );
+                        EMULATOR_PRINT ( ("[Weight Collector %u] Read weight timeout. weightIndexTracker is %u\n", laneID, weightIndexTracker) );
                       }
                     }
               }
 
           break;
         case (COMMIT_WAIT):
-              if (laneID > 0){
+            {
+                bool previousCollectCommit = false;
 
-                read_channel_nb_intel (
-                  channel_weightCollectControlCommitInternal[laneID-1],
-                  &previousCollectCommit);
+                //EMULATOR_PRINT ( ("[Weight Collector %u] State is COMMIT_WAIT\n", laneID) );
+                if (laneID > 0){
 
-                if (previousCollectCommit) {
+                  read_channel_nb_intel (
+                    channel_weightCollectControlCommitInternal[laneID-1],
+                    &previousCollectCommit);
+
+                  if (previousCollectCommit) {
+                    state = COMMIT;
+                  }
+                }
+                else {
                   state = COMMIT;
                 }
-              }
-              else {
-                state = COMMIT;
-              }
+            }
           break;
         case (COMMIT):
+          {
+              bool commitSuccess = false;
+              EMULATOR_PRINT ( ("[Weight Collector %u] State is COMMIT\n", laneID) );
               if (laneID < KERNEL_CACHE_LANES - 1) {
 //                  commitSuccess = write_channel_nb_intel(
 //                    channel_weightCollectControlCommitInternal[laneID],
@@ -361,7 +362,8 @@ __kernel void kernelSequencer(
               }
 //              EMULATOR_PRINT (("[Weight Collector %u]: Committed! Number of weights in uncompressed row: %u\n", laneID, weightIndexLast));
 //              state = IDLE;
-          break;
+          }
+              break;
       }
     }
 }
