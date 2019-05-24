@@ -14,10 +14,10 @@
 #include <unistd.h> //usleep
 #include <random>
 
-#define MATRIX_ROWS 64
-#define MATRIX_COLS 10
+#define MATRIX_ROWS 2048
+#define MATRIX_COLS 1024
 #define SEED 10
-#define BERN_P 0.5
+#define BERN_P 1.0
 
 typedef
 std::vector<cl_ushort, boost::alignment::aligned_allocator<cl_ushort, aocl_utils_cpp::AOCL_ALIGNMENT>>
@@ -124,6 +124,7 @@ int main(int argc, char* argv[]) {
 
 
     std::cout <<"Prepare the test matrix"<<std::endl;
+    std::cout <<"Num Row, Num Col, Prob of 1: "<<MATRIX_ROWS<<" "<<MATRIX_COLS<<" "<<BERN_P<<std::endl;
     std::vector<char> matrix;
 
     aligned_short_vector effectualValues (MATRIX_ROWS * MATRIX_COLS, 3);
@@ -183,7 +184,7 @@ int main(int argc, char* argv[]) {
                 cmdGenCollectWeight(
                     0, //ddrWeightOffset
                     (unsigned short) r, //filterStart
-                    (unsigned short) (std::min((unsigned short) KERNEL_CACHE_LANES, (unsigned short) (MATRIX_ROWS-r))), //numFiltersToCollect
+                    (unsigned short) (std::min( KERNEL_CACHE_LANES, (int) (MATRIX_ROWS-r))), //numFiltersToCollect
                     (unsigned int) MATRIX_COLS //number of uncompressed weights in the filter
                 );
             instructionVector.push_back(instructionCollect);
@@ -193,7 +194,7 @@ int main(int argc, char* argv[]) {
                             0, //ddrIndexOffset
                             0, //ddrWeightOffset
                             (unsigned short) r, //Filter start
-                            (unsigned char) std::min((unsigned char) KERNEL_CACHE_LANES, (unsigned char) (MATRIX_ROWS-r)), //numFilterToStream
+                            (unsigned char) std::min( KERNEL_CACHE_LANES, (int) (MATRIX_ROWS-r)), //numFilterToStream
                             (unsigned short) c, //cbStart
                             (unsigned short) (c + (unsigned int) std::min((unsigned int)KERNEL_INDEX_CACHE_DEPTH - 1, (unsigned int) CBPerRow - c) - 1), //cbEnd
                             CBPerRow,
@@ -207,9 +208,9 @@ int main(int argc, char* argv[]) {
             t_instruction instructionDrain =
                    cmdGenDrainWeightBuffer(
                         0, //laneStart
-                        (unsigned char) std::min((unsigned char) KERNEL_CACHE_LANES, (unsigned char) (MATRIX_ROWS-r)), //laneEnd
+                        (unsigned char) std::min(KERNEL_CACHE_LANES, (int) (MATRIX_ROWS-r)), //laneEnd
                         0, //cbStart
-                        (unsigned short) (std::min((unsigned int)KERNEL_INDEX_CACHE_DEPTH - 1, (unsigned int) CBPerRow - c) - 1) //cbEnd
+                        (unsigned short) (std::min(KERNEL_INDEX_CACHE_DEPTH - 1,  (int) (CBPerRow - c)) - 1) //cbEnd
                     );
             instructionVector.push_back(instructionDrain);
         }
@@ -365,19 +366,48 @@ int main(int argc, char* argv[]) {
                         );
         }
         status = clDMAQueue.enqueueTask(krnSpWDMA);
-        status = clSequencerQueue.enqueueTask(krnSequencer);
+
+        cl::Event sequencerEvent;
+        status = clSequencerQueue.enqueueTask(krnSequencer, NULL, &sequencerEvent);
         aocl_utils_cpp::checkError(status, "Failed to launch at least one kernel");
         //usleep (10000000);
         std::cout <<"Wait for result to be transferred back"<<std::endl;
         clSequencerQueue.finish();
+
+        cl::Event outputReadEvent;
         status = clSequencerQueue.enqueueReadBuffer(outputSpWBuffer,
                                   CL_TRUE
                                   ,0
                                   ,sizeof(typeof(outputEffectualValues.at(0))) * outputEffectualValues.size()
                                   , outputEffectualValues.data()
+                                  , NULL
+                                  , &outputReadEvent
                                   );
        clSequencerQueue.finish();
-        aocl_utils_cpp::checkError(status, "Failed to read the results back");
+       aocl_utils_cpp::checkError(status, "Failed to read the results back");
+
+       //Report timing
+       cl_ulong inputSpWBufferWriteStart = inputTransferEvent.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+       cl_ulong inputSpWBufferWriteEnd = inputTransferEvent.getProfilingInfo<CL_PROFILING_COMMAND_END>();
+       cl_double inputSpWBufferWriteTimeMs = (cl_double)(inputSpWBufferWriteEnd-inputSpWBufferWriteStart)*(cl_double)(1e-06);
+
+       cl_ulong inputSpWPointerBufferWriteStart = inputPointerTransferEvent.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+       cl_ulong inputSpWPointerBufferWriteEnd = inputPointerTransferEvent.getProfilingInfo<CL_PROFILING_COMMAND_END>();
+       cl_double inputSpWPointerBufferWriteTimeMs = (cl_double)(inputSpWPointerBufferWriteEnd-inputSpWPointerBufferWriteStart)*(cl_double)(1e-06);
+
+       cl_ulong sequencerStart = sequencerEvent.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+       cl_ulong sequencerEnd = sequencerEvent.getProfilingInfo<CL_PROFILING_COMMAND_END>();
+       cl_double sequencerTimeMs = (cl_double)(sequencerEnd-sequencerStart)*(cl_double)(1e-06);
+
+       cl_ulong outputReadStart = outputReadEvent.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+       cl_ulong outputReadEnd = outputReadEvent.getProfilingInfo<CL_PROFILING_COMMAND_END>();
+       cl_double outputReadTimeMs = (cl_double)(outputReadEnd-outputReadStart)*(cl_double)(1e-06);
+
+       std::cout <<"============Timing information=================="<<std::endl;
+       std::cout <<"Input SpW Buffer Write (ms): "<<inputSpWBufferWriteTimeMs<<std::endl;
+       std::cout <<"Input SpW Pointer Buffer Write (ms): "<<inputSpWPointerBufferWriteTimeMs<<std::endl;
+       std::cout <<"Ouput SpW Read Time (ms): "<<outputReadTimeMs<<std::endl;
+       std::cout <<"Sequencer Execution Time (ms): "<<sequencerTimeMs<<std::endl;
       }
     catch (const std::runtime_error & e) {
         std::cout <<e.what()<<std::endl;

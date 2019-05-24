@@ -247,7 +247,6 @@ __kernel void kernelSequencer(
                   * ( (unsigned int) controlToken.filterStart + (unsigned int) laneID );
 
                 weightIndexTracker=0;
-                timeOutCount = 0;
                 weightIndexLast = controlToken.numWeightsInFilter;
 
                 state = STREAM;
@@ -263,6 +262,7 @@ __kernel void kernelSequencer(
 
                   state = COMMIT_WAIT;
               }
+              timeOutCount = 0;
           } 
           break;
         case (STREAM):
@@ -272,9 +272,6 @@ __kernel void kernelSequencer(
                   //Wait for weight-offset tuple to arrive
                   weightAndOffset = 
                     read_channel_nb_intel(channel_sparseWeights[laneID], &weightReadSuccess);
-
-                  //Timeout counter
-                  timeOutCount++;  
 
 
                   if (weightReadSuccess){
@@ -297,9 +294,9 @@ __kernel void kernelSequencer(
                     weightIndexTracker += ( (uint24_t) 0X01
                                   + ( (uint24_t) zCount & 0x0F) );
 
-                    //EMULATOR_PRINT( ("[Weight Collector %u] zCount %u weightIndexTracker %u, increment %u\n", 
-                    //  laneID, ((uint24_t) zCount) & 0x0F, weightIndexTracker, (  1 
-                    //              + ( ((uint24_t) zCount) & 0x0F ) ) ) );
+                    EMULATOR_PRINT( ("[Weight Collector %u] zCount %u weightIndexTracker %u, increment %u\n", 
+                      laneID, ((uint24_t) zCount) & 0x0F, weightIndexTracker, (  1 
+                                  + ( ((uint24_t) zCount) & 0x0F ) ) ) );
 
                     weightAddressOffset++;
                  }
@@ -365,6 +362,8 @@ __kernel void kernelSequencer(
           }
               break;
       }
+      //Timeout counter
+      timeOutCount++;  
     }
 }
 
