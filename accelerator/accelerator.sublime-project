@@ -1,0 +1,26 @@
+{
+	"folders":
+	[
+		{
+			"path": "."
+		}
+	],
+
+	"settings": {
+        "easy_clang_complete_verbose": true,
+        "ecc_use_libclang": true,
+        "ecc_verbose": true,
+        "ecc_flags_sources": 
+        [
+            {
+              "file": "CMakeLists.txt",
+              "flags":
+             [
+                "-DBOARD_NAME=A10REF",
+                "-DOpenCV_DIR=/opt/ros/kinetic/share/OpenCV-3.3.1-dev"
+              ],
+            "search_in": "$project_path"
+          }
+        ]
+    },
+}
