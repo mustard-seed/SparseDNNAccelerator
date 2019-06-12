@@ -4,17 +4,17 @@
 class fixedPointNumber {
     private:
         int bits;
-        int fractionWidth;
-        int integerWidth;
+        char fractionWidth;
+        char integerWidth;
         float resolution;
     public:
         fixedPointNumber () = delete;
         fixedPointNumber (float _realNumber
-                          ,int _fracWidth
-                          ,int _intWidth);
+                          ,char _fracWidth
+                          ,char _intWidth);
         fixedPointNumber (int _bits,
-                          int _fracWidth,
-                          int _intWidth);
+                          char _fracWidth,
+                          char _intWidth);
 
         int getBits ();
         int getMask ();

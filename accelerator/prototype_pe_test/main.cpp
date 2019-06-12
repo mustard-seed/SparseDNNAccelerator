@@ -9,11 +9,13 @@
 #include <cassert>
 #include <iostream>
 #include <string> //for std::to_string
+#include <unistd.h> //usleep
+#include <random>
+
 #include "device_structures.hpp"
 #include "boost/align/aligned_allocator.hpp"
 #include "floatFixedPointConversion.hpp"
-#include <unistd.h> //usleep
-#include <random>
+#include "gtest/gtest.h"
 
 #define VECTOR_LENGTH 1024
 #define VECTOR_A_SEED 10
@@ -21,6 +23,10 @@
 #define BERN_SEED 7
 #define BERN_P 1.0
 #define EPSILON 1e-5
+#define VECTOR_MIN -2
+#define VECTOR_MAX 2
+#define FRAC_WIDTH 6
+#define INT_WIDTH 5
 
 typedef
 std::vector<cl_ushort, boost::alignment::aligned_allocator<cl_ushort, aocl_utils_cpp::AOCL_ALIGNMENT>>
@@ -52,33 +58,119 @@ cl_int clInit (const std::string binaryFile,
 
 /*!
  * \brief initialize_vector
- * \details Populate the given vector with values sampled from a random distribution
- * \param seed. Seed used to initialize the random generator
- * \param vector. The vector to be populated
+ * \param seed
+ * \param numElements
+ * \param bernProb
+ * \param min
+ * \param max
+ * \return std::vector<float>
  */
-void initialize_vector (
+std::vector<float> initialize_vector (
         unsigned seed,
-        std::vector<float> & vector
+        unsigned int numElements,
+        float bernProb,
+        float min,
+        float max
         );
 
 /*!
  * \brief compress_vector
  * \details Convert a floating point vector to a fixed vector, and generates the compressed version
+ * \param encodingBlockSize
  * \param inputVector
  * \param fixedPointVector
  * \param compressedVector
  */
 void compress_vector (
         std::vector<float> & inputVector,
+        unsigned int encodingBlockSize,
+        char intWidth,
+        char fracWidth,
         std::vector<fixedPointNumber> & fixedPointVector,
         aligned_short_vector & compressedVector
         );
 
+float dot_product_regular_vectors (
+        std::vector <float> & inputVectorA,
+        std::vector <float> & inputVectorB
+        );
 
+float dot_product_compressed_vectors (
+        aligned_short_vector & compressedVectorA,
+        aligned_short_vector & compressedVectorB,
+        unsigned int numEncodingBlocks,
+        unsigned int encodingBlockSize,
+        char intWidth,
+        char fracWidth
+        );
+
+TEST(commpressionTest, compressionDotProduct) {
+    std::vector<float> vectorA = initialize_vector(
+                VECTOR_A_SEED,
+                VECTOR_LENGTH,
+                BERN_P,
+                VECTOR_MIN,
+                VECTOR_MAX
+                );
+    std::vector<float> vectorB = initialize_vector(
+                VECTOR_B_SEED,
+                VECTOR_LENGTH,
+                BERN_P,
+                VECTOR_MIN,
+                VECTOR_MAX
+                );
+
+    float goldenResult = dot_product_regular_vectors(
+                vectorA,
+                vectorB
+                );
+
+    int effectual_length = (int) (std::ceil( (float) VECTOR_LENGTH / (float) ENCODING_LENGTH) * (float) ENCODING_LENGTH);
+
+    std::vector<fixedPointNumber> fpVectorA (effectual_length, {0, FRAC_WIDTH, INT_WIDTH});
+    aligned_short_vector compressedVectorA (effectual_length, 0);
+    std::vector<fixedPointNumber> fpVectorB (effectual_length, {0, FRAC_WIDTH, INT_WIDTH});
+    aligned_short_vector compressedVectorB (effectual_length, 0);
+
+    compress_vector(vectorA, ENCODING_LENGTH, INT_WIDTH, FRAC_WIDTH, fpVectorA, compressedVectorA);
+    compress_vector(vectorB, ENCODING_LENGTH, INT_WIDTH, FRAC_WIDTH, fpVectorB, compressedVectorB);
+
+    std::cout <<"Check Vector A"<<std::endl;
+    for (unsigned i = 0; i < fpVectorA.size(); i++) {
+        float orig = vectorA.at(i);
+        float fpA = (fpVectorA.at(i)).convert2Float();
+        EXPECT_TRUE(std::abs(orig-fpA) < 1.0f / (1 << FRAC_WIDTH)) << "orig, fpA: "<<orig<<" "<<fpA<<std::endl;
+    }
+
+    std::cout <<"Check Vector B"<<std::endl;
+    for (unsigned i = 0; i < fpVectorB.size(); i++) {
+        float orig = vectorB.at(i);
+        float fpB = (fpVectorB.at(i)).convert2Float();
+        EXPECT_TRUE(std::abs(orig-fpB) < 1.0f / (1 << FRAC_WIDTH)) << "orig, fpB: "<<orig<<" "<<fpB<<std::endl;
+    }
+
+    std::cout <<"Check the dot product"<<std::endl;
+    float compressedResult = dot_product_compressed_vectors(
+                compressedVectorA,
+                compressedVectorB,
+                VECTOR_LENGTH / ENCODING_LENGTH,
+                ENCODING_LENGTH,
+                INT_WIDTH,
+                FRAC_WIDTH
+                );
+
+    EXPECT_TRUE(std::abs(compressedResult-goldenResult) < 1.0f / (1 << FRAC_WIDTH))
+            << "goldenResult, compressedResult: "<<goldenResult<<" "<<compressedResult<<std::endl;
+
+}
 
 void cleanup();
 
 int main(int argc, char* argv[]) {
+
+    ::testing::InitGoogleTest( &argc, argv);
+    return RUN_ALL_TESTS();
+
 
 //    aocl_utils_cpp::Options options(argc, argv);
 
@@ -379,5 +471,129 @@ cl_int clInit (const std::string binaryFile,
     aocl_utils_cpp::checkError(status, "Failed to create at least one of the weight collector kernel");
 
     return status;
+}
+
+std::vector<float> initialize_vector(unsigned seed,
+                       unsigned int numElements,
+                       float bernProb,
+                       float min,
+                       float max) {
+    std::mt19937 generator(seed);
+    std::bernoulli_distribution bernDistribution(bernProb);
+    std::uniform_real_distribution<float> uniDistribution(min, max);
+
+    std::vector<float> vector{};
+    for (unsigned i=0; i<numElements; i++) {
+        float val = bernDistribution(generator) ?
+                    uniDistribution(generator) : 0.0f;
+        vector.push_back(val);
+    }
+
+    return vector;
+}
+
+void compress_vector (std::vector<float> &inputVector
+                      , unsigned int encodingBlockSize
+                      ,char intWidth
+                      ,char fracWidth
+                      ,std::vector<fixedPointNumber> &fixedPointVector
+                      ,aligned_short_vector &compressedVector){
+    //Pad zeros
+    while (inputVector.size() % encodingBlockSize != 0) {
+        inputVector.push_back(0.0f);
+    }
+
+    for (unsigned int iCompressedVector=0, iFullLengthVector=0, zOffset=0;
+         iFullLengthVector < inputVector.size();
+         iFullLengthVector++) {
+        float origValue = inputVector.at(iFullLengthVector);
+        fixedPointNumber fpValue(origValue, fracWidth, intWidth);
+        fixedPointVector.at(iFullLengthVector) = fpValue;
+
+        if (std::abs(origValue) > EPSILON
+                || iFullLengthVector % encodingBlockSize == encodingBlockSize - 1
+                || zOffset == ( (1 << WEIGHT_ZCOUNT_BITWIDTH) - 1)) {
+            int value = fpValue.getBits();
+            short shortValue =
+               ( (zOffset << WEIGHT_ZCOUNT_BITOFFSET) & WEIGHT_ZCOUNT_MASK )
+               | (value & fpValue.getMask());
+            compressedVector.at(iCompressedVector) = shortValue;
+            iCompressedVector++;
+            zOffset=0;
+        }
+        else {
+            zOffset++;
+        }
+    }
+}
+
+float dot_product_regular_vectors (std::vector<float> &inputVectorA
+                                   ,std::vector<float> &inputVectorB) {
+    float result = 0.0f;
+    for (unsigned i=0; i<inputVectorA.size(); i++) {
+        result += inputVectorA.at(i) * inputVectorB.at(i);
+    }
+    return result;
+}
+
+float dot_product_compressed_vectors (
+        aligned_short_vector & compressedVectorA,
+        aligned_short_vector & compressedVectorB,
+        unsigned int numEncodingBlocks,
+        unsigned int encodingBlockSize,
+        char intWidth,
+        char fracWidth
+        )
+{
+    unsigned int indexVectorA=0, indexVectorB=0;
+    auto iterVectorA = compressedVectorA.begin();
+    auto iterVectorB = compressedVectorB.begin();
+    unsigned int maxIndex = numEncodingBlocks * encodingBlockSize;
+    float result = 0.0f;
+    bool readA = true, readB = true;
+
+    while (indexVectorA < maxIndex && indexVectorB < maxIndex) {
+        short codeA = *iterVectorA;
+        unsigned int offsetA = (codeA & WEIGHT_ZCOUNT_MASK) >> (WEIGHT_ZCOUNT_BITOFFSET);
+        unsigned int bitsA = codeA & WEIGHT_MASK;
+        fixedPointNumber fpA((int) bitsA, fracWidth, intWidth);
+        float floatA = fpA.convert2Float();
+        if (readA) {
+            indexVectorA += (offsetA + 1);
+        }
+
+        short codeB = *iterVectorB;
+        unsigned int offsetB = (codeB & WEIGHT_ZCOUNT_MASK) >> (WEIGHT_ZCOUNT_BITOFFSET);
+        unsigned int bitsB = codeB & WEIGHT_MASK;
+        fixedPointNumber fpB((int) bitsB, fracWidth, intWidth);
+        float floatB = fpB.convert2Float();
+        if (readB) {
+            indexVectorB += (offsetB + 1);
+        }
+
+        if (indexVectorA == indexVectorB) {
+            result += floatA * floatB;
+            //indexVectorA += 1;
+            iterVectorA++;
+            //indexVectorB += 1;
+            iterVectorB++;
+            readA = true;
+            readB = true;
+        }
+        else if (indexVectorA > indexVectorB) {
+            //indexVectorB += 1;
+            iterVectorB++;
+            readB = true;
+            readA = false;
+        }
+        else {
+            //indexVectorA += 1;
+            iterVectorA++;
+            readA = true;
+            readB = false;
+        }
+    }
+
+    return result;
 }
 
