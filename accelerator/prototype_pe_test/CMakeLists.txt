@@ -106,7 +106,7 @@ INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIRS})
 #####################################
 add_definitions(-DFPGA_DEVICE)
 add_executable (${TEST_NAME}_host ${HOST_SRC})
-target_link_libraries(${TEST_NAME}_host ${Boost_LIBRARIES} gtest-main)
+target_link_libraries(${TEST_NAME}_host ${Boost_LIBRARIES} gtest_main)
 target_compile_definitions(
     ${TEST_NAME}_host
     PUBLIC
