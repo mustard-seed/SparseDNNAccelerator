@@ -16,6 +16,7 @@
 #include "boost/align/aligned_allocator.hpp"
 #include "floatFixedPointConversion.hpp"
 #include "gtest/gtest.h"
+#include "prototypePE_structs.hpp"
 
 #define VECTOR_LENGTH 1024
 #define VECTOR_A_SEED 10
@@ -27,6 +28,7 @@
 #define VECTOR_MAX 2
 #define FRAC_WIDTH 6
 #define INT_WIDTH 5
+#define MAX_INSTRUCTION_SIZE 64
 
 typedef
 std::vector<cl_ushort, boost::alignment::aligned_allocator<cl_ushort, aocl_utils_cpp::AOCL_ALIGNMENT>>
@@ -37,6 +39,143 @@ typedef
 std::vector<cl_short, boost::alignment::aligned_allocator<cl_short, aocl_utils_cpp::AOCL_ALIGNMENT>>
 //std::vector<cl_short>
 aligned_short_vector;
+
+typedef
+std::vector<t_pe_prototype_instruction,
+boost::alignment::aligned_allocator<t_pe_prototype_instruction, aocl_utils_cpp::AOCL_ALIGNMENT>>
+//std::vector<cl_short>
+t_aligned_instruction_vector;
+
+class peTestFixture : public ::testing::Test {
+protected:
+    std::string binaryFile;
+    cl::Platform clPlatform;
+    cl::Context clContext;
+    cl::Device clDevice;
+    cl::CommandQueue clCommandQueue;
+    cl::Kernel kernelPE;
+    cl::Buffer bufferInstruction;
+    cl::Buffer bufferActivationInput;
+    cl::Buffer bufferActivationOutput;
+    cl::Buffer bufferWeightInput;
+    cl::Buffer bufferWeightOutput;
+    cl::Buffer bufferBiasInput;
+    cl::Buffer bufferBiasOutput;
+
+
+    void SetUp() override {
+        binaryFile = "prototypePE_aoc_emulation.aocx";
+        //Setup and platform and the context
+        cl_int status = CL_SUCCESS;
+        clPlatform = aocl_utils_cpp::findPlatform("Intel(R) FPGA SDK for OpenCL(TM)");
+        std::vector<cl::Device> devices;
+        status = clPlatform.getDevices(CL_DEVICE_TYPE_ALL, &devices);
+        aocl_utils_cpp::checkError(status, "Failed to query the devices");
+        clDevice = devices[0];
+        clContext = cl::Context({devices[0]}
+                                ,NULL
+                                ,&aocl_utils_cpp::oclContextCallback
+                                ,NULL
+                                ,&status);
+        aocl_utils_cpp::checkError(status, "Failed to create context");
+
+        //Parse the binary and invoke the kernel
+        cl::Program program = aocl_utils_cpp::createProgramFromBinary(
+                    clContext,
+                    binaryFile.c_str(),
+                    {clDevice}
+                    );
+        status = program.build({clDevice});
+        aocl_utils_cpp::checkError(status, "Failed to build program");
+
+        kernelPE = cl::Kernel(program, "kernelPrototypePE", &status);
+        aocl_utils_cpp::checkError(status, "Failed to create the prototype PE kernel!");
+
+        //Setup the command queue and buffers
+        clCommandQueue = cl::CommandQueue(
+                    clContext,
+                    clDevice,
+                    CL_QUEUE_PROFILING_ENABLE,
+                    &status
+                    );
+        aocl_utils_cpp::checkError(status, "Failed to setup the command queue!");
+
+        bufferInstruction = cl::Buffer (
+                        clContext,
+                        CL_MEM_READ_ONLY,
+                        MAX_INSTRUCTION_SIZE * sizeof(t_pe_prototype_instruction),
+                        NULL,
+                        &status
+                    );
+        aocl_utils_cpp::checkError(status, "Failed to setup the instruction buffer!");
+
+        bufferActivationInput = cl::Buffer (
+                        clContext,
+                        CL_MEM_READ_ONLY,
+                        VECTOR_LENGTH * sizeof(short),
+                        NULL,
+                        &status
+                    );
+        aocl_utils_cpp::checkError(status, "Failed to setup the input activation buffer!");
+
+        bufferActivationOutput = cl::Buffer (
+                        clContext,
+                        CL_MEM_WRITE_ONLY,
+                        VECTOR_LENGTH * sizeof(short),
+                        NULL,
+                        &status
+                    );
+        aocl_utils_cpp::checkError(status, "Failed to setup the output activation buffer!");
+
+        bufferWeightInput = cl::Buffer (
+                        clContext,
+                        CL_MEM_READ_ONLY,
+                        VECTOR_LENGTH * sizeof(short),
+                        NULL,
+                        &status
+                    );
+        aocl_utils_cpp::checkError(status, "Failed to setup the input weight buffer!");
+
+        bufferWeightOutput = cl::Buffer (
+                        clContext,
+                        CL_MEM_WRITE_ONLY,
+                        VECTOR_LENGTH * sizeof(short),
+                        NULL,
+                        &status
+                    );
+        aocl_utils_cpp::checkError(status, "Failed to setup the output weight buffer!");
+
+        bufferBiasInput = cl::Buffer (
+                        clContext,
+                        CL_MEM_READ_ONLY,
+                        VECTOR_LENGTH * sizeof(short),
+                        NULL,
+                        &status
+                    );
+        aocl_utils_cpp::checkError(status, "Failed to setup the input bias buffer!");
+
+        bufferBiasOutput = cl::Buffer (
+                        clContext,
+                        CL_MEM_WRITE_ONLY,
+                        VECTOR_LENGTH * sizeof(short),
+                        NULL,
+                        &status
+                    );
+        aocl_utils_cpp::checkError(status, "Failed to setup the output bias buffer!");
+
+        kernelPE.setArg(0, bufferActivationInput);
+        kernelPE.setArg(1, bufferActivationOutput);
+        kernelPE.setArg(2, bufferWeightInput);
+        kernelPE.setArg(3, bufferWeightOutput);
+        kernelPE.setArg(4, bufferBiasInput);
+        kernelPE.setArg(5, bufferBiasOutput);
+        kernelPE.setArg(6, bufferInstruction);
+
+        std::cout <<"AOCL setup compelete"<<std::endl;
+
+        //Need to setup numInstructions, idx, and idy separately
+    }
+};
 
 
 /*!
@@ -162,6 +301,10 @@ TEST(commpressionTest, compressionDotProduct) {
     EXPECT_TRUE(std::abs(compressedResult-goldenResult) < 1.0f / (1 << FRAC_WIDTH))
             << "goldenResult, compressedResult: "<<goldenResult<<" "<<compressedResult<<std::endl;
 
+}
+
+TEST_F (peTestFixture, testFixture) {
+    EXPECT_TRUE(true);
 }
 
 void cleanup();

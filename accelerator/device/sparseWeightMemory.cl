@@ -3,25 +3,7 @@
 #include "params.hpp"
 #include "device_structures.hpp"
 #include "channels.cl"
-
-/*
-printf enabled during SW emulation
-*/
-#ifdef EMULATOR
-	#define EMULATOR_PRINT(format) printf format
-#else
-	#define EMULATOR_PRINT(format)
-#endif
-
-/*
-printf enabled on HW if -HW_DEBUG flag is set
-*/
-#ifdef HW_DEBUG
-	#define DEBUG_PRINT(format) printf format
-#else
-	#define DEBUG_PRINT(format)
-#endif
-
+#include "device_utils.hpp"
 
 #pragma OPENCL EXTENSION cl_intel_channels : enable
 

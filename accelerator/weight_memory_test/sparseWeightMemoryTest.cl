@@ -2,6 +2,8 @@
 #include "device_structures.hpp"
 #include "channels.cl"
 #include "ihc_apint.h"
+#include "device_utils.hpp"
+
 //Must include the following line in order to use channel
 #pragma OPENCL EXTENSION cl_intel_channels : enable
 
@@ -13,20 +15,6 @@
 #else
 #error "Invalid number of inflight instructions. Only supports 8 or 16"    
 #endif 
-
-
-#ifdef EMULATOR
-  #define EMULATOR_PRINT(format) printf format
-#else
-  #define EMULATOR_PRINT(format)
-#endif
-
-#ifdef HW_DEBUG
-  #define DEBUG_PRINT(format) printf format
-#else
-  #define DEBUG_PRINT(format)
-#endif
-
 
 void checkCommits (uint4_t* pInstrInFlightCount) {
   bool dmaCommitRead=false, drainCacheCommitRead=false, CacheSelectCommitRead=false, collectCommitRead=false;
