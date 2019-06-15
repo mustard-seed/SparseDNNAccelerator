@@ -226,7 +226,7 @@ __kernel void kernelSparseWeightDMA(
 	            	unsigned short depth = 0;
 		            unsigned int ddrAddress=ddrKernelWeightStartOffset+iterFilter*numWeightsInFilter+ (unsigned int) offsetHead;
 		            
-		            t_spWeightAndOffset weight;
+		            t_spValueAndZCount weight;
 
 		            // Flag. Indicate whether to by pass mem read
 	                // FF
@@ -242,7 +242,7 @@ __kernel void kernelSparseWeightDMA(
 
 	                    // Read the weight/Zcount from the DDR.
 	                    if (!byPassMemRead) {
-		                	weight = (t_spWeightAndOffset) pWeightMem[ddrAddress];
+		                	weight = (t_spValueAndZCount) pWeightMem[ddrAddress];
 		                	byPassMemRead = true;
 		                }
 		                
@@ -335,7 +335,7 @@ __kernel void kernelSparseWeightFeeder()
 	//Declare the buffers
     //By default, the lower dimension is used for banking!
     //M10/20K
-	__private t_spWeightAndOffset  __attribute__ ((numbanks(2), bankwidth(2))) bufferWeightValues [KERNEL_CACHE_DEPTH][2];
+	__private t_spValueAndZCount  __attribute__ ((numbanks(2), bankwidth(2))) bufferWeightValues [KERNEL_CACHE_DEPTH][2];
 	__private t_spOffset __attribute__ ((numbanks(2), bankwidth(2))) bufferWeightIndex [KERNEL_INDEX_CACHE_DEPTH][2];
 
 	//Register controlling the drain select

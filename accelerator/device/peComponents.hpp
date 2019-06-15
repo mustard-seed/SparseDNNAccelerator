@@ -12,17 +12,17 @@
 typedef struct {
 	uint4_t pReadNow;
 	uint4_t pWriteNext;
-	t_spWeightAndOffset regs[16];
+	t_spValueAndZCount regs[16];
 } t_fifo;
 
 bool checkFIFOFull (t_fifo * pFifo);
 
 bool checkFIFOEmpty (t_fifo * pFifo);
 
-t_spWeightAndOffset peekFIFO (t_fifo *pFifo);
+t_spValueAndZCount peekFIFO (t_fifo *pFifo);
 
 void popFIFO (t_fifo *pFifo);
 
-void pushFIFO (t_fifo *pFifo, t_spWeightAndOffset data);
+void pushFIFO (t_fifo *pFifo, t_spValueAndZCount data);
 
 #endif 

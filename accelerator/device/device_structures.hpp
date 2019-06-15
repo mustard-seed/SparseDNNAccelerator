@@ -23,9 +23,20 @@ typedef struct __attribute__((aligned(32))) __attribute__((packed)) {
 #endif
 
 #ifdef INTELFPGA_CL
-#include "ihc_apint.h"
-typedef short t_spWeightAndOffset;
+typedef short t_spValueAndZCount;
 typedef unsigned short t_spOffset;
+#else
+typedef cl_short t_spValueAndZCount;
+typedef cl_ushort t_spOffset;
+#endif
+
+typedef struct __attribute__((aligned(32))) __attribute__((packed)) {
+    t_spValueAndZCount vec[COMPRESSION_VEC_SIZE];
+} t_vecSpValueAndZCount;
+
+
+#ifdef INTELFPGA_CL
+#include "ihc_apint.h"
 typedef uint4_t t_zCount;
 typedef uint12_t t_weight;
 
@@ -48,7 +59,7 @@ typedef struct __attribute__((packed)){
 
 
 typedef union {
-    t_spWeightAndOffset weightAndOffset;
+    t_spValueAndZCount weightAndOffset;
     t_spOffset offset;
 } u_index_data;
 

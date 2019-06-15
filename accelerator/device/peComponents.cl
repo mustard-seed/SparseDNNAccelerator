@@ -13,7 +13,7 @@ bool checkFIFOEmpty (t_fifo * pFifo) {
 	return (pFifo->pWriteNext == pFifo->pReadNow);
 }
 
-t_spWeightAndOffset peekFIFO (t_fifo *pFifo) {
+t_spValueAndZCount peekFIFO (t_fifo *pFifo) {
 	//Doesn't perform empty check. User should do it first
 
 	return pFifo->regs[pFifo->pReadNow];
@@ -25,7 +25,7 @@ void popFIFO (t_fifo *pFifo) {
 	pFifo->pReadNow += 1;
 }
 
-void pushFIFO (t_fifo * pFifo, t_spWeightAndOffset data) {
+void pushFIFO (t_fifo * pFifo, t_spValueAndZCount data) {
 	pFifo->regs[pFifo->pWriteNext] = data;
 	pFifo->pWriteNext += 1;
 }

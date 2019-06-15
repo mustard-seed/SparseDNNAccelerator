@@ -192,7 +192,7 @@ __kernel void kernelSequencer(
     bool keepGoing = true;
     bool stopSignal = false;
 
-    t_spWeightAndOffset weightAndOffset = 0x0;
+    t_spValueAndZCount weightAndOffset = 0x0;
     t_zCount zCount = 0x0;
     short weight = 0x0;
 

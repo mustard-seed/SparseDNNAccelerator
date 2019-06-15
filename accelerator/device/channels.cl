@@ -20,9 +20,9 @@ channel bool channel_spWeightFeederDrainSelect [KERNEL_CACHE_LANES] __attribute_
 channel bool channel_spWeightFeederDrainSelectCommit __attribute__((depth(9)));
 
 #ifdef INCLUDE_COMPUTE_CORE
-channel t_spWeightAndOffset channel_sparseWeights[PE_ROWS][PE_COLS] __attribute__((depth(0)));
+channel t_spValueAndZCount channel_sparseWeights[PE_ROWS][PE_COLS] __attribute__((depth(0)));
 #else
-channel t_spWeightAndOffset channel_sparseWeights[PE_ROWS] __attribute__((depth(0)));
+channel t_spValueAndZCount channel_sparseWeights[PE_ROWS] __attribute__((depth(0)));
 #endif
 
 #ifdef WEIGHT_MEMORY_TEST
