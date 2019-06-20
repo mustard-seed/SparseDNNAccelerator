@@ -39,6 +39,13 @@ typedef struct __attribute__((aligned(32))) __attribute__((packed)) {
 #include "ihc_apint.h"
 typedef uint4_t t_zCount;
 typedef uint12_t t_weight;
+typedef uint12_t t_operand;
+
+#ifdef PE_PROTOTYPE_TEST
+typedef short t_value;
+#else
+typedef int12_t t_value;
+#endif
 
 /*! t_tokenFillWeightCache
     Token used to command filling of the sparse weight cache

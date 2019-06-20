@@ -613,6 +613,8 @@ float dot_product_compressed_vectors (t_aligned_compression_vector &compressedVe
         char fracWidth
         )
 {
+    //Trackers of the head and tail of each window
+
     unsigned int indexVectorA=0, indexVectorB=0, indexVectorATail=0, indexVectorBTail=0;
     auto iterVectorA = compressedVectorA.begin();
     auto iterVectorB = compressedVectorB.begin();

@@ -41,6 +41,9 @@
 #define WEIGHT_BITWIDTH 12
 #define WEIGHT_BITOFFSET 0
 #define WEIGHT_MASK 0x0FFF
+//Must be in HEX
+#define WEIGHT_MAX 0x07FF 
+#define WEIGHT_MIN -2048 
 //================================================================
 
 
@@ -69,14 +72,14 @@
 #define PE_MODE_ELTWISE_ADD 0x02
 #define PE_MODE_DOT_PRODUCT 0x03
 #define PE_MODE_MAX_POOL 0x04
+#define PE_MODE_DRAIN_PSUM 0x05
+
+//PE FIFO parameters
+#define PE_VEC_FIFO_SIZE 16
 
 //PE datawidth parameters
-#define REG_FF_FRAC 16 //16 bit fraction width
+#define REG_FF_FRAC 16 //16 bit fraction width, make  sure it is wider than all possible frac_width used on the short data format
 #define REG_FF_WIDTH 32 //32 bit FF, int
-
-//PE operation states
-#define PE_STATE_IDLE 0x00
-#define PE_STATE_DONE 0x01
 
 
 
