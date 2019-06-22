@@ -30,9 +30,17 @@ typedef cl_short t_spValueAndZCount;
 typedef cl_ushort t_spOffset;
 #endif
 
-typedef struct __attribute__((aligned(32))) __attribute__((packed)) {
+
+
+typedef struct  __attribute__((aligned(8))) __attribute__((packed)) {
     t_spValueAndZCount vec[COMPRESSION_VEC_SIZE];
 } t_vecSpValueAndZCount;
+
+typedef struct __attribute((aligned(32))) __attribute__((packed)){
+    short nzValues [COMPRESSION_VEC_SIZE];
+    unsigned char validMasks [COMPRESSION_VEC_SIZE];
+    unsigned short indices [COMPRESSION_VEC_SIZE];
+} t_vecUnpackedHost;
 
 
 #ifdef INTELFPGA_CL

@@ -3,7 +3,7 @@
 #include "params.hpp"
 
 #ifdef INTELFPGA_CL
-typedef struct __attribute__((aligned(64))) __attribute__((packed)) {
+typedef struct __attribute__((aligned(16))) __attribute__((packed)) {
   //The index of the start of the streaming block. 
   //If the first element in the block is effectual, this is its index
   unsigned short transmissionStartIndex;
@@ -28,7 +28,7 @@ typedef struct __attribute__((aligned(64))) __attribute__((packed)) {
   char fracDout;
 } t_pe_prototype_instruction;
 #else
-typedef struct __attribute__((aligned(64))) __attribute__((packed)) {
+typedef struct __attribute__((aligned(16))) __attribute__((packed)) {
   cl_ushort transmissionStartIndex;
   cl_ushort transmissionEndIndex;
   cl_ushort selectStartIndex;

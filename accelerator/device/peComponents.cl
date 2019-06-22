@@ -102,6 +102,10 @@ void decodeRunLength (t_vecSpValueAndZCount* pCompressionBlock
     ,t_vecUnpacked * pUnpacked
     ,unsigned short startIndex) {
 
+    pUnpacked->indices[0] = pUnpacked->validMasks[0] ?
+            1 + startIndex + (unsigned short) ( (pCompressionBlock->vec[0] & WEIGHT_ZCOUNT_MASK) >> WEIGHT_ZCOUNT_BITOFFSET ) :
+            startIndex;
+
     //Transfer the values
     #pragma unroll
     for (unsigned char i=0; i<COMPRESSION_VEC_SIZE; i++) {
@@ -110,23 +114,13 @@ void decodeRunLength (t_vecSpValueAndZCount* pCompressionBlock
         //pUnpacked->indices[i & 0x3] = (pCompressionBlock->vec[i & 0x3] & WEIGHT_VALID_MASK) > 0 ? 1 : 0;
         //pUnpacked->indices[i] = pUnpacked->validMasks[i] ? 1 : 0;
         
-        if (i==0) {
-        	
-            pUnpacked->indices[i & 0x3] = pUnpacked->validMasks[i & 0x3] ?
-                        1 + startIndex + (unsigned short) ( (pCompressionBlock->vec[0] & WEIGHT_ZCOUNT_MASK) >> WEIGHT_ZCOUNT_BITOFFSET ) :
-                        startIndex;
-            
-        }
-        else {
-        	
-            pUnpacked->indices[i & 0x3] = pUnpacked->validMasks[i & 0x3] ?
+        if (i>0) {
+        	pUnpacked->indices[i & 0x3] = pUnpacked->validMasks[i & 0x3] ?
                         1 + pUnpacked->indices[(i-1) & 0x3] + (unsigned short) ( (pCompressionBlock->vec[i & 0x3] & WEIGHT_ZCOUNT_MASK) >> WEIGHT_ZCOUNT_BITOFFSET ) :
-                        pUnpacked->indices[(i-1) & 0x3];
-            
+                        pUnpacked->indices[(i-1) & 0x3];            
         }
-		
-        
     }
+
 }
 
 bool findMatchInUnpackedBlock (
@@ -136,24 +130,23 @@ bool findMatchInUnpackedBlock (
         ) {
     bool returnVal;
 
-    if ( (pUnpacked->indices[0] <= targetIndex+1) 
-    	&& (pUnpacked->indices[COMPRESSION_VEC_SIZE-1] >= targetIndex+1) ) {
-    	t_operand value = 0x0;
-    	bool found = false;
-    	#pragma unroll
-    	for (unsigned char i=0; i<COMPRESSION_VEC_SIZE; i++) {
-	        bool localMatch = (pUnpacked->indices[i & 0x3] == targetIndex + 1);
-	        if (localMatch) {
-	        	found = true;
-	        	value = pUnpacked->nzValues[i & 0x3];
-	        }
-    	}
-    	*pValueHolder = value;
-    	returnVal = found;
+    if ( ( pUnpacked->indices[0] <= (0x1FFFF & ((0xFFFF & targetIndex) + (0xFFFF & 1)) ) ) 
+    	&& ( pUnpacked->indices[COMPRESSION_VEC_SIZE-1 ]  >= (0x1FFFF & ((0xFFFF & targetIndex) + (0xFFFF & 1)) ) ) ) {
+    	returnVal = true;
     }
     else {
     	returnVal = false;
     }
+
+	t_operand value = 0x0;
+	#pragma unroll
+	for (uint4_t i=0; i<COMPRESSION_VEC_SIZE; i++) {
+        bool localMatch = (pUnpacked->indices[i] == (unsigned short) (targetIndex+ (unsigned short) 1) );
+        if (localMatch) {
+        	value = pUnpacked->nzValues[i];
+        }
+	}
+	*pValueHolder = value;
 
     return returnVal;
 
@@ -166,7 +159,7 @@ int convertSignedFixedPointToAccumulator(
     //int temp = (int) ( fixedPointValue & WEIGHT_MASK);
     int tempSignExtended = (int) (fixedPointValue);
     int returnVal = tempSignExtended
-            << (REG_FF_FRAC - fracWidthFixedPointValue);
+            << (unsigned char)(REG_FF_FRAC - fracWidthFixedPointValue);
     return returnVal;
 }
 
@@ -177,17 +170,17 @@ t_operand convertAccumulatorToSignedFixedPoint(
 	//See if sign extension is required
 	int signExtensionMask = (accumulator >= 0) ?
 		0x0 :
-		~(0xFFFFFFFF >> (REG_FF_FRAC - fracWidthFixedPointValue));
+		~(0xFFFFFFFF >> ( (unsigned char)( REG_FF_FRAC - fracWidthFixedPointValue)) );
 
 	//Match the binary point
-	int fpValueWide = signExtensionMask | ( accumulator >> (REG_FF_FRAC - fracWidthFixedPointValue) );
+	int fpValueWide = signExtensionMask | ( accumulator >> (unsigned char)( (unsigned char) REG_FF_FRAC - fracWidthFixedPointValue) );
 
 	//Clip from above and below
 	int fpValueClipped;
-	if (fpValueWide > WEIGHT_MAX) {
+	if (fpValueWide > (unsigned char) WEIGHT_MAX) {
 		fpValueClipped = WEIGHT_MAX;
 	}
-	else if (fpValueWide < WEIGHT_MIN) {
+	else if (fpValueWide < (unsigned char) WEIGHT_MIN) {
 		fpValueClipped = WEIGHT_MIN;
 	}
 	else {
