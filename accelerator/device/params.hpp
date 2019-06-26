@@ -76,6 +76,7 @@
 
 //PE FIFO parameters
 #define PE_VEC_FIFO_SIZE 16
+#define PE_NUM_MULT 4
 
 //PE datawidth parameters
 #define REG_FF_FRAC 16 //16 bit fraction width, make  sure it is wider than all possible frac_width used on the short data format

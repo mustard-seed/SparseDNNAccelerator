@@ -29,6 +29,7 @@
 #define FRAC_WIDTH 8
 #define INT_WIDTH 3
 #define MAX_INSTRUCTION_SIZE 64
+#define MAX_DATA_LENGTH 2048
 
 typedef
 std::vector<cl_ushort, boost::alignment::aligned_allocator<cl_ushort, aocl_utils_cpp::AOCL_ALIGNMENT>>
@@ -46,6 +47,11 @@ std::vector<t_vecSpValueAndZCount, boost::alignment::aligned_allocator<t_vecSpVa
 t_aligned_compression_vector;
 
 typedef
+std::vector<t_vecUnpackedHost, boost::alignment::aligned_allocator<t_vecUnpackedHost, aocl_utils_cpp::AOCL_ALIGNMENT>>
+//std::vector<cl_short>
+t_aligned_compression_host_vector;
+
+typedef
 std::vector<t_pe_prototype_instruction,
 boost::alignment::aligned_allocator<t_pe_prototype_instruction, aocl_utils_cpp::AOCL_ALIGNMENT>>
 //std::vector<cl_short>
@@ -57,15 +63,46 @@ protected:
     cl::Platform clPlatform;
     cl::Context clContext;
     cl::Device clDevice;
-    cl::CommandQueue clCommandQueue;
+
+    cl::CommandQueue clCQDrainTransport;
+    cl::CommandQueue clCQInstructionTransport;
+    cl::CommandQueue clCQBiasTransport;
+    cl::CommandQueue clCQActivationTransport;
+    cl::CommandQueue clCQWeightTransport;
+    cl::CommandQueue clCQTestInterface;
+    cl::CommandQueue clCQPE;
+
+    cl::Kernel kernelDrainTransport;
+    cl::Kernel kernelInstructionTransport;
+    cl::Kernel kernelBiasTransport;
+    cl::Kernel kernelActivationTransport;
+    cl::Kernel kernelWeightTransport;
+    cl::Kernel kernelTestInterface;
     cl::Kernel kernelPE;
-    cl::Buffer bufferInstruction;
+
+    cl::Buffer bufferInstructionInput;
+    cl::Buffer bufferInstructionOutputH;
+    cl::Buffer bufferInstructionOutputV;
     cl::Buffer bufferActivationInput;
     cl::Buffer bufferActivationOutput;
     cl::Buffer bufferWeightInput;
     cl::Buffer bufferWeightOutput;
     cl::Buffer bufferBiasInput;
     cl::Buffer bufferBiasOutput;
+    cl::Buffer bufferDrainInput;
+    cl::Buffer bufferDrainOutput;
+
+    t_aligned_compression_vector inputActivationVector;
+    t_aligned_compression_host_vector outputActivationVector;
+    t_aligned_compression_vector inputWeightVector;
+    t_aligned_compression_host_vector outputWeightVector;
+    aligned_short_vector inputBiasVector;
+    aligned_short_vector outputBiasVector;
+    aligned_short_vector inputDrainVector;
+    aligned_short_vector outputDrainVector;
+    t_aligned_instruction_vector inputInstructionVector;
+    t_aligned_instruction_vector outputInstructionHVector;
+    t_aligned_instruction_vector outputInstructionVVector;
 
 
     void SetUp() override {
@@ -93,31 +130,117 @@ protected:
         status = program.build({clDevice});
         aocl_utils_cpp::checkError(status, "Failed to build program");
 
+        kernelTestInterface = cl::Kernel(program, "kernelTestInterface", &status);
+        aocl_utils_cpp::checkError(status, "Failed to create the test interface kernel!");
+
+        kernelDrainTransport = cl::Kernel(program, "kernelDrainTransport", &status);
+        aocl_utils_cpp::checkError(status, "Failed to create the drain transport kernel!");
+
+        kernelInstructionTransport = cl::Kernel(program, "kernelInstructionTransport", &status);
+        aocl_utils_cpp::checkError(status, "Failed to create the instruction transport kernel!");
+
+        kernelBiasTransport = cl::Kernel(program, "kernelBiasTransport", &status);
+        aocl_utils_cpp::checkError(status, "Failed to create the bias transport kernel!");
+
+        kernelWeightTransport = cl::Kernel(program, "kernelWeightTransport", &status);
+        aocl_utils_cpp::checkError(status, "Failed to create the weight transport kernel!");
+
+        kernelActivationTransport = cl::Kernel(program, "kernelActivationTransport", &status);
+        aocl_utils_cpp::checkError(status, "Failed to create the drain transport kernel!");
+
         kernelPE = cl::Kernel(program, "kernelPrototypePE", &status);
         aocl_utils_cpp::checkError(status, "Failed to create the prototype PE kernel!");
 
+
         //Setup the command queue and buffers
-        clCommandQueue = cl::CommandQueue(
+        clCQDrainTransport = cl::CommandQueue(
                     clContext,
                     clDevice,
                     CL_QUEUE_PROFILING_ENABLE,
                     &status
                     );
-        aocl_utils_cpp::checkError(status, "Failed to setup the command queue!");
+        aocl_utils_cpp::checkError(status, "Failed to setup the drain transport command queue!");
 
-        bufferInstruction = cl::Buffer (
+        clCQInstructionTransport = cl::CommandQueue(
+                    clContext,
+                    clDevice,
+                    CL_QUEUE_PROFILING_ENABLE,
+                    &status
+                    );
+        aocl_utils_cpp::checkError(status, "Failed to setup the instruction transport command queue!");
+
+        clCQBiasTransport = cl::CommandQueue(
+                    clContext,
+                    clDevice,
+                    CL_QUEUE_PROFILING_ENABLE,
+                    &status
+                    );
+        aocl_utils_cpp::checkError(status, "Failed to setup the bias transport command queue!");
+
+        clCQActivationTransport = cl::CommandQueue(
+                    clContext,
+                    clDevice,
+                    CL_QUEUE_PROFILING_ENABLE,
+                    &status
+                    );
+        aocl_utils_cpp::checkError(status, "Failed to setup the activation transport command queue!");
+
+        clCQWeightTransport = cl::CommandQueue(
+                    clContext,
+                    clDevice,
+                    CL_QUEUE_PROFILING_ENABLE,
+                    &status
+                    );
+        aocl_utils_cpp::checkError(status, "Failed to setup the weight transport command queue!");
+
+        clCQTestInterface = cl::CommandQueue(
+                    clContext,
+                    clDevice,
+                    CL_QUEUE_PROFILING_ENABLE,
+                    &status
+                    );
+        aocl_utils_cpp::checkError(status, "Failed to setup the test interface command queue!");
+
+        clCQPE = cl::CommandQueue(
+                    clContext,
+                    clDevice,
+                    CL_QUEUE_PROFILING_ENABLE,
+                    &status
+                    );
+        aocl_utils_cpp::checkError(status, "Failed to setup the PE command queue!");
+
+        bufferInstructionInput = cl::Buffer (
                         clContext,
                         CL_MEM_READ_ONLY,
-                        MAX_INSTRUCTION_SIZE * sizeof(t_pe_prototype_instruction),
+                        MAX_DATA_LENGTH * sizeof(t_pe_prototype_instruction),
                         NULL,
                         &status
                     );
-        aocl_utils_cpp::checkError(status, "Failed to setup the instruction buffer!");
+        aocl_utils_cpp::checkError(status, "Failed to setup the instruction input buffer!");
+
+        bufferInstructionOutputH = cl::Buffer (
+                        clContext,
+                        CL_MEM_WRITE_ONLY,
+                        MAX_DATA_LENGTH * sizeof(t_pe_prototype_instruction),
+                        NULL,
+                        &status
+                    );
+        aocl_utils_cpp::checkError(status, "Failed to setup the instruction output horizontal buffer!");
+
+        bufferInstructionOutputV = cl::Buffer (
+                        clContext,
+                        CL_MEM_WRITE_ONLY,
+                        MAX_DATA_LENGTH * sizeof(t_pe_prototype_instruction),
+                        NULL,
+                        &status
+                    );
+        aocl_utils_cpp::checkError(status, "Failed to setup the instruction output vertical buffer!");
+
 
         bufferActivationInput = cl::Buffer (
                         clContext,
                         CL_MEM_READ_ONLY,
-                        VECTOR_LENGTH * sizeof(short),
+                        MAX_DATA_LENGTH * sizeof(t_vecSpValueAndZCount),
                         NULL,
                         &status
                     );
@@ -126,7 +249,7 @@ protected:
         bufferActivationOutput = cl::Buffer (
                         clContext,
                         CL_MEM_WRITE_ONLY,
-                        VECTOR_LENGTH * sizeof(short),
+                        MAX_DATA_LENGTH * sizeof(t_vecUnpackedHost),
                         NULL,
                         &status
                     );
@@ -135,7 +258,7 @@ protected:
         bufferWeightInput = cl::Buffer (
                         clContext,
                         CL_MEM_READ_ONLY,
-                        VECTOR_LENGTH * sizeof(short),
+                        MAX_DATA_LENGTH * sizeof(t_vecSpValueAndZCount),
                         NULL,
                         &status
                     );
@@ -144,7 +267,7 @@ protected:
         bufferWeightOutput = cl::Buffer (
                         clContext,
                         CL_MEM_WRITE_ONLY,
-                        VECTOR_LENGTH * sizeof(short),
+                        MAX_DATA_LENGTH * sizeof(t_vecUnpackedHost),
                         NULL,
                         &status
                     );
@@ -153,7 +276,7 @@ protected:
         bufferBiasInput = cl::Buffer (
                         clContext,
                         CL_MEM_READ_ONLY,
-                        VECTOR_LENGTH * sizeof(short),
+                        MAX_DATA_LENGTH * sizeof(short),
                         NULL,
                         &status
                     );
@@ -162,23 +285,275 @@ protected:
         bufferBiasOutput = cl::Buffer (
                         clContext,
                         CL_MEM_WRITE_ONLY,
-                        VECTOR_LENGTH * sizeof(short),
+                        MAX_DATA_LENGTH * sizeof(short),
                         NULL,
                         &status
                     );
         aocl_utils_cpp::checkError(status, "Failed to setup the output bias buffer!");
 
-        kernelPE.setArg(0, bufferActivationInput);
-        kernelPE.setArg(1, bufferActivationOutput);
-        kernelPE.setArg(2, bufferWeightInput);
-        kernelPE.setArg(3, bufferWeightOutput);
-        kernelPE.setArg(4, bufferBiasInput);
-        kernelPE.setArg(5, bufferBiasOutput);
-        kernelPE.setArg(6, bufferInstruction);
+        bufferDrainInput = cl::Buffer (
+                        clContext,
+                        CL_MEM_READ_ONLY,
+                        MAX_DATA_LENGTH * sizeof(short),
+                        NULL,
+                        &status
+                    );
+        aocl_utils_cpp::checkError(status, "Failed to setup the input drain buffer!");
 
+        bufferDrainOutput = cl::Buffer (
+                        clContext,
+                        CL_MEM_WRITE_ONLY,
+                        MAX_DATA_LENGTH * sizeof(short),
+                        NULL,
+                        &status
+                    );
+        aocl_utils_cpp::checkError(status, "Failed to setup the output drain buffer!");
         std::cout <<"AOCL setup compelete"<<std::endl;
 
         //Need to setup numInstructions, idx, and idy separately
+    }
+
+    void launch (int idx, int idy, unsigned short startIndexActivationBlocks, unsigned short startIndexWeightBlocks) {
+        cl_int status;
+        //Set the kernels' ids
+        kernelActivationTransport.setArg(0, idx);
+        kernelActivationTransport.setArg(1, idy);
+
+        kernelWeightTransport.setArg(0, idx);
+        kernelWeightTransport.setArg(1, idy);
+
+        kernelBiasTransport.setArg(0, idx);
+        kernelBiasTransport.setArg(1, idy);
+
+        kernelDrainTransport.setArg(0, idx);
+        kernelDrainTransport.setArg(1, idy);
+
+        kernelInstructionTransport.setArg(0, idx);
+        kernelInstructionTransport.setArg(1, idy);
+
+        kernelPE.setArg(0, idx);
+        kernelPE.setArg(1,idy);
+
+        //Fill the buffers
+        //Transfer the instruction
+        if (inputInstructionVector.size() > 0) {
+            status = clCQTestInterface.enqueueWriteBuffer(bufferInstructionInput,
+                                                 CL_TRUE,
+                                                 0,
+                                                 sizeof(typeof(inputInstructionVector.at(0))) * inputInstructionVector.size(),
+                                                 inputInstructionVector.data(),
+                                                 NULL);
+            aocl_utils_cpp::checkError(status, "Failed to write bufferInstructionInput");
+        }
+
+        //Transfer the input activation
+        if (inputActivationVector.size() > 0) {
+            status = clCQTestInterface.enqueueWriteBuffer(bufferActivationInput,
+                                                 CL_TRUE,
+                                                 0,
+                                                 sizeof(typeof(inputActivationVector.at(0))) * inputActivationVector.size(),
+                                                 inputActivationVector.data(),
+                                                 NULL);
+            aocl_utils_cpp::checkError(status, "Failed to write bufferActivationInput");
+        }
+
+        //Transfer the input weight
+        if (inputWeightVector.size() > 0) {
+            status = clCQTestInterface.enqueueWriteBuffer(bufferWeightInput,
+                                                 CL_TRUE,
+                                                 0,
+                                                 sizeof(typeof(inputWeightVector.at(0))) * inputWeightVector.size(),
+                                                 inputWeightVector.data(),
+                                                 NULL);
+            aocl_utils_cpp::checkError(status, "Failed to write bufferWeightInput");
+        }
+
+        //Transfer the input drain
+        if (inputDrainVector.size() > 0) {
+            status = clCQTestInterface.enqueueWriteBuffer(bufferDrainInput,
+                                                 CL_TRUE,
+                                                 0,
+                                                 sizeof(typeof(inputDrainVector.at(0))) * inputDrainVector.size(),
+                                                 inputDrainVector.data(),
+                                                 NULL);
+            aocl_utils_cpp::checkError(status, "Failed to write bufferDrainInput");
+        }
+
+        //Transfer the input drain
+        if (inputBiasVector.size() > 0) {
+            status = clCQTestInterface.enqueueWriteBuffer(bufferBiasInput,
+                                                 CL_TRUE,
+                                                 0,
+                                                 sizeof(typeof(inputBiasVector.at(0))) * inputBiasVector.size(),
+                                                 inputBiasVector.data(),
+                                                 NULL);
+            aocl_utils_cpp::checkError(status, "Failed to write bufferDrainInput");
+        }
+
+        //Transfer the drain intput
+        cl_ushort numInputDrain = PE_ROWS  - idy - 1;
+        for (int i=0; i<numInputDrain; i++) {
+            short val = i;
+            inputDrainVector.push_back(val);
+        }
+        status = clCQTestInterface.enqueueWriteBuffer(bufferDrainInput,
+                                             CL_TRUE,
+                                             0,
+                                             sizeof(typeof(inputDrainVector.at(0))) * inputDrainVector.size(),
+                                             inputDrainVector.data(),
+                                             NULL);
+        aocl_utils_cpp::checkError(status, "Failed to write bufferDrainInput");
+        EXPECT_TRUE (status == CL_SUCCESS);
+
+        //Transfer the input bias
+        status = clCQTestInterface.enqueueWriteBuffer(bufferBiasInput,
+                                             CL_TRUE,
+                                             0,
+                                             sizeof(typeof(inputBiasVector.at(0))) * inputBiasVector.size(),
+                                             inputBiasVector.data(),
+                                             NULL);
+        aocl_utils_cpp::checkError(status, "Failed to write bufferBiasInput");
+        EXPECT_TRUE (status == CL_SUCCESS);
+
+        //Setup the buffer arguments and number of transfer for the test interface
+        kernelTestInterface.setArg(0, bufferActivationInput);
+        kernelTestInterface.setArg(1, bufferActivationOutput);
+        kernelTestInterface.setArg(2, bufferWeightInput);
+        kernelTestInterface.setArg(3, bufferWeightOutput);
+        kernelTestInterface.setArg(4, bufferBiasInput);
+        kernelTestInterface.setArg(5, bufferBiasOutput);
+        kernelTestInterface.setArg(6, bufferDrainInput);
+        kernelTestInterface.setArg(7, bufferDrainOutput);
+        kernelTestInterface.setArg(8, bufferInstructionInput);
+        kernelTestInterface.setArg(9, bufferInstructionOutputH);
+        kernelTestInterface.setArg(10, bufferInstructionOutputV);
+
+        kernelTestInterface.setArg(11, (cl_ushort) inputActivationVector.size()); //numInputActivationBlocks
+        kernelTestInterface.setArg(12, (cl_ushort) startIndexActivationBlocks); //startIndexActivationBlocks,
+        cl_ushort numOutputActivationBlocks =
+                idy < (PE_ROWS - 1) ? inputActivationVector.size() : 0;
+        kernelTestInterface.setArg(13, numOutputActivationBlocks); //numOutputActivationBlocks
+        //Allocate space for the output activation vector
+        for (int i=0; i<numOutputActivationBlocks; i++) {
+            t_vecUnpackedHost brick;
+            outputActivationVector.push_back(brick);
+        }
+
+        kernelTestInterface.setArg(14, (cl_ushort) inputActivationVector.size()); //numInputWeightBlocks
+        kernelTestInterface.setArg(15, (cl_ushort) startIndexWeightBlocks); //startIndexWeightBlocks,
+        cl_ushort numOutputWeightBlocks =
+                idy < (PE_COLS - 1) ? inputWeightVector.size() : 0;
+        kernelTestInterface.setArg(16, numOutputWeightBlocks); //numOutputWeightBlocks
+        //Allocate space for the output activation vector
+        for (int i=0; i<numOutputWeightBlocks; i++) {
+            t_vecUnpackedHost brick;
+            outputWeightVector.push_back(brick);
+        }
+        kernelTestInterface.setArg(17, (cl_ushort) inputBiasVector.size()); //numInputBias
+        cl_ushort numOutputBias =
+                idx < (PE_COLS - 1) ? inputBiasVector.size() : 0;
+        kernelTestInterface.setArg(18, numOutputBias); //numOutputBias
+        for (int i=0; i<numOutputBias; i++) {
+            short val;
+            outputBiasVector.push_back(val);
+        }
+
+        kernelTestInterface.setArg(19, (cl_ushort) numInputDrain); //numInputDrain
+        cl_ushort numOutputDrain = PE_ROWS  - idy;
+        kernelTestInterface.setArg(20, (cl_ushort) (PE_ROWS - idy)); //numOutputDrain
+        for (int i=0; i<numOutputDrain; i++) {
+            short val;
+            outputDrainVector.push_back(val);
+        }
+
+        kernelTestInterface.setArg(21, (cl_ushort) inputInstructionVector.size()); //numInputInstruction
+        cl_ushort numOutputInstructionH =
+                  ((idy == 0) && (idx < (PE_COLS - 1) )) ? inputInstructionVector.size() : 0;
+        kernelTestInterface.setArg(22, (cl_ushort) numOutputInstructionH); //numOutputInsructionHorizontal,
+        for (int i=0; i<numOutputInstructionH; i++) {
+            t_pe_prototype_instruction val;
+            outputInstructionHVector.push_back(val);
+        }
+
+        cl_ushort numOutputInstructionV =
+                  idy < (PE_ROWS - 1) ? inputInstructionVector.size() : 0;
+        kernelTestInterface.setArg(23, numOutputInstructionV); //numOutputInstructionVertical
+        for (int i=0; i<numOutputInstructionV; i++) {
+            t_pe_prototype_instruction val;
+            outputInstructionVVector.push_back(val);
+        }
+
+        //Launch kernels
+        clCQActivationTransport.enqueueTask(kernelActivationTransport);
+        clCQWeightTransport.enqueueTask(kernelWeightTransport);
+        clCQBiasTransport.enqueueTask(kernelBiasTransport);
+        clCQDrainTransport.enqueueTask(kernelDrainTransport);
+        clCQInstructionTransport.enqueueTask(kernelInstructionTransport);
+        clCQPE.enqueueTask(kernelPE);
+        clCQTestInterface.enqueueTask(kernelTestInterface);
+
+        //Retrieve data
+        clCQTestInterface.finish();
+
+        if (outputActivationVector.size() > 0) {
+            clCQTestInterface.enqueueReadBuffer(
+                        bufferActivationOutput,
+                        CL_TRUE,
+                        0,
+                        sizeof(typeof(outputActivationVector.at(0))) * outputActivationVector.size(),
+                        outputActivationVector.data()
+                        );
+         }
+
+        if (outputWeightVector.size() > 0) {
+            clCQTestInterface.enqueueReadBuffer(
+                        bufferWeightOutput,
+                        CL_TRUE,
+                        0,
+                        sizeof(typeof(outputWeightVector.at(0))) * outputWeightVector.size(),
+                        outputWeightVector.data()
+                        );
+        }
+
+        if (outputBiasVector.size() > 0) {
+            clCQTestInterface.enqueueReadBuffer(
+                        bufferBiasOutput,
+                        CL_TRUE,
+                        0,
+                        sizeof(typeof(outputBiasVector.at(0))) * outputBiasVector.size(),
+                        outputBiasVector.data()
+                        );
+        }
+
+        if (outputDrainVector.size() > 0) {
+            clCQTestInterface.enqueueReadBuffer(
+                        bufferDrainOutput,
+                        CL_TRUE,
+                        0,
+                        sizeof(typeof(outputDrainVector.at(0))) * outputDrainVector.size(),
+                        outputDrainVector.data()
+                        );
+        }
+
+        if (outputInstructionHVector.size() > 0) {
+            clCQTestInterface.enqueueReadBuffer(
+                        bufferInstructionOutputH,
+                        CL_TRUE,
+                        0,
+                        sizeof(typeof(outputInstructionHVector.at(0))) * outputInstructionHVector.size(),
+                        outputInstructionHVector.data()
+                        );
+        }
+
+        if (outputInstructionVVector.size() > 0) {
+            clCQTestInterface.enqueueReadBuffer(
+                        bufferInstructionOutputV,
+                        CL_TRUE,
+                        0,
+                        sizeof(typeof(outputInstructionVVector.at(0))) * outputInstructionVVector.size(),
+                        outputInstructionVVector.data()
+                        );
+        }
     }
 };
 
@@ -230,6 +605,7 @@ float dot_product_compressed_vectors (
         );
 
 TEST(commpressionTest, compressionDotProduct) {
+    EXPECT_TRUE (COMPRESSION_VEC_SIZE == 4);
     std::vector<float> vectorA = initialize_vector(
                 VECTOR_A_SEED,
                 VECTOR_LENGTH,
@@ -253,10 +629,10 @@ TEST(commpressionTest, compressionDotProduct) {
     //int effectual_length = (int) (std::ceil( (float) VECTOR_LENGTH / (float) ENCODING_LENGTH) * (float) ENCODING_LENGTH);
     int effectual_length = VECTOR_LENGTH;
 
-    std::vector<fixedPointNumber> fpVectorA (effectual_length, {0, FRAC_WIDTH, INT_WIDTH});
-    t_aligned_compression_vector compressedVectorA ((int) std::ceil ( (float) effectual_length / (float) COMPRESSION_VEC_SIZE ) * (float) COMPRESSION_VEC_SIZE, {0,0,0,0});
-    std::vector<fixedPointNumber> fpVectorB (effectual_length, {0, FRAC_WIDTH, INT_WIDTH});
-    t_aligned_compression_vector compressedVectorB ((int) std::ceil ( (float) effectual_length / (float) COMPRESSION_VEC_SIZE ) * (float) COMPRESSION_VEC_SIZE, {0,0,0,0});
+    std::vector<fixedPointNumber> fpVectorA;
+    t_aligned_compression_vector compressedVectorA;;
+    std::vector<fixedPointNumber> fpVectorB;
+    t_aligned_compression_vector compressedVectorB;
 
     compress_vector(vectorA, ENCODING_LENGTH, INT_WIDTH, FRAC_WIDTH, fpVectorA, compressedVectorA);
     compress_vector(vectorB, ENCODING_LENGTH, INT_WIDTH, FRAC_WIDTH, fpVectorB, compressedVectorB);
@@ -290,7 +666,151 @@ TEST(commpressionTest, compressionDotProduct) {
 }
 
 TEST_F (peTestFixture, testFixture) {
+    EXPECT_TRUE (COMPRESSION_VEC_SIZE == 4);
     EXPECT_TRUE(true);
+}
+
+TEST_F (peTestFixture, testBiasLoadingAndDrainage) {
+/* Test goal: Verify the correctness of the bias loading and result drainage capability
+ * Procedure: Load a bias into the PE, and read it back. Verify that the bias read back approximately mataches the bias loaded in. Consider the effect of
+ * different fixed-point width
+ *
+*/
+    EXPECT_TRUE (COMPRESSION_VEC_SIZE == 4);
+
+    cl_bool status;
+
+    unsigned char fracIn = 6, fracOut = 8;
+    int targetIDX = 1, targetIDY = 1;
+    EXPECT_TRUE(PE_COLS > targetIDX);
+    EXPECT_TRUE(PE_ROWS > targetIDY);
+
+    //First prepare the bias;
+    float biasFloat = 3.1415926;
+
+    //Then convert the bias into a fixed point number;
+    fixedPointNumber biasFPInput (biasFloat, fracIn, WEIGHT_BITWIDTH);
+
+    //Compute the expected output;
+    fixedPointNumber biasFPExpectedOutput (biasFloat, fracOut, WEIGHT_BITWIDTH - fracOut - 1);
+
+    //Prepare the input buffer
+    inputBiasVector.push_back((short) biasFPInput.getBits());
+
+    //Prepare the buffer to receive the output
+
+
+    //Prepare the instruction
+
+    t_pe_prototype_instruction loadBiasInstruction =
+    {.transmissionStartIndex=0,
+     .transmissionEndIndex=0,
+     .selectStartIndex=0,
+     .maxIDX = PE_COLS - 1,
+     .maxIDY = PE_ROWS - 1,
+     .mode = PE_MODE_LOAD_BIAS,
+     .fracW = 0,
+     .fracDin = fracIn,
+     .fracDout = 0};
+     inputInstructionVector.push_back(loadBiasInstruction);
+
+    t_pe_prototype_instruction drainInstruction =
+    {.transmissionStartIndex=0,
+     .transmissionEndIndex=0,
+     .selectStartIndex=0,
+     .maxIDX = PE_COLS - 1,
+     .maxIDY = PE_ROWS - 1,
+     .mode = PE_MODE_DRAIN_PSUM,
+     .fracW = 0,
+     .fracDin = 0,
+     .fracDout = fracOut};
+    inputInstructionVector.push_back(drainInstruction);
+
+    launch(targetIDX, targetIDY, 0, 0);
+
+    //Compare the result
+    short actualOutputFPBias = outputDrainVector.at(0);
+    EXPECT_TRUE(
+         (actualOutputFPBias & WEIGHT_MASK)
+         == ((short) (biasFPExpectedOutput.getBits() & WEIGHT_MASK) ));
+
+}
+
+TEST_F (peTestFixture, testElementWiseAdditionAndDrainage) {
+/* Test goal: Verify the correctness of the bias loading, elementwise esult drainage capability
+ * Procedure: Load a bias into the PE, and read it back. Verify that the bias read back approximately mataches the bias loaded in. Consider the effect of
+ * different fixed-point width
+ *
+*/
+    EXPECT_TRUE (COMPRESSION_VEC_SIZE == 4);
+
+    char fracIn = 6, fracOut = 8;
+    char intWidthIn = WEIGHT_BITWIDTH - fracIn - 1;
+    int targetIDX = 1, targetIDY = 1;
+    unsigned short startIndex = 3;
+    EXPECT_TRUE(PE_COLS > targetIDX);
+    EXPECT_TRUE(PE_ROWS > targetIDY);
+
+    //First prepare the bias;
+    float biasFloat = 3.1415926;
+
+    //Then convert the bias into a fixed point number;
+    fixedPointNumber biasFPInput (biasFloat, fracIn, WEIGHT_BITWIDTH);
+
+    // Generate a block of activations
+    std::vector<float> activationRealInput = initialize_vector(
+                BERN_SEED,
+                128,
+                BERN_P,
+                -3.14,
+                3.14
+                );
+    // Compress the activaion block
+
+    //Compute the expected output;
+    fixedPointNumber expectedOutputFP (biasFloat + activationRealInput.at(targetIDY + startIndex), fracOut, WEIGHT_BITWIDTH - fracOut - 1);
+
+    //Prepare the input buffer
+    inputBiasVector.push_back((short) biasFPInput.getBits());
+
+
+    //Prepare the buffer to receive the output
+
+
+    //Prepare the instruction
+
+    t_pe_prototype_instruction loadBiasInstruction =
+    {.transmissionStartIndex=0,
+     .transmissionEndIndex=0,
+     .selectStartIndex=0,
+     .maxIDX = PE_COLS - 1,
+     .maxIDY = PE_ROWS - 1,
+     .mode = PE_MODE_LOAD_BIAS,
+     .fracW = 0,
+     .fracDin = fracIn,
+     .fracDout = 0};
+     inputInstructionVector.push_back(loadBiasInstruction);
+
+    t_pe_prototype_instruction drainInstruction =
+    {.transmissionStartIndex=0,
+     .transmissionEndIndex=0,
+     .selectStartIndex=0,
+     .maxIDX = PE_COLS - 1,
+     .maxIDY = PE_ROWS - 1,
+     .mode = PE_MODE_DRAIN_PSUM,
+     .fracW = 0,
+     .fracDin = 0,
+     .fracDout = fracOut};
+    inputInstructionVector.push_back(drainInstruction);
+
+    launch(targetIDX, targetIDY, 0, 0);
+
+    //Compare the result
+    short actualOutputFPBias = outputDrainVector.at(0);
+    EXPECT_TRUE(
+         (actualOutputFPBias & WEIGHT_MASK)
+         == ((short) (biasFPExpectedOutput.getBits() & WEIGHT_MASK) ));
+
 }
 
 void cleanup();
@@ -299,228 +819,6 @@ int main(int argc, char* argv[]) {
 
     ::testing::InitGoogleTest( &argc, argv);
     return RUN_ALL_TESTS();
-
-
-//    aocl_utils_cpp::Options options(argc, argv);
-
-//    std::string binaryFile;
-
-//    if(options.has("help")) {
-//        std::cout<<"Usage: "<<argv[0]
-//        <<" -aocx=<abs path to .aocx>"<<std::endl;
-//        return 1;
-//    }
-
-//    if (options.has("aocx")) {
-//        binaryFile = options.get<std::string>("aocx");
-//      }
-//      else {
-//        std::cout<<"Error: aocx file path is not supplied"<<std::endl;
-//        return 1;
-//      }
-
-//    try{
-//        cl_int status = CL_SUCCESS;
-//        //Platform
-//        cl::Platform clPlatform;
-
-//        //Device ID. Assumes that there is only one device.
-//        cl::Device clDevice;
-
-//        //Context
-//        cl::Context clContext;
-
-//        //Command queue used for data transfer
-//        cl::CommandQueue clDMAQueue, clSequencerQueue;
-//        std::vector<cl::CommandQueue> vecClCollectorQueues;
-//        for (unsigned int i=0; i < KERNEL_CACHE_LANES; i++) {
-//            vecClCollectorQueues.emplace_back();
-//        }
-
-//        //The sparse weight feeder DMA kernel
-//        cl::Kernel krnSpWDMA;
-
-//        //The sequencer kernel
-//        cl::Kernel krnSequencer;
-
-//        //The weight collector kernel
-//        std::vector<cl::Kernel> krnWeightCollectorVec;
-
-//        //Set up the OpenCL environment and create the kernels
-//        clInit(binaryFile,
-//               clPlatform,
-//               clContext,
-//               clDevice,
-//               clDMAQueue,
-//               clSequencerQueue,
-//               vecClCollectorQueues,
-//               krnSpWDMA,
-//               krnSequencer,
-//               krnWeightCollectorVec);
-
-//        //Create the buffers
-//        cl::Buffer inputSpWBuffer(
-//                    clContext,
-//                    CL_MEM_READ_WRITE,
-//                    MATRIX_ROWS * MATRIX_COLS * sizeof(typeof(effectualValues.at(0))),
-//                    NULL,
-//                    &status
-//                    );
-//        aocl_utils_cpp::checkError(status, "Failed to create the input sparse weight buffer");
-
-//        cl::Buffer inputPointerBuffer(
-//                    clContext,
-//                    CL_MEM_READ_WRITE,
-//                    (CBPerRow+1) * MATRIX_ROWS * sizeof(typeof(cbOffsets.at(0))),
-//                    NULL,
-//                    &status
-//                    );
-//        aocl_utils_cpp::checkError(status, "Failed to create the input block pointer buffer");
-
-//        cl::Buffer outputSpWBuffer(
-//                    clContext,
-//                    CL_MEM_READ_WRITE,
-//                    MATRIX_ROWS * MATRIX_COLS * sizeof(typeof(outputEffectualValues.at(0))),
-//                    NULL,
-//                    &status
-//                    );
-//        aocl_utils_cpp::checkError(status, "Failed to create the output sparse weight buffer");
-
-//        cl::Buffer inputInstructionBuffer (
-//                    clContext,
-//                    CL_MEM_READ_WRITE,
-//                    instructionVector.size() * sizeof(t_instruction),
-//                    NULL,
-//                    &status
-//                    );
-//        aocl_utils_cpp::checkError(status, "Failed to create the input sparse weight buffer");
-
-//        std::cout <<"Set up the kernel arguments"<<std::endl;
-//        status = krnSequencer.setArg(0, inputInstructionBuffer);
-//        status = krnSequencer.setArg(1, (cl_ushort) numInstructions);
-//        aocl_utils_cpp::checkError(status, "Failed to set up arguments for the instruction sequencer");
-
-//        for (auto iter=krnWeightCollectorVec.begin();
-//             iter < krnWeightCollectorVec.end();
-//             iter++) {
-//            status = iter->setArg(0, outputSpWBuffer);
-//        }
-//        aocl_utils_cpp::checkError(status, "Failed to set up arguments for the weight collector");
-
-//        status = krnSpWDMA.setArg(0, inputSpWBuffer);
-//        status = krnSpWDMA.setArg(1, inputPointerBuffer);
-//        aocl_utils_cpp::checkError(status, "Failed to set up arguments for the sparse weight DMA");
-
-//        std::cout <<"Transer data to the accelerator"<<std::endl;
-//        cl::Event inputTransferEvent, inputPointerTransferEvent, instructionTransferEvent;
-//        status = clSequencerQueue.enqueueWriteBuffer(
-//                    inputSpWBuffer,
-//                    CL_TRUE,
-//                    0,
-//                    sizeof(typeof(effectualValues.at(0))) * effectualValues.size(),
-//                    effectualValues.data(),
-//                    NULL,
-//                    &inputTransferEvent
-//                    );
-
-//        //CAUTION: Specail trick. Pollut the output region with all 4s, and see whether the FPGA pollute it.
-//        status = clSequencerQueue.enqueueWriteBuffer(outputSpWBuffer,
-//                                  CL_TRUE
-//                                  ,0
-//                                  ,sizeof(typeof(outputEffectualValues.at(0))) * outputEffectualValues.size()
-//                                  , outputEffectualValues.data()
-//                                  );
-
-//        aocl_utils_cpp::checkError(status, "Failed to transfer sparse weights to the accelerator");
-//        status = clSequencerQueue.enqueueWriteBuffer(
-//                    inputPointerBuffer,
-//                    CL_TRUE,
-//                    0,
-//                    sizeof(typeof(cbOffsets.at(0))) * cbOffsets.size(),
-//                    cbOffsets.data(),
-//                    NULL,
-//                    &inputPointerTransferEvent
-//                    );
-//        aocl_utils_cpp::checkError(status, "Failed to transfer weight pointers to the accelerator");
-//        status = clSequencerQueue.enqueueWriteBuffer(
-//                    inputInstructionBuffer,
-//                    CL_TRUE,
-//                    0,
-//                    sizeof(typeof(instructionVector.at(0))) * instructionVector.size(),
-//                    instructionVector.data(),
-//                    NULL,
-//                    &instructionTransferEvent
-//                    );
-//        clSequencerQueue.finish();
-//        std::cout <<"Number of instruction is "<<instructionVector.size()<<std::endl;
-//        aocl_utils_cpp::checkError(status, "Failed to transfer instructions to the accelerator");
-
-//        std::vector<cl::Event> transferEvents{
-//            inputTransferEvent, inputPointerTransferEvent, inputPointerTransferEvent};
-
-//        std::cout <<"Launching the kernels"<<std::endl;
-//        for (unsigned int i = 0;
-//             i < krnWeightCollectorVec.size();
-//             i ++) {
-//            status = vecClCollectorQueues.at(i).enqueueTask(
-//                        krnWeightCollectorVec.at(i)
-//                        );
-//        }
-//        status = clDMAQueue.enqueueTask(krnSpWDMA);
-
-//        cl::Event sequencerEvent;
-//        status = clSequencerQueue.enqueueTask(krnSequencer, NULL, &sequencerEvent);
-//        aocl_utils_cpp::checkError(status, "Failed to launch at least one kernel");
-//        //usleep (10000000);
-//        std::cout <<"Wait for result to be transferred back"<<std::endl;
-//        clSequencerQueue.finish();
-
-//        cl::Event outputReadEvent;
-//        status = clSequencerQueue.enqueueReadBuffer(outputSpWBuffer,
-//                                  CL_TRUE
-//                                  ,0
-//                                  ,sizeof(typeof(outputEffectualValues.at(0))) * outputEffectualValues.size()
-//                                  , outputEffectualValues.data()
-//                                  , NULL
-//                                  , &outputReadEvent
-//                                  );
-//       clSequencerQueue.finish();
-//       aocl_utils_cpp::checkError(status, "Failed to read the results back");
-
-//       //Report timing
-//       cl_ulong inputSpWBufferWriteStart = inputTransferEvent.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-//       cl_ulong inputSpWBufferWriteEnd = inputTransferEvent.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-//       cl_double inputSpWBufferWriteTimeMs = (cl_double)(inputSpWBufferWriteEnd-inputSpWBufferWriteStart)*(cl_double)(1e-06);
-
-//       cl_ulong inputSpWPointerBufferWriteStart = inputPointerTransferEvent.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-//       cl_ulong inputSpWPointerBufferWriteEnd = inputPointerTransferEvent.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-//       cl_double inputSpWPointerBufferWriteTimeMs = (cl_double)(inputSpWPointerBufferWriteEnd-inputSpWPointerBufferWriteStart)*(cl_double)(1e-06);
-
-//       cl_ulong sequencerStart = sequencerEvent.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-//       cl_ulong sequencerEnd = sequencerEvent.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-//       cl_double sequencerTimeMs = (cl_double)(sequencerEnd-sequencerStart)*(cl_double)(1e-06);
-
-//       cl_ulong outputReadStart = outputReadEvent.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-//       cl_ulong outputReadEnd = outputReadEvent.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-//       cl_double outputReadTimeMs = (cl_double)(outputReadEnd-outputReadStart)*(cl_double)(1e-06);
-
-//       std::cout <<"============Timing information=================="<<std::endl;
-//       std::cout <<"Input SpW Buffer Write (ms): "<<inputSpWBufferWriteTimeMs<<std::endl;
-//       std::cout <<"Input SpW Pointer Buffer Write (ms): "<<inputSpWPointerBufferWriteTimeMs<<std::endl;
-//       std::cout <<"Ouput SpW Read Time (ms): "<<outputReadTimeMs<<std::endl;
-//       std::cout <<"Sequencer Execution Time (ms): "<<sequencerTimeMs<<std::endl;
-//      }
-//    catch (const std::runtime_error & e) {
-//        std::cout <<e.what()<<std::endl;
-//        return 1;
-//    }
-//    catch (...) {
-//        std::cout <<"Unspecified error occured!"<<std::endl;
-//        return 1;
-//    }
-
-
-    return 0;
 }
 
 std::vector<float> initialize_vector(unsigned seed,
@@ -555,13 +853,13 @@ void compress_vector (std::vector<float> &inputVector
     auto denseVectorSize = inputVector.size();
     t_vecSpValueAndZCount compressBlock = {.vec={0,0,0,0}};
     for (unsigned int iCompressedVector=0, iFullLengthVector=0, zOffset=0, iCompressBlock=0;
-         iFullLengthVector < inputVector.size();
+         iFullLengthVector < denseVectorSize;
          iFullLengthVector++) {
         float origValue = inputVector.at(iFullLengthVector);
 
         //Float to fixed conversion
         fixedPointNumber fpValue(origValue, fracWidth, intWidth);
-        fixedPointVector.at(iFullLengthVector) = fpValue;
+        fixedPointVector.push_back(fpValue);
 
         //Encoding
         if (std::abs(origValue) > EPSILON
@@ -590,7 +888,7 @@ void compress_vector (std::vector<float> &inputVector
             for (;iCompressBlock<COMPRESSION_VEC_SIZE;iCompressBlock++) {
                 compressBlock.vec[iCompressBlock] = 0x0;
             }
-            compressedVector.at(iCompressedVector) = compressBlock;
+            compressedVector.push_back(compressBlock);
             iCompressedVector++;
             iCompressBlock=0;
         }

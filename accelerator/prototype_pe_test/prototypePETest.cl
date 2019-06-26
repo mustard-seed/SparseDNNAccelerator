@@ -25,8 +25,8 @@
 #define PE_CONTROLLER_STATE_MAX_POOL 0x07
 #define PE_CONTROLLER_STATE_DOT_PRODUCT 0X08
 
-#define PE_NUM_X 3
-#define PE_NUM_Y 3
+#define PE_NUM_X PE_COLS
+#define PE_NUM_Y PE_ROWS
 
 channel t_vecUnpacked channel_activationInput __attribute__((depth(1)));
 channel t_vecUnpacked channel_activationOutput __attribute__((depth(1)));
@@ -40,12 +40,141 @@ channel t_pe_prototype_instruction channel_instructionInput __attribute__((depth
 channel t_pe_prototype_instruction channel_instructionOutputVertical __attribute__((depth(1)));
 channel t_pe_prototype_instruction channel_instructionOutputHorizontal __attribute__((depth(1)));
 
+channel t_vecUnpacked channel_peActivationInput __attribute__((depth(1)));
+channel t_vecUnpacked channel_peWeightInput __attribute__((depth(1)));
+channel short channel_peBiasInput __attribute__((depth(1)));
+channel short channel_peDrainOutput __attribute__((depth(1)));
+channel t_pe_prototype_instruction channel_peInstruction __attribute__((depth(1)));
 
-bool accessIsPossible (int* pCount, int condition) {
-	bool possible = ( (*pCount) & 0x00000003) == condition; 
-	(*pCount)++;
-	return possible;
+channel t_vecUnpacked channel_pe2DpEngineDispatcherActivation __attribute__((depth(PE_VEC_FIFO_SIZE)));
+channel t_vecUnpacked channel_pe2DpEngineDispatcherWeight __attribute__((depth(PE_VEC_FIFO_SIZE)));
+channel int channel_dpEngineDispatcher2PePSum __attribute__((depth(0)));
+channel t_dpInstruction channel_dpInstruction __attribute__((depth(0)));
+
+channel t_vecMultData channel_dpEngineDispatcher2MultOperands [PE_NUM_MULT] __attribute__((depth(0)));
+channel int channel_mult2DpEngineDispatcherPSum [PE_NUM_MULT] __attribute__((depth(0)));
+
+
+
+__attribute__((task))
+__attribute__((max_global_work_dim(0)))
+__kernel void kernelDrainTransport (
+		int idx,
+		int idy
+	)
+{
+	while (true) {
+		for (uint9_t i=0; 
+			i <= ((uint9_t) ( (0x1FF & PE_NUM_Y) - (0x1FF & idy) - 1)); 
+			i++) {
+			short pePsum;
+			if (i==0) {
+				EMULATOR_PRINT ( ("[kernelDrainTransport]: Waiting to read the pe's psum.\n") );
+				pePsum = read_channel_intel(channel_peDrainOutput);
+			}
+			else {
+				EMULATOR_PRINT ( ("[kernelDrainTransport]: Waiting to read other psums.\n") );
+				pePsum = read_channel_intel(channel_drainInput);
+			}
+			EMULATOR_PRINT ( ("[kernelDrainTransport]: Waiting to write the psum.\n") );
+			write_channel_intel(channel_drainOutput, pePsum);
+		}
+	}
 }
+
+__attribute__((task))
+__attribute__((max_global_work_dim(0)))
+__kernel void kernelInstructionTransport (
+		int idx,
+		int idy
+	)
+{
+	while (true) {
+		t_pe_prototype_instruction instruction = 
+			read_channel_intel(channel_instructionInput);
+
+		write_channel_intel(channel_peInstruction, instruction);
+		//Makes sure the PE receives it first
+		//mem_fence(CLK_CHANNEL_MEM_FENCE);
+
+
+		if ( ( (0x1FF & idy) == 0 ) && ( (0x1FF & idx) < (PE_NUM_X - 1) ) ) {
+			//pass right
+			write_channel_intel(channel_instructionOutputHorizontal, instruction);
+		}
+
+		if ( (0x1FF & idy) < (PE_NUM_Y - 1)) {
+			//pass down
+			write_channel_intel(channel_instructionOutputVertical, instruction);
+		}
+	}
+}
+
+__attribute__((task))
+__attribute__((max_global_work_dim(0)))
+__kernel void kernelBiasTransport (
+		int idx,
+		int idy
+	)
+{
+	while (true) {
+		short bias = 
+			read_channel_intel(channel_biasInput);
+
+		write_channel_intel(channel_peBiasInput, bias);
+		//Makes sure the PE receives it first
+		//mem_fence(CLK_CHANNEL_MEM_FENCE);
+
+		if ( (0x1FF & idx) < (PE_NUM_X - 1) ) {
+			write_channel_intel(channel_biasOutput, bias);
+		}
+	}
+}
+
+__attribute__((task))
+__attribute__((max_global_work_dim(0)))
+__kernel void kernelActivationTransport (
+		int idx,
+		int idy
+	)
+{
+	while (true) {
+		t_vecUnpacked activationBlock = 
+			read_channel_intel(channel_activationInput);
+
+		write_channel_intel(channel_peActivationInput, activationBlock);
+		//Makes sure the PE receives it first
+		//mem_fence(CLK_CHANNEL_MEM_FENCE);
+
+		if ( (0x1FF & idy) < (PE_NUM_Y - 1) ) {
+			write_channel_intel(channel_activationOutput, activationBlock);
+		}
+	}
+}
+
+__attribute__((task))
+__attribute__((max_global_work_dim(0)))
+__kernel void kernelWeightTransport (
+		int idx,
+		int idy
+	)
+{
+	while (true) {
+		t_vecUnpacked weightBlock = 
+			read_channel_intel(channel_weightInput);
+
+		write_channel_intel(channel_peWeightInput, weightBlock);
+		//Makes sure the PE receives it first
+		//mem_fence(CLK_CHANNEL_MEM_FENCE);
+
+		if ( (0x1FF & idx) < (PE_NUM_X - 1) ) {
+			write_channel_intel(channel_weightOutput, weightBlock);
+		}
+	}
+}
+
+
+
 
 __attribute__((task))
 __attribute__((max_global_work_dim(0)))
@@ -245,197 +374,162 @@ __kernel void kernelPrototypePE (
 	//Should be interpreted as a signed fixed-point number
 	//Fraction width = REG_FF_FRAC. Total width = PE_FF_WIDTH
 	int pSumFF = 0;
+	
+	while (true) {
 
-	//Continuation flag used for this test
-	uint1_t runKernel = 0x1;
-
-	//0x0 means read, 0x1 means pass forward
-	uint1_t instructionInputCount = 0x0;
-	uint1_t instructionOutputVerticalCount = 0x0;
-	uint1_t instructionOutputHorizontalCount = 0x0;
-	uint1_t instructionPassedCount = 0x0;
-	t_pe_prototype_instruction regInstruction;
-
-	while (runKernel) {
-		if ( (instructionInputCount == instructionOutputVerticalCount)
-				&& (instructionInputCount == instructionOutputHorizontalCount) ) {
-			bool valid = false;
-			regInstruction =
-				read_channel_nb_intel(channel_instructionInput, &valid);
-			instructionInputCount = valid ? instructionInputCount + 0x1 : instructionInputCount;
-
-		}
-		
-
-		bool runInstruction = false;
-		if (instructionInputCount > instructionPassedCount) {
-			runInstruction = true;
-			instructionPassedCount++;
-		}
-
-		//Instruction passing logic
-		if ( ( (0x1FF & idy) == 0 ) && ( (0x1FF & idx) < (PE_NUM_X - 1) ) ) {
-			//pass right
-			if (instructionInputCount > instructionOutputHorizontalCount) {
-				bool valid = write_channel_nb_intel(channel_instructionOutputHorizontal, regInstruction);
-				instructionOutputHorizontalCount = valid ? instructionOutputHorizontalCount + 0x1 : instructionOutputHorizontalCount;
-			}
-		}
-
-		if ( (0x1FF & idy) < (PE_NUM_Y - 1)) {
-			if (instructionInputCount > instructionOutputVerticalCount) {
-				bool valid = write_channel_nb_intel(channel_instructionOutputVertical, regInstruction);
-				instructionOutputVerticalCount = valid ? instructionOutputVerticalCount + 0x1 : instructionOutputVerticalCount;
-			}
-		}
-
-		// instruction passing reset logic
-		if ( (0x1FF & idy) == 0 && (0x1FF & idx) < (PE_NUM_X - 1) )  {
-			if ( instructionInputCount == 0x1 
-					&& instructionOutputVerticalCount == 0x1 
-					&& instructionOutputHorizontalCount == 0x1) {
-				instructionInputCount = 0x0;
-				instructionOutputVerticalCount = 0x0;
-				instructionOutputHorizontalCount = 0x0;
-			}
-		}
-		else if ( ( (0x1FF & idy) == 0 && idx == (PE_NUM_X - 1) ) || 
-					( (0x1FF & idy) > 0 && (0x1FF & idy) < (PE_NUM_Y-1) ) )  {
-			if (instructionInputCount == 0x1 && instructionOutputVerticalCount == 0x1) {
-				instructionInputCount = 0x0;
-				instructionOutputVerticalCount = 0x0;
-				instructionOutputHorizontalCount = 0x0;
-			}
-		}
-		else {
-			if (instructionInputCount == 0x1) {
-				instructionInputCount = 0x0;
-				instructionOutputVerticalCount = 0x0;
-				instructionOutputHorizontalCount = 0x0;
-			}
-		}
-
-		// registers
-		t_operand scalarReg;
-		t_vecUnpacked activationBlock;
-		t_vecUnpacked weightBlock;
-
-		// bias channel and registers
-		unsigned char inputBiasCount = 0;
-		unsigned char outputBiasCount = 0;
-		unsigned char registerBiasCount = 0;
-
-		// drain channel and registers
-		unsigned char inputDrainCount=0;
-		unsigned char outputDrainCount=0;
-
-		// activaion channel count
-		uint1_t inputActivationBlockCount = 0;
-		uint1_t outputActivationBlockCount = 0;
-		uint1_t processedActivationBlockCount = 0;
-
-		// weight channel count
-		uint1_t inputWeightBlockCount = 0;
-		uint1_t outputWeightBlockCount = 0;
-		uint1_t processedWeightBlockCount = 0;
+		t_operand biasReg, scalarActivationReg;
+		int dotProductReg;
 
 		// dense index tracker
-		unsigned short numActivationTracker = 0;
-		unsigned short numWeightTracker=0;
+		unsigned short numActivationTracker;
+		unsigned short finalActivationIndex;
+		unsigned short numWeightTracker;
+		unsigned short finalWeightIndex;
+
+		unsigned short targetIndex;
+
+		//Instruction channel
+		t_pe_prototype_instruction regInstruction
+			= read_channel_intel(channel_peInstruction);
 
 		unsigned char instructionMode = regInstruction.mode;
-		
 
-		#pragma max_concurrency 1
-		while (runInstruction) {
-			/*Channel and memory I*/
-
-			//Decide on whether to read from the input bias channel
-			bool inputBiasChannelReadEnable = 
-				(instructionMode == PE_MODE_LOAD_BIAS) 
-				&& (inputBiasCount == outputBiasCount) && (inputBiasCount == registerBiasCount);
-			if (inputBiasChannelReadEnable) {
-				bool valid = false;
-				scalarReg = (t_operand) (read_channel_nb_intel(channel_biasInput, &valid) & WEIGHT_MASK);
-				if (valid) {
-					inputBiasCount++;
-				}
-
-			}
-
-			//Decide on whether to read from the input drain channel
-			//Condition to read: 
-			// 1. The mode is PE_MODE_DRAIN_SUM, AND
-			// 2. No uncommited value AND
-			// 3. Number of elements read is less than the lesser of idy or maxIDY
-			bool inputDrainChannelReadEnable = 
-				(instructionMode == PE_MODE_DRAIN_PSUM) 
-				&& ( (0x1FF &inputDrainCount) == (0x1FF & outputDrainCount) )  && ( (0x1FF & inputDrainCount) < (0x1FF & idy) ) && ( (0x1FF & inputDrainCount) < ( 0x3FF & ( (0x1FF & regInstruction.maxIDY) + 1) ) );
-			if (inputDrainChannelReadEnable) {
-				bool valid;
-				scalarReg = (t_operand) (read_channel_nb_intel(channel_drainInput, &valid) & WEIGHT_MASK);
-				if (valid) {
-					inputDrainCount++;
-				}
-			}
-
-			//Decide on whether or not to read from the input activation channel
-			bool inputActivationChannelReadEnable = 
-				(instructionMode == PE_MODE_MAX_POOL 
-					|| instructionMode == PE_MODE_LOAD_ACTIVATION
-					|| instructionMode == PE_MODE_ELTWISE_ADD
-					|| instructionMode == PE_MODE_DOT_PRODUCT)
-				&& (inputActivationBlockCount == processedActivationBlockCount)
-				&& (inputActivationBlockCount == outputActivationBlockCount);
-			if (inputActivationChannelReadEnable) {
-				bool valid;
-				activationBlock = read_channel_nb_intel(channel_activationInput, &valid);
-				if (valid) {
-					inputActivationBlockCount++;
-				}
-			} 
-
-			//Decide on whether or not to read from the input weight channel
-			bool inputWeightChannelReadEnable = 
-				(instructionMode == PE_MODE_DOT_PRODUCT )
-				&& (inputWeightBlockCount == processedWeightBlockCount)
-				&& (inputWeightBlockCount == outputWeightBlockCount);
-			if (inputWeightChannelReadEnable) {
-				bool valid;
-				weightBlock = read_channel_nb_intel(channel_weightInput, &valid);
-				if (valid) {
-					inputWeightBlockCount++;
-				}
-			} 
-
-
-			//Reg Updates
-			
-			//Processing
-			if (instructionMode == PE_MODE_LOAD_BIAS) {
-				if (inputBiasCount > registerBiasCount) {
-					if ( ( ((uint9_t) idx) <= ((uint9_t) regInstruction.maxIDX) ) && ( ((uint9_t) idy) <= ((uint9_t) regInstruction.maxIDY)) ) {	
-//					if ( ( idx) <= ( regInstruction.maxIDX) && ( idy) <= (regInstruction.maxIDY)) {					
-						pSumFF = convertSignedFixedPointToAccumulator(scalarReg, regInstruction.fracDin);
-					}
-					registerBiasCount++;
-				}
-			}
-			else if (instructionMode == PE_MODE_MAX_POOL
-				|| instructionMode == PE_MODE_LOAD_ACTIVATION 
+		if (instructionMode == PE_MODE_MAX_POOL 
+				|| instructionMode == PE_MODE_LOAD_ACTIVATION
 				|| instructionMode == PE_MODE_ELTWISE_ADD
-				|| instructionMode == PE_MODE_DOT_PRODUCT)
-			{
-				if (inputActivationBlockCount > processedActivationBlockCount) {
-					//Unpack the activation block
-					if (idx <= regInstruction.maxIDX && idy <= regInstruction.maxIDY) {
-						//Element-wise operation
+				|| instructionMode == PE_MODE_DOT_PRODUCT) {
+			numActivationTracker = regInstruction.transmissionStartIndex;
+			finalActivationIndex = regInstruction.transmissionEndIndex;
+			targetIndex = 0x1FFFF & ( (0xFFFF & idy) +  (0xFFFF & regInstruction.selectStartIndex));
+
+			if (instructionMode == PE_MODE_DOT_PRODUCT) {
+				numWeightTracker = regInstruction.transmissionStartIndex;
+				finalWeightIndex = regInstruction.transmissionEndIndex;
+
+				t_dpInstruction dpInstruction;
+				dpInstruction.lastIndexWeight = regInstruction.transmissionEndIndex;
+				dpInstruction.lastIndexActivation = regInstruction.transmissionEndIndex;
+				write_channel_intel(channel_dpInstruction, dpInstruction);
+				mem_fence(CLK_CHANNEL_MEM_FENCE);
+			}
+			else {
+				numWeightTracker = 0x01;
+				finalActivationIndex = 0x0;
+			}
+
+
+			//Activation block update
+			while (
+			( (0x1FFFF & numWeightTracker) < (0x1FFFF & ((0xFFFF & finalWeightIndex) + (0xFFFF & 1) )) )
+			|| ( (0x1FFFF & numActivationTracker) <  (0x1FFFF & ( (0xFFFF & finalActivationIndex) + (0xFFFF & 1) )) ) ) {
+				//Activation
+				if ( numActivationTracker < (0x1FFFF & ( (0xFFFF & finalActivationIndex) + 1)) ) {
+					bool valid;
+					t_vecUnpacked activationBlock = read_channel_nb_intel(channel_peActivationInput, &valid);
+					if (valid) {
+						if ( ( ((uint9_t) idx) <= ((uint9_t) regInstruction.maxIDX) ) && ( ((uint9_t) idy) <= ((uint9_t) regInstruction.maxIDY)) ) {
+							if (instructionMode == PE_MODE_MAX_POOL
+								|| instructionMode == PE_MODE_LOAD_ACTIVATION 
+								|| instructionMode == PE_MODE_ELTWISE_ADD) {
+								t_operand value;
+								bool valueFound = 
+									findMatchInUnpackedBlock(
+											&activationBlock,
+											targetIndex,
+											&value
+										);
+								if (valueFound) {
+									scalarActivationReg = value;
+								} //if (valueFound)
+							}
+							else if (instructionMode == PE_MODE_DOT_PRODUCT) {
+								// TODO Fill it in
+								write_channel_intel(channel_pe2DpEngineDispatcherActivation, activationBlock);
+							}
+						} // if part of the valid PE range
+
+						numActivationTracker = activationBlock.indices[COMPRESSION_VEC_SIZE-1];
+					}
+				} // if do something with activaiton
+
+				//Weight
+				if ( numWeightTracker < (finalWeightIndex + 1) ) {
+					bool valid;
+					t_vecUnpacked weightBlock = read_channel_nb_intel(channel_peWeightInput, &valid);
+					if (valid) {
+						if ( ( (0x1FF & idx) <= (0x1FF & regInstruction.maxIDX) ) && ( (0x1FF & idy) <= (0x1FF & regInstruction.maxIDY)) ) {
+							if (instructionMode == PE_MODE_DOT_PRODUCT) {
+								// TODO: Fill it in
+								write_channel_intel(channel_pe2DpEngineDispatcherWeight, weightBlock);
+							}
+						}
+						numWeightTracker = weightBlock.indices[COMPRESSION_VEC_SIZE-1];
+					} // if valid
+				} // if do something with weight
+			} // while loop and weight and activation
+
+			//TODO: Read value from the dot product engine during the DP mode.
+
+
+		}
+		
+		if (instructionMode == PE_MODE_LOAD_BIAS) {
+			biasReg = (t_operand) (read_channel_intel(channel_peBiasInput) & WEIGHT_MASK);
+		}
+		
+		if (instructionMode == PE_MODE_DRAIN_PSUM) {
+			short value = (short) convertAccumulatorToSignedFixedPoint (pSumFF, regInstruction.fracDout);
+			write_channel_intel(channel_peDrainOutput, value);
+		}
+
+/*
+		if (instructionMode == PE_MODE_DOT_PRODUCT) {
+			numWeightTracker = regInstruction.transmissionStartIndex;
+			finalWeightIndex = regInstruction.transmissionEndIndex;
+		}
+		else {
+			numWeightTracker = 0x01;
+			finalActivationIndex = 0x0;
+		}
+*/
+
+		//Decide on whether to read from the input bias channel
+/*
+		bool inputBiasChannelReadEnable = 
+			(instructionMode == PE_MODE_LOAD_BIAS);
+		if (inputBiasChannelReadEnable) {
+			biasReg = (t_operand) (read_channel_intel(channel_peBiasInput) & WEIGHT_MASK);
+
+		}
+*/
+
+		//Decide on whether to writ eto the output drain channel
+/*
+		bool outputDrainChannelWriteEnable = 
+			(instructionMode == PE_MODE_DRAIN_PSUM);
+		if (outputDrainChannelWriteEnable) {
+			short value = (short) convertAccumulatorToSignedFixedPoint (pSumFF, regInstruction.fracDout);
+			write_channel_intel(channel_peDrainOutput, value);
+		}
+*/
+
+		//TODO: Write the PSUM to the DP engine during the DP mode
+/*
+		// weight and activation channel handling
+		while (
+			(numWeightTracker < (finalWeightIndex + 1) )
+			|| (numActivationTracker < (finalActivationIndex + 1))
+			) {
+			//Activation
+			if ( numActivationTracker < (finalActivationIndex + 1) ) {
+				bool valid;
+				t_vecUnpacked activationBlock = read_channel_nb_intel(channel_peActivationInput, &valid);
+				if (valid) {
+					if ( ( ((uint9_t) idx) <= ((uint9_t) regInstruction.maxIDX) ) && ( ((uint9_t) idy) <= ((uint9_t) regInstruction.maxIDY)) ) {
 						if (instructionMode == PE_MODE_MAX_POOL
-							|| instructionMode == PE_MODE_LOAD_ACTIVATION
+							|| instructionMode == PE_MODE_LOAD_ACTIVATION 
 							|| instructionMode == PE_MODE_ELTWISE_ADD) {
-							//Filter out the element
 							t_operand value;
-							unsigned short targetIndex = (unsigned short) ( (unsigned short) idy + (unsigned short) regInstruction.selectStartIndex);
 							bool valueFound = 
 								findMatchInUnpackedBlock(
 										&activationBlock,
@@ -443,144 +537,253 @@ __kernel void kernelPrototypePE (
 										&value
 									);
 							if (valueFound) {
-								// convert the value to the accumulator's format
-								int wideValue = convertSignedFixedPointToAccumulator (
-										value,
-										regInstruction.fracDin
-									);
-								switch (instructionMode) {
-									case PE_MODE_ELTWISE_ADD:
-										pSumFF += wideValue;
-										break;
-									case PE_MODE_LOAD_ACTIVATION:
-										pSumFF = wideValue;
-										break;
-									case PE_MODE_MAX_POOL:
-										pSumFF = pSumFF > wideValue ? pSumFF : wideValue;
-										break;
-									default:
-										break;
-										//Do nothing
-								} //switch
+								scalarActivationReg = value;
 							} //if (valueFound)
-						} //if instructionMode == ..
-						else if (instructionMode == PE_MODE_DOT_PRODUCT) {
-							//....
 						}
-					} // if idx <= ...
+						else if (instructionMode == PE_MODE_DOT_PRODUCT) {
+							// Fill it in
+						}
+					} // if part of the valid PE range
+
 					numActivationTracker = activationBlock.indices[COMPRESSION_VEC_SIZE-1];
-					processedActivationBlockCount++;
-				} //if inputActivationBlockCount > ...
+				}
+			} // if do something with activaiton
 
-				if (inputWeightBlockCount > processedWeightBlockCount && instructionMode == PE_MODE_DOT_PRODUCT) {
-					//unpack the weight block
-					if (idx <= regInstruction.maxIDX && idy <= regInstruction.maxIDY) {
-					} // processing block
 
-					numWeightTracker = weightBlock.indices[COMPRESSION_VEC_SIZE-1];
-					processedWeightBlockCount++;
-				} // condition for processing the weight
-			} 
-			// Mode for processing 
 
-			/*Channel and memory O*/
-			//Decide on whether to write to the output bias channel
-			bool outputBiasChannelWriteEnable = 
-				(instructionMode == PE_MODE_LOAD_BIAS) 
-				&& (inputBiasCount > outputBiasCount);
-			if (outputBiasChannelWriteEnable) {
-				bool valid = write_channel_nb_intel(channel_biasOutput, (short) scalarReg);
+			//Weight
+			if ( numWeightTracker < (finalWeightIndex + 1) ) {
+				bool valid;
+				t_vecUnpacked weightBlock = read_channel_nb_intel(channel_peWeightInput, &valid);
 				if (valid) {
-					outputBiasCount++;
-				}
-			}
-
-			//Decide on whether to writ eto the output drain channel
-			bool outputDrainChannelWriteEnable = 
-				(instructionMode == PE_MODE_DRAIN_PSUM)
-				&& ( (inputDrainCount > outputDrainCount) || (inputDrainCount >= idy) || (inputDrainCount) > regInstruction.maxIDY );
-			if (outputDrainChannelWriteEnable) {
-				short value = inputDrainCount > outputDrainCount ?
-						(short) scalarReg : (short) convertAccumulatorToSignedFixedPoint (pSumFF, regInstruction.fracDout);
-				bool valid = write_channel_nb_intel(channel_drainOutput, value);
-				if (valid) {
-					outputDrainCount++;
-				}
-			}
-
-			//Decide on whether or not to write to the output activation channel
-			bool outputActivationChannelWriteEnable = 
-				(instructionMode == PE_MODE_MAX_POOL 
-					|| instructionMode == PE_MODE_LOAD_ACTIVATION
-					|| instructionMode == PE_MODE_ELTWISE_ADD
-					|| instructionMode == PE_MODE_DOT_PRODUCT)
-				&& (inputActivationBlockCount > outputActivationBlockCount);
-			if (outputActivationChannelWriteEnable) {
-				bool success = write_channel_nb_intel(channel_activationOutput, activationBlock);
-				if (success) {
-					outputActivationBlockCount++;
-				}
-			}
-
-			bool outputWeightChannelWriteEnable = 
-				(instructionMode == PE_MODE_DOT_PRODUCT)
-				&& (inputWeightBlockCount > outputWeightBlockCount);
-			if (outputWeightChannelWriteEnable) {
-				bool success = write_channel_nb_intel(channel_weightOutput, weightBlock);
-				if (success) {
-					outputWeightBlockCount++;
-				}
-			}
-
-			//Continue condition
-			if (instructionMode == PE_MODE_LOAD_BIAS) {
-				// If value needs to be loaded in the PE, then we have to make sure the value is loaded
-				if (regInstruction.maxIDX >= idx && regInstruction.maxIDY >= idy) {
-					if ( inputBiasCount == 1 && outputBiasCount == 1 && registerBiasCount == 1) {
-						runInstruction = false;
+					if ( ( ((uint9_t) idx) <= ((uint9_t) regInstruction.maxIDX) ) && ( ((uint9_t) idy) <= ((uint9_t) regInstruction.maxIDY)) ) {
+						if (instructionMode == PE_MODE_DOT_PRODUCT) {
+							// Fill it in
+						}
 					}
+					numWeightTracker = weightBlock.indices[COMPRESSION_VEC_SIZE-1];
+				} // if valid
+			} // if do something with weight
+		} // weight and activaiton while toop
+*/
+
+		//TODO: Read value from the dot product engine during the DP mode.
+
+		//pSum reg update
+		if ( ( (0x1FF & idx) <= (0x1FF & regInstruction.maxIDX) ) && ( (0x1FF & idy) <= (0x1FF & regInstruction.maxIDY)) ) {
+			if (instructionMode == PE_MODE_LOAD_BIAS) {				
+				pSumFF = convertSignedFixedPointToAccumulator(biasReg, regInstruction.fracDin);
+			}
+			else if (instructionMode == PE_MODE_MAX_POOL
+						|| instructionMode == PE_MODE_LOAD_ACTIVATION
+						|| instructionMode == PE_MODE_ELTWISE_ADD) {
+
+				int wideValue = convertSignedFixedPointToAccumulator (
+									scalarActivationReg,
+									regInstruction.fracDin
+								);
+				switch (instructionMode) {
+								case PE_MODE_ELTWISE_ADD:
+									pSumFF += wideValue;
+									break;
+								case PE_MODE_LOAD_ACTIVATION:
+									pSumFF = wideValue;
+									break;
+								case PE_MODE_MAX_POOL:
+									pSumFF = pSumFF > wideValue ? pSumFF : wideValue;
+									break;
+								default:
+									break;
+									//Do nothing
+				} //switch
+			} // else if 
+			else if (instructionMode == PE_MODE_DOT_PRODUCT) {
+				//fill it in
+				int tempPSum = read_channel_intel(channel_dpEngineDispatcher2PePSum);
+
+				//Align the binary point
+				int alignedPSum = tempPSum << (REG_FF_FRAC - regInstruction.fracDin - regInstruction.fracW);
+
+				//Add
+				pSumFF += alignedPSum;
+			}
+		} // if
+
+	}
+}
+
+/*! \brief Dot product kernel that operates on compressed sparse weight and activation
+
+*/
+
+__attribute__((task))
+__attribute__((max_global_work_dim(0)))
+__attribute__((autorun))
+__kernel void kernelDotProductEngineDispatcher (
+	)
+{
+	/*
+	1. Load psum, and the final weight index and the activation index
+	2. Keep loading activation and weight blocks, pick out matching pairs, and perform MAC
+
+	*/
+	unsigned short numActivationTracker = 0xFFFF & 0, numWeightTracker = 0xFFFF & 0;
+	t_vecUnpacked activationBlock, weightBlock;
+
+	//Read the number stop limit of the weight and activation
+	t_dpInstruction instruction = read_channel_intel(channel_dpInstruction);
+	unsigned short numActivationUpperBound = (0x1FFFF & ( (0xFFFF & instruction.lastIndexWeight) + (0XFFFF & 1) ));
+	unsigned short numWeightUpperBound = (0x1FFFF & ( (0xFFFF & instruction.lastIndexActivation) + (0XFFFF & 1) ));
+	uint5_t dispatchIndex = 0;
+	int pSum = 0;
+
+#pragma ii PE_NUM_MULT
+	while ( (numActivationTracker < numActivationUpperBound )
+		||  (numWeightTracker < numWeightUpperBound ) ) {
+		if (numActivationTracker <= numWeightTracker) {
+			activationBlock = read_channel_intel(channel_pe2DpEngineDispatcherActivation);
+		}
+
+		if (numWeightTracker <= numActivationTracker) {
+			weightBlock = read_channel_intel(channel_pe2DpEngineDispatcherWeight);
+		}
+
+		numActivationTracker = 0xFFFF & activationBlock.indices[COMPRESSION_VEC_SIZE-1];
+		numWeightTracker = 0xFFFF & weightBlock.indices[COMPRESSION_VEC_SIZE-1];
+
+		t_vecMultData multData;
+
+		#pragma unroll 
+		for (uint5_t i=0; i<COMPRESSION_VEC_SIZE; i++) {
+			multData.weightNzValues[i] = weightBlock.nzValues[i];
+			multData.weightValidMasks[i] = weightBlock.validMasks[i];
+			multData.weightIndices[i] = weightBlock.indices[i];
+			multData.activationNzValues[i] = activationBlock.nzValues[i];
+			multData.activationValidMasks[i] = activationBlock.validMasks[i];
+			multData.activationIndices[i] = activationBlock.indices[i];
+		}
+
+		//Dispatch to the multiplier engine
+		bool sendSuccess = false;
+		while (!sendSuccess) {
+			#pragma unroll
+			for (uint5_t multIndex=0; multIndex < PE_NUM_MULT; multIndex++) {
+				if (multIndex == dispatchIndex) {
+					sendSuccess = write_channel_nb_intel(channel_dpEngineDispatcher2MultOperands[multIndex], multData);
 				}
-				// Otherwise just make sure one bias has passed.
-				else if ( inputBiasCount == 1 && outputBiasCount == 1 ) {
-						runInstruction = false;
+			}
+		}
+		dispatchIndex++;
+
+		//Retrieve the result and perform addition
+		if ( (dispatchIndex == PE_NUM_MULT)
+				|| ( (numActivationTracker == numActivationUpperBound) && (numWeightTracker == numWeightUpperBound) )
+			) {
+			for (uint5_t i=0; i<dispatchIndex; i++) { //Retreive each sum
+				bool receiveSuccess = false;
+				while (!receiveSuccess) { // Keep trying to retrieve each sum
+					#pragma unroll
+					for (uint5_t multIndex=0; multIndex < PE_NUM_MULT; multIndex++) {
+						if (multIndex == i) {
+							int sum = read_channel_nb_intel(channel_mult2DpEngineDispatcherPSum[multIndex], &receiveSuccess);
+							pSum += sum;
+						}
+					}
+				} // Keep trying to retrieve each sum
+			} //Retreive each sum
+			dispatchIndex = 0;
+		} //Retrieve the result and perform addition
+	} // while
+
+	//Send the Psum back
+	write_channel_intel(channel_dpEngineDispatcher2PePSum, pSum);
+}
+
+__attribute__((max_global_work_dim(0)))
+__attribute__((autorun))
+__attribute__((num_compute_units(PE_NUM_MULT)))
+__kernel void peMult () 
+{
+	int id = get_compute_id(0);
+	int pSum = 0;
+
+	//Wait for the operands to arrive
+	t_vecMultData multData = read_channel_intel(channel_dpEngineDispatcher2MultOperands[id]);
+
+	//Unpack the data
+	t_operand activationValues [COMPRESSION_VEC_SIZE];
+	t_operand weightValues [COMPRESSION_VEC_SIZE];
+	uint1_t activationValidMasks [COMPRESSION_VEC_SIZE];
+	uint1_t weightValidMasks [COMPRESSION_VEC_SIZE];
+	unsigned short activationNum [COMPRESSION_VEC_SIZE];
+	unsigned short weightNum [COMPRESSION_VEC_SIZE];
+	#pragma unroll
+	for (uint5_t i=0; i<COMPRESSION_VEC_SIZE; i++) {
+		activationValues[i] = multData.activationNzValues[i];
+		activationValidMasks[i] = multData.activationValidMasks[i];
+		activationNum[i] = multData.activationIndices[i];
+		weightValues[i] = multData.weightNzValues[i];
+		weightValidMasks[i] = multData.weightValidMasks[i];
+		weightNum[i] = multData.weightIndices[i];
+	}
+
+	//Calculate the mutual masks
+
+	uint1_t activationMutualMask[COMPRESSION_VEC_SIZE];
+	uint1_t weightMutualMask[COMPRESSION_VEC_SIZE];
+
+	#pragma unroll
+	for (uint5_t k=0; k<COMPRESSION_VEC_SIZE; k++) {
+		activationMutualMask[k] = 0x0;
+		weightMutualMask[k] = 0x0;
+	}
+
+	#pragma unroll
+	for (uint5_t i=0; i<COMPRESSION_VEC_SIZE; i++) {
+		#pragma unroll
+		for (uint5_t j=0; j<COMPRESSION_VEC_SIZE; j++) {
+			uint1_t ijEqual = ( (activationNum[i] == weightNum[j]) 
+				&& (activationValidMasks[i] == 0x1) && (weightValidMasks[j] == 0x1) ) ?
+				0x1 : 0x0;
+			activationMutualMask [i] = activationMutualMask [i] | ijEqual;
+			weightMutualMask [j] = weightMutualMask [j] | ijEqual;
+		}
+	}
+
+	unsigned char weightIndex = 0, activationIndex=0;
+	while (weightIndex < COMPRESSION_VEC_SIZE && activationIndex < COMPRESSION_VEC_SIZE) {
+		//Search for the position of the leading 1 in the activation
+		uint1_t activationFound = 0x0;
+		#pragma unroll
+		for (uint5_t i=0; i<COMPRESSION_VEC_SIZE; i++) {
+			unsigned char tempIndex = 0x3F & ((0x1F & activationIndex) + (0x1F & i));  //wont' exceed 5 bit
+			if ( (tempIndex < COMPRESSION_VEC_SIZE) && (activationFound == 0x0) ) {
+				if (activationMutualMask[0X1F & tempIndex] == 0x1) {
+					activationIndex = tempIndex;
+					activationFound = 0x1;
 				}
 			}
-			else if (
-				instructionMode == PE_MODE_LOAD_ACTIVATION ||
-				instructionMode == PE_MODE_ELTWISE_ADD ||
-				instructionMode == PE_MODE_MAX_POOL
-				) {
-				if ( (numActivationTracker == (unsigned short) (regInstruction.transmissionEndIndex + 1))
-					&& (inputActivationBlockCount == outputActivationBlockCount) ) {
-					runInstruction = false;
-				}
+		} // for
 
-			}
-			else if (instructionMode == PE_MODE_DRAIN_PSUM) {
-				if (outputDrainCount == (inputDrainCount + 1) ) {
-						runInstruction = false;
+		uint1_t weightFound = 0x0;
+		#pragma unroll
+		for (uint5_t i=0; i<COMPRESSION_VEC_SIZE; i++) {
+			unsigned char tempIndex = 0x3F & ((0x1F & weightIndex) + (0x1F & i)); //won't exceed 5 bit
+			if ( (tempIndex < COMPRESSION_VEC_SIZE) && (weightFound == 0x0) ) {
+				if (weightMutualMask[0x1F & tempIndex] == 0x1) {
+					weightIndex = tempIndex;
+					weightFound = 0x1;
 				}
 			}
+		} // for
 
-			//activation block counter reset logic
-			if (inputActivationBlockCount == 0x1 && outputActivationBlockCount == 0x1 && processedActivationBlockCount) {
-				inputActivationBlockCount = 0x0;
-				outputActivationBlockCount = 0x0;
-				processedActivationBlockCount = 0x0;
-			}
+		pSum += activationValues[activationIndex] * weightValues[weightIndex];
 
-			//weight block counter reset logic
-			if (inputWeightBlockCount == 0x1 && outputWeightBlockCount == 0x1 && processedWeightBlockCount) {
-				inputWeightBlockCount = 0x0;
-				outputWeightBlockCount = 0x0;
-				processedWeightBlockCount = 0x0;
-			}
+		activationIndex = 0x3F & ((0x1F & activationIndex) + (0x1F & 0x1));
+		weightIndex += 0x1;
+	}
 
 
-		} // while (runInstruction)
-
-
-	} // while (runKernel)
-
-
+	//Write the result back
+	write_channel_intel(channel_mult2DpEngineDispatcherPSum[id], pSum);
 }

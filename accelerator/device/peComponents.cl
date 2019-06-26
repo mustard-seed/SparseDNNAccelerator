@@ -138,10 +138,10 @@ bool findMatchInUnpackedBlock (
     	returnVal = false;
     }
 
-	t_operand value = 0x0;
+	t_operand value;
 	#pragma unroll
-	for (uint4_t i=0; i<COMPRESSION_VEC_SIZE; i++) {
-        bool localMatch = (pUnpacked->indices[i] == (unsigned short) (targetIndex+ (unsigned short) 1) );
+	for (uint5_t i=0; i<COMPRESSION_VEC_SIZE; i++) {
+        bool localMatch = (pUnpacked->indices[i] == (0x1FFFF & ( (0xFFFF & targetIndex) + 1) ) );
         if (localMatch) {
         	value = pUnpacked->nzValues[i];
         }
@@ -177,10 +177,10 @@ t_operand convertAccumulatorToSignedFixedPoint(
 
 	//Clip from above and below
 	int fpValueClipped;
-	if (fpValueWide > (unsigned char) WEIGHT_MAX) {
+	if (fpValueWide > WEIGHT_MAX) {
 		fpValueClipped = WEIGHT_MAX;
 	}
-	else if (fpValueWide < (unsigned char) WEIGHT_MIN) {
+	else if (fpValueWide < WEIGHT_MIN) {
 		fpValueClipped = WEIGHT_MIN;
 	}
 	else {

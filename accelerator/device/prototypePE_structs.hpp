@@ -32,6 +32,10 @@ typedef struct __attribute__((aligned(16))) __attribute__((packed)) {
   cl_ushort transmissionStartIndex;
   cl_ushort transmissionEndIndex;
   cl_ushort selectStartIndex;
+  // PEs with id that satisfies 0<=idx<=maxIDX and -<=idy<=maxIDY will participate 
+  cl_uchar maxIDX;
+  cl_uchar maxIDY;
+
   cl_uchar mode;
   cl_char fracW;
   cl_char fracDin;

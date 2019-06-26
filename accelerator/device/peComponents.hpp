@@ -13,6 +13,22 @@ typedef struct __attribute__((packed)){
     unsigned short indices [COMPRESSION_VEC_SIZE];
 } t_vecUnpacked;
 
+typedef struct __attribute__((packed)){
+    t_operand weightNzValues [COMPRESSION_VEC_SIZE];
+    uint1_t weightValidMasks [COMPRESSION_VEC_SIZE];
+    unsigned short weightIndices [COMPRESSION_VEC_SIZE];
+
+    t_operand activationNzValues [COMPRESSION_VEC_SIZE];
+    uint1_t activationValidMasks [COMPRESSION_VEC_SIZE];
+    unsigned short activationIndices [COMPRESSION_VEC_SIZE];
+} t_vecMultData;
+
+typedef struct __attribute__((packed)) {
+	unsigned short lastIndexWeight;
+	unsigned short lastIndexActivation;
+} t_dpInstruction;
+
+
 //The width given to the FiFO counters need to
 //match the size of the fifo closely
 typedef struct {
