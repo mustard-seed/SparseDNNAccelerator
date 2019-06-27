@@ -11,6 +11,7 @@
 #include <string> //for std::to_string
 #include <unistd.h> //usleep
 #include <random>
+#include <bitset> //Print friendly binary number
 
 #include "device_structures.hpp"
 #include "boost/align/aligned_allocator.hpp"
@@ -60,25 +61,26 @@ t_aligned_instruction_vector;
 class peTestFixture : public ::testing::Test {
 protected:
     std::string binaryFile;
+    cl::Program program;
     cl::Platform clPlatform;
     cl::Context clContext;
     cl::Device clDevice;
 
-    cl::CommandQueue clCQDrainTransport;
-    cl::CommandQueue clCQInstructionTransport;
-    cl::CommandQueue clCQBiasTransport;
-    cl::CommandQueue clCQActivationTransport;
-    cl::CommandQueue clCQWeightTransport;
+    //cl::CommandQueue clCQDrainTransport;
+    //cl::CommandQueue clCQInstructionTransport;
+    //cl::CommandQueue clCQBiasTransport;
+    //cl::CommandQueue clCQActivationTransport;
+    //cl::CommandQueue clCQWeightTransport;
     cl::CommandQueue clCQTestInterface;
-    cl::CommandQueue clCQPE;
+    //cl::CommandQueue clCQPE;
 
-    cl::Kernel kernelDrainTransport;
-    cl::Kernel kernelInstructionTransport;
-    cl::Kernel kernelBiasTransport;
-    cl::Kernel kernelActivationTransport;
-    cl::Kernel kernelWeightTransport;
+    //cl::Kernel kernelDrainTransport;
+    //cl::Kernel kernelInstructionTransport;
+    //cl::Kernel kernelBiasTransport;
+    //cl::Kernel kernelActivationTransport;
+    //cl::Kernel kernelWeightTransport;
     cl::Kernel kernelTestInterface;
-    cl::Kernel kernelPE;
+    //cl::Kernel kernelPE;
 
     cl::Buffer bufferInstructionInput;
     cl::Buffer bufferInstructionOutputH;
@@ -122,7 +124,7 @@ protected:
         aocl_utils_cpp::checkError(status, "Failed to create context");
 
         //Parse the binary and invoke the kernel
-        cl::Program program = aocl_utils_cpp::createProgramFromBinary(
+        program = aocl_utils_cpp::createProgramFromBinary(
                     clContext,
                     binaryFile.c_str(),
                     {clDevice}
@@ -133,6 +135,7 @@ protected:
         kernelTestInterface = cl::Kernel(program, "kernelTestInterface", &status);
         aocl_utils_cpp::checkError(status, "Failed to create the test interface kernel!");
 
+        /*
         kernelDrainTransport = cl::Kernel(program, "kernelDrainTransport", &status);
         aocl_utils_cpp::checkError(status, "Failed to create the drain transport kernel!");
 
@@ -150,9 +153,10 @@ protected:
 
         kernelPE = cl::Kernel(program, "kernelPrototypePE", &status);
         aocl_utils_cpp::checkError(status, "Failed to create the prototype PE kernel!");
-
+        */
 
         //Setup the command queue and buffers
+        /*
         clCQDrainTransport = cl::CommandQueue(
                     clContext,
                     clDevice,
@@ -192,7 +196,7 @@ protected:
                     &status
                     );
         aocl_utils_cpp::checkError(status, "Failed to setup the weight transport command queue!");
-
+        */
         clCQTestInterface = cl::CommandQueue(
                     clContext,
                     clDevice,
@@ -201,6 +205,7 @@ protected:
                     );
         aocl_utils_cpp::checkError(status, "Failed to setup the test interface command queue!");
 
+        /*
         clCQPE = cl::CommandQueue(
                     clContext,
                     clDevice,
@@ -208,7 +213,7 @@ protected:
                     &status
                     );
         aocl_utils_cpp::checkError(status, "Failed to setup the PE command queue!");
-
+        */
         bufferInstructionInput = cl::Buffer (
                         clContext,
                         CL_MEM_READ_ONLY,
@@ -313,9 +318,10 @@ protected:
         //Need to setup numInstructions, idx, and idy separately
     }
 
-    void launch (int idx, int idy, unsigned short startIndexActivationBlocks, unsigned short startIndexWeightBlocks) {
+    void launch (int idx, int idy, unsigned short startIndexActivationBlocks, unsigned short startIndexWeightBlocks, bool drainResult=true) {
         cl_int status;
         //Set the kernels' ids
+        /*
         kernelActivationTransport.setArg(0, idx);
         kernelActivationTransport.setArg(1, idy);
 
@@ -333,6 +339,7 @@ protected:
 
         kernelPE.setArg(0, idx);
         kernelPE.setArg(1,idy);
+        */
 
         //Fill the buffers
         //Transfer the instruction
@@ -368,18 +375,7 @@ protected:
             aocl_utils_cpp::checkError(status, "Failed to write bufferWeightInput");
         }
 
-        //Transfer the input drain
-        if (inputDrainVector.size() > 0) {
-            status = clCQTestInterface.enqueueWriteBuffer(bufferDrainInput,
-                                                 CL_TRUE,
-                                                 0,
-                                                 sizeof(typeof(inputDrainVector.at(0))) * inputDrainVector.size(),
-                                                 inputDrainVector.data(),
-                                                 NULL);
-            aocl_utils_cpp::checkError(status, "Failed to write bufferDrainInput");
-        }
-
-        //Transfer the input drain
+        //Transfer the input bias
         if (inputBiasVector.size() > 0) {
             status = clCQTestInterface.enqueueWriteBuffer(bufferBiasInput,
                                                  CL_TRUE,
@@ -391,29 +387,22 @@ protected:
         }
 
         //Transfer the drain intput
-        cl_ushort numInputDrain = PE_ROWS  - idy - 1;
+        cl_ushort numInputDrain = drainResult ? PE_ROWS  - idy - 1 : 0;
         for (int i=0; i<numInputDrain; i++) {
             short val = i;
             inputDrainVector.push_back(val);
         }
-        status = clCQTestInterface.enqueueWriteBuffer(bufferDrainInput,
-                                             CL_TRUE,
-                                             0,
-                                             sizeof(typeof(inputDrainVector.at(0))) * inputDrainVector.size(),
-                                             inputDrainVector.data(),
-                                             NULL);
-        aocl_utils_cpp::checkError(status, "Failed to write bufferDrainInput");
-        EXPECT_TRUE (status == CL_SUCCESS);
+        if (inputDrainVector.size() > 0){
+            status = clCQTestInterface.enqueueWriteBuffer(bufferDrainInput,
+                                                 CL_TRUE,
+                                                 0,
+                                                 sizeof(typeof(inputDrainVector.at(0))) * inputDrainVector.size(),
+                                                 inputDrainVector.data(),
+                                                 NULL);
+            aocl_utils_cpp::checkError(status, "Failed to write bufferDrainInput");
+            EXPECT_TRUE (status == CL_SUCCESS);
+        }
 
-        //Transfer the input bias
-        status = clCQTestInterface.enqueueWriteBuffer(bufferBiasInput,
-                                             CL_TRUE,
-                                             0,
-                                             sizeof(typeof(inputBiasVector.at(0))) * inputBiasVector.size(),
-                                             inputBiasVector.data(),
-                                             NULL);
-        aocl_utils_cpp::checkError(status, "Failed to write bufferBiasInput");
-        EXPECT_TRUE (status == CL_SUCCESS);
 
         //Setup the buffer arguments and number of transfer for the test interface
         kernelTestInterface.setArg(0, bufferActivationInput);
@@ -439,7 +428,7 @@ protected:
             outputActivationVector.push_back(brick);
         }
 
-        kernelTestInterface.setArg(14, (cl_ushort) inputActivationVector.size()); //numInputWeightBlocks
+        kernelTestInterface.setArg(14, (cl_ushort) inputWeightVector.size()); //numInputWeightBlocks
         kernelTestInterface.setArg(15, (cl_ushort) startIndexWeightBlocks); //startIndexWeightBlocks,
         cl_ushort numOutputWeightBlocks =
                 idy < (PE_COLS - 1) ? inputWeightVector.size() : 0;
@@ -459,8 +448,8 @@ protected:
         }
 
         kernelTestInterface.setArg(19, (cl_ushort) numInputDrain); //numInputDrain
-        cl_ushort numOutputDrain = PE_ROWS  - idy;
-        kernelTestInterface.setArg(20, (cl_ushort) (PE_ROWS - idy)); //numOutputDrain
+        cl_ushort numOutputDrain = drainResult ? PE_ROWS  - idy : 0;
+        kernelTestInterface.setArg(20, numOutputDrain); //numOutputDrain
         for (int i=0; i<numOutputDrain; i++) {
             short val;
             outputDrainVector.push_back(val);
@@ -484,12 +473,14 @@ protected:
         }
 
         //Launch kernels
+        /*
         clCQActivationTransport.enqueueTask(kernelActivationTransport);
         clCQWeightTransport.enqueueTask(kernelWeightTransport);
         clCQBiasTransport.enqueueTask(kernelBiasTransport);
         clCQDrainTransport.enqueueTask(kernelDrainTransport);
         clCQInstructionTransport.enqueueTask(kernelInstructionTransport);
         clCQPE.enqueueTask(kernelPE);
+        */
         clCQTestInterface.enqueueTask(kernelTestInterface);
 
         //Retrieve data
@@ -665,117 +656,360 @@ TEST(commpressionTest, compressionDotProduct) {
 
 }
 
-TEST_F (peTestFixture, testFixture) {
-    EXPECT_TRUE (COMPRESSION_VEC_SIZE == 4);
-    EXPECT_TRUE(true);
-}
+//TEST_F (peTestFixture, testFixture) {
+//    launch(IDX,IDY,0,0, false);
+//    EXPECT_TRUE (COMPRESSION_VEC_SIZE == 4);
+//    EXPECT_TRUE(true);
+//}
 
-TEST_F (peTestFixture, testBiasLoadingAndDrainage) {
-/* Test goal: Verify the correctness of the bias loading and result drainage capability
- * Procedure: Load a bias into the PE, and read it back. Verify that the bias read back approximately mataches the bias loaded in. Consider the effect of
+//TEST_F (peTestFixture, testBiasLoadingAndDrainage) {
+///* Test goal: Verify the correctness of the bias loading and result drainage capability
+// * Procedure: Load a bias into the PE, and read it back. Verify that the bias read back approximately mataches the bias loaded in. Consider the effect of
+// * different fixed-point width
+// *
+//*/
+//    EXPECT_TRUE (COMPRESSION_VEC_SIZE == 4);
+
+//    cl_bool status;
+
+//    unsigned char fracIn = 6, fracOut = 8;
+//    int targetIDX = IDX, targetIDY = IDY;
+//    EXPECT_TRUE(PE_COLS > targetIDX);
+//    EXPECT_TRUE(PE_ROWS > targetIDY);
+
+//    //First prepare the bias;
+//    float biasFloat = 3.1415926;
+
+//    //Then convert the bias into a fixed point number;
+//    fixedPointNumber biasFPInput (biasFloat, fracIn, WEIGHT_BITWIDTH);
+
+//    //Compute the expected output;
+//    fixedPointNumber biasFPExpectedOutput (biasFloat, fracOut, WEIGHT_BITWIDTH - fracOut - 1);
+
+//    //Prepare the input buffer
+//    inputBiasVector.push_back((short) biasFPInput.getBits());
+
+//    //Prepare the buffer to receive the output
+
+
+//    //Prepare the instruction
+
+//    t_pe_prototype_instruction loadBiasInstruction =
+//    {.transmissionStartIndex=0,
+//     .transmissionEndIndex=0,
+//     .selectStartIndex=0,
+//     .maxIDX = PE_COLS - 1,
+//     .maxIDY = PE_ROWS - 1,
+//     .mode = PE_MODE_LOAD_BIAS,
+//     .fracW = 0,
+//     .fracDin = fracIn,
+//     .fracDout = 0};
+//     inputInstructionVector.push_back(loadBiasInstruction);
+
+//    t_pe_prototype_instruction drainInstruction =
+//    {.transmissionStartIndex=0,
+//     .transmissionEndIndex=0,
+//     .selectStartIndex=0,
+//     .maxIDX = PE_COLS - 1,
+//     .maxIDY = PE_ROWS - 1,
+//     .mode = PE_MODE_DRAIN_PSUM,
+//     .fracW = 0,
+//     .fracDin = 0,
+//     .fracDout = fracOut};
+//    inputInstructionVector.push_back(drainInstruction);
+
+//    launch(targetIDX, targetIDY, 0, 0);
+
+//    //Compare the result
+//    short actualOutputFPBias = outputDrainVector.at(0);
+//    EXPECT_TRUE(
+//         (actualOutputFPBias & WEIGHT_MASK)
+//         == ((short) (biasFPExpectedOutput.getBits() & WEIGHT_MASK) ));
+
+//}
+
+//TEST_F (peTestFixture, testElementWiseAdditionAndDrainage) {
+///* Test goal: Verify the correctness of the bias loading, elementwise esult drainage capability
+// * Procedure: Load a bias into the PE, and read it back. Verify that the bias read back approximately mataches the bias loaded in. Consider the effect of
+// * different fixed-point width
+// *
+//*/
+//    EXPECT_TRUE (COMPRESSION_VEC_SIZE == 4);
+
+//    //This test won't pass if fracIn > fractOut
+//    char fracIn = 8, fracOut = 6;
+//    char intWidthIn = WEIGHT_BITWIDTH - fracIn - 1;
+//    int targetIDX = IDX, targetIDY = IDY;
+
+//    unsigned int numActivations = 199;
+//    unsigned short transmissionStartIndex = 0;
+//    unsigned short transmissionEndIndex = 198;
+//    unsigned short selectStartIndex = 19;
+
+//    EXPECT_TRUE(PE_COLS > targetIDX);
+//    EXPECT_TRUE(PE_ROWS > targetIDY);
+
+//    //First prepare the bias;
+//    float biasFloat = 3.1415926;
+
+//    //Then convert the bias into a fixed point number;
+//    fixedPointNumber biasFPInput (biasFloat, fracIn, WEIGHT_BITWIDTH);
+
+//    // Generate a block of activations
+//    std::vector<float> activationRealInput = initialize_vector(
+//                BERN_SEED,
+//                numActivations,
+//                BERN_P,
+//                -3.14,
+//                3.14
+//                );
+
+//    //Compute the expected output;
+//    fixedPointNumber expectedOutputFP (biasFloat + activationRealInput.at(targetIDY + selectStartIndex - transmissionStartIndex), fracOut, WEIGHT_BITWIDTH - fracOut - 1);
+
+//    //Prepare the input buffers
+//    inputBiasVector.push_back((short) biasFPInput.getBits());
+//    // Compress the activaion block
+//    std::vector<fixedPointNumber> fpVector;
+//    compress_vector (
+//                activationRealInput,
+//                ENCODING_LENGTH,
+//                intWidthIn,
+//                fracIn,
+//                fpVector,
+//                inputActivationVector
+//                );
+
+//    //Prepare the instruction
+
+//    t_pe_prototype_instruction loadBiasInstruction =
+//    {.transmissionStartIndex=0,
+//     .transmissionEndIndex=0,
+//     .selectStartIndex=0,
+//     .maxIDX = PE_COLS - 1,
+//     .maxIDY = PE_ROWS - 1,
+//     .mode = PE_MODE_LOAD_BIAS,
+//     .fracW = 0,
+//     .fracDin = fracIn,
+//     .fracDout = 0};
+//     inputInstructionVector.push_back(loadBiasInstruction);
+
+//     t_pe_prototype_instruction eltWiseAddInstruction =
+//     {.transmissionStartIndex=transmissionStartIndex,
+//      .transmissionEndIndex=transmissionEndIndex,
+//      .selectStartIndex=selectStartIndex,
+//      .maxIDX = PE_COLS - 1,
+//      .maxIDY = PE_ROWS - 1,
+//      .mode = PE_MODE_ELTWISE_ADD,
+//      .fracW = 0,
+//      .fracDin = fracIn,
+//      .fracDout = 0};
+//      inputInstructionVector.push_back(eltWiseAddInstruction);
+
+//    t_pe_prototype_instruction drainInstruction =
+//    {.transmissionStartIndex=0,
+//     .transmissionEndIndex=0,
+//     .selectStartIndex=0,
+//     .maxIDX = PE_COLS - 1,
+//     .maxIDY = PE_ROWS - 1,
+//     .mode = PE_MODE_DRAIN_PSUM,
+//     .fracW = 0,
+//     .fracDin = 0,
+//     .fracDout = fracOut};
+//    inputInstructionVector.push_back(drainInstruction);
+
+//    launch(targetIDX, targetIDY, transmissionStartIndex, 0);
+
+//    //Compare the result
+//    short actualOutputFPBias = outputDrainVector.at(0);
+//    EXPECT_TRUE(
+//         (actualOutputFPBias & WEIGHT_MASK)
+//         == ((short) (expectedOutputFP.getBits() & WEIGHT_MASK) ))
+//         << "Actual output: "<<std::bitset<WEIGHT_BITWIDTH>(actualOutputFPBias & WEIGHT_MASK)
+//         <<std::endl<<"Expected output: "<<std::bitset<WEIGHT_BITWIDTH>((expectedOutputFP.getBits()) & WEIGHT_MASK)<<std::endl;
+
+//}
+
+//TEST_F (peTestFixture, testElementWiseCompareAndDrainage) {
+///* Test goal: Verify the correctness of the bias loading, elementwise esult drainage capability
+// * Procedure: Load a bias into the PE, and read it back. Verify that the bias read back approximately mataches the bias loaded in. Consider the effect of
+// * different fixed-point width
+// *
+//*/
+//    EXPECT_TRUE (COMPRESSION_VEC_SIZE == 4);
+
+//    //This test won't pass if fracIn > fractOut
+//    char fracIn = 8, fracOut = 6;
+//    char intWidthIn = WEIGHT_BITWIDTH - fracIn - 1;
+//    int targetIDX = IDX, targetIDY = IDY;
+
+//    unsigned int numActivations = 199;
+//    unsigned short transmissionStartIndex = 0;
+//    unsigned short transmissionEndIndex = 198;
+//    unsigned short selectStartIndex = 19;
+
+//    EXPECT_TRUE(PE_COLS > targetIDX);
+//    EXPECT_TRUE(PE_ROWS > targetIDY);
+
+//    //First prepare the bias;
+//    float biasFloat = 3.1415926;
+
+//    //Then convert the bias into a fixed point number;
+//    fixedPointNumber biasFPInput (biasFloat, fracIn, WEIGHT_BITWIDTH);
+
+//    // Generate a block of activations
+//    std::vector<float> activationRealInput = initialize_vector(
+//                BERN_SEED,
+//                numActivations,
+//                BERN_P,
+//                -3.14,
+//                3.14
+//                );
+
+//    //Compute the expected output;
+//    float expectedResultReal = biasFloat > activationRealInput.at(targetIDY + selectStartIndex - transmissionStartIndex) ?
+//                biasFloat : activationRealInput.at(targetIDY + selectStartIndex - transmissionStartIndex);
+//    fixedPointNumber expectedOutputFP (expectedResultReal, fracOut, WEIGHT_BITWIDTH - fracOut - 1);
+
+//    //Prepare the input buffers
+//    inputBiasVector.push_back((short) biasFPInput.getBits());
+//    // Compress the activaion block
+//    std::vector<fixedPointNumber> fpVector;
+//    compress_vector (
+//                activationRealInput,
+//                ENCODING_LENGTH,
+//                intWidthIn,
+//                fracIn,
+//                fpVector,
+//                inputActivationVector
+//                );
+
+//    //Prepare the instruction
+
+//    t_pe_prototype_instruction loadBiasInstruction =
+//    {.transmissionStartIndex=0,
+//     .transmissionEndIndex=0,
+//     .selectStartIndex=0,
+//     .maxIDX = PE_COLS - 1,
+//     .maxIDY = PE_ROWS - 1,
+//     .mode = PE_MODE_LOAD_BIAS,
+//     .fracW = 0,
+//     .fracDin = fracIn,
+//     .fracDout = 0};
+//     inputInstructionVector.push_back(loadBiasInstruction);
+
+//     t_pe_prototype_instruction maxPoolInstruction =
+//     {.transmissionStartIndex=transmissionStartIndex,
+//      .transmissionEndIndex=transmissionEndIndex,
+//      .selectStartIndex=selectStartIndex,
+//      .maxIDX = PE_COLS - 1,
+//      .maxIDY = PE_ROWS - 1,
+//      .mode = PE_MODE_MAX_POOL,
+//      .fracW = 0,
+//      .fracDin = fracIn,
+//      .fracDout = 0};
+//      inputInstructionVector.push_back(maxPoolInstruction);
+
+//    t_pe_prototype_instruction drainInstruction =
+//    {.transmissionStartIndex=0,
+//     .transmissionEndIndex=0,
+//     .selectStartIndex=0,
+//     .maxIDX = PE_COLS - 1,
+//     .maxIDY = PE_ROWS - 1,
+//     .mode = PE_MODE_DRAIN_PSUM,
+//     .fracW = 0,
+//     .fracDin = 0,
+//     .fracDout = fracOut};
+//    inputInstructionVector.push_back(drainInstruction);
+
+//    launch(targetIDX, targetIDY, transmissionStartIndex, 0);
+
+//    //Compare the result
+//    short actualOutputFPBias = outputDrainVector.at(0);
+//    EXPECT_TRUE(
+//         (actualOutputFPBias & WEIGHT_MASK)
+//         == ((short) (expectedOutputFP.getBits() & WEIGHT_MASK) ))
+//         << "Actual output: "<<std::bitset<WEIGHT_BITWIDTH>(actualOutputFPBias & WEIGHT_MASK)
+//         <<std::endl<<"Expected output: "<<std::bitset<WEIGHT_BITWIDTH>((expectedOutputFP.getBits()) & WEIGHT_MASK)<<std::endl;
+
+//}
+
+TEST_F (peTestFixture, testLoadBiasDotProductAndDrainage) {
+/* Test goal: Verify the correctness of the bias loading, dot product and drainage capability
+ * Procedure: Load a bias into the PE, the stream compressed activation and weights, then read the result back. Verify that the bias read back approximately mataches the bias loaded in. Consider the effect of
  * different fixed-point width
  *
 */
     EXPECT_TRUE (COMPRESSION_VEC_SIZE == 4);
 
-    cl_bool status;
-
-    unsigned char fracIn = 6, fracOut = 8;
-    int targetIDX = 1, targetIDY = 1;
-    EXPECT_TRUE(PE_COLS > targetIDX);
-    EXPECT_TRUE(PE_ROWS > targetIDY);
-
-    //First prepare the bias;
-    float biasFloat = 3.1415926;
-
-    //Then convert the bias into a fixed point number;
-    fixedPointNumber biasFPInput (biasFloat, fracIn, WEIGHT_BITWIDTH);
-
-    //Compute the expected output;
-    fixedPointNumber biasFPExpectedOutput (biasFloat, fracOut, WEIGHT_BITWIDTH - fracOut - 1);
-
-    //Prepare the input buffer
-    inputBiasVector.push_back((short) biasFPInput.getBits());
-
-    //Prepare the buffer to receive the output
-
-
-    //Prepare the instruction
-
-    t_pe_prototype_instruction loadBiasInstruction =
-    {.transmissionStartIndex=0,
-     .transmissionEndIndex=0,
-     .selectStartIndex=0,
-     .maxIDX = PE_COLS - 1,
-     .maxIDY = PE_ROWS - 1,
-     .mode = PE_MODE_LOAD_BIAS,
-     .fracW = 0,
-     .fracDin = fracIn,
-     .fracDout = 0};
-     inputInstructionVector.push_back(loadBiasInstruction);
-
-    t_pe_prototype_instruction drainInstruction =
-    {.transmissionStartIndex=0,
-     .transmissionEndIndex=0,
-     .selectStartIndex=0,
-     .maxIDX = PE_COLS - 1,
-     .maxIDY = PE_ROWS - 1,
-     .mode = PE_MODE_DRAIN_PSUM,
-     .fracW = 0,
-     .fracDin = 0,
-     .fracDout = fracOut};
-    inputInstructionVector.push_back(drainInstruction);
-
-    launch(targetIDX, targetIDY, 0, 0);
-
-    //Compare the result
-    short actualOutputFPBias = outputDrainVector.at(0);
-    EXPECT_TRUE(
-         (actualOutputFPBias & WEIGHT_MASK)
-         == ((short) (biasFPExpectedOutput.getBits() & WEIGHT_MASK) ));
-
-}
-
-TEST_F (peTestFixture, testElementWiseAdditionAndDrainage) {
-/* Test goal: Verify the correctness of the bias loading, elementwise esult drainage capability
- * Procedure: Load a bias into the PE, and read it back. Verify that the bias read back approximately mataches the bias loaded in. Consider the effect of
- * different fixed-point width
- *
-*/
-    EXPECT_TRUE (COMPRESSION_VEC_SIZE == 4);
-
-    char fracIn = 6, fracOut = 8;
+    //This test won't pass if fracIn > fractOut
+    char fracIn = 8, fracOut = 6, fracW = 8;
     char intWidthIn = WEIGHT_BITWIDTH - fracIn - 1;
-    int targetIDX = 1, targetIDY = 1;
-    unsigned short startIndex = 3;
+    char intWidthWeight = WEIGHT_BITWIDTH - fracW - 1;
+    int targetIDX = IDX, targetIDY = IDY;
+    float probOne = BERN_P;
+
+    unsigned int numElements = 1444;
+    unsigned short transmissionStartIndex = 0;
+    unsigned short transmissionEndIndex = numElements - 1;
+    unsigned short selectStartIndex = transmissionStartIndex; //must match the startIndex!
+
     EXPECT_TRUE(PE_COLS > targetIDX);
     EXPECT_TRUE(PE_ROWS > targetIDY);
 
     //First prepare the bias;
     float biasFloat = 3.1415926;
+    //float biasFloat = 0.0;
 
     //Then convert the bias into a fixed point number;
     fixedPointNumber biasFPInput (biasFloat, fracIn, WEIGHT_BITWIDTH);
 
     // Generate a block of activations
     std::vector<float> activationRealInput = initialize_vector(
-                BERN_SEED,
-                128,
-                BERN_P,
+                VECTOR_A_SEED,
+                numElements,
+                probOne,
                 -3.14,
                 3.14
                 );
-    // Compress the activaion block
+    //std::vector<float> activationRealInput = {-3.14f};
+
+    // Generate a block of activations
+    std::vector<float> weightRealInput = initialize_vector(
+                VECTOR_B_SEED,
+                numElements,
+                probOne,
+                -3.14,
+                3.14
+                );
+    //std::vector<float> weightRealInput = {3.14f};
 
     //Compute the expected output;
-    fixedPointNumber expectedOutputFP (biasFloat + activationRealInput.at(targetIDY + startIndex), fracOut, WEIGHT_BITWIDTH - fracOut - 1);
+    float expectedResultReal = dot_product_regular_vectors(activationRealInput, weightRealInput) + biasFloat;
+    fixedPointNumber expectedOutputFP (expectedResultReal, fracOut, WEIGHT_BITWIDTH - fracOut - 1);
 
-    //Prepare the input buffer
+    //Prepare the input buffers
     inputBiasVector.push_back((short) biasFPInput.getBits());
-
-
-    //Prepare the buffer to receive the output
-
+    // Compress the activaion block
+    std::vector<fixedPointNumber> fpActivationVector;
+    std::vector<fixedPointNumber> fpWeightVector;
+    compress_vector (
+                activationRealInput,
+                ENCODING_LENGTH,
+                intWidthIn,
+                fracIn,
+                fpActivationVector,
+                inputActivationVector
+                );
+    // Compress the weight block
+    compress_vector (
+                weightRealInput,
+                ENCODING_LENGTH,
+                intWidthWeight,
+                fracW,
+                fpWeightVector,
+                inputWeightVector
+                );
 
     //Prepare the instruction
 
@@ -791,6 +1025,18 @@ TEST_F (peTestFixture, testElementWiseAdditionAndDrainage) {
      .fracDout = 0};
      inputInstructionVector.push_back(loadBiasInstruction);
 
+     t_pe_prototype_instruction dotProductInstruction =
+     {.transmissionStartIndex=transmissionStartIndex,
+      .transmissionEndIndex=transmissionEndIndex,
+      .selectStartIndex=selectStartIndex,
+      .maxIDX = PE_COLS - 1,
+      .maxIDY = PE_ROWS - 1,
+      .mode = PE_MODE_DOT_PRODUCT,
+      .fracW = fracW,
+      .fracDin = fracIn,
+      .fracDout = 0};
+      inputInstructionVector.push_back(dotProductInstruction);
+
     t_pe_prototype_instruction drainInstruction =
     {.transmissionStartIndex=0,
      .transmissionEndIndex=0,
@@ -803,17 +1049,17 @@ TEST_F (peTestFixture, testElementWiseAdditionAndDrainage) {
      .fracDout = fracOut};
     inputInstructionVector.push_back(drainInstruction);
 
-    launch(targetIDX, targetIDY, 0, 0);
+    launch(targetIDX, targetIDY, transmissionStartIndex, 0);
 
     //Compare the result
-    short actualOutputFPBias = outputDrainVector.at(0);
+    short actualOutputFP = outputDrainVector.at(0);
     EXPECT_TRUE(
-         (actualOutputFPBias & WEIGHT_MASK)
-         == ((short) (biasFPExpectedOutput.getBits() & WEIGHT_MASK) ));
+         (actualOutputFP & WEIGHT_MASK)
+         == ((short) (expectedOutputFP.getBits() & WEIGHT_MASK) ))
+         << "Actual output: "<<std::bitset<WEIGHT_BITWIDTH>(actualOutputFP & WEIGHT_MASK)
+         <<std::endl<<"Expected output: "<<std::bitset<WEIGHT_BITWIDTH>((expectedOutputFP.getBits()) & WEIGHT_MASK)<<std::endl;
 
 }
-
-void cleanup();
 
 int main(int argc, char* argv[]) {
 
@@ -863,8 +1109,8 @@ void compress_vector (std::vector<float> &inputVector
 
         //Encoding
         if (std::abs(origValue) > EPSILON
-                || iFullLengthVector % encodingBlockSize == encodingBlockSize - 1
-                || iFullLengthVector == (unsigned int) denseVectorSize - 1
+                || iFullLengthVector % encodingBlockSize == (encodingBlockSize - 1)
+                || iFullLengthVector == ((unsigned int) denseVectorSize - 1)
                 || zOffset == ( (1 << WEIGHT_ZCOUNT_BITWIDTH) - 1)) {
             int value = fpValue.getBits();
             //Generate the encoded value: valid bit, zCount, and the fixed-point value
@@ -881,8 +1127,8 @@ void compress_vector (std::vector<float> &inputVector
         }
 
         if (iCompressBlock == COMPRESSION_VEC_SIZE
-            || iFullLengthVector % encodingBlockSize == encodingBlockSize - 1
-            || iFullLengthVector == (unsigned int) denseVectorSize - 1
+            || iFullLengthVector % encodingBlockSize == (encodingBlockSize - 1)
+            || iFullLengthVector == ((unsigned int) denseVectorSize - 1)
                 ) {
             //Pad unused spots in the compression block with invalid values
             for (;iCompressBlock<COMPRESSION_VEC_SIZE;iCompressBlock++) {

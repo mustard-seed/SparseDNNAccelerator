@@ -1,0 +1,1291 @@
+{
+	"auto_complete":
+	{
+		"selected_items":
+		[
+			[
+				"lan",
+				"laneEnd"
+			],
+			[
+				"lane",
+				"laneStart"
+			],
+			[
+				"toke",
+				"tokenDrain"
+			],
+			[
+				"pass",
+				"passDrainRequestEnable"
+			],
+			[
+				"update",
+				"updateBuffer"
+			],
+			[
+				"toek",
+				"tokenCount"
+			],
+			[
+				"ddr",
+				"ddrAddress"
+			],
+			[
+				"packe",
+				"packetSent"
+			],
+			[
+				"by",
+				"byPassMemRead"
+			],
+			[
+				"loop",
+				"loopBackTokenRead"
+			],
+			[
+				"pac",
+				"packetSent"
+			],
+			[
+				"max",
+				"max_concurrency"
+			],
+			[
+				"tme",
+				"timeOutCount"
+			],
+			[
+				"write",
+				"writeSuccess"
+			],
+			[
+				"weig",
+				"weightIndexTrack"
+			],
+			[
+				"t_we",
+				"t_weightCollectToken"
+			],
+			[
+				"t_tok",
+				"t_tokenDrainWeightCache"
+			],
+			[
+				"t_",
+				"t_tokenFillWeightCache"
+			],
+			[
+				"time",
+				"timeOutCount"
+			],
+			[
+				"STREA",
+				"STREAM_COMMIT_WRITE"
+			],
+			[
+				"commi",
+				"commitReadSuccess"
+			],
+			[
+				"commit",
+				"commitReadSuccess"
+			],
+			[
+				"write_inte",
+				"write_channel_nb_intel\t(sparseWeightMemoryTest.cl)"
+			],
+			[
+				"CLK_",
+				"CLK_CHANNEL_MEM_FENCE"
+			],
+			[
+				"channel",
+				"channel_weightCollectorStop"
+			],
+			[
+				"stop",
+				"stopSignal"
+			],
+			[
+				"channel_st",
+				"channel_weightCollectorStop"
+			],
+			[
+				"channel_weightColle",
+				"channel_weightCollectorStop\t(channels.cl)"
+			],
+			[
+				"numFil",
+				"numFiltersToCollect\t(device_structures.hpp)"
+			],
+			[
+				"CLK",
+				"CLK_GLOBAL_MEM_FENCE"
+			],
+			[
+				"weight",
+				"weightAddressOffset"
+			],
+			[
+				"Weight",
+				"weightAddressOffset"
+			],
+			[
+				"mem",
+				"mem_fence\tMem Fence"
+			],
+			[
+				"EMULA",
+				"EMULATOR_PRINT"
+			],
+			[
+				"EMUL",
+				"EMULATOR_PRINT"
+			],
+			[
+				"weid",
+				"weightAddressOffset"
+			],
+			[
+				"ins",
+				"instructionSizeBytes"
+			],
+			[
+				"instru",
+				"instruction"
+			],
+			[
+				"depe",
+				"dependencyList\t(device_structures.hpp)"
+			],
+			[
+				"__atr",
+				"__attribute__"
+			],
+			[
+				"MATR",
+				"MATRIX_COLS"
+			],
+			[
+				"output",
+				"outputMatrix"
+			],
+			[
+				"original",
+				"originalMatrix"
+			],
+			[
+				"begin",
+				"beginOffset"
+			],
+			[
+				"iter",
+				"iterRow"
+			],
+			[
+				"origi",
+				"originalIndex"
+			],
+			[
+				"WEIGHT",
+				"WEIGHT_ZCOUNT_BITOFFSET"
+			],
+			[
+				"effe",
+				"effectualValueColIdx"
+			],
+			[
+				"MAT",
+				"MATRIX_COLS"
+			],
+			[
+				"matrix",
+				"matrix_compression"
+			],
+			[
+				"eff",
+				"effectualValues\tshort * effectualValues"
+			],
+			[
+				"MATRIX",
+				"MATRIX_COLS"
+			],
+			[
+				"effec",
+				"effectualValueColIdx"
+			],
+			[
+				"WEIGH",
+				"WEIGHT_MASK\tWEIGHT_MASK"
+			],
+			[
+				"numbe",
+				"numberOfWeightsPerRow"
+			],
+			[
+				"numberof",
+				"numberOfWeightsPerRow"
+			],
+			[
+				"number",
+				"numberOfRows\tunsigned int numberOfRows"
+			],
+			[
+				"push",
+				"push_back\tvoid push_back(value_type &&__x)"
+			],
+			[
+				"devi",
+				"device_structures.hpp\t(sparseWeightMemoryTest.cl)"
+			],
+			[
+				"channel_drainS",
+				"channel_spWeightFeederDrainSelect\t(sparseWeightMemory.cl)"
+			],
+			[
+				"channel_dr",
+				"channel_tokenDrainWeightCacheControl\t(sparseWeightMemory.cl)"
+			],
+			[
+				"channel_spWe",
+				"channel_spWeightDMA\t(sparseWeightMemory.cl)"
+			],
+			[
+				"numE",
+				"numEncodingBlocksInFilter"
+			],
+			[
+				"word",
+				"wordCount"
+			],
+			[
+				"OPC",
+				"OPCODE_FILL_WEIGHT_BUFFER"
+			],
+			[
+				"OP",
+				"OPCODE_FILL_WEIGHT_BUFFER"
+			],
+			[
+				"__a",
+				"__attribute__\tAttribute Qualifer"
+			],
+			[
+				"WEIGHT_",
+				"WEIGHT_MEMORY_TEST\t(device_structures.hpp)"
+			],
+			[
+				"comm",
+				"commitSuccess"
+			],
+			[
+				"channel_we",
+				"channel_weightCollectControlCommitInternal"
+			],
+			[
+				"channel_wei",
+				"channel_weightCollectControlCommitInternal\t(channels.cl)"
+			],
+			[
+				"channel_weight",
+				"channel_weightCollectControlCommit"
+			],
+			[
+				"weihg",
+				"weightAddressOffset"
+			],
+			[
+				"wei",
+				"weightIndexTracker"
+			],
+			[
+				"WE",
+				"WEIGHT_BITOFFSET\t(params.hpp)"
+			],
+			[
+				"t_sp",
+				"t_spWeight\t(sparseWeightMemory.cl)"
+			],
+			[
+				"chann",
+				"channel_weightCollectControl"
+			],
+			[
+				"num",
+				"numWeightsInFilter"
+			],
+			[
+				"weightInde",
+				"weightIndexLast"
+			],
+			[
+				"filter",
+				"filterStart"
+			],
+			[
+				"control",
+				"controlToken"
+			],
+			[
+				"LA",
+				"KERNEL_CACHE_LANES"
+			],
+			[
+				"coll",
+				"collectWeightRequest"
+			],
+			[
+				"channel_",
+				"channel_weightCollectControl\t(channels.cl)"
+			],
+			[
+				"read_channe",
+				"read_channel_nb_intel"
+			],
+			[
+				"COMMI",
+				"COMMIT_WAIT"
+			],
+			[
+				"numWeigh",
+				"numWeightsInFilter\t(sparseWeightMemory.cl)"
+			],
+			[
+				"C",
+				"CLK_CHANNEL_MEM_FENCE"
+			],
+			[
+				"read_chann",
+				"read_channel_nb_intel"
+			],
+			[
+				"channel_sp",
+				"channel_spWeightDMACommit\t(channels.cl)"
+			],
+			[
+				"read_in",
+				"read_channel_nb_intel\t(sparseWeightMemory.cl)"
+			],
+			[
+				"INSTRU",
+				"INSTRUCTION_HEADER_OFFSET\t(params.hpp)"
+			],
+			[
+				"INSTR",
+				"INSTRUCTION_DEPENDENCY_HIGH_OFFSET"
+			],
+			[
+				"instruct",
+				"instructionInFlightCount"
+			],
+			[
+				"MAX",
+				"MAX_INSTRUCTION_TYPE_SIZE"
+			],
+			[
+				"INS",
+				"INSTRUCTION_DEPENDENCY_HIGH_OFFSET\t(params.hpp)"
+			],
+			[
+				"enab",
+				"enableAudio"
+			],
+			[
+				"ena",
+				"enableAudio"
+			],
+			[
+				"KE",
+				"KEY_BASE"
+			],
+			[
+				"std",
+				"stdbool.h\tstandard header (since c99)"
+			],
+			[
+				"config",
+				"configAudio"
+			],
+			[
+				"INT",
+				"INTERRUPT_ID_FPGA_KEYS"
+			],
+			[
+				"confi",
+				"configKeys"
+			],
+			[
+				"conf",
+				"configGIC"
+			]
+		]
+	},
+	"buffers":
+	[
+		{
+			"contents": "#include \"params.hpp\"\n#include \"device_structures.hpp\"\n#include \"channels.cl\"\n#include \"ihc_apint.h\"\n//Must include the following line in order to use channel\n#pragma OPENCL EXTENSION cl_intel_channels : enable\n\n#if KERNEL_CACHE_LANES > 8\n#error \"Too many cache lanes for the test case! Maximal is 8\"\n#endif\n#if MAX_INSTRUCTION_TYPE_BITS == 16\n#elif MAX_INSTRUCTION_TYPE_BITS == 8\n#else\n#error \"Invalid number of inflight instructions. Only supports 8 or 16\"    \n#endif \n\n\n#ifdef EMULATOR\n  #define EMULATOR_PRINT(format) printf format\n#else\n  #define EMULATOR_PRINT(format)\n#endif\n\n#ifdef HW_DEBUG\n  #define DEBUG_PRINT(format) printf format\n#else\n  #define DEBUG_PRINT(format)\n#endif\n\n\nvoid checkCommits (uint4_t* pInstrInFlightCount) {\n  bool dmaCommitRead=false, drainCacheCommitRead=false, CacheSelectCommitRead=false, collectCommitRead=false;\n\n  read_channel_nb_intel(channel_spWeightDMACommit, &dmaCommitRead);\n  if (dmaCommitRead) {\n    EMULATOR_PRINT ( (\"[Kernel Sequencer]: COMMIT. Header is %u.\\n\", OPCODE_FILL_WEIGHT_BUFFER));\n    pInstrInFlightCount[OPCODE_FILL_WEIGHT_BUFFER & 0x1F]--; \n  }\n\n  read_channel_nb_intel(channel_drainWeightCacheCommit, &drainCacheCommitRead);\n  if (drainCacheCommitRead) {\n    EMULATOR_PRINT ( (\"[Kernel Sequencer]: COMMIT. Header is %u.\\n\", OPCODE_DRAIN_WEIGHT_BUFFER));\n    pInstrInFlightCount[OPCODE_DRAIN_WEIGHT_BUFFER & 0x1F]--; \n  }\n\n  read_channel_nb_intel(channel_spWeightFeederDrainSelectCommit, &CacheSelectCommitRead);\n  if (CacheSelectCommitRead) {\n    EMULATOR_PRINT ( (\"[Kernel Sequencer]: COMMIT. Header is %u.\\n\", OPCODE_SWAP_WEIGHT_BUFFER));\n    pInstrInFlightCount[OPCODE_SWAP_WEIGHT_BUFFER & 0x1F]--; \n  }\n\n  read_channel_nb_intel(channel_weightCollectControlCommit, &collectCommitRead);\n  if (collectCommitRead) {\n    EMULATOR_PRINT ( (\"[Kernel Sequencer]: COMMIT. Header is %u.\\n\", OPCODE_COLLECT_WEIGHT));\n    //DEBUG_PRINT ( (\"[Kernel Sequencer]: COMMIT. Header is %u.\\n\", OPCODE_COLLECT_WEIGHT) );\n    pInstrInFlightCount[OPCODE_COLLECT_WEIGHT & 0x1F]--; \n  }\n}\n\n__attribute__((task))\n__attribute__((max_global_work_dim(0)))\n__kernel void kernelSequencer(\n        __global volatile t_instruction* restrict pInstruction,\n        unsigned short numInstructions\n        )\n{\n\n      EMULATOR_PRINT ( (\"[Kernel Sequencer]: Launched\\n\") );\n      uint4_t instructionInFlightCount[MAX_INSTRUCTION_TYPE_BITS];\n\n      //Initialize the inflight instruction count of each instruction type to\n      //0\n      #pragma unroll 1\n      for (uint5_t iter=0;\n          iter < MAX_INSTRUCTION_TYPE_BITS;\n          iter++) {\n        instructionInFlightCount[iter] = 0x0;\n      }\n\n      //Read the instructions sequentially\n      #pragma max_concurrency 1\n      for (unsigned short iterInstruction=0;\n           iterInstruction<numInstructions;\n           iterInstruction++) {\n\n          t_instruction instruction = pInstruction[iterInstruction];\n\n          //Scan the dependency and the header\n          //Then wait for the dependency to be met before issuing the instruction\n          unsigned short dependency =\n          ((unsigned short) instruction.dependencyList[1]) << 8 |   \n          ((unsigned short) instruction.dependencyList[0]);\n\n          unsigned char header = instruction.header;\n          unsigned char instructionSizeBytes = instruction.instructionSizeBytes;\n\n          uint1_t wait = 0x1;\n\n           EMULATOR_PRINT ( (\"[Kernel Sequencer]: Wait to send instruction %u. Header is %u.\\n\", iterInstruction, header));\n          #pragma unroll 1\n          while (wait){\n            uint1_t wait_next = 0x0;\n\n            checkCommits(instructionInFlightCount);\n\n            //Check the dependency\n            #pragma unroll\n            for (uint5_t iter=0;\n                iter < MAX_INSTRUCTION_TYPE_BITS;\n                iter++){\n              wait_next |= \n                ((dependency & (0x1 << iter)) >> iter) & \n                (instructionInFlightCount[iter & 0x1F] > 0);   \n            }\n\n            //Stalls the instruciton issue if \n            // 1) the dependency isn't met, or\n            // 2) The number of instruciton of the same type in flight is too high\n            wait = wait_next || \n            (instructionInFlightCount[header] == MAX_INSTRUCTION_IN_FLIGHT_COUNT_PER_TYPE);\n          }\n\n\n          //Issue the instructions\n          instructionInFlightCount[header]++;\n\n          //Need +1 cycle to send the header\n          for (unsigned char iter=instructionSizeBytes+1;\n            iter > 0;\n            iter--\n            ){\n\n            bool instructionSent = false;\n\n            unsigned short payload = (iter == instructionSizeBytes+1) ? \n                ((unsigned short) header) << 8 : ((unsigned short) header << 8 )| (instruction.words[(iter-1) & 0x01F]);\n\n            do {\n              //Send the instructions\n              //The header occupies the upper byte,\n              //The receiver occupies the lower byte\n              instructionSent = write_channel_nb_intel(channel_instructions[0], \n                      payload) ;\n\n              checkCommits(instructionInFlightCount);\n\n             }\n            while (!instructionSent);\n\n            DEBUG_PRINT( (\"[Kernel Sequencer]: Sent instruction %u byte %u. Header is %u. Packet is %u.\\n\",\n                iterInstruction, iter, header, (instruction.words[(iter-1) & 0x01F]) );\n            ); //do-while\n          } // for\n          EMULATOR_PRINT ( (\"[Kernel Sequencer]: Sent instruction %u. Header is %u No. Bytes is %u.\\n\"\n            , iterInstruction, header, instructionSizeBytes));\n      }\n\n      //Wait for outstanding commands to finish\n      uint1_t wait = 0x1;\n      #pragma max_concurrency 1\n      while (wait){\n        uint1_t wait_next = 0;\n        checkCommits(instructionInFlightCount);\n\n        //Check the dependency\n        #pragma unroll\n        for (uint5_t iter=0;\n            iter < MAX_INSTRUCTION_TYPE_BITS;\n            iter++){\n          wait_next |= \n            (instructionInFlightCount[iter] > 0);   \n        }\n        wait = wait_next;\n      }\n       \n      //Send the stop signals\n      write_channel_intel(channel_weightCollectorStop[0], 0x1);\n\n      write_channel_intel(channel_spWDMAStop, 0x1);\n\n}\n\n/*! Kernel. weightCollector\n    \\brief Collects the sparse weights and store them to cache\n*/\n void weightCollector(\n      __global volatile short * pMem,\n      unsigned char laneID\n    )\n{\n    EMULATOR_PRINT ((\"[Weight Collector %u]: Launched\\n\", laneID));\n    //DEBUG_PRINT ( (\"[Weight Collector %u]: Launched\\n\", laneID) );\n    //mem_fence(CLK_GLOBAL_MEM_FENCE);\n\n\n    enum e_states {IDLE, STREAM, COMMIT_WAIT, COMMIT};\n    enum e_states state=IDLE;\n\n    uint24_t weightIndexLast = 0x0;\n    uint24_t weightIndexTracker = 0x0;\n    unsigned int weightAddressOffset = 0x0;\n    bool collectWeightRequest = false;\n\n    bool keepGoing = true;\n    bool stopSignal = false;\n\n    t_spWeightAndOffset weightAndOffset = 0x0;\n    t_zCount zCount = 0x0;\n    short weight = 0x0;\n\n    //Used in unit teset. Delete this later!\n    unsigned int timeOutCount = 0;\n\n    #pragma unroll 1\n    while (keepGoing) {\n\n      collectWeightRequest = false;\n\n      t_weightCollectToken controlToken\n           = read_channel_nb_intel(channel_weightCollectControl[laneID], &collectWeightRequest);\n\n      \n      if (collectWeightRequest && (laneID < KERNEL_CACHE_LANES - 1)) {\n\n          write_channel_intel(channel_weightCollectControl[laneID+1], controlToken);\n\n      }\n\n      bool stop = read_channel_nb_intel(channel_weightCollectorStop[laneID], &stopSignal);\n      if (stopSignal) {\n          if (laneID < KERNEL_CACHE_LANES - 1) {\n            write_channel_intel (channel_weightCollectorStop[laneID+1], 0x1);\n          }\n         // DEBUG_PRINT( (\"[Weight Collector %u] Shutting down\\n\", laneID) );\n          keepGoing = false;\n\n      }\n\n      switch (state) {\n        case (IDLE):\n          if (collectWeightRequest) {\n              if ( laneID < controlToken.numFiltersToCollect) { //For each collector in the activate range\n\n                weightAddressOffset = \n                  controlToken.ddrKernelWeightStartOffset\n                  + (unsigned int) controlToken.numWeightsInFilter \n                  * ( (unsigned int) controlToken.filterStart + (unsigned int) laneID );\n\n                weightIndexTracker=0;\n                weightIndexLast = controlToken.numWeightsInFilter;\n\n                state = STREAM;\n                EMULATOR_PRINT ((\"[Weight Collector %u]: Starting to collect weights! Number of weights in uncompressed row: %u\\n\", laneID, weightIndexLast));\n                DEBUG_PRINT ( (\"[Weight Collector %u]: Starting to collect weights! Number of weights in uncompressed row: %u\\n\", laneID, weightIndexLast) );\n              }\n              else { //Inactivate collectors should start waiting for commits\n                  //DEBUG_PRINT( (\"[Weight Collector %u]: Collector is skipped.\\n\", laneID) );\n                  //printf(\"Number of filters to collect is: %u\\n\", controlToken.numFiltersToCollect);\n                  //printf(\"Number of weights in the filter is %u\\n\", controlToken.numWeightsInFilter);\n                  //printf(\"Filter start is %u\\n\", controlToken.filterStart);\n                  //printf(\"DDR start is %u\\n\", controlToken.ddrKernelWeightStartOffset);\n\n                  state = COMMIT_WAIT;\n              }\n              timeOutCount = 0;\n          } \n          break;\n        case (STREAM):\n              {\n                  bool weightReadSuccess = false;\n\n                  //Wait for weight-offset tuple to arrive\n                  weightAndOffset = \n                    read_channel_nb_intel(channel_sparseWeights[laneID], &weightReadSuccess);\n\n\n                  if (weightReadSuccess){\n                    //Parse the offset and the weight\n                    zCount = (weightAndOffset & WEIGHT_ZCOUNT_MASK)\n                                        >> WEIGHT_ZCOUNT_BITOFFSET;\n                    weight = (weightAndOffset & WEIGHT_MASK)\n                                        >> WEIGHT_BITOFFSET;\n\n                    \n                    //Store the weight\n                    pMem[weightAddressOffset] = weight;\n\n                    //DEBUG_PRINT( (\"[Weight Collector %u] Writing %u to %u \\n\", laneID, weight, weightAddressOffset) );\n\n                    //Update the index tracker\n                    //weightIndexTracker += ( (uint24_t) 0X01\n                    //              + ((uint24_t) zCount) & 0x0F );\n                    //CAUTION: BIT-wise AND has LOWER precedence than + !!!!\n                    weightIndexTracker += ( (uint24_t) 0X01\n                                  + ( (uint24_t) zCount & 0x0F) );\n\n                    EMULATOR_PRINT( (\"[Weight Collector %u] zCount %u weightIndexTracker %u, increment %u\\n\", \n                      laneID, ((uint24_t) zCount) & 0x0F, weightIndexTracker, (  1 \n                                  + ( ((uint24_t) zCount) & 0x0F ) ) ) );\n\n                    weightAddressOffset++;\n                 }\n\n                 if (weightIndexTracker == weightIndexLast || timeOutCount == TIMEOUT){\n                      state = COMMIT_WAIT;\n                      if (timeOutCount == TIMEOUT) {\n                        DEBUG_PRINT ( (\"[Weight Collector %u] Read weight timeout. weightIndexTracker is %u\\n\", laneID, weightIndexTracker) );\n                        EMULATOR_PRINT ( (\"[Weight Collector %u] Read weight timeout. weightIndexTracker is %u\\n\", laneID, weightIndexTracker) );\n                      }\n                    }\n              }\n\n          break;\n        case (COMMIT_WAIT):\n            {\n                bool previousCollectCommit = false;\n\n                //EMULATOR_PRINT ( (\"[Weight Collector %u] State is COMMIT_WAIT\\n\", laneID) );\n                if (laneID > 0){\n\n                  read_channel_nb_intel (\n                    channel_weightCollectControlCommitInternal[laneID-1],\n                    &previousCollectCommit);\n\n                  if (previousCollectCommit) {\n                    state = COMMIT;\n                  }\n                }\n                else {\n                  state = COMMIT;\n                }\n            }\n          break;\n        case (COMMIT):\n          {\n              bool commitSuccess = false;\n              EMULATOR_PRINT ( (\"[Weight Collector %u] State is COMMIT\\n\", laneID) );\n              if (laneID < KERNEL_CACHE_LANES - 1) {\n//                  commitSuccess = write_channel_nb_intel(\n//                    channel_weightCollectControlCommitInternal[laneID],\n//                    0x1);\n                  commitSuccess = write_channel_nb_intel(\n                    channel_weightCollectControlCommitInternal[laneID],\n                    0x1);\n\n                }\n              else {\n                  commitSuccess = write_channel_nb_intel(\n                    channel_weightCollectControlCommit,\n                    0x1);\n\n//                  write_channel_intel(\n//                   channel_weightCollectControlCommit,\n//                    0x1);\n              }\n              if (commitSuccess){\n                  EMULATOR_PRINT ((\"[Weight Collector %u]: Committed! Number of weights in uncompressed row: %u\\n\", laneID, weightIndexLast));\n                  state = IDLE;\n              }\n//              EMULATOR_PRINT ((\"[Weight Collector %u]: Committed! Number of weights in uncompressed row: %u\\n\", laneID, weightIndexLast));\n//              state = IDLE;\n          }\n              break;\n      }\n      //Timeout counter\n      timeOutCount++;  \n    }\n}\n\n#define COLLECTOR_GEN(copy) \\\n\\\n__attribute__((task)) \\\n__attribute__((max_global_work_dim(0))) \\\n__kernel void kernelWeightCollector ## copy  (\\\n    __global volatile short * pMem \\\n    ) { \\\n    weightCollector(pMem, copy); \\\n  }\n\nCOLLECTOR_GEN(0)\n\n#if KERNEL_CACHE_LANES > 1\n  COLLECTOR_GEN(1)\n#endif\n#if KERNEL_CACHE_LANES > 2\n  COLLECTOR_GEN(2)\n#endif\n#if KERNEL_CACHE_LANES > 3\n  COLLECTOR_GEN(3)\n#endif\n#if KERNEL_CACHE_LANES > 4\n  COLLECTOR_GEN(4)\n#endif\n#if KERNEL_CACHE_LANES > 5\n  COLLECTOR_GEN(5)\n#endif\n#if KERNEL_CACHE_LANES > 6\n  COLLECTOR_GEN(6)\n#endif\n#if KERNEL_CACHE_LANES > 7\n  COLLECTOR_GEN(7)\n#endif\n\n/*! transport_fill_weight_buffer\n    \\brief The instruction transport module of fill_weight_buffer command\n    \\details Assumption of the order in which instruction arrive\n    Each instruction contains 25 bytes\n    t0  Insruction[24], Header (1)\n    t1 - t4: Instruction[23] - Instruction[20], numWeightsInFilter (4)\n    t5 - t8: Instruction[19]-[18], numEncodingBlocks (2)\n    t9 - t10: Instruction[17]-[16], cbEnd (2)\n    t11 - t12: Instruction[15]-[14], cbStart (2)\n    t13: Instruction[13], numFilterToStream (1)\n    t14: Instruction[12]-[11], filterStart (2)\n    t15: Instruction[10]-[7], ddrKernelWeightStartOffset (4)\n    t16: Instruction[6]-[3], ddrKernelIndexStartOffset (4)\n\n*/\n__attribute__((max_global_work_dim(0)))\n__attribute__((autorun))\n__kernel void transport_fill_weight_buffer ()\n{\n  EMULATOR_PRINT ((\"[transport_fill_weight_buffer]: Launched\\n\"));\n  uint5_t wordCount=0;\n  //unsigned char header = 0x0;\n  t_tokenFillWeightCache token = {};\n\n  #pragma unroll 1\n   while (1) {\n      bool readNewPacket = false;\n      unsigned short word = read_channel_nb_intel(channel_instructions[TRANSPORT_ID_FILL_WEIGHT_BUFFER], &readNewPacket);\n      \n\n      if (readNewPacket) {\n        //EMULATOR_PRINT ((\"[transport_fill_weight_buffer]: New word!\\n\"));\n        //Pass the packet to the next one, if this transport isn't the last\n        if (TRANSPORT_ID_FILL_WEIGHT_BUFFER + 0x1 < NUM_TRANSPORTS) {\n            write_channel_intel(channel_instructions[TRANSPORT_ID_FILL_WEIGHT_BUFFER + 0x1], word);\n        }\n\n        unsigned char header = (unsigned char) (word >> 8);\n        unsigned char instruction = (unsigned char) (0x0FF & word);\n\n        if (header == OPCODE_FILL_WEIGHT_BUFFER) {\n          switch (wordCount) {\n            case 0:\n              \n                EMULATOR_PRINT ((\"[transport_fill_weight_buffer]: Detected message \\n\"));\n                wordCount++;\n              break;\n\n            case 1:\n              token.numWeightsInFilter = ((unsigned int) instruction) << 24;\n              wordCount++;\n              break;\n\n            case 2:\n              token.numWeightsInFilter = token.numWeightsInFilter | ( ((unsigned int) instruction) << 16 );\n              wordCount++;\n              break;\n\n            case 3:\n              token.numWeightsInFilter = token.numWeightsInFilter | ( ((unsigned int) instruction) << 8 );\n              wordCount++;\n              break;\n\n            case 4:\n              token.numWeightsInFilter = token.numWeightsInFilter | ( ((unsigned int) instruction ) );\n              wordCount++;\n              break;\n\n            case 5:\n              token.numEncodingBlocksInFilter = ((unsigned short) instruction) << 8;\n              wordCount++;\n              break;\n\n            case 6:\n              token.numEncodingBlocksInFilter = token.numEncodingBlocksInFilter | ( ((unsigned short) instruction) );\n              wordCount++;\n              break;\n\n            case 7:\n              token.cbEnd = ((unsigned short) instruction) << 8;\n              wordCount++;\n              break;\n\n            case 8:\n              token.cbEnd = token.cbEnd | ( ((unsigned short) instruction) );\n              wordCount++;\n              break;\n\n            case 9:\n              token.cbStart = ((unsigned short) instruction) << 8;\n              wordCount++;\n              break;\n\n            case 10:\n              token.cbStart = token.cbStart | ( ((unsigned short) instruction) );\n              wordCount++;\n              break;\n\n            case 11:\n              token.numFiltersToStream =  (unsigned char) instruction;\n              wordCount++;\n              break;\n\n            case 12:\n              token.filterStart = ((unsigned short) instruction) << 8;\n              wordCount++;\n              break;\n\n            case 13:\n              token.filterStart = token.filterStart | ( ((unsigned short) instruction) );\n              wordCount++;\n              break;\n\n            case 14:\n              token.ddrKernelWeightStartOffset = ((unsigned int) instruction) << 24;\n              wordCount++;\n              break;\n\n            case 15:\n              token.ddrKernelWeightStartOffset = token.ddrKernelWeightStartOffset | ( ((unsigned int) instruction) << 16 );\n              wordCount++;\n              break;\n\n            case 16:\n              token.ddrKernelWeightStartOffset = token.ddrKernelWeightStartOffset | ( ((unsigned int) instruction) << 8 );\n              wordCount++;\n              break;\n\n            case 17:\n              token.ddrKernelWeightStartOffset = token.ddrKernelWeightStartOffset | ( ((unsigned int) instruction) );\n              wordCount++;\n              break;\n\n            case 18:\n              token.ddrKernelIndexStartOffset = ((unsigned int) instruction) << 24;\n              wordCount++;\n              break;\n\n            case 19:\n              token.ddrKernelIndexStartOffset = token.ddrKernelIndexStartOffset | ( ((unsigned int) instruction) << 16 );\n              wordCount++;\n              break;\n\n            case 20:\n              token.ddrKernelIndexStartOffset = token.ddrKernelIndexStartOffset | ( ((unsigned int) instruction) << 8 );\n              wordCount++;\n              break;\n\n            case 21:\n              token.ddrKernelIndexStartOffset = token.ddrKernelIndexStartOffset | ( ((unsigned int) instruction) );\n\n              EMULATOR_PRINT ( (\"[SpW Fill Transport]: Sending instruction to SpW DMA.....\\n\") );\n              write_channel_intel(channel_spWeightDMA, token);\n              EMULATOR_PRINT ( (\"[SpW Fill Transport]: Sent instruction to SpW DMA!\\n\") );\n              wordCount = 0x0;\n              break;\n\n            default:\n              wordCount++; \n\n          }\n        }\n       //EMULATOR_PRINT ((\"[transport_fill_weight_buffer]: WordCount is %u \\n\", wordCount));\n      }\n   }\n}\n\n/*! transport_drain_weight_buffer\n    \\brief The instruction transport module of drain_weight_buffer command\n\n*/\n__attribute__((max_global_work_dim(0)))\n__attribute__((autorun))\n__kernel void transport_drain_weight_buffer ()\n{\n  EMULATOR_PRINT ((\"[transport_drain_weight_buffer]: Launched\\n\"));\n  uint5_t wordCount=0;\n  //unsigned char header = 0x0;\n  t_tokenDrainWeightCache token = {};\n\n  #pragma unroll 1\n   while (1) {\n      bool readNewPacket = false;\n      unsigned short word = read_channel_nb_intel(channel_instructions[TRANSPORT_ID_DRAIN_WEIGHT_BUFFER], &readNewPacket);\n      \n\n      if (readNewPacket) {\n        if (TRANSPORT_ID_DRAIN_WEIGHT_BUFFER + 0x1 < NUM_TRANSPORTS) {\n            write_channel_intel(channel_instructions[TRANSPORT_ID_DRAIN_WEIGHT_BUFFER + 0x1], word);\n        }\n\n        unsigned char header = (unsigned char) (word >> 8);\n        unsigned char instruction = (unsigned char) (0x0FF & word);\n\n        if (header == OPCODE_DRAIN_WEIGHT_BUFFER) {\n          switch (wordCount) {\n            case 0:\n                EMULATOR_PRINT ( (\"[SpW Drain Transport]: Message detected!\\n\") );\n                wordCount++;\n              break;\n\n            case 1:\n              token.cbEnd = ((unsigned short) instruction) << 8;\n              wordCount++;\n              break;\n\n            case 2:\n              token.cbEnd = token.cbEnd | ((unsigned short) instruction);\n              wordCount++;\n              break;\n\n            case 3:\n              token.cbStart = ((unsigned short) instruction) << 8;\n              wordCount++;\n              break;\n\n            case 4:\n              token.cbStart = token.cbStart | ( ((unsigned short) instruction) );\n              wordCount++;\n              break;\n\n            case 5:\n              token.laneEnd = ((unsigned char) instruction);\n              wordCount++;\n              break;\n\n            case 6:\n              token.laneStart = ((unsigned char) instruction);\n              wordCount = 0x0;\n\n              write_channel_intel(channel_tokenDrainWeightCacheControl[0], token);\n              EMULATOR_PRINT ( (\"[SpW Drain Transport]: Message sent to the SpW Feeders!\\n\") );\n              break;\n\n            default:\n              wordCount++; \n\n          }\n        }\n      }\n   }\n}\n\n/*! transport_collect_weights\n    \\brief The instruction transport module of collect_weights command\n\n*/\n__attribute__((max_global_work_dim(0)))\n__attribute__((autorun))\n__kernel void transport_collect_weights ()\n{\n  EMULATOR_PRINT ((\"[Transport_collect_weights]: Launched\\n\"));\n\n  //uint5_t wordCount=0;\n  uint5_t wordCount = 0;\n\n  t_weightCollectToken token = {};\n\n  #pragma unroll 1\n   while (1) {\n      bool readNewPacket = false;\n      unsigned short word = read_channel_nb_intel(channel_instructions[TRANSPORT_ID_COLLECT_WEIGHT], &readNewPacket);\n      \n      //mem_fence(CLK_CHANNEL_MEM_FENCE);\n\n      if (readNewPacket) {\n        //EMULATOR_PRINT ((\"[Transport_collect_weights]: New word!\\n\"));\n        if (TRANSPORT_ID_COLLECT_WEIGHT + 0x1 < NUM_TRANSPORTS) {\n            write_channel_intel(channel_instructions[TRANSPORT_ID_COLLECT_WEIGHT + 0x1], word);\n        }\n\n        unsigned char header = (unsigned char) (word >> 8);\n        unsigned char instruction = (unsigned char) (0x0FF & word);\n\n         if (header == OPCODE_COLLECT_WEIGHT) {\n          switch (wordCount) {\n            case 0:\n                EMULATOR_PRINT ((\"[Transport_collect_weights]: Message detected!\\n\"));\n                wordCount++;\n              break;\n\n            case 1:\n              token.numWeightsInFilter = ((uint24_t) instruction) << 16;\n              wordCount++;\n              break;\n\n            case 2:\n              token.numWeightsInFilter = token.numWeightsInFilter | \n                              (((uint24_t) instruction) << 8);\n              wordCount++;\n              break;\n\n            case 3:\n              token.numWeightsInFilter = token.numWeightsInFilter | \n                              ((uint24_t) instruction);\n              wordCount++;\n              break;\n\n            case 4:\n              token.numFiltersToCollect = ((unsigned short) instruction) << 0x8;\n              wordCount++;\n              break;\n\n            case 5:\n              token.numFiltersToCollect = token.numFiltersToCollect \n                                          | ((unsigned short) instruction);\n              wordCount++;\n              break;\n\n            case 6:\n              token.filterStart = ((unsigned short) instruction) << 0x8;\n              wordCount++;\n              break;\n\n            case 7:\n              token.filterStart = token.filterStart \n                                          | ((unsigned short) instruction);\n              wordCount++;\n              break;\n\n            case 8:\n              token.ddrKernelWeightStartOffset = ((unsigned int) instruction) << 24;\n              wordCount++;\n              break;\n\n            case 9:\n              token.ddrKernelWeightStartOffset \n                      = token.ddrKernelWeightStartOffset | (((unsigned int) instruction) << 16);\n              wordCount++;\n              break;\n\n            case 10:\n              token.ddrKernelWeightStartOffset \n                      = token.ddrKernelWeightStartOffset | (((unsigned int) instruction) << 8);\n              wordCount++;\n              break;\n\n            case 11:\n              token.ddrKernelWeightStartOffset \n                      = token.ddrKernelWeightStartOffset | ((unsigned int) instruction);\n              wordCount = 0x0;\n              write_channel_intel(channel_weightCollectControl[0], token);\n              EMULATOR_PRINT ((\"[Transport_collect_weights]: Message sent to the collectors!\\n\"));\n              break;\n\n            default:\n              wordCount++; \n\n          }\n        //EMULATOR_PRINT ((\"[Transport_collect_weights]: WordCount is %u \\n\", wordCount));\n        }\n      }\n   }\n}\n\n/*! transport_drain_weight_select\n    \\brief The instruction transport module of drain_weight_swap command\n\n*/\n__attribute__((max_global_work_dim(0)))\n__attribute__((autorun))\n__kernel void transport_drain_weights_select ()\n{\n  EMULATOR_PRINT ((\"[transport_drain_weights_select]: Launched\\n\"));\n  //uint5_t wordCount=0;\n  uint1_t wordCount=0;\n\n  #pragma unroll 1\n   while (1) {\n      bool readNewPacket = false;\n      unsigned short word = read_channel_nb_intel(channel_instructions[TRANSPORT_ID_SWAP_WEIGHT_BUFFER], &readNewPacket);\n\n      if (readNewPacket) {\n        if (TRANSPORT_ID_SWAP_WEIGHT_BUFFER + 0x1 < NUM_TRANSPORTS) {\n            write_channel_intel(channel_instructions[TRANSPORT_ID_SWAP_WEIGHT_BUFFER + 0x1], word);\n        }\n\n        unsigned char header = (unsigned char) (word >> 8);\n        unsigned char instruction = (unsigned char) (0x0FF & word);\n\n        if (header == OPCODE_SWAP_WEIGHT_BUFFER) {\n\n          switch (wordCount) {\n            case 0:\n                EMULATOR_PRINT ((\"[transport_drain_weights_select]: Message detected!\\n\"));\n                wordCount++;\n                break;\n            case 1:\n                write_channel_intel(channel_spWeightFeederDrainSelect[0], 0x1);\n                EMULATOR_PRINT ((\"[transport_drain_weights_select]: Swap sent!\\n\"));\n                wordCount=0;\n                break;\n            default:\n                wordCount++;\n          }\n\n        }\n         \n\n      }\n    }\n}\n",
+			"file": "weight_memory_test/sparseWeightMemoryTest.cl",
+			"file_size": 27284,
+			"file_write_time": 132031840422231928,
+			"settings":
+			{
+				"buffer_size": 27284,
+				"encoding": "UTF-8",
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"file": "device/sparseWeightMemory.cl",
+			"settings":
+			{
+				"buffer_size": 23251,
+				"encoding": "UTF-8",
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"file": "device/device_structures.hpp",
+			"settings":
+			{
+				"buffer_size": 3556,
+				"encoding": "UTF-8",
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"contents": "include (${PROJECT_SOURCE_DIR}/config.cmake)\n\nset (TEST_NAME \"sparseMemoryTest\")\n\nset (PREPROCESSOR_DEFS\n        -DWEIGHT_MEMORY_TEST\n#        -DHW_DEBUG\n        )\n\n############################################\n#First, we must be able to find Intel FPGA OpenCL SDK\n#############################################\nif(DEFINED ENV{INTELFPGAOCLSDKROOT})\nelse()\n    message(FATAL_ERROR \"The environment variable INTELFPGAOCLSDKROOT isn't set.\")\nendif()\n\n#########################\n#Obtain the host source files\n#########################\nfile(GLOB HOST_SRC\n        ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp\n        ${PROJECT_SOURCE_DIR}/common/src/AOCLUtilsCpp/*.cpp\n)\n\n###########################\n#Add the include files\n###########################\ninclude_directories(\n    ${PROJECT_SOURCE_DIR}/common/inc\n    ${PROJECT_SOURCE_DIR}/device\n    ${CMAKE_CURRENT_SOURCE_DIR}\n    $ENV{INTELFPGAOCLSDKROOT}/include/kernel_headers\n)\n\ninclude_directories(\n    $ENV{INTELFPGAOCLSDKROOT}/host/include\n)\n\n##################################\n#Add the Altera Library to link with\n##################################\nset (intel_fpga_libraries\n        acl_emulator_kernel_rt\n        alteracl\n        alterahalmmd\n        elf\n        OpenCL\n)\n\n##################################\n#Add the RTL directories and libraries\n##################################\nset (rtl_directory ${PROJECT_SOURCE_DIR}/device/RTL\n)\n\nset (rtl_lib rtl_lib.aoclib)\nINCLUDE_DIRECTORIES (${rtl_directory})\n###########################################################\n#Intel FPGA OpenCL SDK Compile and linkage configurations\n###########################################################\nif (BOARD_NAME MATCHES \"DE10Standard\")\n    ##Add library directories for DE10Standard\n    message (STATUS \"Linking against DE10-Standard libraries\")\n    message (STATUS \"$ENV{INTELFPGAOCLSDKROOT}/host/arm32/lib\")\n    message (STATUS \"$ENV{INTELFPGAOCLSDKROOT}/board/de10_standard/arm32/lib\")\n    file (GLOB intelfpga_host_libraries\n        $ENV{INTELFPGAOCLSDKROOT}/host/arm32/lib/*.so\n        )\n    file (GLOB intelfpga_device_libraries\n        $ENV{INTELFPGAOCLSDKROOT}/board/de10_standard/arm32/lib/*.so\n        )\n    add_definitions(-DC5SOC)\n\nelseif (BOARD_NAME MATCHES \"A10REF\")\n    ##Add library directories for a10_ref\n    add_definitions(-DARRIA10)\n    message (STATUS \"Linking against A10-Ref libraries\")\nelseif (BOARD_NAME MATCHES \"A10PAC\")\n    add_definitions(-DARRIA10)\n    ##Add library directories for a10_pac\n    message (STATUS \"Linking against A10-Pac libraries\")\nelseif (BOARD_NAME MATCHES \"DE5ANET\")\n    add_definitions(-DC5SOC)\n    ##Add library directories for de5a_net\n    message (STATUS \"Linking against DE5A-NET libraries\")\nelse()\n    message (STATUS \"The board is ${BOARD_NAME}\")\n    message (FATAL_ERROR \"Unsupported board!\")\nendif()\n\n#######################################\n##Add extra library for the host below\n######################################\n#set (OpenCV_DIR /home/jamesliu/arm_opencv/Build CACHE STRING \"Path of OpenCV\" FORCE)\n#find_package (OpenCV REQUIRED )\n\n#include_directories(${OpenCV_INCLUDE_DIRS})\n#add_definitions(-DUSE_OPENCV)\n\nfind_package (Boost 1.56 REQUIRED)\nINCLUDE_DIRECTORIES(${Boost_INCLUDE_DIRS})\n#####################################\n##Add unit test for the host library below\n#####################################\nadd_definitions(-DFPGA_DEVICE)\nadd_executable (${TEST_NAME}_host ${HOST_SRC})\ntarget_link_libraries(${TEST_NAME}_host ${Boost_LIBRARIES})\ntarget_compile_definitions(\n    ${TEST_NAME}_host\n    PUBLIC\n    ${PREPROCESSOR_DEFS}\n    )\n\n\nif (\"${intelfpga_host_libraries}\" STREQUAL \"\")\n    #Hack for non arm boards\n    execute_process(\n            COMMAND aocl link-config\n            OUTPUT_VARIABLE aocl_link_config\n        )\n    #Need to remove the newline, or the make file will complain \"missing separator\"\n    string(REGEX REPLACE \"\\n$\" \"\" aocl_link_config \"${aocl_link_config}\")\n    target_link_libraries(${TEST_NAME}_host ${aocl_link_config})\nelse()\n    target_link_libraries(${TEST_NAME}_host\n         ${intelfpga_host_libraries}\n         ${intelfpga_device_libraries}\n         )\nendif()\n\ntarget_link_libraries(${TEST_NAME}_host\n         rt\n         pthread\n    )\nset_target_properties (${TEST_NAME}_host PROPERTIES \"CMAKE_CXX_FLAGS\" \"${CMAKE_CXX_FLAGS}\")\n\n\n####################################\n##Generate the hardware targets\n####################################\n\ninclude (${PROJECT_SOURCE_DIR}/aoc.cmake)\n\n# Find the kernel source files. Note, GLOB isn't the recommended way. One needs to touch the CMakesList.txt to effect changes\nfile(GLOB_RECURSE kernel_files\n     ${PROJECT_SOURCE_DIR}/device/sparseWeightMemory.cl\n     ${CMAKE_CURRENT_SOURCE_DIR}/sparseWeightMemoryTest.cl\n)\n\nadd_aoc_target (\n    TARGET_NAME ${TEST_NAME}\n    TARGET_TYPE EMULATION\n    SOURCES_LIST ${kernel_files} \n    HEADER_DIR ${PROJECT_SOURCE_DIR}/device\n    RTL_DIR ${rtl_directory}\n    PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}\n    #RTL_LIB ${rtl_lib})\n    )\n\nadd_aoc_target (\n    TARGET_NAME ${TEST_NAME}\n    TARGET_TYPE RTL_ONLY\n    SOURCES_LIST ${kernel_files} \n    HEADER_DIR ${PROJECT_SOURCE_DIR}/device\n    RTL_DIR ${rtl_directory} \n    PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}\n    #RTL_LIB ${rtl_lib})\n    )\n\nadd_aoc_target (\n    TARGET_NAME ${TEST_NAME}\n    TARGET_TYPE NORMAL_HW\n    SOURCES_LIST ${kernel_files} \n    HEADER_DIR ${PROJECT_SOURCE_DIR}/device\n    RTL_DIR ${rtl_directory} \n    PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}\n    #RTL_LIB ${rtl_lib})\n    )\n\nadd_aoc_target (\n    TARGET_NAME ${TEST_NAME}\n    TARGET_TYPE RELEASE_HW\n    SOURCES_LIST ${kernel_files}\n    HEADER_DIR ${PROJECT_SOURCE_DIR}/device\n    RTL_DIR ${rtl_directory}\n    PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}\n    #RTL_LIB ${rtl_lib})\n    )\n\nadd_aoc_target (\n    TARGET_NAME ${TEST_NAME}\n    TARGET_TYPE PROFILE_HW\n    SOURCES_LIST ${kernel_files} \n    HEADER_DIR ${PROJECT_SOURCE_DIR}/device\n    RTL_DIR ${rtl_directory} \n    PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}\n    #RTL_LIB ${rtl_lib})\n    )\n\nadd_aoc_target (\n    TARGET_NAME ${TEST_NAME}\n    TARGET_TYPE FAST_COMPILE_HW\n    SOURCES_LIST ${kernel_files}\n    HEADER_DIR ${PROJECT_SOURCE_DIR}/device\n    RTL_DIR ${rtl_directory}\n    PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}\n    #RTL_LIB ${rtl_lib})\n    )\n\n#add_aoc_target (\n#    TARGET_NAME ${TEST_NAME}\n#    TARGET_TYPE SIMULATION\n#    SOURCES_LIST ${kernel_files}\n#    HEADER_DIR ${PROJECT_SOURCE_DIR}/device\n#    RTL_DIR ${rtl_directory}\n#    PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}\n#    #RTL_LIB ${rtl_lib})\n#    )\n\n\n\n\n",
+			"file": "weight_memory_test/CMakeLists.txt",
+			"file_size": 6511,
+			"file_write_time": 132031180649331172,
+			"settings":
+			{
+				"buffer_size": 6511,
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"file": "common/inc/AOCLUtils/opencl.h",
+			"settings":
+			{
+				"buffer_size": 4897,
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"file": "device/channels.cl",
+			"settings":
+			{
+				"buffer_size": 1856,
+				"encoding": "UTF-8",
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"file": "weight_memory_test/main.cpp",
+			"settings":
+			{
+				"buffer_size": 31447,
+				"encoding": "UTF-8",
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"file": "accelerator.sublime-project",
+			"settings":
+			{
+				"buffer_size": 499,
+				"encoding": "UTF-8",
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"file": "accelerator.sublime-workspace",
+			"settings":
+			{
+				"buffer_size": 27039,
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"file": "aoc.cmake",
+			"settings":
+			{
+				"buffer_size": 6735,
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"file": "common/src/AOCLUtils/opencl.cpp",
+			"settings":
+			{
+				"buffer_size": 15209,
+				"encoding": "UTF-8",
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"file": "device/params.hpp",
+			"settings":
+			{
+				"buffer_size": 1651,
+				"encoding": "UTF-8",
+				"line_ending": "Unix"
+			}
+		}
+	],
+	"build_system": "",
+	"build_system_choices":
+	[
+	],
+	"build_varint": "",
+	"command_palette":
+	{
+		"height": 0.0,
+		"last_filter": "",
+		"selected_items":
+		[
+			[
+				"pa",
+				"Package Control: Remove Package"
+			],
+			[
+				"package control ins",
+				"Package Control: Install Package"
+			],
+			[
+				"syntax: cma",
+				"Set Syntax: CMake"
+			],
+			[
+				"install",
+				"Package Control: Install Package"
+			],
+			[
+				"set syntax: ope",
+				"Set Syntax: OpenCL"
+			],
+			[
+				"syntax: C++",
+				"Set Syntax: C++"
+			],
+			[
+				"syntax: Op",
+				"Set Syntax: OpenCL"
+			],
+			[
+				"package control: in",
+				"Package Control: Install Package"
+			],
+			[
+				"package control: ",
+				"Package Control: Install Package"
+			],
+			[
+				"packakge con",
+				"Package Control: Install Package"
+			],
+			[
+				"packa",
+				"Package Control: Install Package"
+			],
+			[
+				"package control",
+				"Package Control: Install Package"
+			],
+			[
+				"package control in",
+				"Package Control: Install Package"
+			],
+			[
+				"proje",
+				"Project: Add Folder"
+			]
+		],
+		"width": 0.0
+	},
+	"console":
+	{
+		"height": 206.0,
+		"history":
+		[
+			"help"
+		]
+	},
+	"distraction_free":
+	{
+		"menu_visible": true,
+		"show_minimap": false,
+		"show_open_files": false,
+		"show_tabs": false,
+		"side_bar_visible": false,
+		"status_bar_visible": false
+	},
+	"expanded_folders":
+	[
+		"/home/jamesliu/thesis/SparseDNNAccelerator/accelerator",
+		"/home/jamesliu/thesis/SparseDNNAccelerator/accelerator/common",
+		"/home/jamesliu/thesis/SparseDNNAccelerator/accelerator/common/inc",
+		"/home/jamesliu/thesis/SparseDNNAccelerator/accelerator/common/inc/AOCLUtils",
+		"/home/jamesliu/thesis/SparseDNNAccelerator/accelerator/common/src",
+		"/home/jamesliu/thesis/SparseDNNAccelerator/accelerator/common/src/AOCLUtils",
+		"/home/jamesliu/thesis/SparseDNNAccelerator/accelerator/device",
+		"/home/jamesliu/thesis/SparseDNNAccelerator/accelerator/weight_memory_test"
+	],
+	"file_history":
+	[
+		"/home/jamesliu/thesis/SparseDNNAccelerator/accelerator/device/device_structures.hpp",
+		"/home/jamesliu/.config/sublime-text-3/Packages/FileSystem Autocompletion/Default (Linux).sublime-keymap",
+		"/home/jamesliu/.config/sublime-text-3/Packages/FileSystem Autocompletion/FilesystemAutocompletion.sublime-settings",
+		"/home/jamesliu/.config/sublime-text-3/Packages/All Autocomplete/All Autocomplete.sublime-settings",
+		"/home/jamesliu/.config/sublime-text-3/Packages/User/All Autocomplete.sublime-settings",
+		"/home/jamesliu/thesis/SparseDNNAccelerator/accelerator/accelerator.sublime-project",
+		"/home/jamesliu/thesis/SparseDNNAccelerator/accelerator/weight_memory_test/main.cpp",
+		"/home/jamesliu/thesis/SparseDNNAccelerator/accelerator/weight_memory_test/sparseWeightMemoryTest.cl",
+		"/home/jamesliu/ECE243-Winter2019/audio/audio.c",
+		"/home/jamesliu/ECE243-Winter2019/audio/interruptID.h",
+		"/home/jamesliu/ECE243-Winter2019/audio/address_map_arm.h",
+		"/home/jamesliu/aUToronto/DLA/benchmark/src/CMakeLists.txt"
+	],
+	"find":
+	{
+		"height": 38.0
+	},
+	"find_in_files":
+	{
+		"height": 98.0,
+		"where_history":
+		[
+			"",
+			"pragma",
+			""
+		]
+	},
+	"find_state":
+	{
+		"case_sensitive": true,
+		"find_history":
+		[
+			"timeout",
+			"timeOut",
+			"uint",
+			"time",
+			"timeOutCount",
+			"DEBUG_PRINT",
+			"DEBUG",
+			"mem_fence",
+			"time",
+			"DEBUG_PR",
+			"pMem",
+			"channel_packetDMAToWeightFeeder",
+			"[",
+			"write",
+			"pragam",
+			"Launching",
+			"cbEnd",
+			"uint1_t",
+			"read_channel_nb_intel",
+			"uint1_t",
+			"channel_spWeightFeederDrainSelect",
+			"COMMAND_SIZE_BYTES",
+			"(0x0FF & word)",
+			"readNewByte",
+			"COMMAND_SIZE_BYTES",
+			",\n",
+			"wordCount += 0x1",
+			" wordCount +=0x1",
+			"wordCount +=0x1",
+			"pMem[ddrA",
+			"t_spWe",
+			"write_channel_nb",
+			"PACKET_SIZE",
+			"t_spWeight",
+			"channel_drainWeightCacheCommit",
+			"channel_tokenDrainWeightCacheFinish",
+			"channel_spWeightFeederDrainSelectLoopBack"
+		],
+		"highlight": true,
+		"in_selection": false,
+		"preserve_case": false,
+		"regex": false,
+		"replace_history":
+		[
+			"pragma",
+			"instruction",
+			"readNewPacket",
+			"t_spWeightAndOffset",
+			"channel_drainWeightCacheCommit",
+			"channel_spWeightFeederDrainSelectCommit"
+		],
+		"reverse": false,
+		"show_context": true,
+		"use_buffer2": true,
+		"whole_word": false,
+		"wrap": true
+	},
+	"groups":
+	[
+		{
+			"selected": 9,
+			"sheets":
+			[
+				{
+					"buffer": 0,
+					"file": "weight_memory_test/sparseWeightMemoryTest.cl",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 27284,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								11571,
+								11571
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/OpenCL/OpenCL.tmLanguage",
+							"tab_size": 2,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 0.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 4,
+					"type": "text"
+				},
+				{
+					"buffer": 1,
+					"file": "device/sparseWeightMemory.cl",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 23251,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								21762,
+								21762
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/OpenCL/OpenCL.tmLanguage"
+						},
+						"translation.x": 0.0,
+						"translation.y": 8432.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 3,
+					"type": "text"
+				},
+				{
+					"buffer": 2,
+					"file": "device/device_structures.hpp",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 3556,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								1864,
+								1864
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/C++/C++.sublime-syntax",
+							"tab_size": 4,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 419.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 5,
+					"type": "text"
+				},
+				{
+					"buffer": 0,
+					"file": "weight_memory_test/sparseWeightMemoryTest.cl",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 27284,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								15475,
+								15475
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/OpenCL/OpenCL.tmLanguage",
+							"tab_size": 2,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 7184.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 9,
+					"type": "text"
+				},
+				{
+					"buffer": 3,
+					"file": "weight_memory_test/CMakeLists.txt",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 6511,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								5327,
+								5327
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/CMake/CMake.sublime-syntax",
+							"tab_size": 4,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 0.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 7,
+					"type": "text"
+				},
+				{
+					"buffer": 4,
+					"file": "common/inc/AOCLUtils/opencl.h",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 4897,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								2138,
+								2138
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/C++/C++.sublime-syntax"
+						},
+						"translation.x": 0.0,
+						"translation.y": 360.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 10,
+					"type": "text"
+				},
+				{
+					"buffer": 5,
+					"file": "device/channels.cl",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 1856,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								1849,
+								1849
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/OpenCL/OpenCL.tmLanguage"
+						},
+						"translation.x": 0.0,
+						"translation.y": 0.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 8,
+					"type": "text"
+				},
+				{
+					"buffer": 6,
+					"file": "weight_memory_test/main.cpp",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 31447,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								923,
+								923
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/C++/C++.sublime-syntax",
+							"tab_size": 2,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 0.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 2,
+					"type": "text"
+				},
+				{
+					"buffer": 7,
+					"file": "accelerator.sublime-project",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 499,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								138,
+								138
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/JavaScript/JSON.sublime-syntax",
+							"tab_size": 2,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 0.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 1,
+					"type": "text"
+				},
+				{
+					"buffer": 8,
+					"file": "accelerator.sublime-workspace",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 27039,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								62,
+								62
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/Text/Plain text.tmLanguage",
+							"translate_tabs_to_spaces": false
+						},
+						"translation.x": 0.0,
+						"translation.y": 0.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 0,
+					"type": "text"
+				},
+				{
+					"buffer": 9,
+					"file": "aoc.cmake",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 6735,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								2816,
+								2816
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/CMake/CMake.sublime-syntax",
+							"tab_size": 4,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 225.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 14,
+					"type": "text"
+				}
+			]
+		},
+		{
+			"selected": 2,
+			"sheets":
+			[
+				{
+					"buffer": 10,
+					"file": "common/src/AOCLUtils/opencl.cpp",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 15209,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								6389,
+								6389
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/C++/C++.sublime-syntax",
+							"tab_size": 2,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 0.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 13,
+					"type": "text"
+				},
+				{
+					"buffer": 0,
+					"file": "weight_memory_test/sparseWeightMemoryTest.cl",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 27284,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								22349,
+								22349
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/OpenCL/OpenCL.tmLanguage",
+							"tab_size": 2,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 315.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 11,
+					"type": "text"
+				},
+				{
+					"buffer": 11,
+					"file": "device/params.hpp",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 1651,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								1651,
+								1651
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/C++/C++.sublime-syntax"
+						},
+						"translation.x": 0.0,
+						"translation.y": 0.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 6,
+					"type": "text"
+				},
+				{
+					"buffer": 2,
+					"file": "device/device_structures.hpp",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 3556,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								2246,
+								2246
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/C++/C++.sublime-syntax",
+							"tab_size": 4,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 90.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 12,
+					"type": "text"
+				}
+			]
+		}
+	],
+	"incremental_find":
+	{
+		"height": 27.0
+	},
+	"input":
+	{
+		"height": 36.0
+	},
+	"layout":
+	{
+		"cells":
+		[
+			[
+				0,
+				0,
+				1,
+				1
+			],
+			[
+				1,
+				0,
+				2,
+				1
+			]
+		],
+		"cols":
+		[
+			0.0,
+			0.790508810216,
+			1.0
+		],
+		"rows":
+		[
+			0.0,
+			1.0
+		]
+	},
+	"menu_visible": true,
+	"output.find_results":
+	{
+		"height": 0.0
+	},
+	"output.mdpopups":
+	{
+		"height": 0.0
+	},
+	"pinned_build_system": "",
+	"project": "accelerator.sublime-project",
+	"replace":
+	{
+		"height": 68.0
+	},
+	"save_all_on_build": true,
+	"select_file":
+	{
+		"height": 0.0,
+		"last_filter": "",
+		"selected_items":
+		[
+		],
+		"width": 0.0
+	},
+	"select_project":
+	{
+		"height": 0.0,
+		"last_filter": "",
+		"selected_items":
+		[
+		],
+		"width": 0.0
+	},
+	"select_symbol":
+	{
+		"height": 0.0,
+		"last_filter": "",
+		"selected_items":
+		[
+		],
+		"width": 0.0
+	},
+	"selected_group": 0,
+	"settings":
+	{
+		"last_automatic_layout":
+		[
+			[
+				0,
+				0,
+				1,
+				1
+			],
+			[
+				1,
+				0,
+				2,
+				1
+			]
+		]
+	},
+	"show_minimap": true,
+	"show_open_files": false,
+	"show_tabs": true,
+	"side_bar_visible": true,
+	"side_bar_width": 280.0,
+	"status_bar_visible": true,
+	"template_settings":
+	{
+		"max_columns": 2
+	}
+}

@@ -102,10 +102,6 @@ void decodeRunLength (t_vecSpValueAndZCount* pCompressionBlock
     ,t_vecUnpacked * pUnpacked
     ,unsigned short startIndex) {
 
-    pUnpacked->indices[0] = pUnpacked->validMasks[0] ?
-            1 + startIndex + (unsigned short) ( (pCompressionBlock->vec[0] & WEIGHT_ZCOUNT_MASK) >> WEIGHT_ZCOUNT_BITOFFSET ) :
-            startIndex;
-
     //Transfer the values
     #pragma unroll
     for (unsigned char i=0; i<COMPRESSION_VEC_SIZE; i++) {
@@ -113,12 +109,16 @@ void decodeRunLength (t_vecSpValueAndZCount* pCompressionBlock
         pUnpacked->validMasks[i & 0x3] = (uint1_t) ((pCompressionBlock->vec[i & 0x3] & WEIGHT_VALID_MASK) >> WEIGHT_VALID_BITOFFSET);
         //pUnpacked->indices[i & 0x3] = (pCompressionBlock->vec[i & 0x3] & WEIGHT_VALID_MASK) > 0 ? 1 : 0;
         //pUnpacked->indices[i] = pUnpacked->validMasks[i] ? 1 : 0;
-        
-        if (i>0) {
-        	pUnpacked->indices[i & 0x3] = pUnpacked->validMasks[i & 0x3] ?
-                        1 + pUnpacked->indices[(i-1) & 0x3] + (unsigned short) ( (pCompressionBlock->vec[i & 0x3] & WEIGHT_ZCOUNT_MASK) >> WEIGHT_ZCOUNT_BITOFFSET ) :
-                        pUnpacked->indices[(i-1) & 0x3];            
-        }
+    }
+
+    pUnpacked->indices[0] = pUnpacked->validMasks[0] ?
+            1 + startIndex + (unsigned short) ( (pCompressionBlock->vec[0] & WEIGHT_ZCOUNT_MASK) >> WEIGHT_ZCOUNT_BITOFFSET ) :
+            startIndex;
+
+    for (unsigned char i=1; i<COMPRESSION_VEC_SIZE; i++) {
+    	pUnpacked->indices[i & 0x3] = pUnpacked->validMasks[i & 0x3] ?
+                    1 + pUnpacked->indices[(i-1) & 0x3] + (unsigned short) ( (pCompressionBlock->vec[i & 0x3] & WEIGHT_ZCOUNT_MASK) >> WEIGHT_ZCOUNT_BITOFFSET ) :
+                    pUnpacked->indices[(i-1) & 0x3];            
     }
 
 }
@@ -158,7 +158,7 @@ int convertSignedFixedPointToAccumulator(
         ) {
     //int temp = (int) ( fixedPointValue & WEIGHT_MASK);
     int tempSignExtended = (int) (fixedPointValue);
-    int returnVal = tempSignExtended
+    int returnVal = ((unsigned int) tempSignExtended)
             << (unsigned char)(REG_FF_FRAC - fracWidthFixedPointValue);
     return returnVal;
 }

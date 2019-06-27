@@ -47,7 +47,9 @@ typedef struct __attribute((aligned(32))) __attribute__((packed)){
 #include "ihc_apint.h"
 typedef uint4_t t_zCount;
 typedef uint12_t t_weight;
-typedef uint12_t t_operand;
+
+//Needs to be signed!!!!
+typedef int12_t t_operand;
 
 #ifdef PE_PROTOTYPE_TEST
 typedef short t_value;

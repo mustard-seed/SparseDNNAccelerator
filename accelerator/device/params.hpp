@@ -82,6 +82,9 @@
 #define REG_FF_FRAC 16 //16 bit fraction width, make  sure it is wider than all possible frac_width used on the short data format
 #define REG_FF_WIDTH 32 //32 bit FF, int
 
+#define IDX 1
+#define IDY 1
+
 
 
 #define TIMEOUT 0X1FFFFFF
