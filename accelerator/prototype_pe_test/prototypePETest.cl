@@ -670,7 +670,7 @@ __attribute__((num_compute_units(PE_NUM_MULT)))
 __kernel void peMult () 
 {
 	int id = get_compute_id(0);
-	//while (true) {
+	while (true) {
 		int pSum = 0;
 
 		//Wait for the operands to arrive
@@ -681,8 +681,8 @@ __kernel void peMult ()
 		t_operand __attribute__((register))  weightValues [COMPRESSION_VEC_SIZE];
 		uint1_t __attribute__((register)) activationValidMasks [COMPRESSION_VEC_SIZE];
 		uint1_t __attribute__((register)) weightValidMasks [COMPRESSION_VEC_SIZE];
-		unsigned short activationNum [COMPRESSION_VEC_SIZE];
-		unsigned short weightNum [COMPRESSION_VEC_SIZE];
+		uint6_t activationNum [COMPRESSION_VEC_SIZE];
+		uint6_t weightNum [COMPRESSION_VEC_SIZE];
 
 		// Load the input data
 		#pragma unroll
@@ -697,20 +697,20 @@ __kernel void peMult ()
 
 		//Calculate the mutual masks
 
-		uint1_t activationMutualMask[COMPRESSION_VEC_SIZE];
-		uint1_t weightMutualMask[COMPRESSION_VEC_SIZE];
+		uint1_t __attribute__((register)) activationMutualMask[COMPRESSION_VEC_SIZE];
+		uint1_t __attribute__((register)) weightMutualMask[COMPRESSION_VEC_SIZE];
 
 		#pragma unroll
-		for (unsigned char k=0; k<COMPRESSION_VEC_SIZE; k++) {
+		for (uint4_t k =0; k<COMPRESSION_VEC_SIZE; k++) {
 			activationMutualMask[k] = 0x0;
 			weightMutualMask[k] = 0x0;
 		}
 
 		// i is activation index, j is the weight index
 		#pragma unroll
-		for (unsigned char i=0; i<COMPRESSION_VEC_SIZE; i++) {
+		for (uint4_t i=0; i<COMPRESSION_VEC_SIZE; i++) {
 			#pragma unroll
-			for (unsigned char j=0; j<COMPRESSION_VEC_SIZE; j++) {
+			for (uint4_t j=0; j<COMPRESSION_VEC_SIZE; j++) {
 				uint1_t ijEqual = ( ( activationNum[i] == weightNum[j] ) 
 					&& ( activationValidMasks[i] == 0x1) && ( weightValidMasks[j] == 0x1) ) ?
 					0x1 : 0x0;
@@ -719,37 +719,65 @@ __kernel void peMult ()
 			}
 		}
 
-		unsigned char weightIndex = 0, activationIndex=0;
+//		#pragma unroll
+//		for (uint4_t j=0; j<COMPRESSION_VEC_SIZE; j++) {
+//			#pragma unroll
+//			for (uint4_t i=0; i<COMPRESSION_VEC_SIZE; i++) {
+//				uint1_t jiEqual = ( ( activationNum[i] == weightNum[j] ) 
+//					&& ( activationValidMasks[i] == 0x1) && ( weightValidMasks[j] == 0x1) ) ?
+//					0x1 : 0x0;
+				//activationMutualMask [i] = activationMutualMask [i] | ijEqual;
+//				weightMutualMask [j] = weightMutualMask [j] | jiEqual;
+//			}
+//		}
+
+		uint4_t weightIndex = 0, activationIndex=0;
 		//uint1_t proceed = 0x1;
+		//#pragma ii 3
 		while (true) {
 			//Search for the position of the leading 1 in the activation
 			uint1_t activationFound = 0x0;
+			uint1_t weightFound = 0x0;
+			//uint1_t found = 0x0;
 			//unsigned char localWeightIndex = weightIndex;
 			//unsigned char localActivationIndex = activationIndex;
 			#pragma unroll
-			for (unsigned char i=0; i<COMPRESSION_VEC_SIZE; i++) {
+			for (uint4_t i=0; i<COMPRESSION_VEC_SIZE; i++) {
 				//unsigned char tempIndex = activationIndex + i;  //wont' exceed 5 bit
 				//if ( (tempIndex < COMPRESSION_VEC_SIZE) && (activationFound == 0x0) ) {
-				if (( activationFound == 0x0) && (i >= activationIndex) && ( activationMutualMask[i] == 0x1)) {
+				if ( (activationFound == 0x0) && (i >= activationIndex) && ( activationMutualMask[i] == 0x1)) {
 					activationFound = 0x1;
 					//activationIndex = tempIndex;
 					activationIndex = i;
+					//break;
 				}
-			} // for
-
-			uint1_t weightFound = 0x0;
-			#pragma unroll
-			for (unsigned char i=0; i<COMPRESSION_VEC_SIZE; i++) {
-				//unsigned char tempIndex = weightIndex + i; //won't exceed 5 bit
-				//if ( (tempIndex < COMPRESSION_VEC_SIZE) && (weightFound == 0x0) ) {
-				if ( ( weightFound == 0x0) && (i >= weightIndex) && ( weightMutualMask[i] == 0x1) ) {
+				if ( (weightFound==0x0) && (i >= weightIndex) && ( weightMutualMask[i] == 0x1) ) {
 					weightFound = 0x1;
 					//weightIndex = tempIndex;
 					weightIndex = i;
+					//break;
 				}
+//				if ( (weightFound == 0x0) && (i >= weightIndex) && ( weightMutualMask[i] == 0x1) ) {
+//					weightFound = 0x1;
+//					//weightIndex = tempIndex;
+//					weightIndex = i;
+//				}
 			} // for
 
-			if (weightFound==0x1 && activationFound==0x1) {
+			//uint1_t weightFound = 0x0;
+//			#pragma unroll
+//			for (uint4_t i=0; i<COMPRESSION_VEC_SIZE; i++) {
+				//unsigned char tempIndex = weightIndex + i; //won't exceed 5 bit
+				//if ( (tempIndex < COMPRESSION_VEC_SIZE) && (weightFound == 0x0) ) {
+//				if ( (weightFound==0x0) & (i >= weightIndex) && ( weightMutualMask[i] == 0x1) ) {
+//					weightFound = 0x1;
+					//weightIndex = tempIndex;
+//					weightIndex = i;
+					//break;
+//				}
+//			} // for
+
+			if (activationFound==0x1) { //The number of founds is equal!
 				//Multiplication takes 2 cycles
 				pSum += activationValues[activationIndex] * weightValues[weightIndex];
 				activationIndex = activationIndex + 0x1;
@@ -761,5 +789,5 @@ __kernel void peMult ()
 		}
 
 		 write_channel_intel(channel_mult2DpEngineDispatcherPSum[id], pSum);
-	//}
+	}
 }

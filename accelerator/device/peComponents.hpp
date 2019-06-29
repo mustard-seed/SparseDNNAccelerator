@@ -10,17 +10,17 @@
 typedef struct __attribute__((packed)){
     t_operand nzValues [COMPRESSION_VEC_SIZE];
     uint1_t validMasks [COMPRESSION_VEC_SIZE];
-    unsigned short indices [COMPRESSION_VEC_SIZE];
+    uint6_t indices [COMPRESSION_VEC_SIZE];
 } t_vecUnpacked;
 
 typedef struct __attribute__((packed)){
     t_operand weightNzValues [COMPRESSION_VEC_SIZE];
     uint1_t weightValidMasks [COMPRESSION_VEC_SIZE];
-    unsigned short weightIndices [COMPRESSION_VEC_SIZE];
+    uint6_t weightIndices [COMPRESSION_VEC_SIZE];
 
     t_operand activationNzValues [COMPRESSION_VEC_SIZE];
     uint1_t activationValidMasks [COMPRESSION_VEC_SIZE];
-    unsigned short activationIndices [COMPRESSION_VEC_SIZE];
+    uint6_t activationIndices [COMPRESSION_VEC_SIZE];
 } t_vecMultData;
 
 typedef struct __attribute__((packed)) {
