@@ -157,8 +157,8 @@ int convertSignedFixedPointToAccumulator(
         unsigned char fracWidthFixedPointValue
         ) {
     //int temp = (int) ( fixedPointValue & WEIGHT_MASK);
-    int tempSignExtended = (int) (fixedPointValue);
-    int returnVal = ((unsigned int) tempSignExtended)
+    //int tempSignExtended = (int) (fixedPointValue);
+    int returnVal = ((unsigned int) fixedPointValue)
             << (unsigned char)(REG_FF_FRAC - fracWidthFixedPointValue);
     return returnVal;
 }

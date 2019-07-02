@@ -42,6 +42,17 @@ typedef struct __attribute((aligned(32))) __attribute__((packed)){
     unsigned short indices [COMPRESSION_VEC_SIZE];
 } t_vecUnpackedHost;
 
+#ifdef INTELFPGA_CL
+typedef struct  __attribute__((aligned(32))) __attribute__((packed)) {
+    short nzValue;
+    unsigned short indexInStreamingBlock;
+} t_spValueAndZCountUnpackedHost;
+#else
+typedef struct  __attribute__((aligned(32))) __attribute__((packed)) {
+    cl_short nzValue;
+    cl_ushort indexInStreamingBlock;
+} t_spValueAndZCountUnpackedHost;
+#endif
 
 #ifdef INTELFPGA_CL
 #include "ihc_apint.h"
@@ -56,6 +67,12 @@ typedef short t_value;
 #else
 typedef int12_t t_value;
 #endif
+
+typedef struct  __attribute__((packed)) {
+    t_operand nzValue;
+    uint6_t indexInStreamingBlock;
+    uint1_t isLast;
+} t_spValueAndZCountUnpacked;
 
 /*! t_tokenFillWeightCache
     Token used to command filling of the sparse weight cache
