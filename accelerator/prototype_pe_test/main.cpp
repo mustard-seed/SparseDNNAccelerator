@@ -48,9 +48,19 @@ std::vector<t_vecSpValueAndZCount, boost::alignment::aligned_allocator<t_vecSpVa
 t_aligned_compression_vector;
 
 typedef
+std::vector<t_spValueAndZCount, boost::alignment::aligned_allocator<t_spValueAndZCount, aocl_utils_cpp::AOCL_ALIGNMENT>>
+//std::vector<cl_short>
+t_aligned_compression_scalar_vector;
+
+typedef
 std::vector<t_vecUnpackedHost, boost::alignment::aligned_allocator<t_vecUnpackedHost, aocl_utils_cpp::AOCL_ALIGNMENT>>
 //std::vector<cl_short>
 t_aligned_compression_host_vector;
+
+typedef
+std::vector<t_spValueAndZCountUnpackedHost, boost::alignment::aligned_allocator<t_spValueAndZCountUnpackedHost, aocl_utils_cpp::AOCL_ALIGNMENT>>
+//std::vector<cl_short>
+t_aligned_compression_scalar_host_vector;
 
 typedef
 std::vector<t_pe_prototype_instruction,
@@ -94,10 +104,10 @@ protected:
     cl::Buffer bufferDrainInput;
     cl::Buffer bufferDrainOutput;
 
-    t_aligned_compression_vector inputActivationVector;
-    t_aligned_compression_host_vector outputActivationVector;
-    t_aligned_compression_vector inputWeightVector;
-    t_aligned_compression_host_vector outputWeightVector;
+    t_aligned_compression_scalar_vector inputActivationVector;
+    t_aligned_compression_scalar_host_vector outputActivationVector;
+    t_aligned_compression_scalar_vector inputWeightVector;
+    t_aligned_compression_scalar_host_vector outputWeightVector;
     aligned_short_vector inputBiasVector;
     aligned_short_vector outputBiasVector;
     aligned_short_vector inputDrainVector;
@@ -245,7 +255,7 @@ protected:
         bufferActivationInput = cl::Buffer (
                         clContext,
                         CL_MEM_READ_ONLY,
-                        MAX_DATA_LENGTH * sizeof(t_vecSpValueAndZCount),
+                        MAX_DATA_LENGTH * sizeof(t_spValueAndZCount),
                         NULL,
                         &status
                     );
@@ -254,7 +264,7 @@ protected:
         bufferActivationOutput = cl::Buffer (
                         clContext,
                         CL_MEM_WRITE_ONLY,
-                        MAX_DATA_LENGTH * sizeof(t_vecUnpackedHost),
+                        MAX_DATA_LENGTH * sizeof(t_spValueAndZCountUnpackedHost),
                         NULL,
                         &status
                     );
@@ -263,7 +273,7 @@ protected:
         bufferWeightInput = cl::Buffer (
                         clContext,
                         CL_MEM_READ_ONLY,
-                        MAX_DATA_LENGTH * sizeof(t_vecSpValueAndZCount),
+                        MAX_DATA_LENGTH * sizeof(t_spValueAndZCount),
                         NULL,
                         &status
                     );
@@ -272,7 +282,7 @@ protected:
         bufferWeightOutput = cl::Buffer (
                         clContext,
                         CL_MEM_WRITE_ONLY,
-                        MAX_DATA_LENGTH * sizeof(t_vecUnpackedHost),
+                        MAX_DATA_LENGTH * sizeof(t_spValueAndZCountUnpackedHost),
                         NULL,
                         &status
                     );
@@ -424,7 +434,7 @@ protected:
         kernelTestInterface.setArg(13, numOutputActivationBlocks); //numOutputActivationBlocks
         //Allocate space for the output activation vector
         for (int i=0; i<numOutputActivationBlocks; i++) {
-            t_vecUnpackedHost brick;
+            t_spValueAndZCountUnpackedHost brick;
             outputActivationVector.push_back(brick);
         }
 
@@ -435,7 +445,7 @@ protected:
         kernelTestInterface.setArg(16, numOutputWeightBlocks); //numOutputWeightBlocks
         //Allocate space for the output activation vector
         for (int i=0; i<numOutputWeightBlocks; i++) {
-            t_vecUnpackedHost brick;
+            t_spValueAndZCountUnpackedHost brick;
             outputWeightVector.push_back(brick);
         }
         kernelTestInterface.setArg(17, (cl_ushort) inputBiasVector.size()); //numInputBias
@@ -582,6 +592,23 @@ void compress_vector (
         t_aligned_compression_vector & compressedVector
         );
 
+/*!
+ * \brief compress_vector
+ * \details Convert a floating point vector to a fixed vector, and generates the compressed version
+ * \param encodingBlockSize
+ * \param inputVector
+ * \param fixedPointVector
+ * \param compressedVector
+ */
+void compress_vector (
+        std::vector<float> & inputVector,
+        unsigned int encodingBlockSize,
+        char intWidth,
+        char fracWidth,
+        std::vector<fixedPointNumber> & fixedPointVector,
+        t_aligned_compression_scalar_vector & compressedVector
+        );
+
 float dot_product_regular_vectors (
         std::vector <float> & inputVectorA,
         std::vector <float> & inputVectorB
@@ -590,6 +617,14 @@ float dot_product_regular_vectors (
 float dot_product_compressed_vectors (
         t_aligned_compression_vector & compressedVectorA,
         t_aligned_compression_vector & compressedVectorB,
+        unsigned int maxIndex,
+        char intWidth,
+        char fracWidth
+        );
+
+float dot_product_compressed_vectors (
+        t_aligned_compression_scalar_vector & compressedVectorA,
+        t_aligned_compression_scalar_vector & compressedVectorB,
         unsigned int maxIndex,
         char intWidth,
         char fracWidth
@@ -621,9 +656,9 @@ TEST(commpressionTest, compressionDotProduct) {
     int effectual_length = VECTOR_LENGTH;
 
     std::vector<fixedPointNumber> fpVectorA;
-    t_aligned_compression_vector compressedVectorA;;
+    t_aligned_compression_scalar_vector compressedVectorA;;
     std::vector<fixedPointNumber> fpVectorB;
-    t_aligned_compression_vector compressedVectorB;
+    t_aligned_compression_scalar_vector compressedVectorB;
 
     compress_vector(vectorA, ENCODING_LENGTH, INT_WIDTH, FRAC_WIDTH, fpVectorA, compressedVectorA);
     compress_vector(vectorB, ENCODING_LENGTH, INT_WIDTH, FRAC_WIDTH, fpVectorB, compressedVectorB);
@@ -656,283 +691,281 @@ TEST(commpressionTest, compressionDotProduct) {
 
 }
 
-//TEST_F (peTestFixture, testFixture) {
-//    launch(IDX,IDY,0,0, false);
-//    EXPECT_TRUE (COMPRESSION_VEC_SIZE == 4);
-//    EXPECT_TRUE(true);
-//}
+TEST_F (peTestFixture, testFixture) {
+    launch(IDX,IDY,0,0, false);
+    EXPECT_TRUE (COMPRESSION_VEC_SIZE == 4);
+    EXPECT_TRUE(true);
+}
 
-//TEST_F (peTestFixture, testBiasLoadingAndDrainage) {
-///* Test goal: Verify the correctness of the bias loading and result drainage capability
-// * Procedure: Load a bias into the PE, and read it back. Verify that the bias read back approximately mataches the bias loaded in. Consider the effect of
-// * different fixed-point width
-// *
-//*/
-//    EXPECT_TRUE (COMPRESSION_VEC_SIZE == 4);
+TEST_F (peTestFixture, testBiasLoadingAndDrainage) {
+/* Test goal: Verify the correctness of the bias loading and result drainage capability
+ * Procedure: Load a bias into the PE, and read it back. Verify that the bias read back approximately mataches the bias loaded in. Consider the effect of
+ * different fixed-point width
+ *
+*/
+    EXPECT_TRUE (COMPRESSION_VEC_SIZE == 4);
 
-//    cl_bool status;
+    cl_bool status;
 
-//    unsigned char fracIn = 6, fracOut = 8;
-//    int targetIDX = IDX, targetIDY = IDY;
-//    EXPECT_TRUE(PE_COLS > targetIDX);
-//    EXPECT_TRUE(PE_ROWS > targetIDY);
+    unsigned char fracIn = 6, fracOut = 8;
+    int targetIDX = IDX, targetIDY = IDY;
+    EXPECT_TRUE(PE_COLS > targetIDX);
+    EXPECT_TRUE(PE_ROWS > targetIDY);
 
-//    //First prepare the bias;
-//    float biasFloat = 3.1415926;
+    //First prepare the bias;
+    float biasFloat = 3.1415926;
 
-//    //Then convert the bias into a fixed point number;
-//    fixedPointNumber biasFPInput (biasFloat, fracIn, WEIGHT_BITWIDTH);
+    //Then convert the bias into a fixed point number;
+    fixedPointNumber biasFPInput (biasFloat, fracIn, WEIGHT_BITWIDTH - fracIn - 1);
 
-//    //Compute the expected output;
-//    fixedPointNumber biasFPExpectedOutput (biasFloat, fracOut, WEIGHT_BITWIDTH - fracOut - 1);
+    //Compute the expected output;
+    fixedPointNumber biasFPExpectedOutput (biasFloat, fracOut, WEIGHT_BITWIDTH - fracOut - 1);
 
-//    //Prepare the input buffer
-//    inputBiasVector.push_back((short) biasFPInput.getBits());
+    //Prepare the input buffer
+    inputBiasVector.push_back((short) biasFPInput.getBits());
 
-//    //Prepare the buffer to receive the output
+    //Prepare the buffer to receive the output
 
 
-//    //Prepare the instruction
+    //Prepare the instruction
 
-//    t_pe_prototype_instruction loadBiasInstruction =
-//    {.transmissionStartIndex=0,
-//     .transmissionEndIndex=0,
-//     .selectStartIndex=0,
-//     .maxIDX = PE_COLS - 1,
-//     .maxIDY = PE_ROWS - 1,
-//     .mode = PE_MODE_LOAD_BIAS,
-//     .fracW = 0,
-//     .fracDin = fracIn,
-//     .fracDout = 0};
-//     inputInstructionVector.push_back(loadBiasInstruction);
+    t_pe_prototype_instruction loadBiasInstruction =
+    {
+     .activationSelectStartIndex=0,
+     .maxIDX = PE_COLS - 1,
+     .maxIDY = PE_ROWS - 1,
+     .mode = PE_MODE_LOAD_BIAS,
+     .fracW = 0,
+     .fracDin = fracIn,
+     .fracDout = 0};
+     inputInstructionVector.push_back(loadBiasInstruction);
 
-//    t_pe_prototype_instruction drainInstruction =
-//    {.transmissionStartIndex=0,
-//     .transmissionEndIndex=0,
-//     .selectStartIndex=0,
-//     .maxIDX = PE_COLS - 1,
-//     .maxIDY = PE_ROWS - 1,
-//     .mode = PE_MODE_DRAIN_PSUM,
-//     .fracW = 0,
-//     .fracDin = 0,
-//     .fracDout = fracOut};
-//    inputInstructionVector.push_back(drainInstruction);
+    t_pe_prototype_instruction drainInstruction =
+    {
+     .activationSelectStartIndex=0,
+     .maxIDX = PE_COLS - 1,
+     .maxIDY = PE_ROWS - 1,
+     .mode = PE_MODE_DRAIN_PSUM,
+     .fracW = 0,
+     .fracDin = 0,
+     .fracDout = fracOut};
+    inputInstructionVector.push_back(drainInstruction);
 
-//    launch(targetIDX, targetIDY, 0, 0);
+    launch(targetIDX, targetIDY, 0, 0);
 
-//    //Compare the result
-//    short actualOutputFPBias = outputDrainVector.at(0);
-//    EXPECT_TRUE(
-//         (actualOutputFPBias & WEIGHT_MASK)
-//         == ((short) (biasFPExpectedOutput.getBits() & WEIGHT_MASK) ));
+    //Compare the result
+    short actualOutputFPBias = outputDrainVector.at(0);
+    EXPECT_TRUE(
+         (actualOutputFPBias & WEIGHT_MASK)
+         == ((short) (biasFPExpectedOutput.getBits() & WEIGHT_MASK) ))
+            <<"Expected output: "<<std::bitset<WEIGHT_BITWIDTH>(biasFPExpectedOutput.getBits() & WEIGHT_MASK)<<std::endl
+           <<"Actual output: "<<std::bitset<WEIGHT_BITWIDTH>(actualOutputFPBias & WEIGHT_MASK)<<std::endl;
 
-//}
+}
 
-//TEST_F (peTestFixture, testElementWiseAdditionAndDrainage) {
-///* Test goal: Verify the correctness of the bias loading, elementwise esult drainage capability
-// * Procedure: Load a bias into the PE, and read it back. Verify that the bias read back approximately mataches the bias loaded in. Consider the effect of
-// * different fixed-point width
-// *
-//*/
-//    EXPECT_TRUE (COMPRESSION_VEC_SIZE == 4);
+TEST_F (peTestFixture, testElementWiseAdditionAndDrainage) {
+/* Test goal: Verify the correctness of the bias loading, elementwise esult drainage capability
+ * Procedure: Load a bias into the PE, and read it back. Verify that the bias read back approximately mataches the bias loaded in. Consider the effect of
+ * different fixed-point width
+ *
+*/
+    EXPECT_TRUE (COMPRESSION_VEC_SIZE == 4);
 
-//    //This test won't pass if fracIn > fractOut
-//    char fracIn = 8, fracOut = 6;
-//    char intWidthIn = WEIGHT_BITWIDTH - fracIn - 1;
-//    int targetIDX = IDX, targetIDY = IDY;
+    //This test won't pass if fracIn > fractOut
+    char fracIn = 8, fracOut = 6;
+    char intWidthIn = WEIGHT_BITWIDTH - fracIn - 1;
+    int targetIDX = IDX, targetIDY = IDY;
 
-//    unsigned int numActivations = 199;
-//    unsigned short transmissionStartIndex = 0;
-//    unsigned short transmissionEndIndex = 198;
-//    unsigned short selectStartIndex = 19;
+    unsigned int numActivations = 199;
+    unsigned short transmissionStartIndex = 0;
+    //unsigned short transmissionEndIndex = 198;
+    unsigned short selectStartIndex = 19;
 
-//    EXPECT_TRUE(PE_COLS > targetIDX);
-//    EXPECT_TRUE(PE_ROWS > targetIDY);
+    EXPECT_TRUE(PE_COLS > targetIDX);
+    EXPECT_TRUE(PE_ROWS > targetIDY);
 
-//    //First prepare the bias;
-//    float biasFloat = 3.1415926;
+    //First prepare the bias;
+    float biasFloat = 3.1415926;
 
-//    //Then convert the bias into a fixed point number;
-//    fixedPointNumber biasFPInput (biasFloat, fracIn, WEIGHT_BITWIDTH);
+    //Then convert the bias into a fixed point number;
+    fixedPointNumber biasFPInput (biasFloat, fracIn, WEIGHT_BITWIDTH);
 
-//    // Generate a block of activations
-//    std::vector<float> activationRealInput = initialize_vector(
-//                BERN_SEED,
-//                numActivations,
-//                BERN_P,
-//                -3.14,
-//                3.14
-//                );
+    // Generate a block of activations
+    std::vector<float> activationRealInput = initialize_vector(
+                BERN_SEED,
+                numActivations,
+                BERN_P,
+                -3.14,
+                3.14
+                );
 
-//    //Compute the expected output;
-//    fixedPointNumber expectedOutputFP (biasFloat + activationRealInput.at(targetIDY + selectStartIndex - transmissionStartIndex), fracOut, WEIGHT_BITWIDTH - fracOut - 1);
+    //Compute the expected output;
+    fixedPointNumber expectedOutputFP (biasFloat + activationRealInput.at(targetIDY + selectStartIndex - transmissionStartIndex), fracOut, WEIGHT_BITWIDTH - fracOut - 1);
 
-//    //Prepare the input buffers
-//    inputBiasVector.push_back((short) biasFPInput.getBits());
-//    // Compress the activaion block
-//    std::vector<fixedPointNumber> fpVector;
-//    compress_vector (
-//                activationRealInput,
-//                ENCODING_LENGTH,
-//                intWidthIn,
-//                fracIn,
-//                fpVector,
-//                inputActivationVector
-//                );
+    //Prepare the input buffers
+    inputBiasVector.push_back((short) biasFPInput.getBits());
+    // Compress the activaion block
+    std::vector<fixedPointNumber> fpVector;
+    compress_vector (
+                activationRealInput,
+                ENCODING_LENGTH,
+                intWidthIn,
+                fracIn,
+                fpVector,
+                inputActivationVector
+                );
 
-//    //Prepare the instruction
+    //Prepare the instruction
 
-//    t_pe_prototype_instruction loadBiasInstruction =
-//    {.transmissionStartIndex=0,
-//     .transmissionEndIndex=0,
-//     .selectStartIndex=0,
-//     .maxIDX = PE_COLS - 1,
-//     .maxIDY = PE_ROWS - 1,
-//     .mode = PE_MODE_LOAD_BIAS,
-//     .fracW = 0,
-//     .fracDin = fracIn,
-//     .fracDout = 0};
-//     inputInstructionVector.push_back(loadBiasInstruction);
+    t_pe_prototype_instruction loadBiasInstruction =
+    {
+     .activationSelectStartIndex=selectStartIndex - transmissionStartIndex,
+     .maxIDX = PE_COLS - 1,
+     .maxIDY = PE_ROWS - 1,
+     .mode = PE_MODE_LOAD_BIAS,
+     .fracW = 0,
+     .fracDin = fracIn,
+     .fracDout = 0};
+     inputInstructionVector.push_back(loadBiasInstruction);
 
-//     t_pe_prototype_instruction eltWiseAddInstruction =
-//     {.transmissionStartIndex=transmissionStartIndex,
-//      .transmissionEndIndex=transmissionEndIndex,
-//      .selectStartIndex=selectStartIndex,
-//      .maxIDX = PE_COLS - 1,
-//      .maxIDY = PE_ROWS - 1,
-//      .mode = PE_MODE_ELTWISE_ADD,
-//      .fracW = 0,
-//      .fracDin = fracIn,
-//      .fracDout = 0};
-//      inputInstructionVector.push_back(eltWiseAddInstruction);
+     t_pe_prototype_instruction eltWiseAddInstruction =
+     {
+      .activationSelectStartIndex=selectStartIndex - transmissionStartIndex,
+      .maxIDX = PE_COLS - 1,
+      .maxIDY = PE_ROWS - 1,
+      .mode = PE_MODE_ELTWISE_ADD,
+      .fracW = 0,
+      .fracDin = fracIn,
+      .fracDout = 0};
+      inputInstructionVector.push_back(eltWiseAddInstruction);
 
-//    t_pe_prototype_instruction drainInstruction =
-//    {.transmissionStartIndex=0,
-//     .transmissionEndIndex=0,
-//     .selectStartIndex=0,
-//     .maxIDX = PE_COLS - 1,
-//     .maxIDY = PE_ROWS - 1,
-//     .mode = PE_MODE_DRAIN_PSUM,
-//     .fracW = 0,
-//     .fracDin = 0,
-//     .fracDout = fracOut};
-//    inputInstructionVector.push_back(drainInstruction);
+    t_pe_prototype_instruction drainInstruction =
+    {
+     .activationSelectStartIndex=0,
+     .maxIDX = PE_COLS - 1,
+     .maxIDY = PE_ROWS - 1,
+     .mode = PE_MODE_DRAIN_PSUM,
+     .fracW = 0,
+     .fracDin = 0,
+     .fracDout = fracOut};
+    inputInstructionVector.push_back(drainInstruction);
 
-//    launch(targetIDX, targetIDY, transmissionStartIndex, 0);
+    launch(targetIDX, targetIDY, transmissionStartIndex, 0);
 
-//    //Compare the result
-//    short actualOutputFPBias = outputDrainVector.at(0);
-//    EXPECT_TRUE(
-//         (actualOutputFPBias & WEIGHT_MASK)
-//         == ((short) (expectedOutputFP.getBits() & WEIGHT_MASK) ))
-//         << "Actual output: "<<std::bitset<WEIGHT_BITWIDTH>(actualOutputFPBias & WEIGHT_MASK)
-//         <<std::endl<<"Expected output: "<<std::bitset<WEIGHT_BITWIDTH>((expectedOutputFP.getBits()) & WEIGHT_MASK)<<std::endl;
+    //Compare the result
+    short actualOutputFPBias = outputDrainVector.at(0);
+    EXPECT_TRUE(
+         (actualOutputFPBias & WEIGHT_MASK)
+         == ((short) (expectedOutputFP.getBits() & WEIGHT_MASK) ))
+         << "Target index "<<targetIDY + selectStartIndex - transmissionStartIndex<<std::endl
+         << "fracDin, fracDout: "<<(int) fracIn<<" "<<(int) fracOut<<std::endl
+         << "Bias: "<<std::bitset<WEIGHT_BITWIDTH>(biasFPInput.getBits() & WEIGHT_MASK)<<std::endl
+         << "Add element: "<<std::bitset<WEIGHT_BITWIDTH>( fpVector[targetIDY + selectStartIndex - transmissionStartIndex].getBits())<<std::endl
+         << "Actual output: "<<std::bitset<WEIGHT_BITWIDTH>(actualOutputFPBias & WEIGHT_MASK)
+         <<std::endl<<"Expected output: "<<std::bitset<WEIGHT_BITWIDTH>((expectedOutputFP.getBits()) & WEIGHT_MASK)<<std::endl;
 
-//}
+}
 
-//TEST_F (peTestFixture, testElementWiseCompareAndDrainage) {
-///* Test goal: Verify the correctness of the bias loading, elementwise esult drainage capability
-// * Procedure: Load a bias into the PE, and read it back. Verify that the bias read back approximately mataches the bias loaded in. Consider the effect of
-// * different fixed-point width
-// *
-//*/
-//    EXPECT_TRUE (COMPRESSION_VEC_SIZE == 4);
+TEST_F (peTestFixture, testElementWiseCompareAndDrainage) {
+/* Test goal: Verify the correctness of the bias loading, elementwise esult drainage capability
+ * Procedure: Load a bias into the PE, and read it back. Verify that the bias read back approximately mataches the bias loaded in. Consider the effect of
+ * different fixed-point width
+ *
+*/
+    EXPECT_TRUE (COMPRESSION_VEC_SIZE == 4);
 
-//    //This test won't pass if fracIn > fractOut
-//    char fracIn = 8, fracOut = 6;
-//    char intWidthIn = WEIGHT_BITWIDTH - fracIn - 1;
-//    int targetIDX = IDX, targetIDY = IDY;
+    //This test won't pass if fracIn > fractOut
+    char fracIn = 8, fracOut = 6;
+    char intWidthIn = WEIGHT_BITWIDTH - fracIn - 1;
+    int targetIDX = IDX, targetIDY = IDY;
 
-//    unsigned int numActivations = 199;
-//    unsigned short transmissionStartIndex = 0;
-//    unsigned short transmissionEndIndex = 198;
-//    unsigned short selectStartIndex = 19;
+    unsigned int numActivations = 199;
+    unsigned short transmissionStartIndex = 0;
+    unsigned short transmissionEndIndex = 198;
+    unsigned short selectStartIndex = 19;
 
-//    EXPECT_TRUE(PE_COLS > targetIDX);
-//    EXPECT_TRUE(PE_ROWS > targetIDY);
+    EXPECT_TRUE(PE_COLS > targetIDX);
+    EXPECT_TRUE(PE_ROWS > targetIDY);
 
-//    //First prepare the bias;
-//    float biasFloat = 3.1415926;
+    //First prepare the bias;
+    float biasFloat = 3.1415926;
 
-//    //Then convert the bias into a fixed point number;
-//    fixedPointNumber biasFPInput (biasFloat, fracIn, WEIGHT_BITWIDTH);
+    //Then convert the bias into a fixed point number;
+    fixedPointNumber biasFPInput (biasFloat, fracIn, WEIGHT_BITWIDTH);
 
-//    // Generate a block of activations
-//    std::vector<float> activationRealInput = initialize_vector(
-//                BERN_SEED,
-//                numActivations,
-//                BERN_P,
-//                -3.14,
-//                3.14
-//                );
+    // Generate a block of activations
+    std::vector<float> activationRealInput = initialize_vector(
+                BERN_SEED,
+                numActivations,
+                BERN_P,
+                -3.14,
+                3.14
+                );
 
-//    //Compute the expected output;
-//    float expectedResultReal = biasFloat > activationRealInput.at(targetIDY + selectStartIndex - transmissionStartIndex) ?
-//                biasFloat : activationRealInput.at(targetIDY + selectStartIndex - transmissionStartIndex);
-//    fixedPointNumber expectedOutputFP (expectedResultReal, fracOut, WEIGHT_BITWIDTH - fracOut - 1);
+    //Compute the expected output;
+    float expectedResultReal = biasFloat > activationRealInput.at(targetIDY + selectStartIndex - transmissionStartIndex) ?
+                biasFloat : activationRealInput.at(targetIDY + selectStartIndex - transmissionStartIndex);
+    fixedPointNumber expectedOutputFP (expectedResultReal, fracOut, WEIGHT_BITWIDTH - fracOut - 1);
 
-//    //Prepare the input buffers
-//    inputBiasVector.push_back((short) biasFPInput.getBits());
-//    // Compress the activaion block
-//    std::vector<fixedPointNumber> fpVector;
-//    compress_vector (
-//                activationRealInput,
-//                ENCODING_LENGTH,
-//                intWidthIn,
-//                fracIn,
-//                fpVector,
-//                inputActivationVector
-//                );
+    //Prepare the input buffers
+    inputBiasVector.push_back((short) biasFPInput.getBits());
+    // Compress the activaion block
+    std::vector<fixedPointNumber> fpVector;
+    compress_vector (
+                activationRealInput,
+                ENCODING_LENGTH,
+                intWidthIn,
+                fracIn,
+                fpVector,
+                inputActivationVector
+                );
 
-//    //Prepare the instruction
+    //Prepare the instruction
 
-//    t_pe_prototype_instruction loadBiasInstruction =
-//    {.transmissionStartIndex=0,
-//     .transmissionEndIndex=0,
-//     .selectStartIndex=0,
-//     .maxIDX = PE_COLS - 1,
-//     .maxIDY = PE_ROWS - 1,
-//     .mode = PE_MODE_LOAD_BIAS,
-//     .fracW = 0,
-//     .fracDin = fracIn,
-//     .fracDout = 0};
-//     inputInstructionVector.push_back(loadBiasInstruction);
+    t_pe_prototype_instruction loadBiasInstruction =
+    {
+     .activationSelectStartIndex=0,
+     .maxIDX = PE_COLS - 1,
+     .maxIDY = PE_ROWS - 1,
+     .mode = PE_MODE_LOAD_BIAS,
+     .fracW = 0,
+     .fracDin = fracIn,
+     .fracDout = 0};
+     inputInstructionVector.push_back(loadBiasInstruction);
 
-//     t_pe_prototype_instruction maxPoolInstruction =
-//     {.transmissionStartIndex=transmissionStartIndex,
-//      .transmissionEndIndex=transmissionEndIndex,
-//      .selectStartIndex=selectStartIndex,
-//      .maxIDX = PE_COLS - 1,
-//      .maxIDY = PE_ROWS - 1,
-//      .mode = PE_MODE_MAX_POOL,
-//      .fracW = 0,
-//      .fracDin = fracIn,
-//      .fracDout = 0};
-//      inputInstructionVector.push_back(maxPoolInstruction);
+     t_pe_prototype_instruction maxPoolInstruction =
+     {
+      .activationSelectStartIndex=selectStartIndex,
+      .maxIDX = PE_COLS - 1,
+      .maxIDY = PE_ROWS - 1,
+      .mode = PE_MODE_MAX_POOL,
+      .fracW = 0,
+      .fracDin = fracIn,
+      .fracDout = 0};
+      inputInstructionVector.push_back(maxPoolInstruction);
 
-//    t_pe_prototype_instruction drainInstruction =
-//    {.transmissionStartIndex=0,
-//     .transmissionEndIndex=0,
-//     .selectStartIndex=0,
-//     .maxIDX = PE_COLS - 1,
-//     .maxIDY = PE_ROWS - 1,
-//     .mode = PE_MODE_DRAIN_PSUM,
-//     .fracW = 0,
-//     .fracDin = 0,
-//     .fracDout = fracOut};
-//    inputInstructionVector.push_back(drainInstruction);
+    t_pe_prototype_instruction drainInstruction =
+    {
+     .activationSelectStartIndex=0,
+     .maxIDX = PE_COLS - 1,
+     .maxIDY = PE_ROWS - 1,
+     .mode = PE_MODE_DRAIN_PSUM,
+     .fracW = 0,
+     .fracDin = 0,
+     .fracDout = fracOut};
+    inputInstructionVector.push_back(drainInstruction);
 
-//    launch(targetIDX, targetIDY, transmissionStartIndex, 0);
+    launch(targetIDX, targetIDY, transmissionStartIndex, 0);
 
-//    //Compare the result
-//    short actualOutputFPBias = outputDrainVector.at(0);
-//    EXPECT_TRUE(
-//         (actualOutputFPBias & WEIGHT_MASK)
-//         == ((short) (expectedOutputFP.getBits() & WEIGHT_MASK) ))
-//         << "Actual output: "<<std::bitset<WEIGHT_BITWIDTH>(actualOutputFPBias & WEIGHT_MASK)
-//         <<std::endl<<"Expected output: "<<std::bitset<WEIGHT_BITWIDTH>((expectedOutputFP.getBits()) & WEIGHT_MASK)<<std::endl;
+    //Compare the result
+    short actualOutputFPBias = outputDrainVector.at(0);
+    EXPECT_TRUE(
+         (actualOutputFPBias & WEIGHT_MASK)
+         == ((short) (expectedOutputFP.getBits() & WEIGHT_MASK) ))
+         << "Actual output: "<<std::bitset<WEIGHT_BITWIDTH>(actualOutputFPBias & WEIGHT_MASK)
+         <<std::endl<<"Expected output: "<<std::bitset<WEIGHT_BITWIDTH>((expectedOutputFP.getBits()) & WEIGHT_MASK)<<std::endl;
 
-//}
+}
 
 TEST_F (peTestFixture, testLoadBiasDotProductAndDrainage) {
 /* Test goal: Verify the correctness of the bias loading, dot product and drainage capability
@@ -1014,9 +1047,8 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainage) {
     //Prepare the instruction
 
     t_pe_prototype_instruction loadBiasInstruction =
-    {.transmissionStartIndex=0,
-     .transmissionEndIndex=0,
-     .selectStartIndex=0,
+    {
+     .activationSelectStartIndex=0,
      .maxIDX = PE_COLS - 1,
      .maxIDY = PE_ROWS - 1,
      .mode = PE_MODE_LOAD_BIAS,
@@ -1026,9 +1058,8 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainage) {
      inputInstructionVector.push_back(loadBiasInstruction);
 
      t_pe_prototype_instruction dotProductInstruction =
-     {.transmissionStartIndex=transmissionStartIndex,
-      .transmissionEndIndex=transmissionEndIndex,
-      .selectStartIndex=selectStartIndex,
+     {
+      .activationSelectStartIndex=selectStartIndex,
       .maxIDX = PE_COLS - 1,
       .maxIDY = PE_ROWS - 1,
       .mode = PE_MODE_DOT_PRODUCT,
@@ -1038,9 +1069,8 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainage) {
       inputInstructionVector.push_back(dotProductInstruction);
 
     t_pe_prototype_instruction drainInstruction =
-    {.transmissionStartIndex=0,
-     .transmissionEndIndex=0,
-     .selectStartIndex=0,
+    {
+     .activationSelectStartIndex=0,
      .maxIDX = PE_COLS - 1,
      .maxIDY = PE_ROWS - 1,
      .mode = PE_MODE_DRAIN_PSUM,
@@ -1137,6 +1167,44 @@ void compress_vector (std::vector<float> &inputVector
             compressedVector.push_back(compressBlock);
             iCompressedVector++;
             iCompressBlock=0;
+        }
+    }
+}
+
+void compress_vector (
+        std::vector<float> & inputVector,
+        unsigned int encodingBlockSize,
+        char intWidth,
+        char fracWidth,
+        std::vector<fixedPointNumber> & fixedPointVector,
+        t_aligned_compression_scalar_vector & compressedVector
+        ) {
+    auto denseVectorSize = inputVector.size();
+    //t_vecSpValueAndZCount compressBlock = {.vec={0,0,0,0}};
+    for (unsigned int iFullLengthVector=0, zOffset=0;
+         iFullLengthVector < denseVectorSize;
+         iFullLengthVector++) {
+        float origValue = inputVector.at(iFullLengthVector);
+
+        //Float to fixed conversion
+        fixedPointNumber fpValue(origValue, fracWidth, intWidth);
+        fixedPointVector.push_back(fpValue);
+
+        //Encoding
+        if (std::abs(origValue) > EPSILON
+                || iFullLengthVector % encodingBlockSize == (encodingBlockSize - 1)
+                || iFullLengthVector == ((unsigned int) denseVectorSize - 1)
+                || zOffset == ( (1 << WEIGHT_ZCOUNT_BITWIDTH) - 1)) {
+            int value = fpValue.getBits();
+            //Generate the encoded value: valid bit, zCount, and the fixed-point value
+            t_spValueAndZCount shortValue =
+               ( (zOffset << WEIGHT_ZCOUNT_BITOFFSET) & WEIGHT_ZCOUNT_MASK )
+               | (value & fpValue.getMask());
+            compressedVector.push_back(shortValue);
+            zOffset=0;
+        }
+        else {
+            zOffset++;
         }
     }
 }
@@ -1270,3 +1338,52 @@ float dot_product_compressed_vectors (t_aligned_compression_vector &compressedVe
     return result;
 }
 
+float dot_product_compressed_vectors (
+        t_aligned_compression_scalar_vector & compressedVectorA,
+        t_aligned_compression_scalar_vector & compressedVectorB,
+        unsigned int maxIndex,
+        char intWidth,
+        char fracWidth
+        ) {
+    //Trackers of the head and tail of each window
+
+    unsigned int indexVectorA=0, indexVectorB=0;
+    auto iterVectorA = compressedVectorA.begin();
+    auto iterVectorB = compressedVectorB.begin();
+    float result = 0.0f;
+    t_spValueAndZCount compressionBlockA, compressionBlockB;
+
+    while (indexVectorA < maxIndex && indexVectorB < maxIndex) {
+        bool readA = false, readB = false;
+        if (indexVectorA <= indexVectorB) {
+            compressionBlockA =  (*iterVectorA);
+            readA = true;
+        }
+        if (indexVectorB <= indexVectorA) {
+            compressionBlockB =  (*iterVectorB);
+            readB = true;
+        }
+
+        if (readA) {
+            indexVectorA += (((compressionBlockA & WEIGHT_ZCOUNT_MASK) >> WEIGHT_ZCOUNT_BITOFFSET) + 1);
+            iterVectorA++;
+        }
+        if (readB) {
+            indexVectorB += (((compressionBlockB & WEIGHT_ZCOUNT_MASK) >> WEIGHT_ZCOUNT_BITOFFSET) + 1);
+            iterVectorB++;
+        }
+
+        if (indexVectorA == indexVectorB) {
+            unsigned int bitsA = compressionBlockA & WEIGHT_MASK;
+            fixedPointNumber fpA((int) bitsA, fracWidth, intWidth);
+            float floatA = fpA.convert2Float();
+
+             unsigned int bitsB = compressionBlockB & WEIGHT_MASK;
+            fixedPointNumber fpB((int) bitsB, fracWidth, intWidth);
+            float floatB = fpB.convert2Float();
+            result += floatA * floatB;
+        }
+    }
+
+    return result;
+}

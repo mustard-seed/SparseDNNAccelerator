@@ -104,13 +104,13 @@ bool findMatchInUnpackedBlock (
         t_operand *pValueHolder
         );
 
-int convertSignedFixedPointToAccumulator(
+t_accumulator convertSignedFixedPointToAccumulator(
         t_operand fixedPointValue,
         unsigned char fracWidthFixedPointValue
         );
 
 t_operand convertAccumulatorToSignedFixedPoint(
-		int accumulator,
+		t_accumulator accumulator,
 		unsigned char fracWidthFixedPointValue
 	);
 

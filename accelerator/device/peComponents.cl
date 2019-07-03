@@ -152,31 +152,31 @@ bool findMatchInUnpackedBlock (
 
 }
 
-int convertSignedFixedPointToAccumulator(
+t_accumulator convertSignedFixedPointToAccumulator(
         t_operand fixedPointValue,
         unsigned char fracWidthFixedPointValue
         ) {
     //int temp = (int) ( fixedPointValue & WEIGHT_MASK);
     //int tempSignExtended = (int) (fixedPointValue);
-    int returnVal = ((unsigned int) fixedPointValue)
+    t_accumulator returnVal = ((t_accumulator) fixedPointValue)
             << (unsigned char)(REG_FF_FRAC - fracWidthFixedPointValue);
     return returnVal;
 }
 
 t_operand convertAccumulatorToSignedFixedPoint(
-		int accumulator,
+		t_accumulator accumulator,
 		unsigned char fracWidthFixedPointValue
 	) {
 	//See if sign extension is required
-	int signExtensionMask = (accumulator >= 0) ?
+	t_accumulator signExtensionMask = (accumulator >= 0) ?
 		0x0 :
 		~(0xFFFFFFFF >> ( (unsigned char)( REG_FF_FRAC - fracWidthFixedPointValue)) );
 
 	//Match the binary point
-	int fpValueWide = signExtensionMask | ( accumulator >> (unsigned char)( (unsigned char) REG_FF_FRAC - fracWidthFixedPointValue) );
+	t_accumulator fpValueWide = signExtensionMask | ( accumulator >> (unsigned char)( (unsigned char) REG_FF_FRAC - fracWidthFixedPointValue) );
 
 	//Clip from above and below
-	int fpValueClipped;
+	t_accumulator fpValueClipped;
 	if (fpValueWide > WEIGHT_MAX) {
 		fpValueClipped = WEIGHT_MAX;
 	}
@@ -188,5 +188,5 @@ t_operand convertAccumulatorToSignedFixedPoint(
 	}
 
 	//Finally, return the value
-	return ((t_operand) (fpValueClipped & WEIGHT_MASK));
+	return (fpValueClipped & WEIGHT_MASK);
 }

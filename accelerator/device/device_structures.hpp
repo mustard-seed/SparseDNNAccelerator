@@ -61,6 +61,7 @@ typedef uint12_t t_weight;
 
 //Needs to be signed!!!!
 typedef int12_t t_operand;
+typedef int t_accumulator;
 
 #ifdef PE_PROTOTYPE_TEST
 typedef short t_value;
@@ -69,9 +70,9 @@ typedef int12_t t_value;
 #endif
 
 typedef struct  __attribute__((packed)) {
-    t_operand nzValue;
-    uint6_t indexInStreamingBlock;
     uint1_t isLast;
+    uint6_t indexInStreamingBlock;
+    t_operand nzValue;
 } t_spValueAndZCountUnpacked;
 
 /*! t_tokenFillWeightCache

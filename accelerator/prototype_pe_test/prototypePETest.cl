@@ -22,7 +22,7 @@ typedef struct __attribute__((packed)) {
 
 typedef struct __attribute__((packed)) {
 	// PEs with id that satisfies 0<=idx<=maxIDX and -<=idy<=maxIDY will participate 
-  	uint1_t forwardEnable;
+  	uint2_t forwardEnable;  //uint1_t can't compile under emulation mode
 } t_weightForwarderInstruction;
 
 typedef struct __attribute__((packed)) {
@@ -59,14 +59,14 @@ channel t_pSumManagerInstruction channel_pSumManagerInstructionInput __attribute
 channel t_activationForwarderInstruction channel_activationForwarderInstructionInput __attribute__((depth(0)));
 channel t_weightForwarderInstruction channel_weightForwarderInstructionInput __attribute__((depth(0)));
 
-channel t_spValueAndZCountUnpacked channel_peWeightInput __attribute__((depth(0)));
-channel t_spValueAndZCountUnpacked channel_peActivationInput __attribute__((depth(0)));
+//channel t_spValueAndZCountUnpacked channel_peWeightInput __attribute__((depth(0)));
+//channel t_spValueAndZCountUnpacked channel_peActivationInput __attribute__((depth(0)));
 
-channel t_spValueAndZCountUnpacked channel_dpWeightInput __attribute__((depth(0)));
-channel t_spValueAndZCountUnpacked channel_dpActivationInput __attribute__((depth(0)));
+channel t_spValueAndZCountUnpacked channel_dpWeightInput __attribute__((depth(PE_VEC_FIFO_SIZE)));
+channel t_spValueAndZCountUnpacked channel_dpActivationInput __attribute__((depth(PE_VEC_FIFO_SIZE)));
 channel t_operand channel_pSumManagerActivationInput __attribute__((depth(0)));
 channel t_macOperands channel_macOperandsInput __attribute__((depth(0)));
-channel int channel_pSumManagerMacInput __attribute__((depth(0)));
+channel t_accumulator channel_pSumManagerMacInput __attribute__((depth(0)));
 
 channel short channel_peDrainOutput __attribute__((depth(0)));
 
@@ -146,6 +146,7 @@ __kernel void kernelInstructionTransport (
 		pSumManagerInstruction.fracDin = instruction.fracDin;
 		pSumManagerInstruction.fracDout = instruction.fracDout;
 		pSumManagerInstruction.enable = forwardEnable;
+		pSumManagerInstruction.mode = instruction.mode;
 		write_channel_intel (channel_pSumManagerInstructionInput, pSumManagerInstruction);
 
 		if (instruction.mode == PE_MODE_DOT_PRODUCT ||
@@ -192,6 +193,8 @@ __kernel void kernelBiasTransport (
 	//}
 }
 
+
+/*
 __attribute__((task))
 __attribute__((max_global_work_dim(0)))
 __attribute__ ((autorun))
@@ -215,6 +218,7 @@ __kernel void kernelActivationTransport (
 		}
 	//}
 }
+*/
 
 __attribute__((task))
 __attribute__((max_global_work_dim(0)))
@@ -285,7 +289,7 @@ __kernel void kernelActivationForwarder (
 
 		while (proceed == 0x1) {
 			t_spValueAndZCountUnpacked activationBlock = 
-				read_channel_intel(channel_peActivationInput);
+				read_channel_intel(channel_activationInput);
 			proceed = (activationBlock.isLast == 0x0) ?
 				0x1 : 0x0;
 
@@ -302,6 +306,10 @@ __kernel void kernelActivationForwarder (
 					activationIndexTracker += 64;
 				}
 			} // if forwardEnable
+
+			if ( (0x1FF & idy) < (PE_NUM_Y - 1) ) {
+				write_channel_intel(channel_activationOutput, activationBlock);
+			}
 		} // while
 
 		if (instruction.mode == PE_MODE_ELTWISE_ADD || instruction.mode == PE_MODE_LOAD_ACTIVATION
@@ -312,8 +320,7 @@ __kernel void kernelActivationForwarder (
 
 }
 
-
-
+/*
 __attribute__((task))
 __attribute__((max_global_work_dim(0)))
 __attribute__ ((autorun))
@@ -337,6 +344,7 @@ __kernel void kernelWeightTransport (
 		}
 	//}
 }
+*/
 
 __attribute__((task))
 __attribute__((max_global_work_dim(0)))
@@ -346,6 +354,8 @@ __kernel void kernelWeightForwarder (
 		//int idy
 	)
 {
+	
+
 	int idx = IDX;
 	int idy = IDY;
 
@@ -360,13 +370,17 @@ __kernel void kernelWeightForwarder (
 		}
 		else {
 			t_spValueAndZCountUnpacked weightBlock = 
-				read_channel_intel(channel_peWeightInput);
-			state = (weightBlock.isLast == 0x0) ? 0x0 : 0x1;
+				read_channel_intel(channel_weightInput);
+            state = (weightBlock.isLast == 0x0) ? 0x1 : 0x0;
 			if (instruction.forwardEnable == 0x1) {
 				write_channel_intel(channel_dpWeightInput, weightBlock);
 			} 
+			if ( (0x1FF & idx) < (PE_NUM_X - 1) ) {
+				write_channel_intel(channel_weightOutput, weightBlock);
+			}
 		}
 	}
+
 /*	t_weightForwarderInstruction instruction =
 	 read_channel_intel(channel_weightForwarderInstructionInput);
 
@@ -434,7 +448,6 @@ __kernel void kernelTestInterface (
 	int idx = IDX;
 	int idy = IDY;
 
-
 	while (
 			(countInputActivationBlocks < numInputActivationBlocks)
 			||
@@ -468,12 +481,12 @@ __kernel void kernelTestInterface (
 			unpackedValue.nzValue = value & WEIGHT_MASK;
 			unpackedValue.indexInStreamingBlock = indexActivationTracker + (uint6_t) ((value & WEIGHT_ZCOUNT_MASK) >> WEIGHT_ZCOUNT_BITOFFSET); 
 			unpackedValue.isLast = (countInputActivationBlocks == (numInputActivationBlocks - 1)) ?
-				0x0 : 0x1;
+                0x1 : 0x0;
 			valid = write_channel_nb_intel (channel_activationInput, unpackedValue);
 			if (valid) {
 				countInputActivationBlocks++;
 				//numActivationTracker = unpackedValue.indices[COMPRESSION_VEC_SIZE-1];
-				indexActivationTracker += 0x1;
+				indexActivationTracker = unpackedValue.indexInStreamingBlock  + 0x1;
 			}
 		}
 
@@ -504,15 +517,15 @@ __kernel void kernelTestInterface (
 			//t_vecUnpacked unpackedValue;
 			//decodeRunLength(&value, &unpackedValue, numWeightTracker);
 			t_spValueAndZCountUnpacked unpackedValue;
-			unpackedValue.nzValue = value & WEIGHT_MASK;
+			unpackedValue.nzValue = (t_operand) (value & WEIGHT_MASK);
 			unpackedValue.indexInStreamingBlock = indexWeightTracker + (uint6_t) ((value & WEIGHT_ZCOUNT_MASK) >> WEIGHT_ZCOUNT_BITOFFSET);
-			unpackedValue.isLast = countInputWeightBlocks == (numInputWeightBlocks - 1) ?
-				0x0 : 0x1;
+			unpackedValue.isLast = (countInputWeightBlocks == (numInputWeightBlocks - 1)) ?
+				0x1 : 0x0;
 			valid = write_channel_nb_intel (channel_weightInput, unpackedValue);
 			if (valid) {
 				countInputWeightBlocks++;
 				//numWeightTracker = unpackedValue.indices[COMPRESSION_VEC_SIZE-1];
-				indexWeightTracker += 0x1; //Will wrap at index = 63
+				indexWeightTracker = unpackedValue.indexInStreamingBlock  + 0x1; //Will wrap at index = 63
 			}
 		}
 
@@ -569,7 +582,7 @@ __kernel void kernelTestInterface (
 			bool valid;
 			short value = read_channel_nb_intel(channel_drainOutput, &valid);
 			if (valid) {
-				pDrainOut [countOutputDrain++] = value;
+				pDrainOut [countOutputDrain++] = (short) value;
 			}
 		}
 
@@ -601,6 +614,7 @@ __kernel void kernelTestInterface (
 				}
 			}
 		}
+		
 	}
 }
 
@@ -613,13 +627,15 @@ __kernel void kernelPSumManager (
 	)
 {
 	
+	
 	//int idx = IDX;
 	//int idy = IDY;
 
 	//Register that holds the partial sum
 	//Should be interpreted as a signed fixed-point number
 	//Fraction width = REG_FF_FRAC. Total width = PE_FF_WIDTH
-	int pSumFF;
+	t_accumulator pSumFF;
+	//int biasReg;
 	
 	while (true) {
 
@@ -634,11 +650,10 @@ __kernel void kernelPSumManager (
 					|| instructionMode == PE_MODE_LOAD_ACTIVATION
 					|| instructionMode == PE_MODE_ELTWISE_ADD) {
 
-				int result;
 
 				t_operand activation = read_channel_intel(channel_pSumManagerActivationInput);
 
-				int wideValue = convertSignedFixedPointToAccumulator (
+				t_accumulator wideValue = convertSignedFixedPointToAccumulator (
 					activation,
 					regInstruction.fracDin
 				);
@@ -660,7 +675,7 @@ __kernel void kernelPSumManager (
 								}
 			else if (instructionMode == PE_MODE_DOT_PRODUCT) {
 				// TODO Fill it in
-				int tempPSum = read_channel_intel(channel_pSumManagerMacInput);
+				t_accumulator tempPSum = read_channel_intel(channel_pSumManagerMacInput);
 
 
 				//Add
@@ -672,11 +687,14 @@ __kernel void kernelPSumManager (
 				pSumFF = convertSignedFixedPointToAccumulator(biasReg, regInstruction.fracDin);
 			}
 			else if (instructionMode == PE_MODE_DRAIN_PSUM) {
-				short value = (short) convertAccumulatorToSignedFixedPoint (pSumFF, regInstruction.fracDout);
-				write_channel_intel(channel_peDrainOutput, value);
+				short value = (short)(convertAccumulatorToSignedFixedPoint (pSumFF, regInstruction.fracDout));
+				//t_operand value = (t_operand) (pSumFF);
+				write_channel_intel(channel_peDrainOutput, (t_operand) value);
 			}
 		} // if part of the valid PE range
 	} // while
+	
+
 }
 
 /*! \brief Dot product kernel that operates on compressed sparse weight and activation
@@ -693,6 +711,7 @@ __kernel void kernelDotProductDispatcher (
 	Key assumption: The last uncompressed element in each streaming block, of length 63, will be preserved after 
 	compression!
 	*/
+	
 	uint6_t streamingBlockIndexActivation = 0, streamingBlockIndexWeight = 0;
 	t_spValueAndZCountUnpacked activationBlock, weightBlock;
 	//uint1_t proceed = 0x1;
@@ -735,13 +754,14 @@ __kernel void kernelDotProductDispatcher (
 		}
 		
 	} // while
+	
 }
 
 __attribute__((max_global_work_dim(0)))
 __attribute__((autorun))
 __kernel void mac () 
 {
-	int pSum = 0;
+	t_accumulator pSum = 0;
 
 /*
 	uint1_t state = 0x0;

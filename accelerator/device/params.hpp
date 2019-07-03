@@ -36,14 +36,14 @@
 #define WEIGHT_VALID_MASK 0x08000
 #define WEIGHT_ZCOUNT_BITWIDTH 4
 #define WEIGHT_ZCOUNT_BITOFFSET 12
-#define WEIGHT_ZCOUNT_MASK 0x0F000
+#define WEIGHT_ZCOUNT_MASK 0xF000
 #define WEIGHT_ZCOUNT_MAX 15
 #define WEIGHT_BITWIDTH 12
 #define WEIGHT_BITOFFSET 0
 #define WEIGHT_MASK 0x0FFF
 //Must be in HEX
-#define WEIGHT_MAX 0x07FF 
-#define WEIGHT_MIN -2048 
+#define WEIGHT_MAX 2047
+#define WEIGHT_MIN -2048
 //================================================================
 
 
