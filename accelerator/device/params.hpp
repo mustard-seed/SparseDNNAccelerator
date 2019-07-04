@@ -33,10 +33,10 @@
 //=======Number of bits allocated to the zero count and the value
 #define WEIGHT_VALID_BITWIDTH 1
 #define WEIGHT_VALID_BITOFFSET 15
-#define WEIGHT_VALID_MASK 0x08000
+#define WEIGHT_VALID_MASK 0x01
 #define WEIGHT_ZCOUNT_BITWIDTH 4
 #define WEIGHT_ZCOUNT_BITOFFSET 12
-#define WEIGHT_ZCOUNT_MASK 0xF000
+#define WEIGHT_ZCOUNT_MASK 0xF
 #define WEIGHT_ZCOUNT_MAX 15
 #define WEIGHT_BITWIDTH 12
 #define WEIGHT_BITOFFSET 0

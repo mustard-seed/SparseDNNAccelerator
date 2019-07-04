@@ -1145,8 +1145,8 @@ void compress_vector (std::vector<float> &inputVector
             int value = fpValue.getBits();
             //Generate the encoded value: valid bit, zCount, and the fixed-point value
             t_spValueAndZCount shortValue =
-               ( (0x1 << WEIGHT_VALID_BITOFFSET) & WEIGHT_VALID_MASK )
-               | ( (zOffset << WEIGHT_ZCOUNT_BITOFFSET) & WEIGHT_ZCOUNT_MASK )
+               ( ( (0x1  & WEIGHT_VALID_MASK) << WEIGHT_VALID_BITOFFSET) )
+               | ( (zOffset  & WEIGHT_ZCOUNT_MASK) << WEIGHT_ZCOUNT_BITOFFSET)
                | (value & fpValue.getMask());
             compressBlock.vec[iCompressBlock] = shortValue;
             iCompressBlock++;
@@ -1198,7 +1198,7 @@ void compress_vector (
             int value = fpValue.getBits();
             //Generate the encoded value: valid bit, zCount, and the fixed-point value
             t_spValueAndZCount shortValue =
-               ( (zOffset << WEIGHT_ZCOUNT_BITOFFSET) & WEIGHT_ZCOUNT_MASK )
+               ( ( (zOffset & WEIGHT_ZCOUNT_MASK) << WEIGHT_ZCOUNT_BITOFFSET) )
                | (value & fpValue.getMask());
             compressedVector.push_back(shortValue);
             zOffset=0;
@@ -1256,27 +1256,27 @@ float dot_product_compressed_vectors (t_aligned_compression_vector &compressedVe
         bool maskBlockB[COMPRESSION_VEC_SIZE];
 
         indexA[0] = (compressionBlockA.vec[0] & WEIGHT_VALID_MASK) ?
-                    1 + indexVectorA + (int) ( (compressionBlockA.vec[0] & WEIGHT_ZCOUNT_MASK) >> WEIGHT_ZCOUNT_BITOFFSET ) :
+                    1 + indexVectorA + (int) ( (compressionBlockA.vec[0] >> WEIGHT_ZCOUNT_BITOFFSET ) & WEIGHT_ZCOUNT_MASK ) :
                     indexVectorA;
         indexB[0] = (compressionBlockB.vec[0] & WEIGHT_VALID_MASK) ?
-                    1 + indexVectorB + (int) ( (compressionBlockB.vec[0] & WEIGHT_ZCOUNT_MASK) >> WEIGHT_ZCOUNT_BITOFFSET ) :
+                    1 + indexVectorB + (int) ( (compressionBlockB.vec[0] >> WEIGHT_ZCOUNT_BITOFFSET ) & WEIGHT_ZCOUNT_MASK ) :
                     indexVectorB;
 
         for (int iA=1; iA<COMPRESSION_VEC_SIZE; iA++) {
             indexA[iA] = (compressionBlockA.vec[iA] & WEIGHT_VALID_MASK) ?
-                         1 + indexA[iA-1] + (int) ( (compressionBlockA.vec[iA] & WEIGHT_ZCOUNT_MASK) >> WEIGHT_ZCOUNT_BITOFFSET ) :
+                         1 + indexA[iA-1] + (int) ( (compressionBlockA.vec[iA] >> WEIGHT_ZCOUNT_BITOFFSET ) & WEIGHT_ZCOUNT_MASK ) :
                          indexA[iA-1];
         }
 
         for (int iB=1; iB<COMPRESSION_VEC_SIZE; iB++) {
             indexB[iB] = (compressionBlockB.vec[iB] & WEIGHT_VALID_MASK) ?
-                         1 + indexB[iB-1] + (int) ( (compressionBlockB.vec[iB] & WEIGHT_ZCOUNT_MASK) >> WEIGHT_ZCOUNT_BITOFFSET ) :
+                         1 + indexB[iB-1] + (int) ( (compressionBlockB.vec[iB] >> WEIGHT_ZCOUNT_BITOFFSET ) & WEIGHT_ZCOUNT_MASK ) :
                          indexB[iB-1];
         }
 
         for (int iA=0; iA<COMPRESSION_VEC_SIZE; iA++) {
             maskBlockA[iA] = false;
-            if (compressionBlockA.vec[iA] & WEIGHT_VALID_MASK) {
+            if ( (compressionBlockA.vec[iA] >> WEIGHT_VALID_BITOFFSET) & WEIGHT_VALID_MASK) {
                 for (int iB=0; iB<COMPRESSION_VEC_SIZE; iB++) {
                     maskBlockA[iA] = maskBlockA[iA] || (indexA[iA] == indexB[iB]);
                 }
@@ -1285,7 +1285,7 @@ float dot_product_compressed_vectors (t_aligned_compression_vector &compressedVe
 
         for (int iB=0; iB<COMPRESSION_VEC_SIZE; iB++) {
             maskBlockB[iB] = false;
-            if (compressionBlockB.vec[iB] & WEIGHT_VALID_MASK) {
+            if ( (compressionBlockA.vec[iB] >> WEIGHT_VALID_BITOFFSET) & WEIGHT_VALID_MASK) {
                 for (int iA=0; iA<COMPRESSION_VEC_SIZE; iA++) {
                     maskBlockB[iB] = maskBlockB[iB] || (indexA[iA] == indexB[iB]);
                 }
@@ -1365,11 +1365,11 @@ float dot_product_compressed_vectors (
         }
 
         if (readA) {
-            indexVectorA += (((compressionBlockA & WEIGHT_ZCOUNT_MASK) >> WEIGHT_ZCOUNT_BITOFFSET) + 1);
+            indexVectorA += (((compressionBlockA >> WEIGHT_ZCOUNT_BITOFFSET ) & WEIGHT_ZCOUNT_MASK ) + 1);
             iterVectorA++;
         }
         if (readB) {
-            indexVectorB += (((compressionBlockB & WEIGHT_ZCOUNT_MASK) >> WEIGHT_ZCOUNT_BITOFFSET) + 1);
+            indexVectorB += (((compressionBlockB >> WEIGHT_ZCOUNT_BITOFFSET ) & WEIGHT_ZCOUNT_MASK ) + 1);
             iterVectorB++;
         }
 

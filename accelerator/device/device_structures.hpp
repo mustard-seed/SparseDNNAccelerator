@@ -69,11 +69,20 @@ typedef short t_value;
 typedef int12_t t_value;
 #endif
 
+
 typedef struct  __attribute__((packed)) {
-    uint1_t isLast;
-    uint6_t indexInStreamingBlock;
+    unsigned char metaInformation; //lsLast, indexInStreamingBlock
+    //uint1_t isLast;
+    //uint6_t indexInStreamingBlock;
     t_operand nzValue;
 } t_spValueAndZCountUnpacked;
+
+
+//typedef unsigned short t_spValueAndZountUnpacked;
+#define UNPACKED_INDEX_MASK 0x3F
+#define UNPACKED_INDEX_BITOFFSET 0
+#define UNPACKED_ISLAST_MASK 0x01
+#define UNPACKED_ISLAST_BITOFFSET 6
 
 /*! t_tokenFillWeightCache
     Token used to command filling of the sparse weight cache

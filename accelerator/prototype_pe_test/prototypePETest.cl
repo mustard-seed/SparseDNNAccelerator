@@ -290,19 +290,22 @@ __kernel void kernelActivationForwarder (
 		while (proceed == 0x1) {
 			t_spValueAndZCountUnpacked activationBlock = 
 				read_channel_intel(channel_activationInput);
-			proceed = (activationBlock.isLast == 0x0) ?
-				0x1 : 0x0;
+			proceed = (((activationBlock.metaInformation >> UNPACKED_ISLAST_BITOFFSET) & UNPACKED_ISLAST_MASK ) 
+				== 0x0) ? 0x1 : 0x0;
 
 			if (instruction.forwardEnable == 0x1) {
 				if (instruction.mode == PE_MODE_DOT_PRODUCT) {
 					write_channel_intel(channel_dpActivationInput, activationBlock);
 				}
 
-				unsigned short tempTracker = (activationIndexTracker + (unsigned char) activationBlock.indexInStreamingBlock);
+				unsigned char activaitonBlockIndexInStreamingBlock =
+					((activationBlock.metaInformation >> UNPACKED_INDEX_BITOFFSET) & UNPACKED_INDEX_MASK);
+				unsigned short tempTracker = (unsigned short)
+					(activationIndexTracker + (unsigned char) activaitonBlockIndexInStreamingBlock);
 				if (tempTracker == targetIndex) {
 					tempActivation = activationBlock.nzValue;
 				}
-				if (activationBlock.indexInStreamingBlock == 63) {
+				if (activaitonBlockIndexInStreamingBlock == 63) {
 					activationIndexTracker += 64;
 				}
 			} // if forwardEnable
@@ -371,7 +374,7 @@ __kernel void kernelWeightForwarder (
 		else {
 			t_spValueAndZCountUnpacked weightBlock = 
 				read_channel_intel(channel_weightInput);
-            state = (weightBlock.isLast == 0x0) ? 0x1 : 0x0;
+            state = (((weightBlock.metaInformation >> UNPACKED_ISLAST_BITOFFSET) & UNPACKED_ISLAST_MASK)  == 0x0) ? 0x1 : 0x0;
 			if (instruction.forwardEnable == 0x1) {
 				write_channel_intel(channel_dpWeightInput, weightBlock);
 			} 
@@ -479,14 +482,16 @@ __kernel void kernelTestInterface (
 			//decodeRunLength(&value, &unpackedValue, numActivationTracker);
 			t_spValueAndZCountUnpacked unpackedValue;
 			unpackedValue.nzValue = value & WEIGHT_MASK;
-			unpackedValue.indexInStreamingBlock = indexActivationTracker + (uint6_t) ((value & WEIGHT_ZCOUNT_MASK) >> WEIGHT_ZCOUNT_BITOFFSET); 
-			unpackedValue.isLast = (countInputActivationBlocks == (numInputActivationBlocks - 1)) ?
+			unsigned char indexInStreamingBlock = indexActivationTracker + (uint6_t) ((value  >> WEIGHT_ZCOUNT_BITOFFSET) & WEIGHT_ZCOUNT_MASK); 
+			unsigned char isLast = (countInputActivationBlocks == (numInputActivationBlocks - 1)) ?
                 0x1 : 0x0;
+            unpackedValue.metaInformation = (indexInStreamingBlock & UNPACKED_INDEX_MASK) << UNPACKED_INDEX_BITOFFSET;
+            unpackedValue.metaInformation |= (isLast & UNPACKED_ISLAST_MASK) << UNPACKED_ISLAST_BITOFFSET;
 			valid = write_channel_nb_intel (channel_activationInput, unpackedValue);
 			if (valid) {
 				countInputActivationBlocks++;
 				//numActivationTracker = unpackedValue.indices[COMPRESSION_VEC_SIZE-1];
-				indexActivationTracker = unpackedValue.indexInStreamingBlock  + 0x1;
+				indexActivationTracker = indexInStreamingBlock + 0x1;
 			}
 		}
 
@@ -505,7 +510,7 @@ __kernel void kernelTestInterface (
 					}
 					*/
 					hostValue.nzValue = (short) value.nzValue;
-					hostValue.indexInStreamingBlock = (unsigned short) value.indexInStreamingBlock;
+					hostValue.indexInStreamingBlock = (unsigned short) ((value.metaInformation >> UNPACKED_INDEX_BITOFFSET) & UNPACKED_INDEX_MASK);
 					pActivationOutput[countOutputActivationBlocks++] = hostValue;
 				}
 			}
@@ -518,14 +523,19 @@ __kernel void kernelTestInterface (
 			//decodeRunLength(&value, &unpackedValue, numWeightTracker);
 			t_spValueAndZCountUnpacked unpackedValue;
 			unpackedValue.nzValue = (t_operand) (value & WEIGHT_MASK);
-			unpackedValue.indexInStreamingBlock = indexWeightTracker + (uint6_t) ((value & WEIGHT_ZCOUNT_MASK) >> WEIGHT_ZCOUNT_BITOFFSET);
-			unpackedValue.isLast = (countInputWeightBlocks == (numInputWeightBlocks - 1)) ?
+			unsigned char indexInStreamingBlock = indexWeightTracker + (uint6_t) ((value  >> WEIGHT_ZCOUNT_BITOFFSET) & WEIGHT_ZCOUNT_MASK); 
+			unsigned char isLast = (countInputWeightBlocks == (numInputWeightBlocks - 1)) ?
 				0x1 : 0x0;
+ 			unpackedValue.metaInformation = (indexInStreamingBlock & UNPACKED_INDEX_MASK) << UNPACKED_INDEX_BITOFFSET;
+            unpackedValue.metaInformation |= (isLast & UNPACKED_ISLAST_MASK) << UNPACKED_ISLAST_BITOFFSET;
+
+
 			valid = write_channel_nb_intel (channel_weightInput, unpackedValue);
+
 			if (valid) {
 				countInputWeightBlocks++;
 				//numWeightTracker = unpackedValue.indices[COMPRESSION_VEC_SIZE-1];
-				indexWeightTracker = unpackedValue.indexInStreamingBlock  + 0x1; //Will wrap at index = 63
+				indexWeightTracker = indexInStreamingBlock + 0x1; //Will wrap at index = 63
 			}
 		}
 
@@ -543,7 +553,7 @@ __kernel void kernelTestInterface (
 //						hostValue.indices[i] = (unsigned short) value.indices[i];
 //					}
 					hostValue.nzValue = (short) value.nzValue;
-					hostValue.indexInStreamingBlock = (unsigned short) value.indexInStreamingBlock;
+					hostValue.indexInStreamingBlock = (unsigned short) ((value.metaInformation >> UNPACKED_INDEX_BITOFFSET) & UNPACKED_INDEX_MASK);
 					pWeightOutput[countOutputWeightBlocks++] = hostValue;
 				}
 			}
@@ -717,26 +727,41 @@ __kernel void kernelDotProductDispatcher (
 	//uint1_t proceed = 0x1;
 
 	while (true) {
+;
+		uint1_t weightBlockIsLast;
+		uint1_t activationBlockIsLast;
 		//bool activationBlockValid = true, weightBlockValid = true;
 		if (streamingBlockIndexActivation 
 			<= streamingBlockIndexWeight) {
 			EMULATOR_PRINT ( ("[kernelDotProductEngineDispatcher]: Waiting to read from the activation channel\n") );
 			//activationBlock = read_channel_nb_intel(channel_pe2DpEngineDispatcherActivation, &activationBlockValid);
 			activationBlock = read_channel_intel(channel_dpActivationInput);
+
 		}
 		//mem_fence(CLK_CHANNEL_MEM_FENCE);
 		if (streamingBlockIndexActivation 
 			>= streamingBlockIndexWeight) {
 			EMULATOR_PRINT ( ("[kernelDotProductEngineDispatcher]: Waiting to read from the weight channel\n") );
 			//weightBlock = read_channel_nb_intel(channel_peWeightInput, &weightBlockValid);
-			weightBlock = read_channel_intel(channel_dpWeightInput);
+			weightBlock = read_channel_intel(channel_dpWeightInput);	
 		}
 
-		uint1_t isLast = ((weightBlock.isLast == 0x1) && (activationBlock.isLast == 0x1)) ?
+
+/*
+		uint1_t weightBlockIsLast = (streamingBlockIndexActivation < streamingBlockIndexWeight) ? 
+			(oldBlock.metaInformation >> UNPACKED_ISLAST_BITOFFSET) & UNPACKED_ISLAST_MASK;
+		uint1_t activationBlockIsLast = (activationBlock.metaInformation >> UNPACKED_ISLAST_BITOFFSET) & UNPACKED_ISLAST_MASK;
+*/
+		weightBlockIsLast = (weightBlock.metaInformation >> UNPACKED_ISLAST_BITOFFSET) & UNPACKED_ISLAST_MASK;
+		activationBlockIsLast = (activationBlock.metaInformation >> UNPACKED_ISLAST_BITOFFSET) & UNPACKED_ISLAST_MASK;
+		uint6_t streamingBlockIndexActivationTemp = ((activationBlock.metaInformation >> UNPACKED_INDEX_BITOFFSET) & UNPACKED_INDEX_MASK);
+		uint6_t streamingBlockIndexWeightTemp = ((weightBlock.metaInformation >> UNPACKED_INDEX_BITOFFSET) & UNPACKED_INDEX_MASK);
+
+		uint1_t isLast = ((weightBlockIsLast == 0x1) && (activationBlockIsLast == 0x1)) ?
 			0x1 : 0x0;
 
-		streamingBlockIndexActivation = (isLast == 0x1) ? 0 : activationBlock.indexInStreamingBlock;
-		streamingBlockIndexWeight = (isLast == 0x1) ? 0 : weightBlock.indexInStreamingBlock;
+		streamingBlockIndexActivation = (isLast == 0x1) ? 0 : streamingBlockIndexActivationTemp;
+		streamingBlockIndexWeight = (isLast == 0x1) ? 0 : streamingBlockIndexWeightTemp;
 
 		EMULATOR_PRINT ( ("[kernelDotProductEngineDispatcher]: streamingBlockIndexActivation updated to %d\n", streamingBlockIndexActivation) );
 		EMULATOR_PRINT ( ("[kernelDotProductEngineDispatcher]: streamingBlockIndexWeight updated to %d\n", streamingBlockIndexWeight) );
