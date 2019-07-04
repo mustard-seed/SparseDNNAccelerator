@@ -60,8 +60,8 @@ typedef uint4_t t_zCount;
 typedef uint12_t t_weight;
 
 //Needs to be signed!!!!
-typedef int12_t t_operand;
-typedef int t_accumulator;
+typedef char t_operand;
+typedef short t_accumulator;
 
 #ifdef PE_PROTOTYPE_TEST
 typedef short t_value;

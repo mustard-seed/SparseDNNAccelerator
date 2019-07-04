@@ -35,15 +35,15 @@
 #define WEIGHT_VALID_BITOFFSET 15
 #define WEIGHT_VALID_MASK 0x01
 #define WEIGHT_ZCOUNT_BITWIDTH 4
-#define WEIGHT_ZCOUNT_BITOFFSET 12
+#define WEIGHT_ZCOUNT_BITOFFSET 8
 #define WEIGHT_ZCOUNT_MASK 0xF
 #define WEIGHT_ZCOUNT_MAX 15
-#define WEIGHT_BITWIDTH 12
+#define WEIGHT_BITWIDTH 8
 #define WEIGHT_BITOFFSET 0
-#define WEIGHT_MASK 0x0FFF
+#define WEIGHT_MASK 0x0FF
 //Must be in HEX
-#define WEIGHT_MAX 2047
-#define WEIGHT_MIN -2048
+#define WEIGHT_MAX 255
+#define WEIGHT_MIN -256
 //================================================================
 
 
@@ -82,8 +82,8 @@
 #define REG_FF_FRAC 16 //16 bit fraction width, make  sure it is wider than all possible frac_width used on the short data format
 #define REG_FF_WIDTH 32 //32 bit FF, int
 
-#define IDX 1
-#define IDY 1
+#define IDX 0
+#define IDY 0
 
 
 

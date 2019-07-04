@@ -7,7 +7,7 @@ fixedPointNumber::fixedPointNumber (float _realNumber
                                     ,char _fracWidth
                                     ,char _intWidth){
     //Make sure the number of bits for magnitude and the sign can fit within 32
-    assert (_fracWidth + _intWidth < 32);
+    assert (_fracWidth + _intWidth < 16);
 
     //Find the precision
     resolution = 1.0f / (float) (1 << _fracWidth);
@@ -26,26 +26,27 @@ fixedPointNumber::fixedPointNumber (float _realNumber
                 );
 
     //Preserve the magnitude and the sign bit
-    int bitMask = ~ (0xFFFFFFFF << (totalWidth + 1));
+    short bitMask = ~ (0xFFFF << (totalWidth + 1));
     bits = bitMask & bits;
 }
 
-fixedPointNumber::fixedPointNumber (int _bits,
+fixedPointNumber::fixedPointNumber (short _bits,
                                     char _fracWidth,
                                     char _intWidth)
 {
-    bits = _bits & (~ (0xFFFFFFFF << (_fracWidth + _intWidth + 1)) );
+    assert (_fracWidth + _intWidth < 16);
+    bits = _bits & (~ (0xFFFF << (_fracWidth + _intWidth + 1)) );
     fractionWidth = _fracWidth;
     integerWidth = _intWidth;
     resolution = 1.0f / (float) (1 << _fracWidth);
 }
 
-int fixedPointNumber::getBits() {
+short fixedPointNumber::getBits() {
     return bits;
 }
 
-int fixedPointNumber::getMask() {
-    return ~(0xFFFFFFFF << (fractionWidth + integerWidth + 1));
+short fixedPointNumber::getMask() {
+    return ~(0xFFFF << (fractionWidth + integerWidth + 1));
 }
 
 int fixedPointNumber::getFracWidth() {
@@ -59,10 +60,10 @@ int fixedPointNumber::getIntWidth() {
 
 float fixedPointNumber::convert2Float () {
     //Need to perform sign extend
-    int signBit = 0x1 & (bits >> (fractionWidth + integerWidth));
-    int fullBits =
+    short signBit = 0x1 & (bits >> (fractionWidth + integerWidth));
+    short fullBits =
             signBit > 0 ?
-            bits | 0xFFFFFFFF << (fractionWidth + integerWidth) :
+            bits | 0xFFFF << (fractionWidth + integerWidth) :
             bits;
     return (float) fullBits * resolution;
 }
