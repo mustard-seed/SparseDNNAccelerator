@@ -956,6 +956,7 @@ __kernel void kernelDotProductDispatcher (
 	
 	uint6_t streamingBlockIndexActivation = 0, streamingBlockIndexWeight = 0;
 	t_spValueAndZCountUnpacked activationBlock, weightBlock;
+	t_accumulator pSum=0;
 	//uint1_t proceed = 0x1;
 
 	while (true) {
@@ -1001,49 +1002,32 @@ __kernel void kernelDotProductDispatcher (
 
 		//if (activationBlockValid && weightBlockValid) {
 		if (streamingBlockIndexWeight == streamingBlockIndexActivation) {
-			t_macOperands multData;
+			//t_macOperands multData;
 
-			multData.nzWeight = weightBlock.nzValue;
-			multData.nzActivation = activationBlock.nzValue;
-			multData.isLast = isLast;
+			//multData.nzWeight = weightBlock.nzValue;
+			//multData.nzActivation = activationBlock.nzValue;
+			//multData.isLast = isLast;
 
-			write_channel_intel(channel_macOperandsInput, multData);
+			//write_channel_intel(channel_macOperandsInput, multData);
+			pSum += weightBlock.nzValue * activationBlock.nzValue;
+
+			if (isLast == 0x1) {
+				write_channel_intel(channel_peDrainOutput, pSum);
+				pSum = 0;
+				EMULATOR_PRINT ( ("[kernelMAC]: Committed!\n") );
+			}
 		}
 		
 	} // while
 	
 }
 
+/*
 __attribute__((max_global_work_dim(0)))
 __attribute__((autorun))
 __kernel void mac () 
 {
 	t_accumulator pSum = 0;
-
-/*
-	uint1_t state = 0x0;
-
-	while (true) {
-		if (state == 0x0) {
-			t_macOperands multData = read_channel_intel(channel_macOperandsInput);
-
-			t_operand weight = multData.nzWeight;
-			t_operand activation = multData.nzActivation;
-			uint1_t isLast = multData.isLast;
-
-			pSum += weight * activation;
-
-			if (isLast == 0x1) {
-				state = 0x1;
-			}
-		}
-		else {
-			write_channel_intel(channel_pSumManagerMacInput, pSum);
-			pSum = 0;
-			state = 0x0;
-		}
-	}
-*/
 
 	while (true) {
 		t_macOperands multData = read_channel_intel(channel_macOperandsInput);
@@ -1061,20 +1045,5 @@ __kernel void mac ()
 		}
 	}
 
-/*
-	uint1_t proceed = 0x1;
-	while (proceed == 0x1) {
-
-		//Wait for the operands to arrive
-		t_macOperands multData = read_channel_intel(channel_macOperandsInput);
-
-		t_operand weight = multData.nzWeight;
-		t_operand activation = multData.nzActivation;
-		uint1_t isLast = multData.isLast;
-
-		pSum += weight * activation;
-		proceed = (isLast == 0x0) ? 0x1 : 0x0;
-	}
-	write_channel_intel(channel_pSumManagerMacInput, pSum);
-*/
 }
+*/
