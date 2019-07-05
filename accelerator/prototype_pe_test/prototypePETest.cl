@@ -52,13 +52,13 @@ channel t_spValueAndZCountUnpacked channel_weightInput __attribute__((depth(1)))
 channel t_spValueAndZCountUnpacked channel_weightOutput __attribute__((depth(1)));
 channel t_operand channel_biasInput __attribute__((depth(1)));
 channel t_operand channel_biasOutput __attribute__((depth(1)));
-channel t_operand channel_drainInput __attribute__((depth(1)));
+channel t_accumulator channel_drainInput __attribute__((depth(1)));
 channel t_operand channel_drainOutput __attribute__((depth(1)));
 channel t_pe_prototype_instruction channel_instructionInput __attribute__((depth(1)));
 channel t_pe_prototype_instruction channel_instructionOutputVertical __attribute__((depth(1)));
 channel t_pe_prototype_instruction channel_instructionOutputHorizontal __attribute__((depth(1)));
 
-channel short channel_peBiasInput __attribute__((depth(0)));
+channel t_operand channel_peBiasInput __attribute__((depth(0)));
 //channel t_pSumManagerInstruction channel_pSumManagerInstructionInput __attribute__((depth(0)));
 channel t_convBlockTransportInstruction channel_activationTransportInstructionInput __attribute__((depth(0)));
 channel t_convBlockTransportInstruction channel_weightTransportInstructionInput __attribute__((depth(0)));
@@ -73,7 +73,7 @@ channel t_spValueAndZCountUnpacked channel_dpActivationInput __attribute__((dept
 channel t_macOperands channel_macOperandsInput __attribute__((depth(0)));
 //channel t_accumulator channel_pSumManagerMacInput __attribute__((depth(0)));
 
-channel short channel_peDrainOutput __attribute__((depth(0)));
+channel t_accumulator channel_peDrainOutput __attribute__((depth(0)));
 
 
 
@@ -89,7 +89,6 @@ __kernel void kernelInstructionTransport (
 {
 	int idx = IDX;
 	int idy = IDY;
-	while (true) {
 		t_pe_prototype_instruction instruction = read_channel_intel(channel_instructionInput);
 
 		//Forward the instruction to other the activaion transport
@@ -118,8 +117,7 @@ __kernel void kernelInstructionTransport (
 		if ( (0x1FF & idy) < (instruction.maxIDY)) {
 			//pass down
 			write_channel_intel(channel_instructionOutputVertical, instruction);
-		}
-	}	
+		}	
 }
 
 __attribute__((task))
@@ -174,47 +172,50 @@ __kernel void kernelDrainTransport (
 			} // biasState
 
 			if (drainCount < numPSumToSend) {
-				t_operand result;
+				t_accumulator accumulator;
 				bool success;
 				if (drainCount == 0) {
-					t_accumulator accumulator =
+					accumulator =
 						read_channel_nb_intel(channel_peDrainOutput, &success);
-					//Add bias, shift, and saturate
-					if (success) {
-						accumulator += bias;
-						t_accumulator signExtensionMask;
-						if(accumulator>=0)
-							signExtensionMask = 0x00;
-						else
-							signExtensionMask = ~(0xFFFF>> accumulatorRightShift); // ">>" is logic shift, then perform sign extension manually
-
-						t_accumulator accumulatorWithRndBit = 
-							(signExtensionMask 
-							| (accumulator >> 
-								( accumulatorRightShift )));
-
-
-						t_accumulator accumulatorBiased;
-						if(accumulatorWithRndBit >= ((t_accumulator) 256))
-							accumulatorBiased = 0x0FF; //=255
-						else if(accumulatorWithRndBit <((t_accumulator) -256))
-							accumulatorBiased = 0x0100; //=-256
-						else
-							accumulatorBiased = (t_accumulator) ((0x1FF & accumulatorWithRndBit)+ 0x01);
-
-						// final truncation
-						result = 0xFF & (accumulatorBiased>>0x01);  // remove the last rounding bit
-					}
-
 				}
 				else {
-					result = read_channel_nb_intel(channel_drainInput, &success);
+					accumulator =  read_channel_nb_intel(channel_drainInput, &success);
 				}
-				if (success){
+					//Add bias, shift, and saturate
+				if (success) {
+					if (drainCount == 0) {
+						accumulator += bias;
+					}
+
+					t_operand result;
+					
+					t_accumulator signExtensionMask;
+					if(accumulator>=0)
+						signExtensionMask = 0x00;
+					else
+						signExtensionMask = ~(0xFFFF>> accumulatorRightShift); // ">>" is logic shift, then perform sign extension manually
+
+					t_accumulator accumulatorWithRndBit = 
+						(signExtensionMask 
+						| (accumulator >> 
+							( accumulatorRightShift )));
+
+
+					t_accumulator accumulatorBiased;
+					if(accumulatorWithRndBit >= ((t_accumulator) 256))
+						accumulatorBiased = 0x0FF; //=255
+					else if(accumulatorWithRndBit <((t_accumulator) -256))
+						accumulatorBiased = 0x0100; //=-256
+					else
+						accumulatorBiased = (t_accumulator) ((0x1FF & accumulatorWithRndBit)+ (t_accumulator) 0x01);
+
+					// final truncation
+					result = 0xFF & (accumulatorBiased>>0x01);  // remove the last rounding bit
+					
 					EMULATOR_PRINT ( ("[kernelDrainTransport]: Waiting to write pSum %d \n", drainCount) );
+					//write_channel_intel(channel_drainOutput, result);
 					write_channel_intel(channel_drainOutput, result);
 					drainCount++;
-					EMULATOR_PRINT ( ("[kernelDrainTransport]: Sent %d out of %d pSum\n", drainCount, numPSumToSend) );
 				}
 
 				if (drainCount == numPSumToSend) {
