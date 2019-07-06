@@ -57,6 +57,9 @@
 //Number of encoded values to be transfered together
 #define COMPRESSION_VEC_SIZE 4
 
+#define SIMD_SIZE 4
+#define SYNC_SIZE 8
+
 #define KERNEL_CACHE_LANES PE_ROWS
 #define KERNEL_CACHE_LANE_MASK 0x7
 #define KERNEL_CACHE_DEPTH 1024
@@ -75,7 +78,7 @@
 #define PE_MODE_DRAIN_PSUM 0x05
 
 //PE FIFO parameters
-#define PE_VEC_FIFO_SIZE 16
+#define PE_VEC_FIFO_SIZE 4
 #define PE_NUM_MULT COMPRESSION_VEC_SIZE
 
 //PE datawidth parameters

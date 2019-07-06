@@ -55,6 +55,18 @@ typedef struct  __attribute__((aligned(32))) __attribute__((packed)) {
 #endif
 
 #ifdef INTELFPGA_CL
+typedef struct __attribute__((packed)) {
+    char values [SIMD_SIZE];
+    unsigned char runLength;
+} t_simdblock;
+#else
+typedef struct __attribute__((packed)) {
+    cl_char values [SIMD_SIZE];
+    cl_uchar runLength;
+} t_simdblock;
+#endif
+
+#ifdef INTELFPGA_CL
 #include "ihc_apint.h"
 typedef uint4_t t_zCount;
 typedef uint12_t t_weight;
