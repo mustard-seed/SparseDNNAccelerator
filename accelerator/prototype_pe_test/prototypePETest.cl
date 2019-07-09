@@ -292,8 +292,6 @@ __attribute__((task))
 __attribute__((max_global_work_dim(0)))
 __attribute__ ((autorun))
 __kernel void kernelWeightTransport (
-		//int idx,
-		//int idy
 	)
 {
 	
@@ -324,8 +322,6 @@ __attribute__((task))
 __attribute__((max_global_work_dim(0)))
 __attribute__ ((autorun))
 __kernel void kernelActivationTransport (
-		//int idx,
-		//int idy
 	)
 {
 	
@@ -642,13 +638,6 @@ __kernel void kernelDotProductDispatcher (
 		}
 
 
-/*
-		uint1_t weightBlockIsLast = (streamingBlockIndexActivation < streamingBlockIndexWeight) ? 
-			(oldBlock.metaInformation >> UNPACKED_ISLAST_BITOFFSET) & UNPACKED_ISLAST_MASK;
-		uint1_t activationBlockIsLast = (activationBlock.metaInformation >> UNPACKED_ISLAST_BITOFFSET) & UNPACKED_ISLAST_MASK;
-*/
-		//if (activationBlockValid && weightBlockValid) {
-
 
 			streamingBlockIndexActivation = activationBlock.streamingBlockIndex;
 			streamingBlockIndexWeight = weightBlock.streamingBlockIndex;
@@ -658,23 +647,8 @@ __kernel void kernelDotProductDispatcher (
 
 			EMULATOR_PRINT ( ("[kernelDotProductEngineDispatcher]: streamingBlockIndexWeight updated to %d\n", streamingBlockIndexWeight) );
 
-			//if (activationBlockValid && weightBlockValid) {
 			if (streamingBlockIndexWeight == streamingBlockIndexActivation) {
-				//t_macOperands multData;
-
-				//multData.nzWeight = weightBlock.nzValue;
-				//multData.nzActivation = activationBlock.nzValue;
-				//multData.isLast = isLast;
-
-				//write_channel_intel(channel_macOperandsInput, multData);
-				/*
-				t_accumulator temp=0;
-				#pragma unroll
-				for (unsigned char i=0; i<SIMD_SIZE; i++) {
-					temp += weightBlock.values[i] * activationBlock.values[i];
-				}
-				pSum += temp;
-				*/
+				
 				t_simdblock_mac activations, weights;
 				#pragma unroll
 				for (int i=0; i<SIMD_SIZE; i++) {
@@ -696,34 +670,7 @@ __kernel void kernelDotProductDispatcher (
 					EMULATOR_PRINT ( ("[kernelMAC]: Committed!\n") );
 				}
 			}
-		//}
 		
 	} // while
 	
 }
-
-/*
-__attribute__((max_global_work_dim(0)))
-__attribute__((autorun))
-__kernel void mac () 
-{
-	t_accumulator pSum = 0;
-
-	while (true) {
-		t_macOperands multData = read_channel_intel(channel_macOperandsInput);
-
-		t_operand weight = multData.nzWeight;
-		t_operand activation = multData.nzActivation;
-		uint1_t isLast = multData.isLast;
-
-		pSum += weight * activation;
-
-		if (isLast == 0x1) {
-			write_channel_intel(channel_peDrainOutput, pSum);
-			pSum = 0;
-			EMULATOR_PRINT ( ("[kernelMAC]: Committed!\n") );
-		}
-	}
-
-}
-*/
