@@ -56,7 +56,7 @@ std::vector<t_spValueAndZCount, boost::alignment::aligned_allocator<t_spValueAnd
 t_aligned_compression_scalar_vector;
 
 typedef
-std::vector<t_simdblock, boost::alignment::aligned_allocator<t_simdblock, aocl_utils_cpp::AOCL_ALIGNMENT>>
+std::vector<t_simdblock_host, boost::alignment::aligned_allocator<t_simdblock_host, aocl_utils_cpp::AOCL_ALIGNMENT>>
 //std::vector<cl_short>
 t_aligned_compression_simd_vector;
 
@@ -71,8 +71,8 @@ std::vector<t_spValueAndZCountUnpackedHost, boost::alignment::aligned_allocator<
 t_aligned_compression_scalar_host_vector;
 
 typedef
-std::vector<t_pe_prototype_instruction,
-boost::alignment::aligned_allocator<t_pe_prototype_instruction, aocl_utils_cpp::AOCL_ALIGNMENT>>
+std::vector<t_pe_prototype_instruction_host,
+boost::alignment::aligned_allocator<t_pe_prototype_instruction_host, aocl_utils_cpp::AOCL_ALIGNMENT>>
 //std::vector<cl_short>
 t_aligned_instruction_vector;
 
@@ -164,7 +164,7 @@ protected:
         bufferInstructionInput = cl::Buffer (
                         clContext,
                         CL_MEM_READ_ONLY,
-                        MAX_DATA_LENGTH * sizeof(t_pe_prototype_instruction),
+                        MAX_DATA_LENGTH * sizeof(typeof(inputInstructionVector.at(0))),
                         NULL,
                         &status
                     );
@@ -173,7 +173,7 @@ protected:
         bufferInstructionOutputH = cl::Buffer (
                         clContext,
                         CL_MEM_WRITE_ONLY,
-                        MAX_DATA_LENGTH * sizeof(t_pe_prototype_instruction),
+                        MAX_DATA_LENGTH * sizeof(typeof(outputInstructionHVector.at(0))),
                         NULL,
                         &status
                     );
@@ -182,7 +182,7 @@ protected:
         bufferInstructionOutputV = cl::Buffer (
                         clContext,
                         CL_MEM_WRITE_ONLY,
-                        MAX_DATA_LENGTH * sizeof(t_pe_prototype_instruction),
+                        MAX_DATA_LENGTH * sizeof(typeof(outputInstructionVVector.at(0))),
                         NULL,
                         &status
                     );
@@ -192,7 +192,7 @@ protected:
         bufferActivationInput = cl::Buffer (
                         clContext,
                         CL_MEM_READ_ONLY,
-                        MAX_DATA_LENGTH * sizeof(t_simdblock),
+                        MAX_DATA_LENGTH * sizeof(typeof(inputActivationVector.at(0))),
                         NULL,
                         &status
                     );
@@ -201,7 +201,7 @@ protected:
         bufferActivationOutput = cl::Buffer (
                         clContext,
                         CL_MEM_WRITE_ONLY,
-                        MAX_DATA_LENGTH * sizeof(t_simdblock),
+                        MAX_DATA_LENGTH * sizeof(typeof(outputActivationVector.at(0))),
                         NULL,
                         &status
                     );
@@ -210,7 +210,7 @@ protected:
         bufferWeightInput = cl::Buffer (
                         clContext,
                         CL_MEM_READ_ONLY,
-                        MAX_DATA_LENGTH * sizeof(t_simdblock),
+                        MAX_DATA_LENGTH * sizeof(typeof(inputWeightVector.at(0))),
                         NULL,
                         &status
                     );
@@ -219,7 +219,7 @@ protected:
         bufferWeightOutput = cl::Buffer (
                         clContext,
                         CL_MEM_WRITE_ONLY,
-                        MAX_DATA_LENGTH * sizeof(t_simdblock),
+                        MAX_DATA_LENGTH * sizeof(typeof(outputWeightVector.at(0))),
                         NULL,
                         &status
                     );
@@ -228,7 +228,7 @@ protected:
         bufferBiasInput = cl::Buffer (
                         clContext,
                         CL_MEM_READ_ONLY,
-                        MAX_DATA_LENGTH * sizeof(short),
+                        MAX_DATA_LENGTH * sizeof(typeof(inputBiasVector.at(0))),
                         NULL,
                         &status
                     );
@@ -237,7 +237,7 @@ protected:
         bufferBiasOutput = cl::Buffer (
                         clContext,
                         CL_MEM_WRITE_ONLY,
-                        MAX_DATA_LENGTH * sizeof(short),
+                        MAX_DATA_LENGTH * sizeof(typeof(outputBiasVector.at(0))),
                         NULL,
                         &status
                     );
@@ -246,7 +246,7 @@ protected:
         bufferDrainInput = cl::Buffer (
                         clContext,
                         CL_MEM_READ_ONLY,
-                        MAX_DATA_LENGTH * sizeof(short),
+                        MAX_DATA_LENGTH * sizeof(typeof(inputDrainVector.at(0))),
                         NULL,
                         &status
                     );
@@ -255,7 +255,7 @@ protected:
         bufferDrainOutput = cl::Buffer (
                         clContext,
                         CL_MEM_WRITE_ONLY,
-                        MAX_DATA_LENGTH * sizeof(short),
+                        MAX_DATA_LENGTH * sizeof(typeof(outputDrainVector.at(0))),
                         NULL,
                         &status
                     );
@@ -371,7 +371,7 @@ protected:
         kernelTestInterface.setArg(13, numOutputActivationBlocks); //numOutputActivationBlocks
         //Allocate space for the output activation vector
         for (int i=0; i<numOutputActivationBlocks; i++) {
-            t_simdblock brick;
+            t_simdblock_host brick;
             outputActivationVector.push_back(brick);
         }
 
@@ -382,7 +382,7 @@ protected:
         kernelTestInterface.setArg(16, numOutputWeightBlocks); //numOutputWeightBlocks
         //Allocate space for the output activation vector
         for (int i=0; i<numOutputWeightBlocks; i++) {
-            t_simdblock brick;
+            t_simdblock_host brick;
             outputWeightVector.push_back(brick);
         }
         kernelTestInterface.setArg(17, (cl_ushort) inputBiasVector.size()); //numInputBias
@@ -407,7 +407,7 @@ protected:
                   ((idy == 0) && (idx < (PE_COLS - 1) )) ? inputInstructionVector.size() : 0;
         kernelTestInterface.setArg(22, (cl_ushort) numOutputInstructionH); //numOutputInsructionHorizontal,
         for (int i=0; i<numOutputInstructionH; i++) {
-            t_pe_prototype_instruction val;
+            t_pe_prototype_instruction_host val;
             outputInstructionHVector.push_back(val);
         }
 
@@ -415,7 +415,7 @@ protected:
                   idy < (PE_ROWS - 1) ? inputInstructionVector.size() : 0;
         kernelTestInterface.setArg(23, numOutputInstructionV); //numOutputInstructionVertical
         for (int i=0; i<numOutputInstructionV; i++) {
-            t_pe_prototype_instruction val;
+            t_pe_prototype_instruction_host val;
             outputInstructionVVector.push_back(val);
         }
 
@@ -741,7 +741,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainage) {
 
     //Prepare the instruction
 
-     t_pe_prototype_instruction dotProductInstruction =
+     t_pe_prototype_instruction_host dotProductInstruction =
      {
       .maxIDX = PE_COLS - 1,
       .maxIDY = PE_ROWS - 1,
@@ -888,7 +888,7 @@ void compress_vector (
         t_aligned_compression_simd_vector & compressedVector
         ) {
     auto denseVectorSize = inputVector.size();
-    t_simdblock compressBlock;
+    t_simdblock_host compressBlock;
     bool retainFlag = false;
     for (unsigned int iFullLengthVector=0, zOffset=0, simdCount=0, blockCount=0;
          iFullLengthVector < denseVectorSize;
@@ -905,7 +905,8 @@ void compress_vector (
 
         //Encoding
         if ( (simdCount == SIMD_SIZE) ) {
-            if ( retainFlag || (zOffset == ( (1 << WEIGHT_ZCOUNT_BITWIDTH) - 1)) || (blockCount % SYNC_SIZE == (SYNC_SIZE - 1)) ) {
+            if ( retainFlag || (zOffset == ( (1 << WEIGHT_ZCOUNT_BITWIDTH) - 1)) || (blockCount % SYNC_SIZE == (SYNC_SIZE - 1))
+                 || ( iFullLengthVector == ((unsigned int) denseVectorSize - 1) ) ) {
                 compressBlock.runLength = zOffset;
                 compressedVector.push_back(compressBlock);
                 zOffset=0;
@@ -1122,7 +1123,7 @@ float dot_product_compressed_vectors (
     auto iterVectorA = compressedVectorA.begin();
     auto iterVectorB = compressedVectorB.begin();
     float result = 0.0f;
-    t_simdblock compressionBlockA, compressionBlockB;
+    t_simdblock_host compressionBlockA, compressionBlockB;
 
     while (indexVectorA < maxIndex && indexVectorB < maxIndex) {
         bool readA = false, readB = false;

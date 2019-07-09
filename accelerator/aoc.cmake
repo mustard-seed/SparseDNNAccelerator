@@ -107,10 +107,10 @@ function (add_aoc_target)
     list(SORT add_aoc_target_SOURCES_LIST)
 
     #Add the library for custom RTL if needed
-    if ("${add_hw_emulation_target_RTL_LIB}" STREQUAL "")
+    if ("${add_aoc_target_RTL_LIB}" STREQUAL "")
     else()
-        list (APPEND occflags -I ${add_hw_profile_target_RTL_DIR} -L ${add_hw_profile_target_RTL_DIR}
-                -l ${add_hw_profile_target_RTL_LIB})
+        list (APPEND occflags -I ${add_aoc_target_RTL_DIR} -L ${add_aoc_target_RTL_DIR}
+                -l ${add_aoc_target_RTL_LIB})
     endif()
 
     list (APPEND occflags ${add_aoc_target_SOURCES_LIST})
@@ -118,5 +118,7 @@ function (add_aoc_target)
     add_custom_target(${target_name_local}
         COMMAND aoc ${occflags}
     )
+
+    #message (STATUS ${occflags})
     
 endfunction()

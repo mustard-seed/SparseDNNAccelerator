@@ -72,25 +72,28 @@ if (BOARD_NAME MATCHES "DE10Standard")
         $ENV{INTELFPGAOCLSDKROOT}/board/de10_standard/arm32/lib/*.so
         )
     add_definitions(-DC5SOC)
-
+    list (APPEND PREPROCESSOR_DEFS -DC5SOC)
 elseif (BOARD_NAME MATCHES "A10REF")
     ##Add library directories for a10_ref
     add_definitions(-DARRIA10)
+    list (APPEND PREPROCESSOR_DEFS -DARRIA10)
     message (STATUS "Linking against A10-Ref libraries")
 elseif (BOARD_NAME MATCHES "A10PAC")
     add_definitions(-DARRIA10)
     ##Add library directories for a10_pac
+    list (APPEND PREPROCESSOR_DEFS -DARRIA10)
     message (STATUS "Linking against A10-Pac libraries")
 elseif (BOARD_NAME MATCHES "DE5ANET")
-    add_definitions(-DC5SOC)
+    add_definitions(-DARRIA10)
     ##Add library directories for de5a_net
+    list (APPEND PREPROCESSOR_DEFS -DARRIA10)
     message (STATUS "Linking against DE5A-NET libraries")
 else()
     message (STATUS "The board is ${BOARD_NAME}")
     message (FATAL_ERROR "Unsupported board!")
 endif()
 
-#######################################
+#######################################d
 ##Add extra library for the host below
 ######################################
 #set (OpenCV_DIR /home/jamesliu/arm_opencv/Build CACHE STRING "Path of OpenCV" FORCE)
@@ -156,7 +159,7 @@ add_aoc_target (
     HEADER_DIR ${PROJECT_SOURCE_DIR}/device
     RTL_DIR ${rtl_directory}
     PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}
-    #RTL_LIB ${rtl_lib})
+    RTL_LIB ${rtl_lib}
     )
 
 add_aoc_target (
@@ -166,7 +169,7 @@ add_aoc_target (
     HEADER_DIR ${PROJECT_SOURCE_DIR}/device
     RTL_DIR ${rtl_directory} 
     PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}
-    #RTL_LIB ${rtl_lib})
+    RTL_LIB ${rtl_lib}
     )
 
 add_aoc_target (
@@ -176,7 +179,7 @@ add_aoc_target (
     HEADER_DIR ${PROJECT_SOURCE_DIR}/device
     RTL_DIR ${rtl_directory} 
     PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}
-    #RTL_LIB ${rtl_lib})
+    RTL_LIB ${rtl_lib}
     )
 
 add_aoc_target (
@@ -186,7 +189,7 @@ add_aoc_target (
     HEADER_DIR ${PROJECT_SOURCE_DIR}/device
     RTL_DIR ${rtl_directory}
     PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}
-    #RTL_LIB ${rtl_lib})
+    RTL_LIB ${rtl_lib}
     )
 
 add_aoc_target (
@@ -196,7 +199,7 @@ add_aoc_target (
     HEADER_DIR ${PROJECT_SOURCE_DIR}/device
     RTL_DIR ${rtl_directory} 
     PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}
-    #RTL_LIB ${rtl_lib})
+    RTL_LIB ${rtl_lib}
     )
 
 add_aoc_target (
@@ -206,7 +209,7 @@ add_aoc_target (
     HEADER_DIR ${PROJECT_SOURCE_DIR}/device
     RTL_DIR ${rtl_directory}
     PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}
-    #RTL_LIB ${rtl_lib})
+    RTL_LIB ${rtl_lib}
     )
 
 #add_aoc_target (

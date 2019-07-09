@@ -4,6 +4,7 @@
 #include "device_utils.hpp"
 #include "prototypePE_structs.hpp"
 #include "peComponents.hpp"
+#include "rtl_lib.hpp"
 
 
 #define PE_NUM_X PE_COLS
@@ -60,6 +61,46 @@ typedef struct __attribute__((packed)){
 	uint1_t isLast;
 } t_simdblock_di;
 
+//MAC Operands
+typedef struct __attribute__((packed)) {
+	char values [SIMD_SIZE];
+} t_simdblock_mac;
+
+t_accumulator mac (t_simdblock_mac activations, t_simdblock_mac weights) {
+	t_accumulator output = 0x0;
+
+	#pragma unroll
+	for(int i=0; i<SIMD_SIZE/4; i++){
+		//output += input.data[i]*weights.data[i];
+		// use packed DSP blocks to improve efficiency
+		#if defined (ARRIA10)
+			output += a10_mac_8bitx4(
+				activations.values[i*4],
+				weights.values[i*4],
+				activations.values[i*4+1],
+				weights.values[i*4+1],
+				activations.values[i*4+2],
+				weights.values[i*4+2],
+				activations.values[i*4+3],
+				weights.values[i*4+3]
+				);
+		#elif defined (C5SOC)
+			output += c5_mac_8bitx4(
+					activations.values[i*4],
+					weights.values[i*4],
+					activations.values[i*4+1],
+					weights.values[i*4+1],
+					activations.values[i*4+2],
+					weights.values[i*4+2],
+					activations.values[i*4+3],
+					weights.values[i*4+3]
+					);
+		#else
+		#error Unsupported FPGA type!
+		#endif
+	}
+	return output;
+}
 
 
 
@@ -210,7 +251,7 @@ __kernel void kernelDrainTransport (
 					if(accumulator>=0)
 						signExtensionMask = 0x00;
 					else
-						signExtensionMask = ~(0xFFFF>> accumulatorRightShift); // ">>" is logic shift, then perform sign extension manually
+						signExtensionMask = ~(0xFFFFFFFF>> accumulatorRightShift); // ">>" is logic shift, then perform sign extension manually
 
 					t_accumulator accumulatorWithRndBit = 
 						(signExtensionMask 
@@ -313,342 +354,20 @@ __kernel void kernelActivationTransport (
 
 
 
-/*
-__attribute__((task))
-__attribute__((max_global_work_dim(0)))
-__attribute__ ((autorun))
-__kernel void kernelInstructionTransport (
-		//int idx,
-		//int idy
-	)
-{
-	int idx = IDX;
-	int idy = IDY;
-	while (true) {
-		t_pe_prototype_instruction instruction = 
-			read_channel_intel(channel_instructionInput);
-
-		//Makes sure the PE receives it first
-		//mem_fence(CLK_CHANNEL_MEM_FENCE);
-
-
-		if ( ( (0x1FF & idy) == 0 ) && ( (0x1FF & idx) < (PE_NUM_X - 1) ) ) {
-			//pass right
-			write_channel_intel(channel_instructionOutputHorizontal, instruction);
-		}
-
-		if ( (0x1FF & idy) < (PE_NUM_Y - 1)) {
-			//pass down
-			write_channel_intel(channel_instructionOutputVertical, instruction);
-		}
-
-		uint1_t forwardEnable = ( (idy <= instruction.maxIDY) && (idx <= instruction.maxIDX)) ?
-			0x1 : 0x0;
-		
-		t_pSumManagerInstruction pSumManagerInstruction;
-		pSumManagerInstruction.fracW = instruction.fracW;
-		pSumManagerInstruction.fracDin = instruction.fracDin;
-		pSumManagerInstruction.fracDout = instruction.fracDout;
-		pSumManagerInstruction.enable = forwardEnable;
-		pSumManagerInstruction.mode = instruction.mode;
-		write_channel_intel (channel_pSumManagerInstructionInput, pSumManagerInstruction);
-
-		if (instruction.mode == PE_MODE_DOT_PRODUCT ||
-			instruction.mode == PE_MODE_MAX_POOL ||
-			instruction.mode == PE_MODE_LOAD_ACTIVATION ||
-			instruction.mode == PE_MODE_ELTWISE_ADD) {
-			t_activationForwarderInstruction actForwarderInstruction;
-			actForwarderInstruction.activationSelectStartIndex = instruction.activationSelectStartIndex;
-			actForwarderInstruction.mode = instruction.mode;
-			actForwarderInstruction.forwardEnable = forwardEnable;
-			write_channel_intel (channel_activationForwarderInstructionInput, actForwarderInstruction);
-		}
-
-		if (instruction.mode == PE_MODE_DOT_PRODUCT) {
-			t_weightForwarderInstruction wForwarderInstruction;;
-			wForwarderInstruction.forwardEnable = forwardEnable;
-			write_channel_intel (channel_weightForwarderInstructionInput, wForwarderInstruction);
-		}
-	}
-
-}
-*/
-
-/*
-__attribute__((task))
-__attribute__((max_global_work_dim(0)))
-__attribute__ ((autorun))
-__kernel void kernelBiasTransport (
-		//int idx,
-		//int idy
-	)
-{
-	int idx = IDX;
-	int idy = IDY;
-	//while (true) {
-		short bias = 
-			read_channel_intel(channel_biasInput);
-
-		write_channel_intel(channel_peBiasInput, bias);
-		//Makes sure the PE receives it first
-		//mem_fence(CLK_CHANNEL_MEM_FENCE);
-
-		if ( (0x1FF & idx) < (PE_NUM_X - 1) ) {
-			write_channel_intel(channel_biasOutput, bias);
-		}
-	//}
-}
-*/
-
-/*
-__attribute__((task))
-__attribute__((max_global_work_dim(0)))
-__attribute__ ((autorun))
-__kernel void kernelActivationTransport (
-		//int idx,
-		//int idy
-	)
-{
-	int idx = IDX;
-	int idy = IDY;
-	t_activationForwarderInstruction instruction =
-	 read_channel_intel(channel_activationForwarderInstructionInput);
-
-	uint1_t proceed = 0x1;
-	unsigned short targetIndex = 
-	((unsigned short) idy) +  ( ( unsigned short ) instruction.activationSelectStartIndex);
-	unsigned short activationIndexTracker = 0;
-	unsigned char indexInStreamingBlock = 0;
-	t_operand tempActivation = 0x0;
-
-	while (proceed == 0x1) {
-		t_spValueAndZCountUnpacked activationBlock = 
-			read_channel_intel(channel_activationInput);
-		proceed = (((activationBlock.metaInformation >> UNPACKED_ISLAST_BITOFFSET) & UNPACKED_ISLAST_MASK ) 
-			== 0x0) ? 0x1 : 0x0;
-
-		if (instruction.forwardEnable == 0x1) {
-			if (instruction.mode == PE_MODE_DOT_PRODUCT) {
-				write_channel_intel(channel_dpActivationInput, activationBlock);
-			}
-
-			unsigned char activaitonBlockIndexInStreamingBlock =
-				((activationBlock.metaInformation >> UNPACKED_INDEX_BITOFFSET) & UNPACKED_INDEX_MASK);
-			unsigned short tempTracker = (unsigned short)
-				(activationIndexTracker + (unsigned char) activaitonBlockIndexInStreamingBlock);
-			if (tempTracker == targetIndex) {
-				tempActivation = activationBlock.nzValue;
-			}
-			if (activaitonBlockIndexInStreamingBlock == 63) {
-				activationIndexTracker += 64;
-			}
-		} // if forwardEnable
-
-		if ( (0x1FF & idy) < (PE_NUM_Y - 1) ) {
-			write_channel_intel(channel_activationOutput, activationBlock);
-		}
-	} // while
-
-	if (instruction.mode == PE_MODE_ELTWISE_ADD || instruction.mode == PE_MODE_LOAD_ACTIVATION
-		|| instruction.mode == PE_MODE_MAX_POOL) {
-		write_channel_intel(channel_pSumManagerActivationInput, tempActivation);
-	}
-
-}
-*/
-
-/*
-__attribute__((task))
-__attribute__((max_global_work_dim(0)))
-__attribute__ ((autorun))
-__kernel void kernelWeightTransport (
-		//int idx,
-		//int idy
-	)
-{
-	
-
-	int idx = IDX;
-	int idy = IDY;
-
-	uint1_t state = 0x0;
-	t_weightForwarderInstruction instruction;
-
-	while (true) {
-		if (state == 0x0) {
-			instruction =
-	 			read_channel_intel(channel_weightForwarderInstructionInput);
-	 		state = 0x1;
-		}
-		else {
-			t_spValueAndZCountUnpacked weightBlock = 
-				read_channel_intel(channel_weightInput);
-            state = (((weightBlock.metaInformation >> UNPACKED_ISLAST_BITOFFSET) & UNPACKED_ISLAST_MASK)  == 0x0) ? 0x1 : 0x0;
-			if (instruction.forwardEnable == 0x1) {
-				write_channel_intel(channel_dpWeightInput, weightBlock);
-			} 
-			if ( (0x1FF & idx) < (PE_NUM_X - 1) ) {
-				write_channel_intel(channel_weightOutput, weightBlock);
-			}
-		}
-	}
-}
-*/
-
-/*
-__attribute__((task))
-__attribute__((max_global_work_dim(0)))
-__attribute__ ((autorun))
-__kernel void kernelTransport ()
-{
-	int idx = IDX;
-	int idy = IDY;
-
-	uint1_t activationState = 0x0, 
-			weightState = 0x0,
-			drainState = 0x0,
-			biasState = 0x0;
-
-	t_accumulator bias;
-
-	t_pe_prototype_instruction instruction;
-	uint9_t drainCount;
-
-	while (true) {
-		if (activationState == 0x0 &&
-			weightState == 0x0 &&
-			drainState == 0x0 &&
-			biasState == 0x0) {
-			instruction =
-				read_channel_intel(channel_instructionInput);
-			if ( ( (0x1FF & idy) == 0 ) && ( (0x1FF & idx) < (PE_NUM_X - 1) ) ) {
-				//pass right
-				write_channel_intel(channel_instructionOutputHorizontal, instruction);
-			}
-			if ( (0x1FF & idy) < (PE_NUM_Y - 1)) {
-				//pass down
-				write_channel_intel(channel_instructionOutputVertical, instruction);
-			}
-
-			// Set up for activation read
-			if ( idy <= instruction.maxIDY && idx <= instruction.maxIDX ) {
-				activationState = 0x1;
-				weightState = 0x1;
-				drainState = 0x1;
-				biasState = 0x1;
-				//fracDin = instruction.fracDin;
-				//fracW = instruction.fracW;
-				//fracDout = instruction.fracDout;
-				drainCount = 0;
-			}
-		} // if  read instruction
-		else {
-			if (activationState == 0x1) {
-				bool readSuccess;
-				t_spValueAndZCountUnpacked block = 
-					read_channel_nb_intel(channel_activationInput, &readSuccess);
-				if (readSuccess) {
-					activationState = (((block.metaInformation >> UNPACKED_ISLAST_BITOFFSET) & UNPACKED_ISLAST_MASK ) 
-				== 0x0) ? 0x1 : 0x0;
-					if (idy < instruction.maxIDY) {
-						write_channel_intel(channel_activationOutput, block);
-					}
-					EMULATOR_PRINT ( ("[kernelTransport]: Waiting to pass a activation block to the PE\n") );
-					write_channel_intel(channel_dpActivationInput, block);
-					//mem_fence(CLK_CHANNEL_MEM_FENCE);
-				} // if read success
-			} //activation state
-
-			if (weightState == 0x1) {
-				bool readSuccess;
-				t_spValueAndZCountUnpacked block = 
-					read_channel_nb_intel(channel_weightInput, &readSuccess);
-				if (readSuccess) {
-					weightState = (((block.metaInformation >> UNPACKED_ISLAST_BITOFFSET) & UNPACKED_ISLAST_MASK ) 
-				== 0x0) ? 0x1 : 0x0;
-					if (idx < instruction.maxIDX) {
-						write_channel_intel(channel_weightOutput, block);
-					}
-					EMULATOR_PRINT ( ("[kernelTransport]: Waiting to pass a weight block to the PE\n") );
-					write_channel_intel(channel_dpWeightInput, block);
-
-				} // if read success
-			} //weight state
-
-			if (biasState == 0x1) {
-				bool readSuccess;
-				t_operand tempBias = read_channel_nb_intel(channel_biasInput, &readSuccess);
-				if (readSuccess) {
-					bias = ((t_accumulator) tempBias) >> ((unsigned char) (instruction.fracW + instruction.fracDin - instruction.fracDout-1));
-					biasState = 0x0;
-				}
-			} // biasState
-
-			if (drainState == 0x1) {
-				t_operand result;
-				bool success;
-				if (drainCount == 0) {
-					t_accumulator accumulator =
-						read_channel_nb_intel(channel_peDrainOutput, &success);
-					//Add bias, shift, and saturate
-					if (success) {
-						accumulator += bias;
-						t_accumulator signExtensionMask;
-						if(accumulator>=0)
-							signExtensionMask = 0x00;
-						else
-							signExtensionMask = ~(0xFFFF>>(unsigned char) (instruction.fracW+instruction.fracDin-instruction.fracDout-1)); // ">>" is logic shift, then perform sign extension manually
-
-						t_accumulator accumulatorWithRndBit = (signExtensionMask 
-							| (accumulator >> ( (unsigned char) (instruction.fracW
-								+ instruction.fracDin
-								- instruction.fracDout- 1) ) ) );
-
-
-						t_accumulator accumulatorBiased;
-						if(accumulatorWithRndBit >=256)
-							accumulatorBiased = 0x0FF; //=255
-						else if(accumulatorWithRndBit <-256)
-							accumulatorBiased = 0x0100; //=-256
-						else
-							accumulatorBiased = (0x1FF & accumulatorWithRndBit)+0x01;
-
-						// final truncation
-						result = 0xFF & (accumulatorBiased>>0x01);  // remove the last rounding bit
-					}
-
-				}
-				else {
-					result = read_channel_nb_intel(channel_drainInput, &success);
-				}
-				if (success){
-					write_channel_intel(channel_drainOutput, result);
-					drainCount++;
-				}
-				if (drainCount == instruction.maxIDY - idy + 1) {
-					drainCount = 0;
-					drainState = 0x0;
-				}
-			} //drainState
-		}
-	}
-}
-*/
-
 __attribute__((task))
 __attribute__((max_global_work_dim(0)))
 __kernel void kernelTestInterface (
-		__global t_simdblock* restrict pActivationInput,
-		__global t_simdblock* restrict pActivationOutput,
-		__global t_simdblock* restrict pWeightInput,
-		__global t_simdblock* restrict pWeightOutput,
+		__global t_simdblock_host* restrict pActivationInput,
+		__global t_simdblock_host* restrict pActivationOutput,
+		__global t_simdblock_host* restrict pWeightInput,
+		__global t_simdblock_host* restrict pWeightOutput,
 		__global short * restrict pBiasIn,
 		__global short * restrict pBiasOut,
 		__global short * restrict pDrainIn, 
 		__global short * restrict pDrainOut,
-		__global t_pe_prototype_instruction* restrict pInstructionInput,
-		__global t_pe_prototype_instruction* restrict pInsructionOutputHorizontal,
-		__global t_pe_prototype_instruction* restrict pInstructionOutputVeritcal,
+		__global t_pe_prototype_instruction_host* restrict pInstructionInput,
+		__global t_pe_prototype_instruction_host* restrict pInsructionOutputHorizontal,
+		__global t_pe_prototype_instruction_host* restrict pInstructionOutputVeritcal,
 		unsigned short numInputActivationBlocks,
 		unsigned short startIndexActivationBlocks,
 		unsigned short numOutputActivationBlocks,
@@ -709,7 +428,7 @@ __kernel void kernelTestInterface (
 
 		if (countInputActivationBlocks < numInputActivationBlocks) {
 			bool valid;
-			t_simdblock block = pActivationInput[countInputActivationBlocks];
+			t_simdblock_host block = pActivationInput[countInputActivationBlocks];
 			//t_vecUnpacked unpackedValue;
 			//decodeRunLength(&value, &unpackedValue, numActivationTracker);
 			t_simdblock_di_tagged taggedBlock;
@@ -729,7 +448,7 @@ __kernel void kernelTestInterface (
 			if (valid) {
 				countInputActivationBlocks++;
 				//numActivationTracker = unpackedValue.indices[COMPRESSION_VEC_SIZE-1];
-				indexActivationTracker = (indexActivationTracker == (SYNC_SIZE - 1)) ? 0x0 : indexInStreamingBlock + 0x1;
+				indexActivationTracker = (indexInStreamingBlock == (SYNC_SIZE - 1)) ? 0x0 : indexInStreamingBlock + 0x1;
 			}
 		}
 
@@ -738,7 +457,7 @@ __kernel void kernelTestInterface (
 				bool valid;
 				t_simdblock_di_tagged block = read_channel_nb_intel(channel_activationOutput, &valid);
 				if (valid) {
-					t_simdblock hostBlock;
+					t_simdblock_host hostBlock;
 					
 					#pragma unroll
 					for (unsigned char i=0; i<SIMD_SIZE; i++) {
@@ -753,7 +472,7 @@ __kernel void kernelTestInterface (
 
 		if (countInputWeightBlocks < numInputWeightBlocks) {
 			bool valid;
-			t_simdblock block = pWeightInput[countInputWeightBlocks];
+			t_simdblock_host block = pWeightInput[countInputWeightBlocks];
 			//t_vecUnpacked unpackedValue;
 			//decodeRunLength(&value, &unpackedValue, numActivationTracker);
 			t_simdblock_di_tagged taggedBlock;
@@ -773,7 +492,7 @@ __kernel void kernelTestInterface (
 			if (valid) {
 				countInputWeightBlocks++;
 				//numActivationTracker = unpackedValue.indices[COMPRESSION_VEC_SIZE-1];
-				indexWeightTracker = (indexWeightTracker == (SYNC_SIZE - 1)) ? 0x0 : indexInStreamingBlock + 0x1;
+				indexWeightTracker = (indexInStreamingBlock == (SYNC_SIZE - 1)) ? 0x0 : indexInStreamingBlock + 0x1;
 			}
 		}
 
@@ -783,7 +502,7 @@ __kernel void kernelTestInterface (
 				//t_vecUnpacked value = read_channel_nb_intel(channel_weightOutput, &valid);
 				t_simdblock_di_tagged block = read_channel_nb_intel(channel_weightOutput, &valid);
 				if (valid) {
-					t_simdblock hostBlock;
+					t_simdblock_host hostBlock;
 					
 					#pragma unroll
 					for (unsigned char i=0; i<SIMD_SIZE; i++) {
@@ -835,7 +554,13 @@ __kernel void kernelTestInterface (
 
 		if (countInputInstruction < numInputInstruction) {
 			bool valid;
-			t_pe_prototype_instruction value = pInstructionInput [countInputInstruction];
+			t_pe_prototype_instruction_host valueHost = pInstructionInput [countInputInstruction];
+			t_pe_prototype_instruction value;
+			value.maxIDX = valueHost.maxIDX;
+			value.maxIDY = valueHost.maxIDY;
+			value.fracW = valueHost.fracW;
+			value.fracDin = valueHost.fracDin;
+			value.fracDout = valueHost.fracDout;
 			valid = write_channel_nb_intel (channel_instructionInput, value);
 			if (valid) {
 				countInputInstruction++;
@@ -846,8 +571,14 @@ __kernel void kernelTestInterface (
 			if (countOutputInstructionHorizontal < numOutputInsructionHorizontal) {
 				bool valid;
 				t_pe_prototype_instruction value = read_channel_nb_intel(channel_instructionOutputHorizontal, &valid);
+				t_pe_prototype_instruction_host valueHost;
+				valueHost.maxIDX = value.maxIDX;
+				valueHost.maxIDY = value.maxIDY;
+				valueHost.fracW = value.fracW;
+				valueHost.fracDin = value.fracDin;
+				valueHost.fracDout = value.fracDout;
 				if (valid) {
-					pInsructionOutputHorizontal [countOutputInstructionHorizontal++] = value;
+					pInsructionOutputHorizontal [countOutputInstructionHorizontal++] = valueHost;
 				}
 			}
 		}
@@ -856,8 +587,14 @@ __kernel void kernelTestInterface (
 			if (countOutputInstructionVertical < numOutputInstructionVertical) {
 				bool valid;
 				t_pe_prototype_instruction value = read_channel_nb_intel(channel_instructionOutputVertical, &valid);
+				t_pe_prototype_instruction_host valueHost;
+				valueHost.maxIDX = value.maxIDX;
+				valueHost.maxIDY = value.maxIDY;
+				valueHost.fracW = value.fracW;
+				valueHost.fracDin = value.fracDin;
+				valueHost.fracDout = value.fracDout;
 				if (valid) {
-					pInstructionOutputVeritcal [countOutputInstructionVertical++] = value;
+					pInstructionOutputVeritcal [countOutputInstructionVertical++] = valueHost;
 				}
 			}
 		}
@@ -865,86 +602,6 @@ __kernel void kernelTestInterface (
 	}
 }
 
-/*
-__attribute__((task))
-__attribute__((max_global_work_dim(0)))
-__attribute__ ((autorun))
-__kernel void kernelPSumManager (
-		  //int idx,
-		  //int idy
-	)
-{
-	
-	
-	//int idx = IDX;
-	//int idy = IDY;
-
-	//Register that holds the partial sum
-	//Should be interpreted as a signed fixed-point number
-	//Fraction width = REG_FF_FRAC. Total width = PE_FF_WIDTH
-	t_accumulator pSumFF;
-	//int biasReg;
-	
-	while (true) {
-
-		//Instruction channel
-		t_pSumManagerInstruction regInstruction
-			= read_channel_intel(channel_pSumManagerInstructionInput);
-
-		unsigned char instructionMode = regInstruction.mode;
-
-		if (regInstruction.enable == 0x1){
-			if (instructionMode == PE_MODE_MAX_POOL 
-					|| instructionMode == PE_MODE_LOAD_ACTIVATION
-					|| instructionMode == PE_MODE_ELTWISE_ADD) {
-
-
-				t_operand activation = read_channel_intel(channel_pSumManagerActivationInput);
-
-				t_accumulator wideValue = convertSignedFixedPointToAccumulator (
-					activation,
-					regInstruction.fracDin
-				);
-				switch (instructionMode) {
-				case PE_MODE_ELTWISE_ADD:
-					pSumFF = pSumFF + wideValue;
-					break;
-				case PE_MODE_LOAD_ACTIVATION:
-					pSumFF = wideValue;
-					break;
-				case PE_MODE_MAX_POOL:
-					pSumFF = pSumFF > wideValue ? pSumFF : wideValue;
-					break;
-				default:
-					break;
-					//Do nothing
-				} //switch
-
-								}
-			else if (instructionMode == PE_MODE_DOT_PRODUCT) {
-				// TODO Fill it in
-				t_accumulator tempPSum = read_channel_intel(channel_pSumManagerMacInput);
-
-
-				//Add
-				pSumFF += (tempPSum << (unsigned char) (REG_FF_FRAC - regInstruction.fracDin - regInstruction.fracW));
-			}
-
-			else if (instructionMode == PE_MODE_LOAD_BIAS) {
-				t_operand biasReg = (t_operand) (read_channel_intel(channel_peBiasInput) & WEIGHT_MASK);
-				pSumFF = convertSignedFixedPointToAccumulator(biasReg, regInstruction.fracDin);
-			}
-			else if (instructionMode == PE_MODE_DRAIN_PSUM) {
-				short value = (short)(convertAccumulatorToSignedFixedPoint (pSumFF, regInstruction.fracDout));
-				//t_operand value = (t_operand) (pSumFF);
-				write_channel_intel(channel_peDrainOutput, (t_operand) value);
-			}
-		} // if part of the valid PE range
-	} // while
-	
-
-}
-*/
 
 /*! \brief Dot product kernel that operates on compressed sparse weight and activation
 
@@ -965,23 +622,23 @@ __kernel void kernelDotProductDispatcher (
 	t_simdblock_di activationBlock, weightBlock;
 	t_accumulator pSum=0;
 	//uint1_t proceed = 0x1;
+	//bool activationBlockValid = true, weightBlockValid = true, loadBlock = true;
 
 	while (true) {
 ;
-		//bool activationBlockValid = true, weightBlockValid = true;
 		if (streamingBlockIndexActivation 
-			<= streamingBlockIndexWeight) {
+					<= streamingBlockIndexWeight) {
 			//EMULATOR_PRINT ( ("[kernelDotProductEngineDispatcher]: Waiting to read from the activation channel\n") );
+			//activationBlock = read_channel_nb_intel(channel_dpActivationInput, &activationBlockValid);
 			activationBlock = read_channel_intel(channel_dpActivationInput);
-			//activationBlock = read_channel_intel(channel_dpActivationInput);
 
 		}
 		//mem_fence(CLK_CHANNEL_MEM_FENCE);
 		if (streamingBlockIndexActivation 
-			>= streamingBlockIndexWeight) {
+					>= streamingBlockIndexWeight) {
 			//EMULATOR_PRINT ( ("[kernelDotProductEngineDispatcher]: Waiting to read from the weight channel\n") );
-			weightBlock = read_channel_intel(channel_dpWeightInput);
-			//weightBlock = read_channel_intel(channel_dpWeightInput);	
+			//weightBlock = read_channel_nb_intel(channel_dpWeightInput, &weightBlockValid);
+			weightBlock = read_channel_intel(channel_dpWeightInput);	
 		}
 
 
@@ -991,19 +648,15 @@ __kernel void kernelDotProductDispatcher (
 		uint1_t activationBlockIsLast = (activationBlock.metaInformation >> UNPACKED_ISLAST_BITOFFSET) & UNPACKED_ISLAST_MASK;
 */
 		//if (activationBlockValid && weightBlockValid) {
-			uint1_t weightBlockIsLast = weightBlock.isLast;
-			uint1_t activationBlockIsLast = activationBlock.isLast;
 
-			uint1_t isLast = ((weightBlockIsLast == 0x1) && (activationBlockIsLast == 0x1)) ?
-				0x1 : 0x0;
 
-			streamingBlockIndexActivation = (isLast == 0x1) ? 0 : activationBlock.streamingBlockIndex;
-			streamingBlockIndexWeight = (isLast == 0x1) ? 0 : weightBlock.streamingBlockIndex;
+			streamingBlockIndexActivation = activationBlock.streamingBlockIndex;
+			streamingBlockIndexWeight = weightBlock.streamingBlockIndex;
 
 
 			EMULATOR_PRINT ( ("[kernelDotProductEngineDispatcher]: streamingBlockIndexActivation updated to %d\n", streamingBlockIndexActivation) );
+
 			EMULATOR_PRINT ( ("[kernelDotProductEngineDispatcher]: streamingBlockIndexWeight updated to %d\n", streamingBlockIndexWeight) );
-			
 
 			//if (activationBlockValid && weightBlockValid) {
 			if (streamingBlockIndexWeight == streamingBlockIndexActivation) {
@@ -1014,12 +667,27 @@ __kernel void kernelDotProductDispatcher (
 				//multData.isLast = isLast;
 
 				//write_channel_intel(channel_macOperandsInput, multData);
+				/*
 				t_accumulator temp=0;
 				#pragma unroll
 				for (unsigned char i=0; i<SIMD_SIZE; i++) {
 					temp += weightBlock.values[i] * activationBlock.values[i];
 				}
 				pSum += temp;
+				*/
+				t_simdblock_mac activations, weights;
+				#pragma unroll
+				for (int i=0; i<SIMD_SIZE; i++) {
+					activations.values[i] = activationBlock.values[i];
+					weights.values[i] = weightBlock.values[i];
+				}
+				pSum += (t_accumulator) (mac(activations, weights));
+
+				uint1_t weightBlockIsLast = weightBlock.isLast;
+				uint1_t activationBlockIsLast = activationBlock.isLast;
+
+				uint1_t isLast = ((weightBlockIsLast == 0x1) && (activationBlockIsLast == 0x1)) ?
+				0x1 : 0x0;
 
 				if (isLast == 0x1) {
 					EMULATOR_PRINT ( ("[kernelMAC]: Waiting to commit!\n") );

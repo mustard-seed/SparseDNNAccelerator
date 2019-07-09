@@ -59,11 +59,16 @@ typedef struct __attribute__((packed)) {
     char values [SIMD_SIZE];
     unsigned char runLength;
 } t_simdblock;
+
+typedef struct __attribute__((aligned(8))) __attribute__((packed)) {
+    char values [SIMD_SIZE];
+    unsigned char runLength;
+} t_simdblock_host;
 #else
-typedef struct __attribute__((packed)) {
+typedef struct __attribute__((aligned(8))) __attribute__((packed)) {
     cl_char values [SIMD_SIZE];
     cl_uchar runLength;
-} t_simdblock;
+} t_simdblock_host;
 #endif
 
 #ifdef INTELFPGA_CL
@@ -73,7 +78,7 @@ typedef uint12_t t_weight;
 
 //Needs to be signed!!!!
 typedef char t_operand;
-typedef short t_accumulator;
+typedef int t_accumulator;
 
 #ifdef PE_PROTOTYPE_TEST
 typedef short t_value;
