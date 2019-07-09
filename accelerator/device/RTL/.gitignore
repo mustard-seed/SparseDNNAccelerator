@@ -1,0 +1,42 @@
+# ignore Quartus II generated folders
+*_sim
+**/*db
+**/*greybox_tmp
+**/*incremental_db
+**/*simulation
+**/*testbench
+**/*timing
+
+# ignore Quartus II generated files
+**/*_generation_script*
+**/*_inst.vhd
+**/*.bak
+**/*.cmp
+**/*.done
+**/*.eqn
+**/*.hex
+**/*.html
+**/*.jdi
+**/*.jpg
+**/*.mif
+**/*.pin
+**/*.pof
+**/*.ptf.*
+**/*.qar
+**/*.qarlog
+**/*.qws
+**/*.rpt
+**/*.smsg
+**/*.sof
+**/*.sopc_builder
+**/*.summary
+**/*.txt
+**/*.json
+**/*.log
+**/*.marker
+**/libraries
+**/*~
+**/*example*
+**/*sopc_*
+**/PLLJ_PLLSPE_INFO.txt # The generated PLL specification file
+transcript

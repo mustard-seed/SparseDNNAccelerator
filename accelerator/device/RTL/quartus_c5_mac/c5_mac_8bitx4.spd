@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<simPackage>
+ <file path="c5_mac_8bitx4_sim/c5_mac_8bitx4.v" type="VERILOG" />
+ <topLevel name="c5_mac_8bitx4" />
+ <deviceFamily name="cyclonev" />
+</simPackage>

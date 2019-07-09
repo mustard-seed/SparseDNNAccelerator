@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<simPackage>
+ <file
+   path="altera_mult_add_171/sim/a10_mac_8bitx4_altera_mult_add_171_ixw6vsi.v"
+   type="VERILOG"
+   library="altera_mult_add_171" />
+ <file
+   path="sim/a10_mac_8bitx4.v"
+   type="VERILOG"
+   library="a10_mac_8bitx4"
+   hasInlineConfiguration="true" />
+ <topLevel name="a10_mac_8bitx4.a10_mac_8bitx4" />
+ <deviceFamily name="arria10" />
+</simPackage>
