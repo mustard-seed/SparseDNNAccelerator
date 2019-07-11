@@ -50,6 +50,7 @@ protected:
     void SetUp() override {
         std::cout<<"Type in the aocx file name: ";
         std::cin >> binaryFile;
+        //binaryFile = "toyPingPong_aoc_emulation.aocx";
         //Setup and platform and the context
         cl_int status = CL_SUCCESS;
         clPlatform = aocl_utils_cpp::findPlatform("Intel(R) FPGA SDK for OpenCL(TM)");
@@ -164,7 +165,7 @@ protected:
 
 };
 
-void convolution1D (t_aligned_float_vector inputVector, std::vector<float> outputVector, float w0, float w1, float w2) {
+void convolution1D (t_aligned_float_vector & inputVector, std::vector<float>& outputVector, float w0, float w1, float w2) {
     assert (inputVector.size() >= 3);
 
     for (int i=0; i<inputVector.size() - 2; i++) {
@@ -204,10 +205,11 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainage) {
     //Compare the result
     for (int i=0; i<referenceOutput.size(); i++) {
         EXPECT_TRUE(
-             (referenceOutput.at(i) == outputVector.at(i)) )
+             std::abs(referenceOutput.at(i) - outputVector.at(i)) < 1e-4)
              << "referenceOutput["<<i<<"]: "<<referenceOutput.at(i)<<std::endl
              << "outputVector["<<i<<"]: "<<outputVector.at(i)<<std::endl;
    }
+    std::cout <<"Finished checking the result"<<std::endl;
 
 }
 
