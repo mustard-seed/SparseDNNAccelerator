@@ -48,7 +48,8 @@ protected:
 
 
     void SetUp() override {
-        binaryFile = "toyPingPong_aoc_release_hw.aocx";
+        std::cout<<"Type in the aocx file name: ";
+        std::cin >> binaryFile;
         //Setup and platform and the context
         cl_int status = CL_SUCCESS;
         clPlatform = aocl_utils_cpp::findPlatform("Intel(R) FPGA SDK for OpenCL(TM)");
