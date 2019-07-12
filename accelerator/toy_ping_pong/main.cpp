@@ -20,7 +20,7 @@
 #define W1 0.33333333
 #define W2 0.33333333
 #define K_SIZE 3
-#define MAX_DATA_LENGTH 8192
+#define MAX_DATA_LENGTH 1048576
 
 typedef
 std::vector<cl_float, boost::alignment::aligned_allocator<cl_float, aocl_utils_cpp::AOCL_ALIGNMENT>>
