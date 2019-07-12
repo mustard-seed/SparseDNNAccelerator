@@ -1,5 +1,7 @@
+__kernel void nop () {}
 
-#define CACHE_SIZE 128
+
+#define CACHE_SIZE 256 //DE10-Standard's DRAM width is 512 bit, with burst length 16, so 256 floats in one burst
 __kernel void toyPingPongConv (
 	__global float* restrict input,
 	__global float* restrict output,
@@ -14,7 +16,7 @@ __kernel void toyPingPongConv (
 	//Computer some parameters
 	int iterOutput = 0;
 	char loadFlag = 0x0;
-	unsigned char prevNumInputToLoad = 0;
+	unsigned short prevNumInputToLoad = 0;
 
 	//Important to go one extra
 	for (int iterInput=0; iterInput < numInputs + (CACHE_SIZE - 2); iterInput += (CACHE_SIZE - 2) ) {

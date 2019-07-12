@@ -39,6 +39,7 @@ protected:
     cl::CommandQueue commandQueue;
 
     cl::Kernel toyPingPongConvKernel;
+    cl::Kernel nopKernel;
 
     cl::Buffer bufferInput;
     cl::Buffer bufferOutput;
@@ -75,7 +76,10 @@ protected:
         aocl_utils_cpp::checkError(status, "Failed to build program");
 
         toyPingPongConvKernel = cl::Kernel(program, "toyPingPongConv", &status);
-        aocl_utils_cpp::checkError(status, "Failed to create the kernel!");
+        aocl_utils_cpp::checkError(status, "Failed to create the ping pong kernel!");
+
+        nopKernel = cl::Kernel(program, "nop", &status);
+        aocl_utils_cpp::checkError(status, "Failed to created the nop kernel!");
 
         commandQueue = cl::CommandQueue(
                     clContext,
@@ -156,6 +160,21 @@ protected:
 
             std::cout <<"Convolution kernel time (us): "<<kernelRunTime<<std::endl;
             std::cout <<"Number of inputs: "<<inputVector.size()<<std::endl;
+
+            int numNOPLaunch = 100;
+            cl_double nopKernelTotalTime = 0;
+            std::cout <<"Launching the NOP kernel "<<numNOPLaunch<<" times."<<std::endl;
+            for (int i=0; i<numNOPLaunch; i++) {
+            cl::Event nopKernelEvent;
+                status = commandQueue.enqueueTask(nopKernel, NULL, &nopKernelEvent);
+                aocl_utils_cpp::checkError(status, "Failed to launch the nop kernel!");
+                commandQueue.finish();
+
+                kernelStartTime = nopKernelEvent.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+                kernelEndTime = nopKernelEvent.getProfilingInfo<CL_PROFILING_COMMAND_END>();
+                nopKernelTotalTime += (cl_double)((kernelEndTime - kernelStartTime) * (cl_double)(1e-3));
+            }
+            std::cout <<"Average NOP kernel time (us): "<<nopKernelTotalTime / (cl_double (numNOPLaunch))<<std::endl;
 
         }
         else {
