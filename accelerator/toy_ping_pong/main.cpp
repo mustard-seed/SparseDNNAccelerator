@@ -114,7 +114,7 @@ protected:
         //Need to setup numInstructions, idx, and idy separately
     }
 
-    void launch (float w0, float w1, float w2) {
+    void launch (float w0, float w1, float w2, int cacheSize) {
         cl_int status;
         //Fill the buffers
         //Transfer the instruction
@@ -136,6 +136,7 @@ protected:
             toyPingPongConvKernel.setArg(3, w0);
             toyPingPongConvKernel.setArg(4, w1);
             toyPingPongConvKernel.setArg(5, w2);
+            toyPingPongConvKernel.setArg(6, cacheSize);
 
             cl::Event kernelEvent;
             status = commandQueue.enqueueTask(toyPingPongConvKernel, NULL, &kernelEvent);
@@ -160,6 +161,7 @@ protected:
 
             std::cout <<"Convolution kernel time (us): "<<kernelRunTime<<std::endl;
             std::cout <<"Number of inputs: "<<inputVector.size()<<std::endl;
+            std::cout <<"Cache size: "<<cacheSize<<std::endl;
 
             int numNOPLaunch = 100;
             cl_double nopKernelTotalTime = 0;
@@ -219,16 +221,20 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainage) {
     inputVector = initialize_vector(seed, numElements);
     std::vector<float> referenceOutput;
     convolution1D(inputVector, referenceOutput, W0, W1, W2);
-    launch(W0, W1, W2);
 
-    //Compare the result
-    for (int i=0; i<referenceOutput.size(); i++) {
-        EXPECT_TRUE(
-             std::abs(referenceOutput.at(i) - outputVector.at(i)) < 1e-4)
-             << "referenceOutput["<<i<<"]: "<<referenceOutput.at(i)<<std::endl
-             << "outputVector["<<i<<"]: "<<outputVector.at(i)<<std::endl;
-   }
-    std::cout <<"Finished checking the result"<<std::endl;
+    for (int cacheSize=64; cacheSize <= 1024; cacheSize +=64) {
+        std::cout <<"================="<<std::endl;
+        launch(W0, W1, W2, cacheSize);
+
+        //Compare the result
+        for (int i=0; i<referenceOutput.size(); i++) {
+            EXPECT_TRUE(
+                 std::abs(referenceOutput.at(i) - outputVector.at(i)) < 1e-4)
+                 << "referenceOutput["<<i<<"]: "<<referenceOutput.at(i)<<std::endl
+                 << "outputVector["<<i<<"]: "<<outputVector.at(i)<<std::endl;
+       }
+        std::cout <<"Finished checking the result"<<std::endl;
+    }
 
 }
 

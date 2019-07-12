@@ -1,16 +1,17 @@
 __kernel void nop () {}
 
 
-#define CACHE_SIZE 256 //DE10-Standard's DRAM width is 512 bit, with burst length 16, so 256 floats in one burst
+#define MAX_CACHE_SIZE 1024 //DE10-Standard's DRAM width is 512 bit, with burst length 16, so 256 floats in one burst
 __kernel void toyPingPongConv (
 	__global float* restrict input,
 	__global float* restrict output,
 	int numInputs,
 	float w0,
 	float w1,
-	float w2
+	float w2,
+	int cacheSize
 	) {
-	float cache[CACHE_SIZE][2] __attribute__ ((numbanks(2), bankwidth(4)));
+	float cache[MAX_CACHE_SIZE][2] __attribute__ ((numbanks(2), bankwidth(4)));
 	//float cache[CACHE_SIZE];
 
 	//Computer some parameters
@@ -19,9 +20,9 @@ __kernel void toyPingPongConv (
 	unsigned short prevNumInputToLoad = 0;
 
 	//Important to go one extra
-	for (int iterInput=0; iterInput < numInputs + (CACHE_SIZE - 2); iterInput += (CACHE_SIZE - 2) ) {
-		short numInputToLoad = ((iterInput + CACHE_SIZE) < numInputs) ? 
-			CACHE_SIZE : (numInputs - iterInput);
+	for (int iterInput=0; iterInput < numInputs + (cacheSize - 2); iterInput += (cacheSize - 2) ) {
+		short numInputToLoad = ((iterInput + cacheSize) < numInputs) ? 
+			cacheSize : (numInputs - iterInput);
 		short iterCacheLoad=0;
 		short iterCacheRead = 0;
 		bool proceed = true;
