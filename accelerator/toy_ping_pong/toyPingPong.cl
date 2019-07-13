@@ -1,7 +1,9 @@
+__attribute__((max_global_work_dim(0)))
 __kernel void nop () {}
 
 
 #define MAX_CACHE_SIZE 1024 //DE10-Standard's DRAM width is 512 bit, with burst length 16, so 256 floats in one burst
+__attribute__((max_global_work_dim(0)))
 __kernel void toyPingPongConv (
 	__global float* restrict input,
 	__global float* restrict output,
