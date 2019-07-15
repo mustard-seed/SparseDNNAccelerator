@@ -46,6 +46,15 @@
 #define WEIGHT_MIN -256
 //================================================================
 
+//=======Mask used for the new encoding scheme (2019/07)=========
+//channel offset information
+#define CHANNEL_OFFSET_MASK 0x07F
+#define CHANNEL_OFFSET_BITOFFSET 0
+#define IS_LAST_BLOCK_MASK 0x01
+#define IS_LAST_BLOCK_BITOFFSET	7
+//===============================
+//===============================================================
+
 
 #define PACKET_SIZE 1
 

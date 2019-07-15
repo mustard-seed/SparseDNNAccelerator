@@ -8,7 +8,7 @@ class fixedPointNumber {
         char integerWidth;
         float resolution;
     public:
-        fixedPointNumber () = delete;
+        fixedPointNumber () = default;
         fixedPointNumber (float _realNumber
                           ,char _fracWidth
                           ,char _intWidth);

@@ -2,6 +2,7 @@
 #define STRUCTURES_HPP_DEF
 
 #include "params.hpp"
+#include "CL/cl.hpp"
 
 /*! t_instruction
  * \brief VLIW instructions for controlling the accelerator
@@ -69,6 +70,25 @@ typedef struct __attribute__((aligned(8))) __attribute__((packed)) {
     cl_char values [SIMD_SIZE];
     cl_uchar runLength;
 } t_simdblock_host;
+#endif
+
+#ifdef INTELFPGA_CL
+typedef struct {
+    char values [SIMD_SIZE];
+} t_simdblock_value; //Value in a simdblock
+
+typedef unsigned char t_simdblock_channel_offset; //Relative channel of a simdblock in a streaming block
+
+typedef unsigned short t_streamblock_address; //Address of a streaming block in BRAM
+
+#else
+typedef struct {
+    cl_char values [SIMD_SIZE];
+} t_simdblock_value;
+
+typedef cl_uchar t_simdblock_channel_offset;
+
+typedef cl_ushort t_streamblock_address;
 #endif
 
 #ifdef INTELFPGA_CL
