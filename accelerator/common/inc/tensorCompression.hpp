@@ -11,6 +11,7 @@ public:
     //and the BRAM addresses of each streamBlock
     t_aligned_simd_value_vector valueVector;
     t_aligned_channel_offset_vector channelOffsetVector;
+    t_aligned_streamblock_address_vector streamBlockAddressVector;
     //The BRAM addresses of each streamBlock can be computed on the fly in the kernel!
     //t_aligned_streamblock_address_vector streamBlockAddressVector;
 
@@ -20,16 +21,28 @@ public:
     unsigned short width;
     unsigned short height;
 
-    //The following parameters should be compatiable with the hardware
-    //Number of uncompressed simdblocks in a streaming block
-    //TODO: Should this value should match the number of PE rows?
-    unsigned short streamingBlockSize;
+    //This flag controls the external memory address stride, and
+    //the streaming block size.
+    //If is Kernel, each filter is one streaming block
+    //Otherwise, the size of each streaming block is that of one synchorinization block
+    bool isKernel;
 
-    //Number of uncompressed scalar value in each simdblock;
-    unsigned short simdBlockSize;
+    //The max index (starts from 0) of a simd block found inside a stream block
+    unsigned short maxSimdBlockIndexInStreamBlock;
 
-    //Word stride between the start of adjacent rows in the external memory
-    unsigned int externalMemoryRowAddressStride;
+    //The max index (starts from 0) of a simd block found inside a synchornization block
+    unsigned char maxSimdBlockIndexInSyncBlock;
+
+    //The maximum index (starts from 0) of a scalar found inside a simd blcok
+    //Equal to the size of simd block minus 1
+    unsigned char maxScalarIndexInSimdBlock;
+
+    //Word stride between the start of contiguous compression region in the external memory
+    //In the case of kernel tensor, the contiguous compression region is sized at the number of words in the
+    //uncompressed kernel
+    //In the case of input/output activation tensor, the contiguous compression region is sized at
+    //page_size * ceil (page_size / (channel * row))
+    unsigned int externalMemoryAddressStride;
 
     //Number of banks per 3D tensor. The strips will be distributed across the banks
     //in a interleaved fashion
@@ -39,16 +52,15 @@ public:
     compressedTensor() {}
 
     //In practice, use the following constructor
-    compressedTensor (
-            std::vector<fixedPointNumber> & fixedPointVector,
+    compressedTensor (std::vector<fixedPointNumber> & fixedPointVector,
             unsigned short _num3DTensors,
             unsigned short _channel,
             unsigned short _width,
             unsigned short _height,
-            unsigned short _streamingBlockSize,
-            unsigned short _simdBlockSize,
-            unsigned short _extMemoryRowAddressStride,
-            unsigned short _numBanks
+            unsigned char _maxSimdBlockIndexInStreamBlock,
+            unsigned char _maxScalarIndexInSimdBlock,
+            unsigned short _numBanks,
+            bool _isKernel
             );
 
 

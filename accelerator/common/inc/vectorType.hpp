@@ -14,6 +14,10 @@ std::vector<t_simdblock_channel_offset, boost::alignment::aligned_allocator<t_si
 t_aligned_channel_offset_vector;
 
 typedef
+std::vector<cl_uchar, boost::alignment::aligned_allocator<cl_uchar, aocl_utils_cpp::AOCL_ALIGNMENT>>
+t_aligned_runlength_vector;
+
+typedef
 std::vector<t_streamblock_address, boost::alignment::aligned_allocator<t_streamblock_address, aocl_utils_cpp::AOCL_ALIGNMENT>>
 t_aligned_streamblock_address_vector;
 #endif

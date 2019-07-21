@@ -2,27 +2,47 @@
 #include "params.hpp"
 #include <cmath> //std::ceil
 #include <iostream> //cout
+#include <cassert>
 
-compressedTensor::compressedTensor(std::vector<fixedPointNumber> &fixedPointVector
-                                   ,unsigned short _num3DTensors
-                                   ,unsigned short _channel
-                                   ,unsigned short _width
-                                   ,unsigned short _height
-                                   ,unsigned short _streamingBlockSize
-                                   ,unsigned short _simdBlockSize
-                                   ,unsigned short _extMemoryRowAddressStride
-                                   ,unsigned short _numBanks) {
+compressedTensor::compressedTensor (std::vector<fixedPointNumber> & fixedPointVector,
+                                    unsigned short _num3DTensors,
+                                    unsigned short _channel,
+                                    unsigned short _width,
+                                    unsigned short _height,
+                                    unsigned char _maxSimdBlockIndexInStreamBlock,
+                                    unsigned char _maxScalarIndexInSimdBlock,
+                                    unsigned short _numBanks,
+                                    bool _isKernel
+                                    ) {
     num3DTensors = _num3DTensors;
     channel = _channel;
     width = _width;
     height = _height;
-    streamingBlockSize = _streamingBlockSize;
-    simdBlockSize = _simdBlockSize;
-    externalMemoryRowAddressStride = _extMemoryRowAddressStride;
+    maxScalarIndexInSimdBlock = _maxScalarIndexInSimdBlock;
     numBanks = _numBanks;
+    isKernel = _isKernel;
+    unsigned short numSimdBlocksInChannel =
+            (unsigned short) std::ceil ( (float) channel / (float) (maxScalarIndexInSimdBlock + 1) );
+    externalMemoryAddressStride = isKernel ? width * height * numSimdBlocksInChannel * num3DTensors : width * numSimdBlocksInChannel;
 
-    valueVector.resize(height * externalMemoryRowAddressStride);
-    channelOffsetVector.resize(height * externalMemoryRowAddressStride);
+    maxSimdBlockIndexInStreamBlock = isKernel ?
+                height * width * (unsigned short) std::ceil ( (float) channel / (float) (maxScalarIndexInSimdBlock + 1) ) - 1
+              : _maxSimdBlockIndexInStreamBlock;
+    maxSimdBlockIndexInSyncBlock = std::min(maxSimdBlockIndexInStreamBlock, (unsigned short) MAX_SIMD_BLOCK_INDEX);
+
+
+    if (isKernel) {
+        valueVector.resize(externalMemoryAddressStride);
+        channelOffsetVector.resize(externalMemoryAddressStride);
+        streamBlockAddressVector.resize(num3DTensors);
+     }
+    else {
+        valueVector.resize(height * externalMemoryAddressStride);
+        channelOffsetVector.resize(height * externalMemoryAddressStride);
+        assert( numSimdBlocksInChannel % (_maxSimdBlockIndexInStreamBlock + 1) == 0 );
+        unsigned int numStreamBlocksPerChannel = numSimdBlocksInChannel / (_maxSimdBlockIndexInStreamBlock + 1);
+        streamBlockAddressVector.resize(num3DTensors * width * height * numStreamBlocksPerChannel );
+    }
     //streamBlockAddressVector.resize(
     //            height*width* ((int) std::ceil(
     //                ((float) channel) / ((float) simdBlockSize * (float) streamingBlockSize)
@@ -30,78 +50,108 @@ compressedTensor::compressedTensor(std::vector<fixedPointNumber> &fixedPointVect
     //            );
 
     int iCompressVectorBase = 0;
+    int iStreamBlockAddressVector = 0;
+    cl_ushort streamBlockAddress = 0;
     for (int iTensor=0, iFullVector=0; iTensor < num3DTensors; iTensor++){
         for (int iHeight=0; iHeight < height; iHeight++) {
             int iCompressVector = iCompressVectorBase;
-            unsigned short countNumSimdBlockStored = 0;
+            //Index of the current uncompressed simd block in the current stream block
+            cl_ushort iSimdBlockInStreamBlock = 0;
             //Index of the external memory location
             for (int iWidth=0; iWidth < width; iWidth++) {
                 t_simdblock_value compressionBlock;
                 bool retainFlag = false;
-                //Number of uncompressed simdblocks in the current streaming block
-                int iChannelOffset = 0;
+                //Index of the current uncompressed simd block in the current sync Block;
+                int iSimdBlockInSyncBlock = 0;
                 //Number of scar within the current simd block
-                int simdCount = 0;
+                int iScalarInSimdBlock = 0;
                 //Depth of the BRAM port we are updating;
-                //unsigned short addressDepth = streamBlockAddressTracker.at(iWidth % numBanks);
+
+                //Stream block address is reset to zero at the beginning of every strip
+                //If the tensor is an I/O
+                if (!isKernel) {
+                    streamBlockAddress = 0;
+                }
                 for (int iChannel=0;
                      iChannel < channel;
                      iChannel++, iFullVector++) {
+                    //Float to fixed point conversion
                     fixedPointNumber fpNumber = fixedPointVector.at(iFullVector);
                     char fpValue = ( (fpNumber.getBits()) & (fpNumber.getMask()) );
+
                     //If at least one value needs to be retained, then the entire block is retained.
                     retainFlag = (fpValue != 0x0) || retainFlag;
-                    compressionBlock.values[simdCount++] = fpValue;
+                    compressionBlock.values[iScalarInSimdBlock] = fpValue;
 
                     //If we are at the end of the channel, at a simd block is yet formed
                     //then we need to pad 0s
                     if ( iChannel == (channel - 1) ) {
-                           while (simdCount < simdBlockSize) {
-                               compressionBlock.values[simdCount++] = 0x0;
+                           while (iScalarInSimdBlock < maxScalarIndexInSimdBlock) {
+                               compressionBlock.values[++iScalarInSimdBlock] = 0x0;
                             }
                     }
 
-                    //Update the simdCound
-                    simdCount =  (simdCount == simdBlockSize) ? 0 : simdCount;
-
-                    //If a simd block has been formed, and it
+                    // Condition for storing a simd block and its position in a sync block
+                    // If a simd block has been formed, and it
                     // a. contains at least one non-zero element OR
-                    // b. is the last simd block in a streaming block OR
+                    // b. is the last simd block in a sync block OR
                     // c. is the last simd block in the channel
                     // Then we need to store it.
-                    // If we come across case b or c, we also need to mark the block as "last"
+                    // If we come across case b or c, we also need reset iSimdBlockInSyncBlock
+
+                    bool simdBlockFormed = (iScalarInSimdBlock == maxScalarIndexInSimdBlock);
+
+                    bool simdBlockIndexInSyncBlockReset = ( iSimdBlockInSyncBlock == maxSimdBlockIndexInSyncBlock )
+                            || (iChannel == (channel - 1));
+
+                    bool simdBlockIndexInStreamBlockReset = (iSimdBlockInStreamBlock == maxSimdBlockIndexInStreamBlock);
 
                     bool storeSimdBlock =
-                            (simdCount == 0) && (retainFlag || (iChannelOffset == (streamingBlockSize - 1) ) || (iChannel == (channel - 1)) ) ?
+                            simdBlockFormed && (retainFlag || simdBlockIndexInSyncBlockReset ) ?
                                 true : false;
-                    unsigned char simdBlocIsLast =
-                           (simdCount == 0) && ((iChannelOffset == (streamingBlockSize - 1) ) || (iChannel == (channel - 1)) ) ?
-                                0x1 : 0x0;
 
+                    //Logic for storing the simd block
                     if (storeSimdBlock) {
                         valueVector.at(iCompressVector) = compressionBlock;
-                        char value = (
-                                    ((iChannelOffset & CHANNEL_OFFSET_MASK) << CHANNEL_OFFSET_BITOFFSET)
-                                    | ((simdBlocIsLast & IS_LAST_BLOCK_MASK) << IS_LAST_BLOCK_BITOFFSET)
-                                    );
-                        channelOffsetVector.at(iCompressVector+2) = value;
+                        channelOffsetVector.at(iCompressVector) = iSimdBlockInSyncBlock;
+                        streamBlockAddress++;
+
                         iCompressVector++;
-                        countNumSimdBlockStored++;
                         retainFlag = false;
                     }
 
-                    //Update the iChannelOffset
-                    if (simdCount == 0) {
-                        iChannelOffset = (iChannelOffset == streamingBlockSize - 1)
-                                ? 0 : (iChannelOffset+1);
+                    //Logic for updating
+                    //1. iSimdBlockInSyncBlock
+                    //2. iSimdBlockInStreamBlock
+                    //3. streamAddress
+                    if (simdBlockFormed) {
+                        iSimdBlockInSyncBlock = simdBlockIndexInSyncBlockReset ?
+                                    0 : iSimdBlockInSyncBlock + 1;
+                        iSimdBlockInStreamBlock = simdBlockIndexInStreamBlockReset ?
+                                    0 : iSimdBlockInStreamBlock + 1;
+                        //We've crossed a stream block boundary, need to record the end pointer to the stream block
+                        //In the compressed tensor
+                        if (simdBlockIndexInStreamBlockReset) {
+                            streamBlockAddressVector[iStreamBlockAddressVector++] = streamBlockAddress;
+                            if ((!isKernel) && (iChannel == (channel - 1))) {
+                                streamBlockAddress = 0;
+                            }
+                        }
                     }
+
+                    //Update the scalarIndexInSimdBlock
+                    iScalarInSimdBlock =  (iScalarInSimdBlock == maxScalarIndexInSimdBlock) ? 0 : iScalarInSimdBlock + 1;
 
                 } // for channel
             } // for width
-            channelOffsetVector.at(iHeight * externalMemoryRowAddressStride) = (countNumSimdBlockStored & 0xFF);
-            channelOffsetVector.at(iHeight * externalMemoryRowAddressStride + 1) = ((countNumSimdBlockStored & 0xFF00) >> 8);
-            iCompressVectorBase += externalMemoryRowAddressStride;
+            if (!isKernel) {
+                iCompressVectorBase += externalMemoryAddressStride;
+             }
+            else {
+                iCompressVectorBase = iCompressVector;
+            }
         } // for height
+        streamBlockAddress = 0;
      } // for Tensor
 }
 
@@ -111,65 +161,93 @@ int decodeTensor(compressedTensor compTensor, std::vector<float> & denseTensor, 
     unsigned short channel = compTensor.channel;
     unsigned short width = compTensor.width;
     unsigned short height = compTensor.height;
+    bool isKernel = compTensor.isKernel;
 
     //The following parameters should be compatiable with the hardware
     //Number of uncompressed simdblocks in a streaming block
     //TODO: Should this value should match the number of PE rows?
-    unsigned short streamingBlockSize = compTensor.streamingBlockSize;
+    unsigned short maxSimdBlockIndexInStreamBlock = compTensor.maxSimdBlockIndexInStreamBlock;
 
     //Number of uncompressed scalar value in each simdblock;
-    unsigned short simdBlockSize = compTensor.simdBlockSize;
+    unsigned short simdBlockSize = compTensor.maxScalarIndexInSimdBlock + 1;
 
     //Word stride between the start of adjacent rows in the external memory
-    unsigned int externalMemoryRowAddressStride = compTensor.externalMemoryRowAddressStride;
+    unsigned int externalMemoryAddressStride = compTensor.externalMemoryAddressStride;
+
+    unsigned short numSimdBlockPerChannel = (unsigned short) std::ceil( ((float) channel) / ((float) simdBlockSize) );
+
+    unsigned short numStreamBlocksInTensor =
+            isKernel ? num3DTensors : num3DTensors * height * width * numSimdBlockPerChannel / (maxSimdBlockIndexInStreamBlock + 1);
 
     //Allocate space for the dense tensor
-    denseTensor.resize(num3DTensors*channel*width*height);
-    int iDenseTensor = 0;
-    int iCompressVectorBase = 0;
-
+    denseTensor.resize(num3DTensors*channel*width*height, 0.0f);
     int numSimdBlock = 0;
-    for (int iTensor=0; iTensor < num3DTensors; iTensor++) {
-        for (int iH = 0; iH < height; iH++) {
-            int iCompressVector = iCompressVectorBase;
-            unsigned short numCompressedBlocks =
-                    (unsigned short) compTensor.channelOffsetVector.at(iCompressVector)
-                    | (((unsigned short) (compTensor.channelOffsetVector.at(iCompressVector + 1))) << 8);
-            int iDenseTensorChannel = 0;
-            std::vector<float> streamingBlock (streamingBlockSize*simdBlockSize, 0.0f);
-            for (int iSimdBlocks = 0; iSimdBlocks < numCompressedBlocks; iSimdBlocks++) {
-                char channelOffsetBlob = compTensor.channelOffsetVector.at(iCompressVector+2);
-                bool isLastBlock = (((channelOffsetBlob >> IS_LAST_BLOCK_BITOFFSET) & IS_LAST_BLOCK_MASK) == 0x1) ?
-                            true : false;
-                char channelOffset = ((channelOffsetBlob >> CHANNEL_OFFSET_BITOFFSET) & CHANNEL_OFFSET_MASK);
-                t_simdblock_value compressionBlock = (compTensor.valueVector).at(iCompressVector);
-                for (int i=0, idx=channelOffset*simdBlockSize; i<simdBlockSize; i++, idx++) {
-                    fixedPointNumber fpValue ((short) compressionBlock.values[i], fracWidth, intWidth);
-                    streamingBlock.at(idx) = fpValue.convert2Float();
-                }
-                iCompressVector++;
+    int iCompressVectorBase = 0;
+    int iCompressVector = 0;
+    int iWidth = 0;
+    int iHeight = 0;
+    int iTensor = 0;
+    int iChannelBase = 0;
 
-                //Update the output vector if necessary
-                if (isLastBlock) {
-                    for (int ii=0; ii<streamingBlockSize*simdBlockSize; ii++) {
-                        if (iDenseTensorChannel < channel) {
-                           denseTensor.at(iDenseTensor++) = streamingBlock.at (ii);
-                           iDenseTensorChannel++;
-                        }
+    for (unsigned short iStreamBlock = 0; iStreamBlock<numStreamBlocksInTensor; iStreamBlock++) {
+        int numCompressedSimdBlocksInStreamBlock = 0;
+
+        //Logic for computing the number of compressed simdblocks in the stream block
+        if (isKernel) {
+            numCompressedSimdBlocksInStreamBlock = compTensor.streamBlockAddressVector.at(iStreamBlock);
+        }
+        else {
+            if (iChannelBase == 0) {
+                numCompressedSimdBlocksInStreamBlock = compTensor.streamBlockAddressVector.at(iStreamBlock);
+            }
+            else {
+                numCompressedSimdBlocksInStreamBlock =
+                        compTensor.streamBlockAddressVector.at(iStreamBlock)
+                        - compTensor.streamBlockAddressVector.at(iStreamBlock - 1);
+            }
+        }
+
+        //Perform some operations to initialize the iterators
+        for (int iSimdBlock = 0; iSimdBlock<numCompressedSimdBlocksInStreamBlock; iSimdBlock++) {
+            t_simdblock_value simdBlock =compTensor.valueVector.at(iCompressVector);
+            t_simdblock_channel_offset iSimdBlockInSyncBlock = compTensor.channelOffsetVector.at(iCompressVector);
+            iCompressVector++;
+            numSimdBlock++;
+
+            int iChannel = iChannelBase + iSimdBlockInSyncBlock * simdBlockSize;
+            int iDenseVector = iTensor * height * width * channel + iHeight * width * channel + iWidth * channel + iChannel;
+
+            //Write the scalars in the simd block to the dense vector
+            for (int i=0; i< simdBlockSize; i++) {
+                if (iChannel < channel) {
+                    fixedPointNumber fpValue ( (short) (simdBlock.values[i]), fracWidth, intWidth);
+                    denseTensor.at(iDenseVector++) = fpValue.convert2Float();
+                    iChannel++;
+                }
+            }
+
+            if (iChannel < channel) {
+                if (iSimdBlockInSyncBlock == compTensor.maxSimdBlockIndexInSyncBlock) {
+                    iChannelBase += (compTensor.maxSimdBlockIndexInSyncBlock + 1) * simdBlockSize;
+                }
+            }
+            else {
+                iChannelBase = 0;
+                iWidth = (iWidth == (width - 1)) ? 0 : iWidth + 1;
+                if (iWidth == 0) {
+                    iHeight = (iHeight == (height - 1)) ? 0: iHeight + 1;
+                    if (iHeight == 0) {
+                        iTensor++;
                     }
-                    streamingBlock.clear();
-                    streamingBlock.resize(streamingBlockSize*simdBlockSize, 0.0f);
-                }
+                    if (!isKernel) {
+                        iCompressVectorBase += externalMemoryAddressStride;
+                        iCompressVector = iCompressVectorBase;
+                    }
+                } // height update
+            } // width update
+        } // for simdblocks in one Stream block
 
-                if (iDenseTensorChannel == channel) {
-                    iDenseTensorChannel = 0;
-                }
-                //std::cout <<"Decoded simd block "<<iSimdBlocks<<" in row "<<iH<<std::endl;
-            } // for surviving simd blocks
-            numSimdBlock += numCompressedBlocks;
-            iCompressVectorBase += externalMemoryRowAddressStride;
-        } // for height
-    } // for tensors
+    }
     std::cout <<"Number of simd blocks survived "<<numSimdBlock<<std::endl;
-    std::cout <<"Number of dense value written: "<<iDenseTensor<<std::endl;
+    std::cout <<"Size of the dense vector "<<denseTensor.size()<<std::endl;
 }

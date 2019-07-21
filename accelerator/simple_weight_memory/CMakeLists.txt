@@ -6,6 +6,7 @@ set (PREPROCESSOR_DEFS
 #        -DWEIGHT_MEMORY_TEST
 #        -DHW_DEBUG
         -DSIMPLE_WEIGHT_MEMORY_TEST
+        -DSIMPLE_WEIGHT_STREAMER
         )
 
 ############################################
@@ -150,6 +151,7 @@ include (${PROJECT_SOURCE_DIR}/aoc.cmake)
 # Find the kernel source files. Note, GLOB isn't the recommended way. One needs to touch the CMakesList.txt to effect changes
 file(GLOB_RECURSE kernel_files
      ${PROJECT_SOURCE_DIR}/device/simple_weight_memory.cl
+     ${PROJECT_SOURCE_DIR}/device/channels.cl
 )
 
 add_aoc_target (
