@@ -41,6 +41,7 @@
 #define WEIGHT_BITWIDTH 8
 #define WEIGHT_BITOFFSET 0
 #define WEIGHT_MASK 0x0FF
+
 //Must be in HEX
 #define WEIGHT_MAX 255
 #define WEIGHT_MIN -256
@@ -58,8 +59,12 @@
 
 #define PACKET_SIZE 1
 
-#define PE_ROWS 4
+#define PE_ROWS 16
+#ifdef DSIMPLE_WEIGHT_STEAMER
+#define PE_COLS 1
+#else
 #define PE_COLS 2
+#endif
 
 //Encoding weight length
 #define ENCODING_LENGTH 64
@@ -68,6 +73,7 @@
 
 #define SIMD_SIZE 4
 #define SYNC_SIZE 8
+#define MAX_SIMD_BLOCK_INDEX 0x0FF
 
 #define KERNEL_CACHE_LANES PE_ROWS
 #define KERNEL_CACHE_LANE_MASK 0x7

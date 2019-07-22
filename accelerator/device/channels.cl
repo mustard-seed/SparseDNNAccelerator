@@ -36,4 +36,8 @@ channel bool channel_weightCollectControlCommit __attribute__((depth(9)));
 channel bool channel_weightCollectorStop [KERNEL_CACHE_LANES]__attribute__((depth(0)));
 #endif
 
+#ifdef SIMPLE_WEIGHT_STREAMER
+channel t_simdblock_di_tagged channel_weightLanes[PE_ROWS][PE_COLS] __attribute__((depth(0)));
+#endif
+
 #endif

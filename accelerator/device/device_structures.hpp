@@ -2,7 +2,9 @@
 #define STRUCTURES_HPP_DEF
 
 #include "params.hpp"
+#ifndef INTELFPGA_CL
 #include "CL/cl.hpp"
+#endif
 
 /*! t_instruction
  * \brief VLIW instructions for controlling the accelerator
@@ -99,6 +101,15 @@ typedef uint12_t t_weight;
 //Needs to be signed!!!!
 typedef char t_operand;
 typedef int t_accumulator;
+
+//With the max transport length and last bit annotation
+typedef struct __attribute__((packed)){
+    char values [SIMD_SIZE];
+    unsigned char streamingBlockIndex;
+    bool isLast;
+    char maxTransportID;
+
+} t_simdblock_di_tagged;
 
 #ifdef PE_PROTOTYPE_TEST
 typedef short t_value;
