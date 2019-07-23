@@ -23,13 +23,13 @@
 #                            "_aoc_simulation"
 # HEADER_DIR:  Single valued, optional. Custom header include path for the compiler to see. There is no need to pass <INTELFPGAOCLSDKROOT>/include/kernel_headers via this argument
 # RTL_DIR:     Single valued, optional. Directory of the custom RTL library path. Must be supplied if RTL_LIB is specified
-# RTL_LIB:     Single valued, optional. Name of the RTL library. Must be supplied if RTL_DIR is specified.
+# RTL_LIB_LIST:    List, optional. -l flags of rtl libraries. Must be supplied if RTL_DIR is specified. e.g. {-l mylib1.aoclib -l mylib2.aoclib}
 # SOURCES_LIST: List, required. List of OpenCL kernel files (*.cl) to be compiled.
 # PREPROCESSOR_DEFS_LIST: List, optional. List of preprocessor definition flags. e.g. {-DMY_MACRO1=xxxx -DMY_MACRO2=yyy}             
 function (add_aoc_target)
     set (options )
-    set (oneValueArgs TARGET_NAME TARGET_TYPE HEADER_DIR RTL_DIR RTL_LIB)
-    set (multiValueArgs  SOURCES_LIST PREPROCESSOR_DEFS_LIST)
+    set (oneValueArgs TARGET_NAME TARGET_TYPE HEADER_DIR RTL_DIR)
+    set (multiValueArgs  SOURCES_LIST PREPROCESSOR_DEFS_LIST RTL_LIB)
 
     cmake_parse_arguments(add_aoc_target "${options}" "${oneValueArgs}" "${multiValueArgs}" "${ARGN}" )    
 
@@ -107,10 +107,10 @@ function (add_aoc_target)
     list(SORT add_aoc_target_SOURCES_LIST)
 
     #Add the library for custom RTL if needed
-    if ("${add_aoc_target_RTL_LIB}" STREQUAL "")
+    if ("${add_aoc_target_RTL_DIR}" STREQUAL "")
     else()
         list (APPEND occflags -I ${add_aoc_target_RTL_DIR} -L ${add_aoc_target_RTL_DIR}
-                -l ${add_aoc_target_RTL_LIB})
+                ${add_aoc_target_RTL_LIB})
     endif()
 
     list (APPEND occflags ${add_aoc_target_SOURCES_LIST})

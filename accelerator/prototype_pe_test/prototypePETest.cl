@@ -45,15 +45,6 @@ typedef struct __attribute__((packed)) {
 	uint1_t isLast;
 } t_macOperands;
 
-//With the max transport length and last bit annotation
-typedef struct __attribute__((packed)){
-	char values [SIMD_SIZE];
-	uint6_t streamingBlockIndex;
-	uint1_t isLast;
-	char maxTransportID;
-
-} t_simdblock_di_tagged;
-
 //With the final array
 typedef struct __attribute__((packed)){
 	char values [SIMD_SIZE];
