@@ -336,6 +336,128 @@ TEST (hostInfrastructureTest, compressionTestActivation) {
     }
 }
 
+TEST (hostInfrastructureTest, directCompressionTestKernel) {
+    char fracWidth = 4, intWidth = 3;
+    float bernProb = 0.01;
+    int numTensors = 512;
+    int height = 3;
+    int width = 3;
+    int channel = 512;
+    int seed = 1256;
+    float min = 1.0;
+    float max = 2.0;
+    int numElements = numTensors * height * width * channel;
+
+    unsigned short maxSimdBlockIndexInStreamBlock = 8-1;
+    unsigned short maxScalarIndexInSimdBlock = 4-1;
+    unsigned short numBanks = 1;
+    bool isKernel = true;
+    t_aligned_float_vector floatVector = initialize_vector(
+                seed,
+                bernProb,
+                numTensors,
+                height,
+                width,
+                channel,
+                min,
+                max
+                );
+
+
+    std::vector<fixedPointNumber> fpVector;
+    fpVector.resize(numElements);
+
+    for (int i=0; i<numElements; i++) {
+        fixedPointNumber fpValue(floatVector.at(i), fracWidth, intWidth);
+        fpVector.at(i) = fpValue;
+    }
+
+    std::cout <<"Start to compress the tensor"<<std::endl;
+    directCompressedTensor compTensor(
+                fpVector,
+                numTensors,
+                channel,
+                width,
+                height,
+                maxSimdBlockIndexInStreamBlock,
+                maxScalarIndexInSimdBlock,
+                isKernel
+                );
+
+    std::cout <<"Start to decode the tensor"<<std::endl;
+    std::vector<float> decodedVector;
+    decodeDirectCompressedTensor(compTensor, decodedVector, fracWidth, intWidth);
+
+    std::cout <<"Comparing the decoded tensor and the original tensor"<<std::endl;
+    for (int i=0; i<numElements; i++) {
+        float orig = floatVector.at(i);
+        float newValue = decodedVector.at(i);
+        EXPECT_TRUE(std::abs(orig-newValue) < 1.0f / (1 << fracWidth))
+                << "i, Original Value, New Value: "<<i<<" "<<orig<<" "<<newValue<<std::endl;
+    }
+}
+
+TEST (hostInfrastructureTest, directCompressionTestActivation) {
+    char fracWidth = 4, intWidth = 3;
+    float bernProb = 0.1;
+    int numTensors = 1;
+    int height = 63;
+    int width = 63;
+    int channel = 512;
+    int seed = 3737;
+    float min = 1.0;
+    float max = 2.0;
+    int numElements = numTensors * height * width * channel;
+
+    unsigned short maxSimdBlockIndexInStreamBlock = 8-1;
+    unsigned short maxScalarIndexInSimdBlock = 4-1;
+    unsigned short numBanks = 1;
+    bool isKernel = false;
+    t_aligned_float_vector floatVector = initialize_vector(
+                seed,
+                bernProb,
+                numTensors,
+                height,
+                width,
+                channel,
+                min,
+                max
+                );
+
+
+    std::vector<fixedPointNumber> fpVector;
+    fpVector.resize(numElements);
+
+    for (int i=0; i<numElements; i++) {
+        fixedPointNumber fpValue(floatVector.at(i), fracWidth, intWidth);
+        fpVector.at(i) = fpValue;
+    }
+
+    std::cout <<"Start to compress the tensor"<<std::endl;
+    directCompressedTensor compTensor(
+                fpVector,
+                numTensors,
+                channel,
+                width,
+                height,
+                maxSimdBlockIndexInStreamBlock,
+                maxScalarIndexInSimdBlock,
+                isKernel
+                );
+
+    std::cout <<"Start to decode the tensor"<<std::endl;
+    std::vector<float> decodedVector;
+    decodeDirectCompressedTensor(compTensor, decodedVector, fracWidth, intWidth);
+
+    std::cout <<"Comparing the decoded tensor and the original tensor"<<std::endl;
+    for (int i=0; i<numElements; i++) {
+        float orig = floatVector.at(i);
+        float newValue = decodedVector.at(i);
+        EXPECT_TRUE(std::abs(orig-newValue) < 1.0f / (1 << fracWidth))
+                << "i, Original Value, New Value: "<<i<<" "<<orig<<" "<<newValue<<std::endl;
+    }
+}
+
 int main(int argc, char* argv[]) {
 
     ::testing::InitGoogleTest( &argc, argv);
