@@ -127,7 +127,12 @@ protected:
 
 
     void SetUp() override {
+#ifdef ARRIA10
         binaryFile = "prototypePE_aoc_emulation.aocx";
+#else
+        std::cout <<"Please type in the FPGA image (e.g. foo.aocx): "<<std::endl;
+        std::cin >> binaryFile;
+#endif
         //Setup and platform and the context
         cl_int status = CL_SUCCESS;
         clPlatform = aocl_utils_cpp::findPlatform("Intel(R) FPGA SDK for OpenCL(TM)");

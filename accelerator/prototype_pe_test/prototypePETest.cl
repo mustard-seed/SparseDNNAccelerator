@@ -657,8 +657,9 @@ __kernel void kernelDotProductDispatcher (
 	//t_simdblock_value regActivationBuffer1[8];
 	//t_simdblock_window regActivationBuffer0;
 	//t_simdblock_window regActivationBuffer1;
-	t_simdblock_value ramActivationBuffer0[8];
-	t_simdblock_value ramActivationBuffer1[8];
+	//t_simdblock_value ramActivationBuffer0[8];
+	//t_simdblock_value ramActivationBuffer1[8];
+	t_simdblock_value ramActivationBuffer[8][2];
 
 	//==========Registers used for loading the weight==============
 	uint2_t regStateLoadWeight = DP_LOAD_STATE_LOAD_BITMASK;
@@ -669,8 +670,9 @@ __kernel void kernelDotProductDispatcher (
 	//t_simdblock_value regWeightBuffer1[8];
 	//t_simdblock_window regWeightBuffer0;
 	//t_simdblock_window regWeightBuffer1;
-	t_simdblock_value ramWeightBuffer0[8];
-	t_simdblock_value ramWeightBuffer1[8];
+	//t_simdblock_value ramWeightBuffer0[8];
+	//t_simdblock_value ramWeightBuffer1[8];
+	t_simdblock_value ramWeightBuffer[8][2];
 
 	unsigned char regLoadWeightPosition;
 
@@ -690,10 +692,13 @@ __kernel void kernelDotProductDispatcher (
 	//#pragma ivdep array(regWeightBuffer0)
 	//#pragma ivdep array(regWeightBuffer1)
 	//#pragma ivdep
-	#pragma ivdep array(ramActivationBuffer0)
-	#pragma ivdep array(ramActivationBuffer1)
-	#pragma ivdep array(ramWeightBuffer0)
-	#pragma ivdep array(ramWeightBuffer1)
+	//#pragma ivdep array(ramActivationBuffer0)
+	//#pragma ivdep array(ramActivationBuffer1)
+	//#pragma ivdep array(ramWeightBuffer0)
+	//#pragma ivdep array(ramWeightBuffer1)
+	#pragma ivdep array(ramActivationBuffer)
+	#pragma ivdep array(ramWeightBuffer)
+	//#pragma ivdep
 	while (true) {
 		bool loadActivationSuccess;
 		t_simdblock_bitmask activationBlob;
@@ -789,6 +794,7 @@ __kernel void kernelDotProductDispatcher (
 						}
 					}
 					*/
+					/*
 					if (regLoadSide == 0x0) {
 						ramActivationBuffer0[index]
 							 	= activationBlob.values;
@@ -797,6 +803,8 @@ __kernel void kernelDotProductDispatcher (
 						ramActivationBuffer1[index]
 							 	= activationBlob.values;
 					}
+					*/
+					ramActivationBuffer[index][regLoadSide & 0x1] = activationBlob.values;
 
 					//Calculate the new state
 					newStateLoadActivation = (newBitMask == 0x0) ?
@@ -917,6 +925,7 @@ __kernel void kernelDotProductDispatcher (
 						
 					}
 					*/
+					/*
 					if (regLoadSide == 0x0) {
 							ramWeightBuffer0[index]
 								 	= weightBlob.values;
@@ -925,6 +934,8 @@ __kernel void kernelDotProductDispatcher (
 							ramWeightBuffer1[index]
 								 	= weightBlob.values;
 					}
+					*/
+					ramWeightBuffer[index][regLoadSide & 0x1] = weightBlob.values;
 
 					//Calculate the new state
 					newStateLoadWeight = (newBitMask == 0x0) ?
@@ -1011,6 +1022,7 @@ __kernel void kernelDotProductDispatcher (
 					}
 				}
 				*/
+				/*
 				if (regLoadSide == 0x1) {
 						operands.weights = ramWeightBuffer0[drainIndex];
 						operands.activations = ramActivationBuffer0[drainIndex];
@@ -1019,6 +1031,9 @@ __kernel void kernelDotProductDispatcher (
 					operands.weights = ramWeightBuffer1[drainIndex];
 					operands.activations = ramActivationBuffer1[drainIndex];
 				}
+				*/
+				operands.weights = ramWeightBuffer[drainIndex][(~regLoadSide) & 0x1];
+				operands.activations = ramActivationBuffer[drainIndex][(~regLoadSide) & 0x1];
 				operands.isLast = 0x0;
 
 			}
@@ -1132,19 +1147,25 @@ __kernel void mac () {
 	t_accumulator pSum = 0;
 	uint1_t proceed = TRUE;
 	while (proceed == TRUE) {
-		t_mac_simd_operands operands = read_channel_intel(channel_macOperandsInput);
-		bool isLast = operands.isLast;
-		if (!isLast) {
-			t_simdblock_value activations, weights;
-			activations = operands.activations;
-			weights = operands.weights;
-			t_accumulator tempPSum = madd(activations, weights);
-			pSum += tempPSum;
-		}
-		else {
-			proceed = FALSE;
+		bool readSuccess;
+		t_mac_simd_operands operands = read_channel_nb_intel(channel_macOperandsInput, &readSuccess);
+		if (readSuccess) {
+			bool isLast = operands.isLast;
+			if (!isLast) {
+				t_simdblock_value activations, weights;
+				activations = operands.activations;
+				weights = operands.weights;
+				t_accumulator tempPSum = madd(activations, weights);
+				pSum += tempPSum;
+			}
+			else {
+				bool writeSuccess = false;
+				writeSuccess = write_channel_nb_intel(channel_peDrainOutput, pSum);
+				if (writeSuccess) {
+					proceed = FALSE;
+				}
+			}
 		}
 	}
 
-	write_channel_intel(channel_peDrainOutput, pSum);
 }
