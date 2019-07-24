@@ -678,7 +678,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainage) {
     char intWidthIn = WEIGHT_BITWIDTH - fracIn - 1;
     char intWidthWeight = WEIGHT_BITWIDTH - fracW - 1;
     int targetIDX = IDX, targetIDY = IDY;
-    float probOne = 0.05;
+    float probOne = 0.5;
 
     unsigned int numElements = 1444;
     unsigned short transmissionStartIndex = 0;

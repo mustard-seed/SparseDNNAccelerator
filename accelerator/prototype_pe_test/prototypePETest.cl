@@ -645,11 +645,13 @@ __kernel void kernelDotProductDispatcher (
 
 	//=========Registers used for the loading the activation===============
 	uint2_t regStateLoadActivation = DP_LOAD_STATE_LOAD_BITMASK;
-	unsigned char regOriginalActivationBitMask0;
-	unsigned char regOriginalActivationBitMask1;
+	//unsigned char regOriginalActivationBitMask0;
+	//unsigned char regOriginalActivationBitMask1;
+	unsigned char regOriginalActivationBitMask;
 	unsigned char regRunningActivationBitMask = 0;
-	uint1_t regActivationIsLast0;
-	uint1_t regActivationIsLast1;
+	//uint1_t regActivationIsLast0;
+	//uint1_t regActivationIsLast1;
+	uint1_t regActivationIsLast;
 	unsigned char regLoadActivationPosition;
 	//t_simdblock_value regActivationBuffer0[8];
 	//t_simdblock_value regActivationBuffer1[8];
@@ -660,11 +662,9 @@ __kernel void kernelDotProductDispatcher (
 
 	//==========Registers used for loading the weight==============
 	uint2_t regStateLoadWeight = DP_LOAD_STATE_LOAD_BITMASK;
-	unsigned char regOriginalWeightBitMask0;
-	unsigned char regOriginalWeightBitMask1;
+	unsigned char regOriginalWeightBitMask;
 	unsigned char regRunningWeightBitMask = 0;
-	uint1_t regWeightIsLast0;
-	uint1_t regWeightIsLast1;
+	uint1_t regWeightIsLast;
 	//t_simdblock_value regWeightBuffer0[8];
 	//t_simdblock_value regWeightBuffer1[8];
 	//t_simdblock_window regWeightBuffer0;
@@ -678,8 +678,12 @@ __kernel void kernelDotProductDispatcher (
 	//========Registers used for the drain side============
 	uint2_t regStateDrain = DP_MATCH_STATE_DONE;
 	unsigned char regRunningDrainMutualBitMask;
+	//unsigned char regOriginalDrainMutualBitMask0;
+	//unsigned char regOriginalDrainMutualBitMask1;
 	unsigned char regDrainPosition;
 	uint1_t regDrainIsLast;
+	//uint1_t regDrainIsLast0;
+	//uint1_t regDrainIsLast1;
 
 	//#pragma ivdep array(regActivationBuffer0)
 	//#pragma ivdep array(regActivationBuffer1)
@@ -709,23 +713,29 @@ __kernel void kernelDotProductDispatcher (
 				if (loadActivationSuccess) {
 					regLoadActivationPosition = 0x0;
 					unsigned char activationBitmask = activationBlob.values.values[0];
+					/*
 					if (regLoadSide == 0x0) {
 						regOriginalActivationBitMask0 = activationBitmask;
 					}
 					else {
 						regOriginalActivationBitMask1 = activationBitmask;
 					}
+					*/
+					regOriginalActivationBitMask = activationBitmask;
 					regRunningActivationBitMask = activationBitmask;
 					newStateLoadActivation = 
 						(activationBitmask == 0x0) ?
 						DP_LOAD_STATE_DONE : DP_LOAD_STATE_FILL_WINDOW;
 					if (activationBitmask == 0x0) {
+						/*
 						if (regLoadSide == 0x0) {
 							regActivationIsLast0 = (activationBlob.isLast) ? TRUE: FALSE;
 						}
 						else {
 							regActivationIsLast1 = (activationBlob.isLast) ? TRUE: FALSE;
 						}
+						*/
+						regActivationIsLast = (activationBlob.isLast) ? TRUE: FALSE;
 					}
 				}
 			} // case DP_LOAD_STATE_LOAD_BITMASK
@@ -794,12 +804,15 @@ __kernel void kernelDotProductDispatcher (
 
 					//Update the last register, if necessary
 					if (newBitMask == 0x0) {
+						/*
 						if (regLoadSide == 0x0) {
 							regActivationIsLast0 = (activationBlob.isLast) ? TRUE: FALSE;
 						}
 						else {
 							regActivationIsLast1 = (activationBlob.isLast) ? TRUE: FALSE;
 						}
+						*/
+						regActivationIsLast = (activationBlob.isLast) ? TRUE: FALSE;
 					}
 				} // if loadActivationSuccess
 			} // case DP_LOAD_STATE_FILL_WINDOW
@@ -826,24 +839,29 @@ __kernel void kernelDotProductDispatcher (
 				if (loadWeightSuccess) {
 					regLoadWeightPosition = 0x0;
 					unsigned char weightBitMask = weightBlob.values.values[0];
+					/*
 					if (regLoadSide == 0x0) {
 						regOriginalWeightBitMask0 = weightBitMask;
 					}
 					else {
 						regOriginalWeightBitMask1 = weightBitMask;
 					}
+					*/
+					regOriginalWeightBitMask = weightBitMask;
 					regRunningWeightBitMask = weightBitMask;
 					newStateLoadWeight = 
 						(weightBitMask == 0x0) ?
 						DP_LOAD_STATE_DONE : DP_LOAD_STATE_FILL_WINDOW;
 					if (weightBitMask == 0x0) {
-						
+						/*
 						if (regLoadSide == 0x0) {
 							regWeightIsLast0 = (weightBlob.isLast) ? TRUE: FALSE;
 						}
 						else {
 							regWeightIsLast1 = (weightBlob.isLast) ? TRUE: FALSE;
 						}
+						*/
+						regWeightIsLast = (weightBlob.isLast) ? TRUE: FALSE;
 					}
 				}
 			} // case DP_LOAD_STATE_LOAD_BITMASK
@@ -913,14 +931,15 @@ __kernel void kernelDotProductDispatcher (
 						DP_LOAD_STATE_DONE : DP_LOAD_STATE_FILL_WINDOW;
 
 					//Update the last register, if necessary
-					if (newBitMask == 0x0) {
+					/*
 						if (regLoadSide == 0x0) {
 							regWeightIsLast0 = (weightBlob.isLast) ? TRUE: FALSE;
 						}
 						else {
 							regWeightIsLast1 = (weightBlob.isLast) ? TRUE: FALSE;
 						}
-					}
+						*/
+						regWeightIsLast = (weightBlob.isLast) ? TRUE: FALSE;
 				} // if loadActivationSuccess
 			} // case DP_LOAD_STATE_FILL_WINDOW
 			break;
@@ -941,14 +960,18 @@ __kernel void kernelDotProductDispatcher (
 		//Local variable computation
 		switch (regStateDrain) {
 			case DP_MATCH_STATE_COMPUTE_MUTUAL_BITMASK : {
+				/*
 				if (regLoadSide == 0x1) {
-					newMutualBitMask = regOriginalActivationBitMask0 & regOriginalWeightBitMask0;
-					newDrainIsLast = regActivationIsLast0 & regWeightIsLast0;
+					newMutualBitMask = regOriginalDrainMutualBitMask0;
+					newDrainIsLast = regDrainIsLast0;
 				}
 				else {
-					newMutualBitMask = regOriginalActivationBitMask1 & regOriginalWeightBitMask1;
-					newDrainIsLast = regActivationIsLast1 & regWeightIsLast1;
+					newMutualBitMask = regOriginalDrainMutualBitMask1;
+					newDrainIsLast = regDrainIsLast1;
 				}
+				*/
+				newMutualBitMask = regRunningDrainMutualBitMask;
+				newDrainIsLast = regDrainIsLast;
 				newDrainPosition = 0;
 
 			}
@@ -1068,11 +1091,25 @@ __kernel void kernelDotProductDispatcher (
 		if ( (newStateLoadActivation == DP_LOAD_STATE_DONE)
 			&& (newStateLoadWeight == DP_LOAD_STATE_DONE)
 			&& (newStateDrain == DP_MATCH_STATE_DONE) ) {
+
 			regStateLoadActivation = DP_LOAD_STATE_LOAD_BITMASK;
 			regStateLoadWeight = DP_LOAD_STATE_LOAD_BITMASK;
 			regStateDrain = DP_MATCH_STATE_COMPUTE_MUTUAL_BITMASK;
 
+			unsigned char newMutualBitMask = regOriginalActivationBitMask & regOriginalWeightBitMask;
+			uint1_t newIsDrainLastLocal = regActivationIsLast & regWeightIsLast;
+
+			//if (regLoadSide == 0x0) {
+				regRunningDrainMutualBitMask = newMutualBitMask;
+				regDrainIsLast = newIsDrainLastLocal;
+			//}
+			//else {
+				//regOriginalDrainMutualBitMask1 = newMutualBitMask;
+				//regDrainIsLast1 = newIsDrainLastLocal;
+			//}
+
 			regLoadSide = (regLoadSide == 0x0) ? 0x1 : 0x0;
+
 			EMULATOR_PRINT ( ("[kernelDotProductEngineDispatcher]: Swap occured!\n") );
 		}
 		// otherwise just perform regular state update
