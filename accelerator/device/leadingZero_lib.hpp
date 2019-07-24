@@ -1,5 +1,5 @@
-#ifndef RTL_LIB_HPP
-#define RTL_LIB_HPP
+#ifndef LEADING_ZERO_HPP
+#define LEADING_ZERO_HPP
 
 unsigned char leadingZeroCounter (unsigned char bitmask);
 

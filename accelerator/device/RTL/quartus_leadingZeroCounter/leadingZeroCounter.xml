@@ -51,7 +51,7 @@
       <AVALON port="ovalid" type="ovalid"/>
       <AVALON port="oready" type="oready"/>
       <INPUT  port="bitmask" width="8"/>
-      <OUTPUT port="result"  width="32"/>
+      <OUTPUT port="result"  width="8"/>
     </INTERFACE>
 <!--
      <RESOURCES>

@@ -22,6 +22,7 @@ file(GLOB HOST_SRC
         ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp
         ${PROJECT_SOURCE_DIR}/common/src/AOCLUtilsCpp/*.cpp
         ${PROJECT_SOURCE_DIR}/common/src/floatFixedPointConversion.cpp
+        ${PROJECT_SOURCE_DIR}/common/src/tensorCompression.cpp
 )
 
 ###########################
@@ -56,7 +57,8 @@ set (rtl_directory ${PROJECT_SOURCE_DIR}/device/RTL
 )
 
 set (rtl_lib
-    -l rtl_lib.aoclib)
+    -l rtl_lib.aoclib
+    -l leadingZero_lib.aoclib)
 INCLUDE_DIRECTORIES (${rtl_directory})
 ###########################################################
 #Intel FPGA OpenCL SDK Compile and linkage configurations

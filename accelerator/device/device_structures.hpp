@@ -65,12 +65,12 @@ typedef struct __attribute__((packed)) {
 
 typedef struct __attribute__((aligned(8))) __attribute__((packed)) {
     char values [SIMD_SIZE];
-    unsigned char runLength;
+    //unsigned char runLength;
 } t_simdblock_host;
 #else
 typedef struct __attribute__((aligned(8))) __attribute__((packed)) {
     cl_char values [SIMD_SIZE];
-    cl_uchar runLength;
+    //cl_uchar runLength;
 } t_simdblock_host;
 #endif
 
@@ -84,9 +84,10 @@ typedef unsigned char t_simdblock_channel_offset; //Relative channel of a simdbl
 typedef unsigned short t_streamblock_address; //Address of a streaming block in BRAM
 
 #else
-typedef struct {
-    cl_char values [SIMD_SIZE];
-} t_simdblock_value;
+//typedef struct {
+//    cl_char values [SIMD_SIZE];
+//} t_simdblock_value;
+typedef t_simdblock_host t_simdblock_value;
 
 typedef cl_uchar t_simdblock_channel_offset;
 
@@ -110,6 +111,13 @@ typedef struct __attribute__((packed)){
     char maxTransportID;
 
 } t_simdblock_di_tagged;
+
+typedef struct __attribute__((packed)){
+    char values [SIMD_SIZE];
+    bool isLast;
+    char maxTransportID;
+
+} t_simdblock_bitmask_tagged;
 
 #ifdef PE_PROTOTYPE_TEST
 typedef short t_value;

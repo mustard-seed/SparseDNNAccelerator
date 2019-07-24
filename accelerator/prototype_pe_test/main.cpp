@@ -18,6 +18,7 @@
 #include "floatFixedPointConversion.hpp"
 #include "gtest/gtest.h"
 #include "prototypePE_structs.hpp"
+#include "tensorCompression.hpp"
 
 #define VECTOR_LENGTH 1111
 #define VECTOR_A_SEED 10
@@ -365,47 +366,47 @@ protected:
         kernelTestInterface.setArg(10, bufferInstructionOutputV);
 
         kernelTestInterface.setArg(11, (cl_ushort) inputActivationVector.size()); //numInputActivationBlocks
-        kernelTestInterface.setArg(12, (cl_ushort) startIndexActivationBlocks); //startIndexActivationBlocks,
+       // kernelTestInterface.setArg(12, (cl_ushort) startIndexActivationBlocks); //startIndexActivationBlocks,
         cl_ushort numOutputActivationBlocks =
                 idy < (PE_ROWS - 1) ? inputActivationVector.size() : 0;
-        kernelTestInterface.setArg(13, numOutputActivationBlocks); //numOutputActivationBlocks
+        kernelTestInterface.setArg(12, numOutputActivationBlocks); //numOutputActivationBlocks
         //Allocate space for the output activation vector
         for (int i=0; i<numOutputActivationBlocks; i++) {
             t_simdblock_host brick;
             outputActivationVector.push_back(brick);
         }
 
-        kernelTestInterface.setArg(14, (cl_ushort) inputWeightVector.size()); //numInputWeightBlocks
-        kernelTestInterface.setArg(15, (cl_ushort) startIndexWeightBlocks); //startIndexWeightBlocks,
+        kernelTestInterface.setArg(13, (cl_ushort) inputWeightVector.size()); //numInputWeightBlocks
+        //kernelTestInterface.setArg(15, (cl_ushort) startIndexWeightBlocks); //startIndexWeightBlocks,
         cl_ushort numOutputWeightBlocks =
                 idy < (PE_COLS - 1) ? inputWeightVector.size() : 0;
-        kernelTestInterface.setArg(16, numOutputWeightBlocks); //numOutputWeightBlocks
+        kernelTestInterface.setArg(14, numOutputWeightBlocks); //numOutputWeightBlocks
         //Allocate space for the output activation vector
         for (int i=0; i<numOutputWeightBlocks; i++) {
             t_simdblock_host brick;
             outputWeightVector.push_back(brick);
         }
-        kernelTestInterface.setArg(17, (cl_ushort) inputBiasVector.size()); //numInputBias
+        kernelTestInterface.setArg(15, (cl_ushort) inputBiasVector.size()); //numInputBias
         cl_ushort numOutputBias =
                 idx < (PE_COLS - 1) ? inputBiasVector.size() : 0;
-        kernelTestInterface.setArg(18, numOutputBias); //numOutputBias
+        kernelTestInterface.setArg(16, numOutputBias); //numOutputBias
         for (int i=0; i<numOutputBias; i++) {
             short val;
             outputBiasVector.push_back(val);
         }
 
-        kernelTestInterface.setArg(19, (cl_ushort) numInputDrain); //numInputDrain
+        kernelTestInterface.setArg(17, (cl_ushort) numInputDrain); //numInputDrain
         cl_ushort numOutputDrain = drainResult ? PE_ROWS  - idy : 0;
-        kernelTestInterface.setArg(20, numOutputDrain); //numOutputDrain
+        kernelTestInterface.setArg(18, numOutputDrain); //numOutputDrain
         for (int i=0; i<numOutputDrain; i++) {
             short val;
             outputDrainVector.push_back(val);
         }
 
-        kernelTestInterface.setArg(21, (cl_ushort) inputInstructionVector.size()); //numInputInstruction
+        kernelTestInterface.setArg(19, (cl_ushort) inputInstructionVector.size()); //numInputInstruction
         cl_ushort numOutputInstructionH =
                   ((idy == 0) && (idx < (PE_COLS - 1) )) ? inputInstructionVector.size() : 0;
-        kernelTestInterface.setArg(22, (cl_ushort) numOutputInstructionH); //numOutputInsructionHorizontal,
+        kernelTestInterface.setArg(20, (cl_ushort) numOutputInstructionH); //numOutputInsructionHorizontal,
         for (int i=0; i<numOutputInstructionH; i++) {
             t_pe_prototype_instruction_host val;
             outputInstructionHVector.push_back(val);
@@ -413,14 +414,14 @@ protected:
 
         cl_ushort numOutputInstructionV =
                   idy < (PE_ROWS - 1) ? inputInstructionVector.size() : 0;
-        kernelTestInterface.setArg(23, numOutputInstructionV); //numOutputInstructionVertical
+        kernelTestInterface.setArg(21, numOutputInstructionV); //numOutputInstructionVertical
         for (int i=0; i<numOutputInstructionV; i++) {
             t_pe_prototype_instruction_host val;
             outputInstructionVVector.push_back(val);
         }
 
-        kernelTestInterface.setArg(24, (cl_uchar)MAX_IDX);
-        kernelTestInterface.setArg(25, (cl_uchar)MAX_IDY);
+        kernelTestInterface.setArg(22, (cl_uchar)MAX_IDX);
+        kernelTestInterface.setArg(23, (cl_uchar)MAX_IDY);
 
         //Launch kernels
         /*
@@ -515,148 +516,148 @@ std::vector<float> initialize_vector (
         float max
         );
 
-/*!
- * \brief compress_vector
- * \details Convert a floating point vector to a fixed vector, and generates the compressed version
- * \param encodingBlockSize
- * \param inputVector
- * \param fixedPointVector
- * \param compressedVector
- */
-void compress_vector (
-        std::vector<float> & inputVector,
-        unsigned int encodingBlockSize,
-        char intWidth,
-        char fracWidth,
-        std::vector<fixedPointNumber> & fixedPointVector,
-        t_aligned_compression_vector & compressedVector
-        );
+///*!
+// * \brief compress_vector
+// * \details Convert a floating point vector to a fixed vector, and generates the compressed version
+// * \param encodingBlockSize
+// * \param inputVector
+// * \param fixedPointVector
+// * \param compressedVector
+// */
+//void compress_vector (
+//        std::vector<float> & inputVector,
+//        unsigned int encodingBlockSize,
+//        char intWidth,
+//        char fracWidth,
+//        std::vector<fixedPointNumber> & fixedPointVector,
+//        t_aligned_compression_vector & compressedVector
+//        );
 
-/*!
- * \brief compress_vector
- * \details Convert a floating point vector to a fixed vector, and generates the compressed version
- * \param encodingBlockSize
- * \param inputVector
- * \param fixedPointVector
- * \param compressedVector
- */
-void compress_vector (
-        std::vector<float> & inputVector,
-        unsigned int encodingBlockSize,
-        char intWidth,
-        char fracWidth,
-        std::vector<fixedPointNumber> & fixedPointVector,
-        t_aligned_compression_scalar_vector & compressedVector
-        );
+///*!
+// * \brief compress_vector
+// * \details Convert a floating point vector to a fixed vector, and generates the compressed version
+// * \param encodingBlockSize
+// * \param inputVector
+// * \param fixedPointVector
+// * \param compressedVector
+// */
+//void compress_vector (
+//        std::vector<float> & inputVector,
+//        unsigned int encodingBlockSize,
+//        char intWidth,
+//        char fracWidth,
+//        std::vector<fixedPointNumber> & fixedPointVector,
+//        t_aligned_compression_scalar_vector & compressedVector
+//        );
 
-/*!
- * \brief compress_vector
- * \details Convert a floating point vector to a fixed vector, and generates the compressed version
- * \param encodingBlockSize
- * \param inputVector
- * \param fixedPointVector
- * \param compressedVector
- */
-void compress_vector (
-        std::vector<float> & inputVector,
-        char intWidth,
-        char fracWidth,
-        std::vector<fixedPointNumber> & fixedPointVector,
-        t_aligned_compression_simd_vector & compressedVector
-        );
+///*!
+// * \brief compress_vector
+// * \details Convert a floating point vector to a fixed vector, and generates the compressed version
+// * \param encodingBlockSize
+// * \param inputVector
+// * \param fixedPointVector
+// * \param compressedVector
+// */
+//void compress_vector (
+//        std::vector<float> & inputVector,
+//        char intWidth,
+//        char fracWidth,
+//        std::vector<fixedPointNumber> & fixedPointVector,
+//        t_aligned_compression_simd_vector & compressedVector
+//        );
 
 float dot_product_regular_vectors (
         std::vector <float> & inputVectorA,
         std::vector <float> & inputVectorB
         );
 
-float dot_product_compressed_vectors (
-        t_aligned_compression_vector & compressedVectorA,
-        t_aligned_compression_vector & compressedVectorB,
-        unsigned int maxIndex,
-        char intWidth,
-        char fracWidth
-        );
+//float dot_product_compressed_vectors (
+//        t_aligned_compression_vector & compressedVectorA,
+//        t_aligned_compression_vector & compressedVectorB,
+//        unsigned int maxIndex,
+//        char intWidth,
+//        char fracWidth
+//        );
 
-float dot_product_compressed_vectors (
-        t_aligned_compression_scalar_vector & compressedVectorA,
-        t_aligned_compression_scalar_vector & compressedVectorB,
-        unsigned int maxIndex,
-        char intWidth,
-        char fracWidth
-        );
+//float dot_product_compressed_vectors (
+//        t_aligned_compression_scalar_vector & compressedVectorA,
+//        t_aligned_compression_scalar_vector & compressedVectorB,
+//        unsigned int maxIndex,
+//        char intWidth,
+//        char fracWidth
+//        );
 
-float dot_product_compressed_vectors (
-        t_aligned_compression_simd_vector & compressedVectorA,
-        t_aligned_compression_simd_vector & compressedVectorB,
-        unsigned int maxIndex,
-        char intWidth,
-        char fracWidth
-        );
+//float dot_product_compressed_vectors (
+//        t_aligned_compression_simd_vector & compressedVectorA,
+//        t_aligned_compression_simd_vector & compressedVectorB,
+//        unsigned int maxIndex,
+//        char intWidth,
+//        char fracWidth
+//        );
 
-TEST(commpressionTest, compressionDotProduct) {
-    EXPECT_TRUE (COMPRESSION_VEC_SIZE == 4);
-    unsigned char intWidth = 2;
-    unsigned char fracWidth = 5;
-    std::vector<float> vectorA = initialize_vector(
-                VECTOR_A_SEED,
-                VECTOR_LENGTH,
-                BERN_P,
-                VECTOR_MIN,
-                VECTOR_MAX
-                );
-    std::vector<float> vectorB = initialize_vector(
-                VECTOR_B_SEED,
-                VECTOR_LENGTH,
-                BERN_P,
-                VECTOR_MIN,
-                VECTOR_MAX
-                );
+//TEST(commpressionTest, compressionDotProduct) {
+//    EXPECT_TRUE (COMPRESSION_VEC_SIZE == 4);
+//    unsigned char intWidth = 2;
+//    unsigned char fracWidth = 5;
+//    std::vector<float> vectorA = initialize_vector(
+//                VECTOR_A_SEED,
+//                VECTOR_LENGTH,
+//                BERN_P,
+//                VECTOR_MIN,
+//                VECTOR_MAX
+//                );
+//    std::vector<float> vectorB = initialize_vector(
+//                VECTOR_B_SEED,
+//                VECTOR_LENGTH,
+//                BERN_P,
+//                VECTOR_MIN,
+//                VECTOR_MAX
+//                );
 
-    float goldenResult = dot_product_regular_vectors(
-                vectorA,
-                vectorB
-                );
+//    float goldenResult = dot_product_regular_vectors(
+//                vectorA,
+//                vectorB
+//                );
 
-    //int effectual_length = (int) (std::ceil( (float) VECTOR_LENGTH / (float) ENCODING_LENGTH) * (float) ENCODING_LENGTH);
-    int effectual_length = VECTOR_LENGTH;
+//    //int effectual_length = (int) (std::ceil( (float) VECTOR_LENGTH / (float) ENCODING_LENGTH) * (float) ENCODING_LENGTH);
+//    int effectual_length = VECTOR_LENGTH;
 
-    std::vector<fixedPointNumber> fpVectorA;
-    t_aligned_compression_simd_vector compressedVectorA;;
-    std::vector<fixedPointNumber> fpVectorB;
-    t_aligned_compression_simd_vector compressedVectorB;
+//    std::vector<fixedPointNumber> fpVectorA;
+//    t_aligned_compression_simd_vector compressedVectorA;;
+//    std::vector<fixedPointNumber> fpVectorB;
+//    t_aligned_compression_simd_vector compressedVectorB;
 
-    compress_vector(vectorA, intWidth, fracWidth, fpVectorA, compressedVectorA);
-    compress_vector(vectorB, intWidth, fracWidth, fpVectorB, compressedVectorB);
+//    compress_vector(vectorA, intWidth, fracWidth, fpVectorA, compressedVectorA);
+//    compress_vector(vectorB, intWidth, fracWidth, fpVectorB, compressedVectorB);
 
-    std::cout <<"Check Vector A"<<std::endl;
-    for (unsigned i = 0; i < fpVectorA.size(); i++) {
-        float orig = vectorA.at(i);
-        float fpA = (fpVectorA.at(i)).convert2Float();
-        EXPECT_TRUE(std::abs(orig-fpA) < 1.0f / (1 << fracWidth)) << "orig, fpA: "<<orig<<" "<<fpA<<std::endl;
-    }
+//    std::cout <<"Check Vector A"<<std::endl;
+//    for (unsigned i = 0; i < fpVectorA.size(); i++) {
+//        float orig = vectorA.at(i);
+//        float fpA = (fpVectorA.at(i)).convert2Float();
+//        EXPECT_TRUE(std::abs(orig-fpA) < 1.0f / (1 << fracWidth)) << "orig, fpA: "<<orig<<" "<<fpA<<std::endl;
+//    }
 
-    std::cout <<"Check Vector B"<<std::endl;
-    for (unsigned i = 0; i < fpVectorB.size(); i++) {
-        float orig = vectorB.at(i);
-        float fpB = (fpVectorB.at(i)).convert2Float();
-        EXPECT_TRUE(std::abs(orig-fpB) < 1.0f / (1 << fracWidth)) << "orig, fpB: "<<orig<<" "<<fpB<<std::endl;
-    }
+//    std::cout <<"Check Vector B"<<std::endl;
+//    for (unsigned i = 0; i < fpVectorB.size(); i++) {
+//        float orig = vectorB.at(i);
+//        float fpB = (fpVectorB.at(i)).convert2Float();
+//        EXPECT_TRUE(std::abs(orig-fpB) < 1.0f / (1 << fracWidth)) << "orig, fpB: "<<orig<<" "<<fpB<<std::endl;
+//    }
 
-    std::cout <<"Check the dot product"<<std::endl;
-    int size = (fpVectorA.size() % SIMD_SIZE == 0) ? fpVectorA.size() / SIMD_SIZE : fpVectorA.size() / SIMD_SIZE + 1;
-    float compressedResult = dot_product_compressed_vectors(
-                compressedVectorB,
-                compressedVectorA,
-                size,
-                intWidth,
-                fracWidth
-                );
+//    std::cout <<"Check the dot product"<<std::endl;
+//    int size = (fpVectorA.size() % SIMD_SIZE == 0) ? fpVectorA.size() / SIMD_SIZE : fpVectorA.size() / SIMD_SIZE + 1;
+//    float compressedResult = dot_product_compressed_vectors(
+//                compressedVectorB,
+//                compressedVectorA,
+//                size,
+//                intWidth,
+//                fracWidth
+//                );
 
-    EXPECT_TRUE(std::abs(compressedResult-goldenResult) < 1.0f / (1 << fracWidth))
-            << "goldenResult, compressedResult: "<<goldenResult<<" "<<compressedResult<<std::endl;
+//    EXPECT_TRUE(std::abs(compressedResult-goldenResult) < 1.0f / (1 << fracWidth))
+//            << "goldenResult, compressedResult: "<<goldenResult<<" "<<compressedResult<<std::endl;
 
-}
+//}
 
 TEST_F (peTestFixture, testFixture) {
     launch(IDX,IDY,0,0, false);
@@ -677,7 +678,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainage) {
     char intWidthIn = WEIGHT_BITWIDTH - fracIn - 1;
     char intWidthWeight = WEIGHT_BITWIDTH - fracW - 1;
     int targetIDX = IDX, targetIDY = IDY;
-    float probOne = BERN_P;
+    float probOne = 0.05;
 
     unsigned int numElements = 1444;
     unsigned short transmissionStartIndex = 0;
@@ -708,7 +709,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainage) {
     std::vector<float> weightRealInput = initialize_vector(
                 VECTOR_B_SEED,
                 numElements,
-                probOne,
+                1.0,
                 -3.14,
                 3.14
                 );
@@ -723,21 +724,68 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainage) {
     // Compress the activaion block
     std::vector<fixedPointNumber> fpActivationVector;
     std::vector<fixedPointNumber> fpWeightVector;
-    compress_vector (
-                activationRealInput,
-                intWidthIn,
-                fracIn,
-                fpActivationVector,
-                inputActivationVector
-                );
-    // Compress the weight block
-    compress_vector (
-                weightRealInput,
-                intWidthWeight,
-                fracW,
+
+    fpActivationVector.resize(activationRealInput.size());
+    fpWeightVector.resize(weightRealInput.size());
+
+    for (int i=0; i<numElements; i++) {
+        fixedPointNumber fpWeight(weightRealInput.at(i), fracW, intWidthWeight);
+        fpWeightVector.at(i) = fpWeight;
+        fixedPointNumber fpActivation(activationRealInput.at(i), fracIn, intWidthIn);
+        fpActivationVector.at(i) = fpActivation;
+    }
+
+    std::cout<<"Comrpessing the weights"<<std::endl;
+    directCompressedTensor compWTensor(
                 fpWeightVector,
-                inputWeightVector
+                1, //numTensors
+                numElements, //channel
+                1, //width
+                1, //height
+                7, //maxSimdBlockIndexInStreamBlock
+                3, //maxScalarIndexInSimdBlock
+                true //isKernel
                 );
+
+    std::cout<<"Comrpessing the activations"<<std::endl;
+    directCompressedTensor compATensor(
+                fpActivationVector,
+                1, //numTensors
+                numElements, //channel
+                1, //width
+                1, //height
+                7, //maxSimdBlockIndexInStreamBlock
+                3, //maxScalarIndexInSimdBlock
+                true //isKernel
+                );
+
+    std::cout <<"Transfer the compressed activations to the test harness"<<std::endl;
+    inputActivationVector.resize(compATensor.streamBlockAddressVector.at(0));
+    for (unsigned int i=0; i<compATensor.streamBlockAddressVector.at(0); i++) {
+        inputActivationVector.at(i) = compATensor.valueVector.at(i);
+    }
+
+    std::cout <<"Transfer the compressed weights to the test harness"<<std::endl;
+    inputWeightVector.resize(compWTensor.streamBlockAddressVector.at(0));
+    for (unsigned int i=0; i<compWTensor.streamBlockAddressVector.at(0); i++) {
+        inputWeightVector.at(i) = compWTensor.valueVector.at(i);
+    }
+
+//    compress_vector (
+//                activationRealInput,
+//                intWidthIn,
+//                fracIn,
+//                fpActivationVector,
+//                inputActivationVector
+//                );
+    // Compress the weight block
+//    compress_vector (
+//                weightRealInput,
+//                intWidthWeight,
+//                fracW,
+//                fpWeightVector,
+//                inputWeightVector
+//                );
 
     //Prepare the instruction
 
@@ -787,149 +835,149 @@ std::vector<float> initialize_vector(unsigned seed,
     return vector;
 }
 
-void compress_vector (std::vector<float> &inputVector
-                      , unsigned int encodingBlockSize
-                      , char intWidth
-                      , char fracWidth
-                      , std::vector<fixedPointNumber> &fixedPointVector
-                      , t_aligned_compression_vector &compressedVector){
-    //Pad zeros
-//    while (inputVector.size() % encodingBlockSize != 0) {
-//        inputVector.push_back(0.0f);
+//void compress_vector (std::vector<float> &inputVector
+//                      , unsigned int encodingBlockSize
+//                      , char intWidth
+//                      , char fracWidth
+//                      , std::vector<fixedPointNumber> &fixedPointVector
+//                      , t_aligned_compression_vector &compressedVector){
+//    //Pad zeros
+////    while (inputVector.size() % encodingBlockSize != 0) {
+////        inputVector.push_back(0.0f);
+////    }
+//    auto denseVectorSize = inputVector.size();
+//    t_vecSpValueAndZCount compressBlock = {.vec={0,0,0,0}};
+//    for (unsigned int iCompressedVector=0, iFullLengthVector=0, zOffset=0, iCompressBlock=0;
+//         iFullLengthVector < denseVectorSize;
+//         iFullLengthVector++) {
+//        float origValue = inputVector.at(iFullLengthVector);
+
+//        //Float to fixed conversion
+//        fixedPointNumber fpValue(origValue, fracWidth, intWidth);
+//        fixedPointVector.push_back(fpValue);
+
+//        //Encoding
+//        if (std::abs(origValue) > EPSILON
+//                || iFullLengthVector % encodingBlockSize == (encodingBlockSize - 1)
+//                || iFullLengthVector == ((unsigned int) denseVectorSize - 1)
+//                || zOffset == ( (1 << WEIGHT_ZCOUNT_BITWIDTH) - 1)) {
+//            int value = fpValue.getBits();
+//            //Generate the encoded value: valid bit, zCount, and the fixed-point value
+//            t_spValueAndZCount shortValue =
+//               ( ( (0x1  & WEIGHT_VALID_MASK) << WEIGHT_VALID_BITOFFSET) )
+//               | ( (zOffset  & WEIGHT_ZCOUNT_MASK) << WEIGHT_ZCOUNT_BITOFFSET)
+//               | (value & fpValue.getMask());
+//            compressBlock.vec[iCompressBlock] = shortValue;
+//            iCompressBlock++;
+//            zOffset=0;
+//        }
+//        else {
+//            zOffset++;
+//        }
+
+//        if (iCompressBlock == COMPRESSION_VEC_SIZE
+//            || iFullLengthVector % encodingBlockSize == (encodingBlockSize - 1)
+//            || iFullLengthVector == ((unsigned int) denseVectorSize - 1)
+//                ) {
+//            //Pad unused spots in the compression block with invalid values
+//            for (;iCompressBlock<COMPRESSION_VEC_SIZE;iCompressBlock++) {
+//                compressBlock.vec[iCompressBlock] = 0x0;
+//            }
+//            compressedVector.push_back(compressBlock);
+//            iCompressedVector++;
+//            iCompressBlock=0;
+//        }
 //    }
-    auto denseVectorSize = inputVector.size();
-    t_vecSpValueAndZCount compressBlock = {.vec={0,0,0,0}};
-    for (unsigned int iCompressedVector=0, iFullLengthVector=0, zOffset=0, iCompressBlock=0;
-         iFullLengthVector < denseVectorSize;
-         iFullLengthVector++) {
-        float origValue = inputVector.at(iFullLengthVector);
+//}
 
-        //Float to fixed conversion
-        fixedPointNumber fpValue(origValue, fracWidth, intWidth);
-        fixedPointVector.push_back(fpValue);
+//void compress_vector (
+//        std::vector<float> & inputVector,
+//        unsigned int encodingBlockSize,
+//        char intWidth,
+//        char fracWidth,
+//        std::vector<fixedPointNumber> & fixedPointVector,
+//        t_aligned_compression_scalar_vector & compressedVector
+//        ) {
+//    auto denseVectorSize = inputVector.size();
+//    //t_vecSpValueAndZCount compressBlock = {.vec={0,0,0,0}};
+//    for (unsigned int iFullLengthVector=0, zOffset=0;
+//         iFullLengthVector < denseVectorSize;
+//         iFullLengthVector++) {
+//        float origValue = inputVector.at(iFullLengthVector);
 
-        //Encoding
-        if (std::abs(origValue) > EPSILON
-                || iFullLengthVector % encodingBlockSize == (encodingBlockSize - 1)
-                || iFullLengthVector == ((unsigned int) denseVectorSize - 1)
-                || zOffset == ( (1 << WEIGHT_ZCOUNT_BITWIDTH) - 1)) {
-            int value = fpValue.getBits();
-            //Generate the encoded value: valid bit, zCount, and the fixed-point value
-            t_spValueAndZCount shortValue =
-               ( ( (0x1  & WEIGHT_VALID_MASK) << WEIGHT_VALID_BITOFFSET) )
-               | ( (zOffset  & WEIGHT_ZCOUNT_MASK) << WEIGHT_ZCOUNT_BITOFFSET)
-               | (value & fpValue.getMask());
-            compressBlock.vec[iCompressBlock] = shortValue;
-            iCompressBlock++;
-            zOffset=0;
-        }
-        else {
-            zOffset++;
-        }
+//        //Float to fixed conversion
+//        fixedPointNumber fpValue(origValue, fracWidth, intWidth);
+//        fixedPointVector.push_back(fpValue);
 
-        if (iCompressBlock == COMPRESSION_VEC_SIZE
-            || iFullLengthVector % encodingBlockSize == (encodingBlockSize - 1)
-            || iFullLengthVector == ((unsigned int) denseVectorSize - 1)
-                ) {
-            //Pad unused spots in the compression block with invalid values
-            for (;iCompressBlock<COMPRESSION_VEC_SIZE;iCompressBlock++) {
-                compressBlock.vec[iCompressBlock] = 0x0;
-            }
-            compressedVector.push_back(compressBlock);
-            iCompressedVector++;
-            iCompressBlock=0;
-        }
-    }
-}
+//        //Encoding
+//        if (std::abs(origValue) > EPSILON
+//                || iFullLengthVector % encodingBlockSize == (encodingBlockSize - 1)
+//                || iFullLengthVector == ((unsigned int) denseVectorSize - 1)
+//                || zOffset == ( (1 << WEIGHT_ZCOUNT_BITWIDTH) - 1)) {
+//            int value = fpValue.getBits();
+//            //Generate the encoded value: valid bit, zCount, and the fixed-point value
+//            t_spValueAndZCount shortValue =
+//               ( ( (zOffset & WEIGHT_ZCOUNT_MASK) << WEIGHT_ZCOUNT_BITOFFSET) )
+//               | (value & fpValue.getMask());
+//            compressedVector.push_back(shortValue);
+//            zOffset=0;
+//        }
+//        else {
+//            zOffset++;
+//        }
+//    }
+//}
 
-void compress_vector (
-        std::vector<float> & inputVector,
-        unsigned int encodingBlockSize,
-        char intWidth,
-        char fracWidth,
-        std::vector<fixedPointNumber> & fixedPointVector,
-        t_aligned_compression_scalar_vector & compressedVector
-        ) {
-    auto denseVectorSize = inputVector.size();
-    //t_vecSpValueAndZCount compressBlock = {.vec={0,0,0,0}};
-    for (unsigned int iFullLengthVector=0, zOffset=0;
-         iFullLengthVector < denseVectorSize;
-         iFullLengthVector++) {
-        float origValue = inputVector.at(iFullLengthVector);
+//void compress_vector (
+//        std::vector<float> & inputVector,
+//        char intWidth,
+//        char fracWidth,
+//        std::vector<fixedPointNumber> & fixedPointVector,
+//        t_aligned_compression_simd_vector & compressedVector
+//        ) {
+//    auto denseVectorSize = inputVector.size();
+//    t_simdblock_host compressBlock;
+//    bool retainFlag = false;
+//    for (unsigned int iFullLengthVector=0, zOffset=0, simdCount=0, blockCount=0;
+//         iFullLengthVector < denseVectorSize;
+//         iFullLengthVector++) {
+//        float origValue = inputVector.at(iFullLengthVector);
 
-        //Float to fixed conversion
-        fixedPointNumber fpValue(origValue, fracWidth, intWidth);
-        fixedPointVector.push_back(fpValue);
+//        //Float to fixed conversion
+//        fixedPointNumber fpValue(origValue, fracWidth, intWidth);
+//        fixedPointVector.push_back(fpValue);
 
-        //Encoding
-        if (std::abs(origValue) > EPSILON
-                || iFullLengthVector % encodingBlockSize == (encodingBlockSize - 1)
-                || iFullLengthVector == ((unsigned int) denseVectorSize - 1)
-                || zOffset == ( (1 << WEIGHT_ZCOUNT_BITWIDTH) - 1)) {
-            int value = fpValue.getBits();
-            //Generate the encoded value: valid bit, zCount, and the fixed-point value
-            t_spValueAndZCount shortValue =
-               ( ( (zOffset & WEIGHT_ZCOUNT_MASK) << WEIGHT_ZCOUNT_BITOFFSET) )
-               | (value & fpValue.getMask());
-            compressedVector.push_back(shortValue);
-            zOffset=0;
-        }
-        else {
-            zOffset++;
-        }
-    }
-}
+//        compressBlock.values[simdCount] = ((fpValue.getBits()) & (fpValue.getMask()));
+//        retainFlag = (std::abs(origValue) > EPSILON) || retainFlag;
+//        simdCount++;
 
-void compress_vector (
-        std::vector<float> & inputVector,
-        char intWidth,
-        char fracWidth,
-        std::vector<fixedPointNumber> & fixedPointVector,
-        t_aligned_compression_simd_vector & compressedVector
-        ) {
-    auto denseVectorSize = inputVector.size();
-    t_simdblock_host compressBlock;
-    bool retainFlag = false;
-    for (unsigned int iFullLengthVector=0, zOffset=0, simdCount=0, blockCount=0;
-         iFullLengthVector < denseVectorSize;
-         iFullLengthVector++) {
-        float origValue = inputVector.at(iFullLengthVector);
+//        //Encoding
+//        if ( (simdCount == SIMD_SIZE) ) {
+//            if ( retainFlag || (zOffset == ( (1 << WEIGHT_ZCOUNT_BITWIDTH) - 1)) || (blockCount % SYNC_SIZE == (SYNC_SIZE - 1))
+//                 || ( iFullLengthVector == ((unsigned int) denseVectorSize - 1) ) ) {
+//                compressBlock.runLength = zOffset;
+//                compressedVector.push_back(compressBlock);
+//                zOffset=0;
+//                retainFlag = false;
+//            }
+//            else {
+//                zOffset++;
+//            }
+//            simdCount = 0;
+//            blockCount++;
+//        }
+//        else if ( iFullLengthVector == ((unsigned int) denseVectorSize - 1) ) {
+//            while (simdCount < SIMD_SIZE) {
+//                compressBlock.values[simdCount++] = 0x0;
+//            }
+//            compressBlock.runLength = zOffset;
+//            compressedVector.push_back(compressBlock);
+//            zOffset=0;
+//            retainFlag = false;
+//        }
 
-        //Float to fixed conversion
-        fixedPointNumber fpValue(origValue, fracWidth, intWidth);
-        fixedPointVector.push_back(fpValue);
-
-        compressBlock.values[simdCount] = ((fpValue.getBits()) & (fpValue.getMask()));
-        retainFlag = (std::abs(origValue) > EPSILON) || retainFlag;
-        simdCount++;
-
-        //Encoding
-        if ( (simdCount == SIMD_SIZE) ) {
-            if ( retainFlag || (zOffset == ( (1 << WEIGHT_ZCOUNT_BITWIDTH) - 1)) || (blockCount % SYNC_SIZE == (SYNC_SIZE - 1))
-                 || ( iFullLengthVector == ((unsigned int) denseVectorSize - 1) ) ) {
-                compressBlock.runLength = zOffset;
-                compressedVector.push_back(compressBlock);
-                zOffset=0;
-                retainFlag = false;
-            }
-            else {
-                zOffset++;
-            }
-            simdCount = 0;
-            blockCount++;
-        }
-        else if ( iFullLengthVector == ((unsigned int) denseVectorSize - 1) ) {
-            while (simdCount < SIMD_SIZE) {
-                compressBlock.values[simdCount++] = 0x0;
-            }
-            compressBlock.runLength = zOffset;
-            compressedVector.push_back(compressBlock);
-            zOffset=0;
-            retainFlag = false;
-        }
-
-    } // for
-}
+//    } // for
+//}
 
 float dot_product_regular_vectors (std::vector<float> &inputVectorA
                                    ,std::vector<float> &inputVectorB) {
@@ -940,224 +988,224 @@ float dot_product_regular_vectors (std::vector<float> &inputVectorA
     return result;
 }
 
-float dot_product_compressed_vectors (t_aligned_compression_vector &compressedVectorA,
-        t_aligned_compression_vector &compressedVectorB,
-        unsigned int maxIndex,
-        char intWidth,
-        char fracWidth
-        )
-{
-    //Trackers of the head and tail of each window
+//float dot_product_compressed_vectors (t_aligned_compression_vector &compressedVectorA,
+//        t_aligned_compression_vector &compressedVectorB,
+//        unsigned int maxIndex,
+//        char intWidth,
+//        char fracWidth
+//        )
+//{
+//    //Trackers of the head and tail of each window
 
-    unsigned int indexVectorA=0, indexVectorB=0, indexVectorATail=0, indexVectorBTail=0;
-    auto iterVectorA = compressedVectorA.begin();
-    auto iterVectorB = compressedVectorB.begin();
-    float result = 0.0f;
-    t_vecSpValueAndZCount compressionBlockA, compressionBlockB;
+//    unsigned int indexVectorA=0, indexVectorB=0, indexVectorATail=0, indexVectorBTail=0;
+//    auto iterVectorA = compressedVectorA.begin();
+//    auto iterVectorB = compressedVectorB.begin();
+//    float result = 0.0f;
+//    t_vecSpValueAndZCount compressionBlockA, compressionBlockB;
 
-    while (indexVectorATail < maxIndex && indexVectorBTail < maxIndex) {
-        unsigned int tempIndexVectorA = indexVectorA, tempIndexVectorB=indexVectorB;
+//    while (indexVectorATail < maxIndex && indexVectorBTail < maxIndex) {
+//        unsigned int tempIndexVectorA = indexVectorA, tempIndexVectorB=indexVectorB;
 
-        if (indexVectorATail == indexVectorBTail) {
-           compressionBlockA = (*iterVectorA);
-           compressionBlockB = (*iterVectorB);
-        }
-        else if (indexVectorATail > indexVectorBTail) {
-           compressionBlockB = (*iterVectorB);
-        }
-        else {
-           compressionBlockA = (*iterVectorA);
-        }
+//        if (indexVectorATail == indexVectorBTail) {
+//           compressionBlockA = (*iterVectorA);
+//           compressionBlockB = (*iterVectorB);
+//        }
+//        else if (indexVectorATail > indexVectorBTail) {
+//           compressionBlockB = (*iterVectorB);
+//        }
+//        else {
+//           compressionBlockA = (*iterVectorA);
+//        }
 
-        //Calculation
-        //At least one of the compression block will be updated in the next cycle
-        int indexA[COMPRESSION_VEC_SIZE];
-        int indexB[COMPRESSION_VEC_SIZE];
+//        //Calculation
+//        //At least one of the compression block will be updated in the next cycle
+//        int indexA[COMPRESSION_VEC_SIZE];
+//        int indexB[COMPRESSION_VEC_SIZE];
 
-        bool maskBlockA[COMPRESSION_VEC_SIZE];
-        bool maskBlockB[COMPRESSION_VEC_SIZE];
+//        bool maskBlockA[COMPRESSION_VEC_SIZE];
+//        bool maskBlockB[COMPRESSION_VEC_SIZE];
 
-        indexA[0] = (compressionBlockA.vec[0] & WEIGHT_VALID_MASK) ?
-                    1 + indexVectorA + (int) ( (compressionBlockA.vec[0] >> WEIGHT_ZCOUNT_BITOFFSET ) & WEIGHT_ZCOUNT_MASK ) :
-                    indexVectorA;
-        indexB[0] = (compressionBlockB.vec[0] & WEIGHT_VALID_MASK) ?
-                    1 + indexVectorB + (int) ( (compressionBlockB.vec[0] >> WEIGHT_ZCOUNT_BITOFFSET ) & WEIGHT_ZCOUNT_MASK ) :
-                    indexVectorB;
+//        indexA[0] = (compressionBlockA.vec[0] & WEIGHT_VALID_MASK) ?
+//                    1 + indexVectorA + (int) ( (compressionBlockA.vec[0] >> WEIGHT_ZCOUNT_BITOFFSET ) & WEIGHT_ZCOUNT_MASK ) :
+//                    indexVectorA;
+//        indexB[0] = (compressionBlockB.vec[0] & WEIGHT_VALID_MASK) ?
+//                    1 + indexVectorB + (int) ( (compressionBlockB.vec[0] >> WEIGHT_ZCOUNT_BITOFFSET ) & WEIGHT_ZCOUNT_MASK ) :
+//                    indexVectorB;
 
-        for (int iA=1; iA<COMPRESSION_VEC_SIZE; iA++) {
-            indexA[iA] = (compressionBlockA.vec[iA] & WEIGHT_VALID_MASK) ?
-                         1 + indexA[iA-1] + (int) ( (compressionBlockA.vec[iA] >> WEIGHT_ZCOUNT_BITOFFSET ) & WEIGHT_ZCOUNT_MASK ) :
-                         indexA[iA-1];
-        }
+//        for (int iA=1; iA<COMPRESSION_VEC_SIZE; iA++) {
+//            indexA[iA] = (compressionBlockA.vec[iA] & WEIGHT_VALID_MASK) ?
+//                         1 + indexA[iA-1] + (int) ( (compressionBlockA.vec[iA] >> WEIGHT_ZCOUNT_BITOFFSET ) & WEIGHT_ZCOUNT_MASK ) :
+//                         indexA[iA-1];
+//        }
 
-        for (int iB=1; iB<COMPRESSION_VEC_SIZE; iB++) {
-            indexB[iB] = (compressionBlockB.vec[iB] & WEIGHT_VALID_MASK) ?
-                         1 + indexB[iB-1] + (int) ( (compressionBlockB.vec[iB] >> WEIGHT_ZCOUNT_BITOFFSET ) & WEIGHT_ZCOUNT_MASK ) :
-                         indexB[iB-1];
-        }
+//        for (int iB=1; iB<COMPRESSION_VEC_SIZE; iB++) {
+//            indexB[iB] = (compressionBlockB.vec[iB] & WEIGHT_VALID_MASK) ?
+//                         1 + indexB[iB-1] + (int) ( (compressionBlockB.vec[iB] >> WEIGHT_ZCOUNT_BITOFFSET ) & WEIGHT_ZCOUNT_MASK ) :
+//                         indexB[iB-1];
+//        }
 
-        for (int iA=0; iA<COMPRESSION_VEC_SIZE; iA++) {
-            maskBlockA[iA] = false;
-            if ( (compressionBlockA.vec[iA] >> WEIGHT_VALID_BITOFFSET) & WEIGHT_VALID_MASK) {
-                for (int iB=0; iB<COMPRESSION_VEC_SIZE; iB++) {
-                    maskBlockA[iA] = maskBlockA[iA] || (indexA[iA] == indexB[iB]);
-                }
-            }
-        }
+//        for (int iA=0; iA<COMPRESSION_VEC_SIZE; iA++) {
+//            maskBlockA[iA] = false;
+//            if ( (compressionBlockA.vec[iA] >> WEIGHT_VALID_BITOFFSET) & WEIGHT_VALID_MASK) {
+//                for (int iB=0; iB<COMPRESSION_VEC_SIZE; iB++) {
+//                    maskBlockA[iA] = maskBlockA[iA] || (indexA[iA] == indexB[iB]);
+//                }
+//            }
+//        }
 
-        for (int iB=0; iB<COMPRESSION_VEC_SIZE; iB++) {
-            maskBlockB[iB] = false;
-            if ( (compressionBlockA.vec[iB] >> WEIGHT_VALID_BITOFFSET) & WEIGHT_VALID_MASK) {
-                for (int iA=0; iA<COMPRESSION_VEC_SIZE; iA++) {
-                    maskBlockB[iB] = maskBlockB[iB] || (indexA[iA] == indexB[iB]);
-                }
-            }
-        }
+//        for (int iB=0; iB<COMPRESSION_VEC_SIZE; iB++) {
+//            maskBlockB[iB] = false;
+//            if ( (compressionBlockA.vec[iB] >> WEIGHT_VALID_BITOFFSET) & WEIGHT_VALID_MASK) {
+//                for (int iA=0; iA<COMPRESSION_VEC_SIZE; iA++) {
+//                    maskBlockB[iB] = maskBlockB[iB] || (indexA[iA] == indexB[iB]);
+//                }
+//            }
+//        }
 
-        int iBlockA=0, iBlockB=0;
-        while (iBlockA < COMPRESSION_VEC_SIZE && iBlockB < COMPRESSION_VEC_SIZE) {
-            while (!maskBlockA[iBlockA] && iBlockA < COMPRESSION_VEC_SIZE) {
-                iBlockA++;
-            }
-            while (!maskBlockB[iBlockB] && iBlockB < COMPRESSION_VEC_SIZE) {
-                iBlockB++;
-            }
-            if (iBlockA < COMPRESSION_VEC_SIZE && iBlockB < COMPRESSION_VEC_SIZE) {
-                t_spValueAndZCount codeA = compressionBlockA.vec[iBlockA];
-                short bitsA = codeA & WEIGHT_MASK;
-                fixedPointNumber fpA((short) bitsA, fracWidth, intWidth);
-                float floatA = fpA.convert2Float();
+//        int iBlockA=0, iBlockB=0;
+//        while (iBlockA < COMPRESSION_VEC_SIZE && iBlockB < COMPRESSION_VEC_SIZE) {
+//            while (!maskBlockA[iBlockA] && iBlockA < COMPRESSION_VEC_SIZE) {
+//                iBlockA++;
+//            }
+//            while (!maskBlockB[iBlockB] && iBlockB < COMPRESSION_VEC_SIZE) {
+//                iBlockB++;
+//            }
+//            if (iBlockA < COMPRESSION_VEC_SIZE && iBlockB < COMPRESSION_VEC_SIZE) {
+//                t_spValueAndZCount codeA = compressionBlockA.vec[iBlockA];
+//                short bitsA = codeA & WEIGHT_MASK;
+//                fixedPointNumber fpA((short) bitsA, fracWidth, intWidth);
+//                float floatA = fpA.convert2Float();
 
-                t_spValueAndZCount codeB = compressionBlockB.vec[iBlockB];
-                short bitsB = codeB & WEIGHT_MASK;
-                fixedPointNumber fpB((short) bitsB, fracWidth, intWidth);
-                float floatB = fpB.convert2Float();
+//                t_spValueAndZCount codeB = compressionBlockB.vec[iBlockB];
+//                short bitsB = codeB & WEIGHT_MASK;
+//                fixedPointNumber fpB((short) bitsB, fracWidth, intWidth);
+//                float floatB = fpB.convert2Float();
 
-                result += floatA * floatB;
+//                result += floatA * floatB;
 
-                iBlockA++;
-                iBlockB++;
-            }
-        }
+//                iBlockA++;
+//                iBlockB++;
+//            }
+//        }
 
-        tempIndexVectorA = indexA[COMPRESSION_VEC_SIZE-1];
-        tempIndexVectorB = indexB[COMPRESSION_VEC_SIZE-1];
+//        tempIndexVectorA = indexA[COMPRESSION_VEC_SIZE-1];
+//        tempIndexVectorB = indexB[COMPRESSION_VEC_SIZE-1];
 
-        //Final update
-        if (tempIndexVectorA>=tempIndexVectorB) {
-            indexVectorB=tempIndexVectorB;
-            indexVectorATail = tempIndexVectorA;
-            iterVectorB++;
-        }
+//        //Final update
+//        if (tempIndexVectorA>=tempIndexVectorB) {
+//            indexVectorB=tempIndexVectorB;
+//            indexVectorATail = tempIndexVectorA;
+//            iterVectorB++;
+//        }
 
-        if (tempIndexVectorB>=tempIndexVectorA) {
-            indexVectorA=tempIndexVectorA;
-            indexVectorBTail = tempIndexVectorB;
-            iterVectorA++;
-        }
-    }
+//        if (tempIndexVectorB>=tempIndexVectorA) {
+//            indexVectorA=tempIndexVectorA;
+//            indexVectorBTail = tempIndexVectorB;
+//            iterVectorA++;
+//        }
+//    }
 
-    return result;
-}
+//    return result;
+//}
 
-float dot_product_compressed_vectors (
-        t_aligned_compression_scalar_vector & compressedVectorA,
-        t_aligned_compression_scalar_vector & compressedVectorB,
-        unsigned int maxIndex,
-        char intWidth,
-        char fracWidth
-        ) {
-    //Trackers of the head and tail of each window
+//float dot_product_compressed_vectors (
+//        t_aligned_compression_scalar_vector & compressedVectorA,
+//        t_aligned_compression_scalar_vector & compressedVectorB,
+//        unsigned int maxIndex,
+//        char intWidth,
+//        char fracWidth
+//        ) {
+//    //Trackers of the head and tail of each window
 
-    unsigned int indexVectorA=0, indexVectorB=0;
-    auto iterVectorA = compressedVectorA.begin();
-    auto iterVectorB = compressedVectorB.begin();
-    float result = 0.0f;
-    t_spValueAndZCount compressionBlockA, compressionBlockB;
+//    unsigned int indexVectorA=0, indexVectorB=0;
+//    auto iterVectorA = compressedVectorA.begin();
+//    auto iterVectorB = compressedVectorB.begin();
+//    float result = 0.0f;
+//    t_spValueAndZCount compressionBlockA, compressionBlockB;
 
-    while (indexVectorA < maxIndex && indexVectorB < maxIndex) {
-        bool readA = false, readB = false;
-        if (indexVectorA <= indexVectorB) {
-            compressionBlockA =  (*iterVectorA);
-            readA = true;
-        }
-        if (indexVectorB <= indexVectorA) {
-            compressionBlockB =  (*iterVectorB);
-            readB = true;
-        }
+//    while (indexVectorA < maxIndex && indexVectorB < maxIndex) {
+//        bool readA = false, readB = false;
+//        if (indexVectorA <= indexVectorB) {
+//            compressionBlockA =  (*iterVectorA);
+//            readA = true;
+//        }
+//        if (indexVectorB <= indexVectorA) {
+//            compressionBlockB =  (*iterVectorB);
+//            readB = true;
+//        }
 
-        if (readA) {
-            indexVectorA += (((compressionBlockA >> WEIGHT_ZCOUNT_BITOFFSET ) & WEIGHT_ZCOUNT_MASK ) + 1);
-            iterVectorA++;
-        }
-        if (readB) {
-            indexVectorB += (((compressionBlockB >> WEIGHT_ZCOUNT_BITOFFSET ) & WEIGHT_ZCOUNT_MASK ) + 1);
-            iterVectorB++;
-        }
+//        if (readA) {
+//            indexVectorA += (((compressionBlockA >> WEIGHT_ZCOUNT_BITOFFSET ) & WEIGHT_ZCOUNT_MASK ) + 1);
+//            iterVectorA++;
+//        }
+//        if (readB) {
+//            indexVectorB += (((compressionBlockB >> WEIGHT_ZCOUNT_BITOFFSET ) & WEIGHT_ZCOUNT_MASK ) + 1);
+//            iterVectorB++;
+//        }
 
-        if (indexVectorA == indexVectorB) {
-            short bitsA = compressionBlockA & WEIGHT_MASK;
-            fixedPointNumber fpA((short) bitsA, fracWidth, intWidth);
-            float floatA = fpA.convert2Float();
+//        if (indexVectorA == indexVectorB) {
+//            short bitsA = compressionBlockA & WEIGHT_MASK;
+//            fixedPointNumber fpA((short) bitsA, fracWidth, intWidth);
+//            float floatA = fpA.convert2Float();
 
-            short bitsB = compressionBlockB & WEIGHT_MASK;
-            fixedPointNumber fpB((short) bitsB, fracWidth, intWidth);
-            float floatB = fpB.convert2Float();
-            result += floatA * floatB;
-        }
-    }
+//            short bitsB = compressionBlockB & WEIGHT_MASK;
+//            fixedPointNumber fpB((short) bitsB, fracWidth, intWidth);
+//            float floatB = fpB.convert2Float();
+//            result += floatA * floatB;
+//        }
+//    }
 
-    return result;
-}
+//    return result;
+//}
 
-float dot_product_compressed_vectors (
-        t_aligned_compression_simd_vector & compressedVectorA,
-        t_aligned_compression_simd_vector & compressedVectorB,
-        unsigned int maxIndex,
-        char intWidth,
-        char fracWidth
-        ) {
-    //Trackers of the head and tail of each window
+//float dot_product_compressed_vectors (
+//        t_aligned_compression_simd_vector & compressedVectorA,
+//        t_aligned_compression_simd_vector & compressedVectorB,
+//        unsigned int maxIndex,
+//        char intWidth,
+//        char fracWidth
+//        ) {
+//    //Trackers of the head and tail of each window
 
-    unsigned int indexVectorA=0, indexVectorB=0;
-    auto iterVectorA = compressedVectorA.begin();
-    auto iterVectorB = compressedVectorB.begin();
-    float result = 0.0f;
-    t_simdblock_host compressionBlockA, compressionBlockB;
+//    unsigned int indexVectorA=0, indexVectorB=0;
+//    auto iterVectorA = compressedVectorA.begin();
+//    auto iterVectorB = compressedVectorB.begin();
+//    float result = 0.0f;
+//    t_simdblock_host compressionBlockA, compressionBlockB;
 
-    while (indexVectorA < maxIndex && indexVectorB < maxIndex) {
-        bool readA = false, readB = false;
-        if (indexVectorA <= indexVectorB) {
-            compressionBlockA =  (*iterVectorA);
-            readA = true;
-        }
-        if (indexVectorB <= indexVectorA) {
-            compressionBlockB =  (*iterVectorB);
-            readB = true;
-        }
+//    while (indexVectorA < maxIndex && indexVectorB < maxIndex) {
+//        bool readA = false, readB = false;
+//        if (indexVectorA <= indexVectorB) {
+//            compressionBlockA =  (*iterVectorA);
+//            readA = true;
+//        }
+//        if (indexVectorB <= indexVectorA) {
+//            compressionBlockB =  (*iterVectorB);
+//            readB = true;
+//        }
 
-        if (readA) {
-            indexVectorA += (compressionBlockA.runLength + 1);
-            iterVectorA++;
-        }
-        if (readB) {
-            indexVectorB += (compressionBlockB.runLength + 1);
-            iterVectorB++;
-        }
+//        if (readA) {
+//            indexVectorA += (compressionBlockA.runLength + 1);
+//            iterVectorA++;
+//        }
+//        if (readB) {
+//            indexVectorB += (compressionBlockB.runLength + 1);
+//            iterVectorB++;
+//        }
 
-        if (indexVectorA == indexVectorB) {
-            for (unsigned i=0; i<SIMD_SIZE; i++) {
-                char bitsA = compressionBlockA.values[i];
-                fixedPointNumber fpA((short) bitsA, fracWidth, intWidth);
-                float floatA = fpA.convert2Float();
+//        if (indexVectorA == indexVectorB) {
+//            for (unsigned i=0; i<SIMD_SIZE; i++) {
+//                char bitsA = compressionBlockA.values[i];
+//                fixedPointNumber fpA((short) bitsA, fracWidth, intWidth);
+//                float floatA = fpA.convert2Float();
 
-                char bitsB = compressionBlockB.values[i];
-                fixedPointNumber fpB((short) bitsB, fracWidth, intWidth);
-                float floatB = fpB.convert2Float();
-                result += floatA * floatB;
-              }
-        }
-    }
+//                char bitsB = compressionBlockB.values[i];
+//                fixedPointNumber fpB((short) bitsB, fracWidth, intWidth);
+//                float floatB = fpB.convert2Float();
+//                result += floatA * floatB;
+//              }
+//        }
+//    }
 
-    return result;
-}
+//    return result;
+//}

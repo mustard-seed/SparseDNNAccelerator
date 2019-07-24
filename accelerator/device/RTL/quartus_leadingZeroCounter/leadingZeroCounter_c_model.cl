@@ -7,4 +7,6 @@ unsigned char leadingZeroCounter (unsigned char bitmask) {
     }
     countPlus1 = count + 1;
     unsigned char result = ( (countPlus1 & 0x0F) << 4 ) | (count & 0x0F);
+
+    return result;
 }

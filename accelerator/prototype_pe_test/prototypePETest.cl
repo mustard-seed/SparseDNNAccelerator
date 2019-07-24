@@ -5,6 +5,7 @@
 #include "prototypePE_structs.hpp"
 #include "peComponents.hpp"
 #include "rtl_lib.hpp"
+#include "leadingZero_lib.hpp"
 
 
 #define PE_NUM_X PE_COLS
@@ -39,11 +40,6 @@ typedef struct __attribute__((packed)) {
 } t_pSumManagerInstruction;
 */
 
-typedef struct __attribute__((packed)) {
-	t_operand nzWeight;
-	t_operand nzActivation;
-	uint1_t isLast;
-} t_macOperands;
 
 //With the final array
 typedef struct __attribute__((packed)){
@@ -52,12 +48,23 @@ typedef struct __attribute__((packed)){
 	uint1_t isLast;
 } t_simdblock_di;
 
+typedef struct __attribute__((packed)){
+	t_simdblock_value values;
+	uint1_t isLast;
+} t_simdblock_bitmask;
+
+typedef struct __attribute__((packed)){
+	t_simdblock_value weights;
+	t_simdblock_value activations;
+	uint1_t isLast;
+} t_mac_simd_operands;
+
 //MAC Operands
 typedef struct __attribute__((packed)) {
 	char values [SIMD_SIZE];
 } t_simdblock_mac;
 
-t_accumulator mac (t_simdblock_mac activations, t_simdblock_mac weights) {
+t_accumulator madd (t_simdblock_value activations, t_simdblock_value weights) {
 	t_accumulator output = 0x0;
 
 	#pragma unroll
@@ -95,10 +102,10 @@ t_accumulator mac (t_simdblock_mac activations, t_simdblock_mac weights) {
 
 
 
-channel t_simdblock_di_tagged channel_activationInput __attribute__((depth(1)));
-channel t_simdblock_di_tagged channel_activationOutput __attribute__((depth(1)));
-channel t_simdblock_di_tagged channel_weightInput __attribute__((depth(1)));
-channel t_simdblock_di_tagged channel_weightOutput __attribute__((depth(1)));
+channel t_simdblock_bitmask_tagged channel_activationInput __attribute__((depth(1)));
+channel t_simdblock_bitmask_tagged channel_activationOutput __attribute__((depth(1)));
+channel t_simdblock_bitmask_tagged channel_weightInput __attribute__((depth(1)));
+channel t_simdblock_bitmask_tagged channel_weightOutput __attribute__((depth(1)));
 channel t_operand channel_biasInput __attribute__((depth(1)));
 channel t_operand channel_biasOutput __attribute__((depth(1)));
 channel t_accumulator channel_drainInput __attribute__((depth(1)));
@@ -116,10 +123,10 @@ channel t_drainTransportInstruction channel_drainTransportInstruction __attribut
 //channel t_spValueAndZCountUnpacked channel_peWeightInput __attribute__((depth(0)));
 //channel t_spValueAndZCountUnpacked channel_peActivationInput __attribute__((depth(0)));
 
-channel t_simdblock_di channel_dpWeightInput __attribute__((depth(PE_VEC_FIFO_SIZE)));
-channel t_simdblock_di channel_dpActivationInput __attribute__((depth(PE_VEC_FIFO_SIZE)));
+channel t_simdblock_bitmask channel_dpWeightInput __attribute__((depth(PE_VEC_FIFO_SIZE)));
+channel t_simdblock_bitmask channel_dpActivationInput __attribute__((depth(PE_VEC_FIFO_SIZE)));
 //channel t_operand channel_pSumManagerActivationInput __attribute__((depth(0)));
-channel t_macOperands channel_macOperandsInput __attribute__((depth(0)));
+channel t_mac_simd_operands channel_macOperandsInput __attribute__((depth(0)));
 //channel t_accumulator channel_pSumManagerMacInput __attribute__((depth(0)));
 
 channel t_accumulator channel_peDrainOutput __attribute__((depth(0)));
@@ -290,13 +297,15 @@ __kernel void kernelWeightTransport (
 	int idx = IDX;
 	int idy = IDY;
 
-	t_simdblock_di_tagged block = read_channel_intel(channel_weightInput);
-	t_simdblock_di peBlock;
+	//t_simdblock_di_tagged block = read_channel_intel(channel_weightInput);
+	//t_simdblock_di peBlock;
+	t_simdblock_bitmask_tagged block = read_channel_intel(channel_weightInput);
+	t_simdblock_bitmask peBlock;
 	#pragma unroll
 	for (unsigned char i=0; i<SIMD_SIZE; i++) {
-		peBlock.values[i] = block.values[i];
+		peBlock.values.values[i] = block.values[i];
 	}
-	peBlock.streamingBlockIndex = block.streamingBlockIndex;
+	//peBlock.streamingBlockIndex = block.streamingBlockIndex;
 	peBlock.isLast = block.isLast;
 
 	if (idy < (PE_ROWS - 1)){
@@ -320,18 +329,20 @@ __kernel void kernelActivationTransport (
 	int idx = IDX;
 	int idy = IDY;
 
-	t_simdblock_di_tagged block = read_channel_intel(channel_activationInput);
-	t_simdblock_di peBlock;
+	//t_simdblock_di_tagged block = read_channel_intel(channel_activationInput);
+	//t_simdblock_di peBlock;
+	t_simdblock_bitmask_tagged block = read_channel_intel(channel_activationInput);
+	t_simdblock_bitmask peBlock;
 	#pragma unroll
 	for (unsigned char i=0; i<SIMD_SIZE; i++) {
-		peBlock.values[i] = block.values[i];
+		peBlock.values.values[i] = block.values[i];
 	}
-	peBlock.streamingBlockIndex = block.streamingBlockIndex;
+	//peBlock.streamingBlockIndex = block.streamingBlockIndex;
 	peBlock.isLast = block.isLast;
 
 	if (idx < (PE_COLS - 1)){
 		if ( idx < block.maxTransportID ) {
-			EMULATOR_PRINT ( ("[kernelWeightTransport]: Waiting to pass a weight block to the output\n") );
+			EMULATOR_PRINT ( ("[kernelWeightTransport]: Waiting to pass an activation block to the output\n") );
 			write_channel_intel(channel_activationOutput, block);
 		}
 	}
@@ -356,10 +367,8 @@ __kernel void kernelTestInterface (
 		__global t_pe_prototype_instruction_host* restrict pInsructionOutputHorizontal,
 		__global t_pe_prototype_instruction_host* restrict pInstructionOutputVeritcal,
 		unsigned short numInputActivationBlocks,
-		unsigned short startIndexActivationBlocks,
 		unsigned short numOutputActivationBlocks,
 		unsigned short numInputWeightBlocks,
-		unsigned short startIndexWeightBlocks,
 		unsigned short numOutputWeightBlocks,
 		unsigned short numInputBias,
 		unsigned short numOutputBias,
@@ -384,8 +393,8 @@ __kernel void kernelTestInterface (
 				   countOutputInstructionVertical = 0,
 				   countOutputInstructionHorizontal = 0;
 
-	uint5_t		   indexActivationTracker = 0,
-				   indexWeightTracker = 0;
+	//uint5_t		   indexActivationTracker = 0;
+	//uint5_t		   indexWeightTracker = 0;
 	int idx = IDX;
 	int idy = IDY;
 
@@ -418,16 +427,17 @@ __kernel void kernelTestInterface (
 			t_simdblock_host block = pActivationInput[countInputActivationBlocks];
 			//t_vecUnpacked unpackedValue;
 			//decodeRunLength(&value, &unpackedValue, numActivationTracker);
-			t_simdblock_di_tagged taggedBlock;
+			//t_simdblock_di_tagged taggedBlock;
+			t_simdblock_bitmask_tagged taggedBlock;
 			#pragma unroll
 			for (unsigned char i=0; i<SIMD_SIZE; i++) {
 				taggedBlock.values[i] = block.values[i];
 			}
 
-			uint6_t indexInStreamingBlock = indexActivationTracker + (uint6_t) block.runLength; 
+			//uint6_t indexInStreamingBlock = indexActivationTracker + (uint6_t) block.runLength; 
 			unsigned char isLast = (countInputActivationBlocks == (numInputActivationBlocks - 1)) ?
                 0x1 : 0x0;
-            taggedBlock.streamingBlockIndex = indexInStreamingBlock;
+            //taggedBlock.streamingBlockIndex = indexInStreamingBlock;
             taggedBlock.isLast = isLast;;
             taggedBlock.maxTransportID = maxIDY;
 
@@ -435,14 +445,15 @@ __kernel void kernelTestInterface (
 			if (valid) {
 				countInputActivationBlocks++;
 				//numActivationTracker = unpackedValue.indices[COMPRESSION_VEC_SIZE-1];
-				indexActivationTracker = (indexInStreamingBlock == (SYNC_SIZE - 1)) ? 0x0 : indexInStreamingBlock + 0x1;
+				//indexActivationTracker = (indexInStreamingBlock == (SYNC_SIZE - 1)) ? 0x0 : indexInStreamingBlock + 0x1;
 			}
 		}
 
 		if ( (0x1FF & idy) < (PE_NUM_Y - 1) ) {
 			if (countOutputActivationBlocks < numOutputActivationBlocks) {
 				bool valid;
-				t_simdblock_di_tagged block = read_channel_nb_intel(channel_activationOutput, &valid);
+				//t_simdblock_di_tagged block = read_channel_nb_intel(channel_activationOutput, &valid);
+				t_simdblock_bitmask_tagged block = read_channel_nb_intel(channel_activationOutput, &valid);
 				if (valid) {
 					t_simdblock_host hostBlock;
 					
@@ -450,7 +461,7 @@ __kernel void kernelTestInterface (
 					for (unsigned char i=0; i<SIMD_SIZE; i++) {
 						hostBlock.values[i] = block.values[i];
 					}
-					hostBlock.runLength = block.streamingBlockIndex;
+					//hostBlock.runLength = block.streamingBlockIndex;
 					pActivationOutput[countOutputActivationBlocks++] = hostBlock;
 					EMULATOR_PRINT ( ("[kernelTestInferace]: Collected %d out of %d activation blocks\n", countOutputActivationBlocks, numOutputActivationBlocks) );
 				}
@@ -462,16 +473,17 @@ __kernel void kernelTestInterface (
 			t_simdblock_host block = pWeightInput[countInputWeightBlocks];
 			//t_vecUnpacked unpackedValue;
 			//decodeRunLength(&value, &unpackedValue, numActivationTracker);
-			t_simdblock_di_tagged taggedBlock;
+			//t_simdblock_di_tagged taggedBlock;
+			t_simdblock_bitmask_tagged taggedBlock;
 			#pragma unroll
 			for (unsigned char i=0; i<SIMD_SIZE; i++) {
 				taggedBlock.values[i] = block.values[i];
 			}
 
-			uint6_t indexInStreamingBlock = indexWeightTracker + (uint6_t) block.runLength; 
+			//uint6_t indexInStreamingBlock = indexWeightTracker + (uint6_t) block.runLength; 
 			unsigned char isLast = (countInputWeightBlocks == (numInputWeightBlocks - 1)) ?
                 0x1 : 0x0;
-            taggedBlock.streamingBlockIndex = indexInStreamingBlock;
+            //taggedBlock.streamingBlockIndex = indexInStreamingBlock;
             taggedBlock.isLast = isLast;;
             taggedBlock.maxTransportID = maxIDX;
 
@@ -479,7 +491,7 @@ __kernel void kernelTestInterface (
 			if (valid) {
 				countInputWeightBlocks++;
 				//numActivationTracker = unpackedValue.indices[COMPRESSION_VEC_SIZE-1];
-				indexWeightTracker = (indexInStreamingBlock == (SYNC_SIZE - 1)) ? 0x0 : indexInStreamingBlock + 0x1;
+				//indexWeightTracker = (indexInStreamingBlock == (SYNC_SIZE - 1)) ? 0x0 : indexInStreamingBlock + 0x1;
 			}
 		}
 
@@ -487,7 +499,8 @@ __kernel void kernelTestInterface (
 			if (countOutputWeightBlocks < numOutputWeightBlocks) {
 				bool valid;
 				//t_vecUnpacked value = read_channel_nb_intel(channel_weightOutput, &valid);
-				t_simdblock_di_tagged block = read_channel_nb_intel(channel_weightOutput, &valid);
+				//t_simdblock_di_tagged block = read_channel_nb_intel(channel_weightOutput, &valid);
+				t_simdblock_bitmask_tagged block = read_channel_nb_intel(channel_weightOutput, &valid);
 				if (valid) {
 					t_simdblock_host hostBlock;
 					
@@ -495,7 +508,7 @@ __kernel void kernelTestInterface (
 					for (unsigned char i=0; i<SIMD_SIZE; i++) {
 						hostBlock.values[i] = block.values[i];
 					}
-					hostBlock.runLength = block.streamingBlockIndex;
+					//hostBlock.runLength = block.streamingBlockIndex;
 					pWeightOutput[countOutputWeightBlocks++] = hostBlock;
 					EMULATOR_PRINT ( ("[kernelTestInferace]: Collected %d out of %d weight blocks\n", countOutputWeightBlocks, numOutputWeightBlocks) );
 				}
@@ -590,6 +603,25 @@ __kernel void kernelTestInterface (
 }
 
 
+#define DP_LOAD_STATE_LOAD_BITMASK 0X0
+#define DP_LOAD_STATE_FILL_WINDOW 0X1
+#define DP_LOAD_STATE_DONE 0x2
+
+#define DP_MATCH_STATE_COMPUTE_MUTUAL_BITMASK 0X0
+#define DP_MATCH_STATE_DRAIN_WINDOW 0X1
+#define DP_MATCH_STATE_SEND_LAST 0x2
+#define DP_MATCH_STATE_DONE 0x3
+
+typedef struct {
+	t_simdblock_value values[8];
+} t_simdblock_window;
+
+#define TRUE 0X1
+#define FALSE 0x0
+#define BASE0 0
+#define BASE1 8
+
+
 /*! \brief Dot product kernel that operates on compressed sparse weight and activation
 
 */
@@ -605,63 +637,477 @@ __kernel void kernelDotProductDispatcher (
 	compression!
 	*/
 	
-	uint6_t streamingBlockIndexActivation = 0, streamingBlockIndexWeight = 0;
-	t_simdblock_di activationBlock, weightBlock;
-	t_accumulator pSum=0;
-	//uint1_t proceed = 0x1;
-	//bool activationBlockValid = true, weightBlockValid = true, loadBlock = true;
+	uint1_t regLoadSide = 0x0; //Can be 0x0 or 0x1;
 
+	//t_simdblock_value ramBuffer0[16];
+	//t_simdblock_value ramBuffer1[16];
+
+
+	//=========Registers used for the loading the activation===============
+	uint2_t regStateLoadActivation = DP_LOAD_STATE_LOAD_BITMASK;
+	unsigned char regOriginalActivationBitMask0;
+	unsigned char regOriginalActivationBitMask1;
+	unsigned char regRunningActivationBitMask = 0;
+	uint1_t regActivationIsLast0;
+	uint1_t regActivationIsLast1;
+	unsigned char regLoadActivationPosition;
+	//t_simdblock_value regActivationBuffer0[8];
+	//t_simdblock_value regActivationBuffer1[8];
+	//t_simdblock_window regActivationBuffer0;
+	//t_simdblock_window regActivationBuffer1;
+	t_simdblock_value ramActivationBuffer0[8];
+	t_simdblock_value ramActivationBuffer1[8];
+
+	//==========Registers used for loading the weight==============
+	uint2_t regStateLoadWeight = DP_LOAD_STATE_LOAD_BITMASK;
+	unsigned char regOriginalWeightBitMask0;
+	unsigned char regOriginalWeightBitMask1;
+	unsigned char regRunningWeightBitMask = 0;
+	uint1_t regWeightIsLast0;
+	uint1_t regWeightIsLast1;
+	//t_simdblock_value regWeightBuffer0[8];
+	//t_simdblock_value regWeightBuffer1[8];
+	//t_simdblock_window regWeightBuffer0;
+	//t_simdblock_window regWeightBuffer1;
+	t_simdblock_value ramWeightBuffer0[8];
+	t_simdblock_value ramWeightBuffer1[8];
+
+	unsigned char regLoadWeightPosition;
+
+
+	//========Registers used for the drain side============
+	uint2_t regStateDrain = DP_MATCH_STATE_DONE;
+	unsigned char regRunningDrainMutualBitMask;
+	unsigned char regDrainPosition;
+	uint1_t regDrainIsLast;
+
+	//#pragma ivdep array(regActivationBuffer0)
+	//#pragma ivdep array(regActivationBuffer1)
+	//#pragma ivdep array(regWeightBuffer0)
+	//#pragma ivdep array(regWeightBuffer1)
+	//#pragma ivdep
+	#pragma ivdep array(ramActivationBuffer0)
+	#pragma ivdep array(ramActivationBuffer1)
+	#pragma ivdep array(ramWeightBuffer0)
+	#pragma ivdep array(ramWeightBuffer1)
 	while (true) {
-;
-		if (streamingBlockIndexActivation 
-					<= streamingBlockIndexWeight) {
-			//EMULATOR_PRINT ( ("[kernelDotProductEngineDispatcher]: Waiting to read from the activation channel\n") );
-			//activationBlock = read_channel_nb_intel(channel_dpActivationInput, &activationBlockValid);
-			activationBlock = read_channel_intel(channel_dpActivationInput);
+		bool loadActivationSuccess;
+		t_simdblock_bitmask activationBlob;
+		uint2_t newStateLoadActivation = regStateLoadActivation;
 
-		}
-		//mem_fence(CLK_CHANNEL_MEM_FENCE);
-		if (streamingBlockIndexActivation 
-					>= streamingBlockIndexWeight) {
-			//EMULATOR_PRINT ( ("[kernelDotProductEngineDispatcher]: Waiting to read from the weight channel\n") );
-			//weightBlock = read_channel_nb_intel(channel_dpWeightInput, &weightBlockValid);
-			weightBlock = read_channel_intel(channel_dpWeightInput);	
+		if ( (regStateLoadActivation == DP_LOAD_STATE_LOAD_BITMASK)
+			|| (regStateLoadActivation == DP_LOAD_STATE_FILL_WINDOW) ) {
+			activationBlob = read_channel_nb_intel(channel_dpActivationInput, 
+						&loadActivationSuccess);
+			if (!loadActivationSuccess) {
+				//EMULATOR_PRINT ( ("[kernelDotProductEngineDispatcher]: Failed to load activation\n") );	
+			}
 		}
 
-
-
-			streamingBlockIndexActivation = activationBlock.streamingBlockIndex;
-			streamingBlockIndexWeight = weightBlock.streamingBlockIndex;
-
-
-			EMULATOR_PRINT ( ("[kernelDotProductEngineDispatcher]: streamingBlockIndexActivation updated to %d\n", streamingBlockIndexActivation) );
-
-			EMULATOR_PRINT ( ("[kernelDotProductEngineDispatcher]: streamingBlockIndexWeight updated to %d\n", streamingBlockIndexWeight) );
-
-			if (streamingBlockIndexWeight == streamingBlockIndexActivation) {
-				
-				t_simdblock_mac activations, weights;
-				#pragma unroll
-				for (int i=0; i<SIMD_SIZE; i++) {
-					activations.values[i] = activationBlock.values[i];
-					weights.values[i] = weightBlock.values[i];
+		switch (regStateLoadActivation) {
+			case DP_LOAD_STATE_LOAD_BITMASK: {		
+				if (loadActivationSuccess) {
+					regLoadActivationPosition = 0x0;
+					unsigned char activationBitmask = activationBlob.values.values[0];
+					if (regLoadSide == 0x0) {
+						regOriginalActivationBitMask0 = activationBitmask;
+					}
+					else {
+						regOriginalActivationBitMask1 = activationBitmask;
+					}
+					regRunningActivationBitMask = activationBitmask;
+					newStateLoadActivation = 
+						(activationBitmask == 0x0) ?
+						DP_LOAD_STATE_DONE : DP_LOAD_STATE_FILL_WINDOW;
+					if (activationBitmask == 0x0) {
+						if (regLoadSide == 0x0) {
+							regActivationIsLast0 = (activationBlob.isLast) ? TRUE: FALSE;
+						}
+						else {
+							regActivationIsLast1 = (activationBlob.isLast) ? TRUE: FALSE;
+						}
+					}
 				}
-				pSum += (t_accumulator) (mac(activations, weights));
+			} // case DP_LOAD_STATE_LOAD_BITMASK
+			break;
+			case DP_LOAD_STATE_FILL_WINDOW: {
+				if (loadActivationSuccess) {
+					unsigned char currentBitMask = regRunningActivationBitMask;
+					unsigned char currentPosition =
+						regLoadActivationPosition;
+					unsigned char bitCountResult = 
+						leadingZeroCounter (currentBitMask);
+					unsigned char leadingZeroCountPlusOne =
+						(bitCountResult >> 4) & 0x0F;
+					unsigned char leadingZeroCount = bitCountResult & 0x0F;
 
-				uint1_t weightBlockIsLast = weightBlock.isLast;
-				uint1_t activationBlockIsLast = activationBlock.isLast;
+					//Calculate the position of the simd block
+					unsigned char index = (currentPosition + leadingZeroCount);
 
-				uint1_t isLast = ((weightBlockIsLast == 0x1) && (activationBlockIsLast == 0x1)) ?
-				0x1 : 0x0;
+					//Calculate the new bitmask;
+					unsigned char newBitMask = currentBitMask >> leadingZeroCountPlusOne;
 
-				if (isLast == 0x1) {
-					EMULATOR_PRINT ( ("[kernelMAC]: Waiting to commit!\n") );
-					write_channel_intel(channel_peDrainOutput, pSum);
-					pSum = 0;
-					EMULATOR_PRINT ( ("[kernelMAC]: Committed!\n") );
+					//Update the position register
+					regLoadActivationPosition = currentPosition + leadingZeroCountPlusOne;
+
+					//Update the running activation  bit mask
+					regRunningActivationBitMask = newBitMask;
+
+					//Update the activaiton buffer window
+					/*
+					#pragma unroll
+					for (unsigned char i=0; i<SIMD_SIZE; i++) {
+						if (regLoadSide == 0x0) {
+							//regActivationBuffer0.values[index].values[i] =
+							//	activationBlob.values[i];
+							//regActivationBuffer0[index].values[i] =
+							//	activationBlob.values[i];
+							//ramBuffer0[index].values[i] =
+							//	activationBlob.values[i];
+							 ramActivationBuffer[BASE0 + index].values[i]
+							 	= activationBlob.values[i];
+						}
+						else {
+							//regActivationBuffer1.values[index].values[i] =
+							//	activationBlob.values[i];
+							//regActivationBuffer1[index].values[i] =
+							//	activationBlob.values[i];
+							//ramBuffer1[index].values[i] =
+							//	activationBlob.values[i];
+							ramActivationBuffer[BASE1 + index].values[i]
+							 	= activationBlob.values[i];
+						}
+					}
+					*/
+					if (regLoadSide == 0x0) {
+						ramActivationBuffer0[index]
+							 	= activationBlob.values;
+					}
+					else {
+						ramActivationBuffer1[index]
+							 	= activationBlob.values;
+					}
+
+					//Calculate the new state
+					newStateLoadActivation = (newBitMask == 0x0) ?
+						DP_LOAD_STATE_DONE : DP_LOAD_STATE_FILL_WINDOW;
+
+					//Update the last register, if necessary
+					if (newBitMask == 0x0) {
+						if (regLoadSide == 0x0) {
+							regActivationIsLast0 = (activationBlob.isLast) ? TRUE: FALSE;
+						}
+						else {
+							regActivationIsLast1 = (activationBlob.isLast) ? TRUE: FALSE;
+						}
+					}
+				} // if loadActivationSuccess
+			} // case DP_LOAD_STATE_FILL_WINDOW
+			break;
+			default: {
+			}
+		} // switch regStateLoadActivation
+
+		bool loadWeightSuccess;
+		t_simdblock_bitmask weightBlob;
+		uint2_t newStateLoadWeight = regStateLoadWeight;
+
+		if ( (regStateLoadWeight == DP_LOAD_STATE_LOAD_BITMASK)
+			|| (regStateLoadWeight == DP_LOAD_STATE_FILL_WINDOW) ) {
+			weightBlob = read_channel_nb_intel(channel_dpWeightInput, 
+						&loadWeightSuccess);
+			if (!loadWeightSuccess) {
+				//EMULATOR_PRINT ( ("[kernelDotProductEngineDispatcher]: Failed to load weight\n") );	
+			}
+		}
+
+		switch (regStateLoadWeight) {
+			case DP_LOAD_STATE_LOAD_BITMASK: {		
+				if (loadWeightSuccess) {
+					regLoadWeightPosition = 0x0;
+					unsigned char weightBitMask = weightBlob.values.values[0];
+					if (regLoadSide == 0x0) {
+						regOriginalWeightBitMask0 = weightBitMask;
+					}
+					else {
+						regOriginalWeightBitMask1 = weightBitMask;
+					}
+					regRunningWeightBitMask = weightBitMask;
+					newStateLoadWeight = 
+						(weightBitMask == 0x0) ?
+						DP_LOAD_STATE_DONE : DP_LOAD_STATE_FILL_WINDOW;
+					if (weightBitMask == 0x0) {
+						
+						if (regLoadSide == 0x0) {
+							regWeightIsLast0 = (weightBlob.isLast) ? TRUE: FALSE;
+						}
+						else {
+							regWeightIsLast1 = (weightBlob.isLast) ? TRUE: FALSE;
+						}
+					}
+				}
+			} // case DP_LOAD_STATE_LOAD_BITMASK
+			break;
+			case DP_LOAD_STATE_FILL_WINDOW: {
+				if (loadWeightSuccess) {
+					unsigned char currentBitMask = regRunningWeightBitMask;
+					unsigned char currentPosition =
+						regLoadWeightPosition;
+					unsigned char bitCountResult = 
+						leadingZeroCounter (currentBitMask);
+					unsigned char leadingZeroCountPlusOne =
+						(bitCountResult >> 4) & 0x0F;
+					unsigned char leadingZeroCount = bitCountResult & 0x0F;
+
+					//Calculate the position of the simd block
+					unsigned char index = (currentPosition + leadingZeroCount) & 0xF;
+
+					//Calculate the new bitmask;
+					unsigned char newBitMask = currentBitMask >> leadingZeroCountPlusOne;
+
+					//Update the position register
+					regLoadWeightPosition = currentPosition + leadingZeroCountPlusOne;
+
+					//Update the bit mask
+					regRunningWeightBitMask = newBitMask;
+
+					//Update the activaiton buffer window
+					/*
+					#pragma unroll
+					for (unsigned char i=0; i<SIMD_SIZE; i++) {
+						
+						if (regLoadSide == 0x0) {
+							//regWeightBuffer0.values[index].values[i] =
+							//	weightBlob.values[i];
+							//regWeightBuffer0[index].values[i] =
+							//	weightBlob.values[i];
+							//ramBuffer0[index].values[i] =
+							//	weightBlob.values[i];
+							ramWeightBuffer[BASE0 + index].values[i]
+							 	= weightBlob.values[i];
+						}
+						else {
+							//regWeightBuffer1.values[index].values[i] =
+							//	weightBlob.values[i];
+							//regWeightBuffer1[index].values[i] =
+							//	weightBlob.values[i];
+							//ramBuffer1[index].values[i] =
+							//	weightBlob.values[i];
+							ramWeightBuffer[BASE1 + index].values[i]
+							 	= weightBlob.values[i];
+						}
+						
+					}
+					*/
+					if (regLoadSide == 0x0) {
+							ramWeightBuffer0[index]
+								 	= weightBlob.values;
+						}
+					else {
+							ramWeightBuffer1[index]
+								 	= weightBlob.values;
+					}
+
+					//Calculate the new state
+					newStateLoadWeight = (newBitMask == 0x0) ?
+						DP_LOAD_STATE_DONE : DP_LOAD_STATE_FILL_WINDOW;
+
+					//Update the last register, if necessary
+					if (newBitMask == 0x0) {
+						if (regLoadSide == 0x0) {
+							regWeightIsLast0 = (weightBlob.isLast) ? TRUE: FALSE;
+						}
+						else {
+							regWeightIsLast1 = (weightBlob.isLast) ? TRUE: FALSE;
+						}
+					}
+				} // if loadActivationSuccess
+			} // case DP_LOAD_STATE_FILL_WINDOW
+			break;
+			default: {
+			}
+		} // switch regStateLoadWeight
+
+
+		bool writeMacSuccess;
+		uint2_t newStateDrain = regStateDrain;
+
+		unsigned char newMutualBitMask = 0;
+		unsigned char newDrainPosition = 0;
+		uint1_t newDrainIsLast = false;
+		unsigned char drainIndex = 0;
+		t_mac_simd_operands operands;
+
+		//Local variable computation
+		switch (regStateDrain) {
+			case DP_MATCH_STATE_COMPUTE_MUTUAL_BITMASK : {
+				if (regLoadSide == 0x1) {
+					newMutualBitMask = regOriginalActivationBitMask0 & regOriginalWeightBitMask0;
+					newDrainIsLast = regActivationIsLast0 & regWeightIsLast0;
+				}
+				else {
+					newMutualBitMask = regOriginalActivationBitMask1 & regOriginalWeightBitMask1;
+					newDrainIsLast = regActivationIsLast1 & regWeightIsLast1;
+				}
+				newDrainPosition = 0;
+
+			}
+			break;
+			case DP_MATCH_STATE_DRAIN_WINDOW : {
+				unsigned char bitCountResult = 
+						leadingZeroCounter (regRunningDrainMutualBitMask);
+				unsigned char leadingZeroCountPlusOne =
+						(bitCountResult >> 4) & 0x0F;
+				unsigned char leadingZeroCount = bitCountResult & 0x0F;
+				newDrainPosition = regDrainPosition + leadingZeroCountPlusOne;
+				drainIndex =  (regDrainPosition + leadingZeroCount) & 0xF;
+				newMutualBitMask = (regRunningDrainMutualBitMask >> leadingZeroCountPlusOne);
+				newDrainIsLast = regDrainIsLast;
+				/*
+				#pragma unroll
+				for (unsigned char i=0; i<SIMD_SIZE; i++) {
+					if (regLoadSide == 0x1) {
+						//operands.weights[i] = regWeightBuffer0.values[drainIndex].values[i];
+						//operands.activations[i] = regActivationBuffer0.values[drainIndex].values[i];
+						//operands.weights[i] = regWeightBuffer0[drainIndex].values[i];
+						//operands.activations[i] = regActivationBuffer0[drainIndex].values[i];
+						//operands.weights[i] = ramBuffer0[drainIndex+WEIGHT_BASE].values[i];
+						//operands.activations[i] = ramBuffer0[drainIndex+ACTIVATION_BASE].values[i];
+						operands.weights[i] = ramWeightBuffer[drainIndex+BASE0].values[i];
+						operands.activations[i] = ramActivationBuffer[drainIndex+BASE0].values[i];
+					}
+					else {
+						//operands.weights[i] = regWeightBuffer1.values[drainIndex].values[i];
+						//operands.activations[i] = regActivationBuffer1.values[drainIndex].values[i];
+						//operands.weights[i] = regWeightBuffer1[drainIndex].values[i];
+						//operands.activations[i] = regActivationBuffer1[drainIndex].values[i];
+						//operands.weights[i] = ramBuffer1[drainIndex+WEIGHT_BASE].values[i];
+						//operands.activations[i] = ramBuffer1[drainIndex+ACTIVATION_BASE].values[i];
+						operands.weights[i] = ramWeightBuffer[drainIndex+BASE1].values[i];
+						operands.activations[i] = ramActivationBuffer[drainIndex+BASE1].values[i];
+					}
+				}
+				*/
+				if (regLoadSide == 0x1) {
+						operands.weights = ramWeightBuffer0[drainIndex];
+						operands.activations = ramActivationBuffer0[drainIndex];
+					}
+				else {
+					operands.weights = ramWeightBuffer1[drainIndex];
+					operands.activations = ramActivationBuffer1[drainIndex];
+				}
+				operands.isLast = 0x0;
+
+			}
+			break;
+			case DP_MATCH_STATE_SEND_LAST : {
+				operands.isLast = 0x1;
+			}
+			break;
+			default: {
+
+			}
+		}
+
+		if ((regStateDrain == DP_MATCH_STATE_DRAIN_WINDOW)
+			|| (regStateDrain == DP_MATCH_STATE_SEND_LAST)) {
+			writeMacSuccess = write_channel_nb_intel(channel_macOperandsInput, operands);
+		}
+
+
+		//State variable updates for the draining side
+		switch (regStateDrain) {
+			case DP_MATCH_STATE_COMPUTE_MUTUAL_BITMASK : {
+				regDrainPosition = newDrainPosition;
+				regRunningDrainMutualBitMask = newMutualBitMask;
+				regDrainIsLast = newDrainIsLast;
+				if  (newMutualBitMask == 0x0) {
+					if (newDrainIsLast) {
+						newStateDrain = DP_MATCH_STATE_SEND_LAST;
+					}
+					else {
+						newStateDrain = DP_MATCH_STATE_DONE;
+					}
+				}
+				else {
+					newStateDrain = DP_MATCH_STATE_DRAIN_WINDOW;
+				}
+			} // DP_MATCH_STATE_COMPUTE_MUTUAL_BITMASK
+			break;
+			case DP_MATCH_STATE_DRAIN_WINDOW : {
+				if (writeMacSuccess) {
+					regDrainPosition = newDrainPosition;
+					regRunningDrainMutualBitMask = newMutualBitMask;
+					EMULATOR_PRINT ( ("[kernelDotProductEngineDispatcher]: Sent new operands to mac. The new mutual bit mask is %d\n", newMutualBitMask) );
+					if  (newMutualBitMask == 0x0) {
+						if (newDrainIsLast) {
+							newStateDrain = DP_MATCH_STATE_SEND_LAST;
+						}
+						else {
+							newStateDrain = DP_MATCH_STATE_DONE;
+						}
+						EMULATOR_PRINT ( ("[kernelDotProductEngineDispatcher]: Finished sending the operands in one window to mac!\n") );
+					}
+
+				}
+			} //DP_MATCH_STATE_DRAIN_WINDOW
+			break;
+			case DP_MATCH_STATE_SEND_LAST : {
+				if (writeMacSuccess) {
+					newStateDrain = DP_MATCH_STATE_DONE;
+					EMULATOR_PRINT ( ("[kernelDotProductEngineDispatcher]: Finished sending the operands in one dot product to mac!\n") );
 				}
 			}
-		
-	} // while
+			break;
+			default: {
+
+			}
+		}
+
+		//swap and reset states if necessary, 
+		if ( (newStateLoadActivation == DP_LOAD_STATE_DONE)
+			&& (newStateLoadWeight == DP_LOAD_STATE_DONE)
+			&& (newStateDrain == DP_MATCH_STATE_DONE) ) {
+			regStateLoadActivation = DP_LOAD_STATE_LOAD_BITMASK;
+			regStateLoadWeight = DP_LOAD_STATE_LOAD_BITMASK;
+			regStateDrain = DP_MATCH_STATE_COMPUTE_MUTUAL_BITMASK;
+
+			regLoadSide = (regLoadSide == 0x0) ? 0x1 : 0x0;
+			EMULATOR_PRINT ( ("[kernelDotProductEngineDispatcher]: Swap occured!\n") );
+		}
+		// otherwise just perform regular state update
+		else {
+			//State updates
+			regStateLoadActivation = newStateLoadActivation;
+			regStateLoadWeight = newStateLoadWeight;
+			regStateDrain = newStateDrain;
+			//EMULATOR_PRINT ( ("[kernelDotProductEngineDispatcher]: New activation state, weight state, and drain state: %d %d %d\n",
+			//	regStateLoadActivation, regStateLoadWeight, regStateDrain) );	
+		}
+	}		
 	
+}
+
+__attribute__((task))
+__attribute__((max_global_work_dim(0)))
+__attribute__((autorun))
+__kernel void mac () {
+	t_accumulator pSum = 0;
+	uint1_t proceed = TRUE;
+	while (proceed == TRUE) {
+		t_mac_simd_operands operands = read_channel_intel(channel_macOperandsInput);
+		bool isLast = operands.isLast;
+		if (!isLast) {
+			t_simdblock_value activations, weights;
+			activations = operands.activations;
+			weights = operands.weights;
+			t_accumulator tempPSum = madd(activations, weights);
+			pSum += tempPSum;
+		}
+		else {
+			proceed = FALSE;
+		}
+	}
+
+	write_channel_intel(channel_peDrainOutput, pSum);
 }
