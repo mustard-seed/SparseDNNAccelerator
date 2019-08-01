@@ -273,8 +273,8 @@ hexDriver hexD5 (
   );
 
 //assign LEDR[0] = &(wireResult[63:24]);
-assign GPIO[35:6] = wireResult[53:24];
-assign LEDR[9:0] = wireResult[63:54];
+assign GPIO[29:6] = wireResult[47:24];
+assign LEDR[3:0] = wireResult[51:48];
 endmodule
 
 

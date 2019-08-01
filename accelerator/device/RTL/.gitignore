@@ -40,3 +40,7 @@
 **/*sopc_*
 **/PLLJ_PLLSPE_INFO.txt # The generated PLL specification file
 transcript
+
+# Ignore modelsim stuff
+**/*work
+**/*output_files

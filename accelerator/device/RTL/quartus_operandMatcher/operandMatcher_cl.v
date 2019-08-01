@@ -107,7 +107,7 @@ module collapseBubble
 	//indexWithoutGap is the output
 	genvar i;
 	generate
-		for (i=0; i<BITMASK_LENGTH; i=i+1) begin : genloop
+		for (i=0; i<BITMASK_LENGTH; i=i+1) begin: genloop
 			indexExtraction #(.NUM_INDEX(BITMASK_LENGTH - i), .BITWIDTH_INDEX(BITWIDTH_INDEX), .BITWIDTH_NUMBER(BITWIDTH_NUMBER)) 
 			inst_indexExtraction (
 					.shiftList(positions[BITMASK_LENGTH*BITWIDTH_INDEX-1 : i*BITWIDTH_INDEX]),
@@ -116,6 +116,31 @@ module collapseBubble
 				);
 		end
 	endgenerate
+
+endmodule
+
+module popCounter
+	# (
+		parameter BITMASK_LENGTH = 8,
+		parameter BITWIDTH_OUTPUT = 4
+	)
+	(
+		input wire [BITMASK_LENGTH-1 : 0] bitmask,
+		output wire [BITWIDTH_OUTPUT-1 : 0] count
+	);
+
+	reg [BITMASK_LENGTH*BITWIDTH_OUTPUT-1 : 0] counterBank;
+
+	integer i;
+	always @ (*) begin
+		counterBank [BITWIDTH_OUTPUT-1 : 0] = {{(BITWIDTH_OUTPUT-1){1'b0}}, bitmask[0]};
+		for (i=1; i<BITMASK_LENGTH; i=i+1) begin
+				counterBank[(i+1)*BITWIDTH_OUTPUT-1 -: BITWIDTH_OUTPUT]
+					= counterBank[i*BITWIDTH_OUTPUT-1 -: BITWIDTH_OUTPUT] + {{(BITWIDTH_OUTPUT-1){1'b0}}, bitmask[i]};
+		end
+	end
+
+	assign count = counterBank[BITMASK_LENGTH*BITWIDTH_OUTPUT-1 -: BITWIDTH_OUTPUT];
 
 endmodule
 
@@ -130,7 +155,7 @@ module operandMatcher8 (
 		input  wire [7:0]  bitmaskW, //weight bitmask
 		input  wire [7:0]  bitmaskA, //Activation bitmask
 		
-		output wire [63:0] result  //  [23:0] Packed indices of A; [47:24] Packed indices of W; [55:48] Packed mutual bitmask; [63:56]: Padding
+		output wire [63:0] result  //  [23:0] Packed indices of A; [47:24] Packed indices of W; [51:48] Number of pairs; [63:52]: Padding
 	);
 	
 	//Ignoring resetn, ivalid, and iready
@@ -143,6 +168,7 @@ module operandMatcher8 (
 	localparam BITMASK_LENGTH = 8;
 	localparam INDEX_BITWIDTH = 3;
 	localparam ACCUM_LENGTH = BITMASK_LENGTH * INDEX_BITWIDTH;
+	localparam BITWIDTH_COUNT = 4;
 
 
 	//Declare the registers
@@ -152,7 +178,7 @@ module operandMatcher8 (
 	reg [ACCUM_LENGTH-1:0]  regWeightMaskedAccum;
 	reg [ACCUM_LENGTH-1:0]  regActivationDenseAccum;
 	reg [ACCUM_LENGTH-1:0]  regWeightDenseAccum;
-	reg [BITMASK_LENGTH-1:0]  regBitmaskDense;
+	reg [BITWIDTH_COUNT-1:0] regBitWidthCount;
 
 	//Structural wires
 	wire [BITMASK_LENGTH-1:0] wireMutualBitmask;
@@ -164,7 +190,7 @@ module operandMatcher8 (
 	wire [ACCUM_LENGTH-1:0]  wireWeightMaskedAccum;
 	wire [ACCUM_LENGTH-1:0]  wireActivationDenseAccum;
 	wire [ACCUM_LENGTH-1:0]  wireWeightDenseAccum;
-	wire [BITMASK_LENGTH-1:0]  wireBitmaskDense;
+	wire [BITWIDTH_COUNT-1:0] wireBitWidthCount;
 
 	//Structural coding
 	assign wireMutualBitmask = bitmaskA & bitmaskW;
@@ -216,17 +242,15 @@ module operandMatcher8 (
 
 
 	//Logic for generating the condensed bitmask
-	collapseBubble 
+	popCounter
 		# (
-			.BITMASK_LENGTH (BITMASK_LENGTH),
-			.BITWIDTH_INDEX (INDEX_BITWIDTH),
-			.BITWIDTH_NUMBER (1)
+			.BITMASK_LENGTH (8),
+			.BITWIDTH_OUTPUT (4)
 		)
-		inst_collapseBubble_bitmask
+		inst_popCounter_pairCount
 		(
-			.inputWithGap(regMutualBitmask),
-			.positions(regShiftAccum),
-			.outputWithoutGap(wireBitmaskDense)
+			.bitmask(regMutualBitmask),
+			.count(wireBitWidthCount)
 		);
 
 	//Logic for generating the condensed activation indices
@@ -265,7 +289,7 @@ module operandMatcher8 (
 		regWeightMaskedAccum = {ACCUM_LENGTH{1'b0}};
 		regActivationDenseAccum = {ACCUM_LENGTH{1'b0}};
 		regWeightDenseAccum = {ACCUM_LENGTH{1'b0}};
-		regBitmaskDense = {BITMASK_LENGTH{1'b0}};
+		regBitWidthCount = {BITWIDTH_COUNT{1'b0}};
 	end
 	//Registers update
 	always @ (posedge clock) begin
@@ -276,7 +300,7 @@ module operandMatcher8 (
 			regWeightMaskedAccum <= {ACCUM_LENGTH{1'b0}};
 			regActivationDenseAccum <= {ACCUM_LENGTH{1'b0}};
 			regWeightDenseAccum <= {ACCUM_LENGTH{1'b0}};
-			regBitmaskDense <= {BITMASK_LENGTH{1'b0}};
+			regBitWidthCount <= {BITWIDTH_COUNT{1'b0}};
 		end
 		else begin
 			regMutualBitmask <= wireMutualBitmask;
@@ -285,13 +309,13 @@ module operandMatcher8 (
 			regWeightMaskedAccum <= wireWeightMaskedAccum;
 			regActivationDenseAccum <= wireActivationDenseAccum;
 			regWeightDenseAccum <= wireWeightDenseAccum;
-			regBitmaskDense <= wireBitmaskDense;
+			regBitWidthCount <= wireBitWidthCount;
 		end
 	end
 
 	//Assign the final output
 	assign result = 
-		{{8{1'b0}}, regBitmaskDense, regWeightDenseAccum, regActivationDenseAccum};
+		{{12{1'b0}}, regBitWidthCount, regWeightDenseAccum, regActivationDenseAccum};
 	
 
 
