@@ -1,0 +1,1893 @@
+<?xml version="1.0" ?>
+<spirit:component xmlns:altera="http://www.altera.com/XMLSchema/IPXact/extensions" xmlns:spirit="http://www.spiritconsortium.org/XMLSchema/SPIRIT/1685-2009">
+  <spirit:vendor>Intel Corporation</spirit:vendor>
+  <spirit:library>a10_mac_8bitx2</spirit:library>
+  <spirit:name>mult_add_0</spirit:name>
+  <spirit:version>17.1</spirit:version>
+  <spirit:busInterfaces>
+    <spirit:busInterface>
+      <spirit:name>clock0</spirit:name>
+      <spirit:busType spirit:vendor="altera" spirit:library="altera" spirit:name="conduit" spirit:version="17.1"></spirit:busType>
+      <spirit:slave></spirit:slave>
+      <spirit:portMaps>
+        <spirit:portMap>
+          <spirit:logicalPort>
+            <spirit:name>clock0</spirit:name>
+          </spirit:logicalPort>
+          <spirit:physicalPort>
+            <spirit:name>clock0</spirit:name>
+          </spirit:physicalPort>
+        </spirit:portMap>
+      </spirit:portMaps>
+      <spirit:parameters>
+        <spirit:parameter>
+          <spirit:name>associatedClock</spirit:name>
+          <spirit:displayName>associatedClock</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="associatedClock"></spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>associatedReset</spirit:name>
+          <spirit:displayName>associatedReset</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="associatedReset"></spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>prSafe</spirit:name>
+          <spirit:displayName>Partial Reconfiguration Safe</spirit:displayName>
+          <spirit:value spirit:format="bool" spirit:id="prSafe">false</spirit:value>
+        </spirit:parameter>
+      </spirit:parameters>
+    </spirit:busInterface>
+    <spirit:busInterface>
+      <spirit:name>dataa_0</spirit:name>
+      <spirit:busType spirit:vendor="altera" spirit:library="altera" spirit:name="conduit" spirit:version="17.1"></spirit:busType>
+      <spirit:slave></spirit:slave>
+      <spirit:portMaps>
+        <spirit:portMap>
+          <spirit:logicalPort>
+            <spirit:name>dataa_0</spirit:name>
+          </spirit:logicalPort>
+          <spirit:physicalPort>
+            <spirit:name>dataa_0</spirit:name>
+          </spirit:physicalPort>
+        </spirit:portMap>
+      </spirit:portMaps>
+      <spirit:parameters>
+        <spirit:parameter>
+          <spirit:name>associatedClock</spirit:name>
+          <spirit:displayName>associatedClock</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="associatedClock"></spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>associatedReset</spirit:name>
+          <spirit:displayName>associatedReset</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="associatedReset"></spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>prSafe</spirit:name>
+          <spirit:displayName>Partial Reconfiguration Safe</spirit:displayName>
+          <spirit:value spirit:format="bool" spirit:id="prSafe">false</spirit:value>
+        </spirit:parameter>
+      </spirit:parameters>
+    </spirit:busInterface>
+    <spirit:busInterface>
+      <spirit:name>dataa_1</spirit:name>
+      <spirit:busType spirit:vendor="altera" spirit:library="altera" spirit:name="conduit" spirit:version="17.1"></spirit:busType>
+      <spirit:slave></spirit:slave>
+      <spirit:portMaps>
+        <spirit:portMap>
+          <spirit:logicalPort>
+            <spirit:name>dataa_1</spirit:name>
+          </spirit:logicalPort>
+          <spirit:physicalPort>
+            <spirit:name>dataa_1</spirit:name>
+          </spirit:physicalPort>
+        </spirit:portMap>
+      </spirit:portMaps>
+      <spirit:parameters>
+        <spirit:parameter>
+          <spirit:name>associatedClock</spirit:name>
+          <spirit:displayName>associatedClock</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="associatedClock"></spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>associatedReset</spirit:name>
+          <spirit:displayName>associatedReset</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="associatedReset"></spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>prSafe</spirit:name>
+          <spirit:displayName>Partial Reconfiguration Safe</spirit:displayName>
+          <spirit:value spirit:format="bool" spirit:id="prSafe">false</spirit:value>
+        </spirit:parameter>
+      </spirit:parameters>
+    </spirit:busInterface>
+    <spirit:busInterface>
+      <spirit:name>datab_0</spirit:name>
+      <spirit:busType spirit:vendor="altera" spirit:library="altera" spirit:name="conduit" spirit:version="17.1"></spirit:busType>
+      <spirit:slave></spirit:slave>
+      <spirit:portMaps>
+        <spirit:portMap>
+          <spirit:logicalPort>
+            <spirit:name>datab_0</spirit:name>
+          </spirit:logicalPort>
+          <spirit:physicalPort>
+            <spirit:name>datab_0</spirit:name>
+          </spirit:physicalPort>
+        </spirit:portMap>
+      </spirit:portMaps>
+      <spirit:parameters>
+        <spirit:parameter>
+          <spirit:name>associatedClock</spirit:name>
+          <spirit:displayName>associatedClock</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="associatedClock"></spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>associatedReset</spirit:name>
+          <spirit:displayName>associatedReset</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="associatedReset"></spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>prSafe</spirit:name>
+          <spirit:displayName>Partial Reconfiguration Safe</spirit:displayName>
+          <spirit:value spirit:format="bool" spirit:id="prSafe">false</spirit:value>
+        </spirit:parameter>
+      </spirit:parameters>
+    </spirit:busInterface>
+    <spirit:busInterface>
+      <spirit:name>datab_1</spirit:name>
+      <spirit:busType spirit:vendor="altera" spirit:library="altera" spirit:name="conduit" spirit:version="17.1"></spirit:busType>
+      <spirit:slave></spirit:slave>
+      <spirit:portMaps>
+        <spirit:portMap>
+          <spirit:logicalPort>
+            <spirit:name>datab_1</spirit:name>
+          </spirit:logicalPort>
+          <spirit:physicalPort>
+            <spirit:name>datab_1</spirit:name>
+          </spirit:physicalPort>
+        </spirit:portMap>
+      </spirit:portMaps>
+      <spirit:parameters>
+        <spirit:parameter>
+          <spirit:name>associatedClock</spirit:name>
+          <spirit:displayName>associatedClock</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="associatedClock"></spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>associatedReset</spirit:name>
+          <spirit:displayName>associatedReset</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="associatedReset"></spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>prSafe</spirit:name>
+          <spirit:displayName>Partial Reconfiguration Safe</spirit:displayName>
+          <spirit:value spirit:format="bool" spirit:id="prSafe">false</spirit:value>
+        </spirit:parameter>
+      </spirit:parameters>
+    </spirit:busInterface>
+    <spirit:busInterface>
+      <spirit:name>result</spirit:name>
+      <spirit:busType spirit:vendor="altera" spirit:library="altera" spirit:name="conduit" spirit:version="17.1"></spirit:busType>
+      <spirit:slave></spirit:slave>
+      <spirit:portMaps>
+        <spirit:portMap>
+          <spirit:logicalPort>
+            <spirit:name>result</spirit:name>
+          </spirit:logicalPort>
+          <spirit:physicalPort>
+            <spirit:name>result</spirit:name>
+          </spirit:physicalPort>
+        </spirit:portMap>
+      </spirit:portMaps>
+      <spirit:parameters>
+        <spirit:parameter>
+          <spirit:name>associatedClock</spirit:name>
+          <spirit:displayName>associatedClock</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="associatedClock"></spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>associatedReset</spirit:name>
+          <spirit:displayName>associatedReset</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="associatedReset"></spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>prSafe</spirit:name>
+          <spirit:displayName>Partial Reconfiguration Safe</spirit:displayName>
+          <spirit:value spirit:format="bool" spirit:id="prSafe">false</spirit:value>
+        </spirit:parameter>
+      </spirit:parameters>
+      <spirit:vendorExtensions>
+        <altera:altera_assignments>
+          <spirit:parameters>
+            <spirit:parameter>
+              <spirit:name>ui.blockdiagram.direction</spirit:name>
+              <spirit:value spirit:format="string" spirit:id="ui.blockdiagram.direction">OUTPUT</spirit:value>
+            </spirit:parameter>
+          </spirit:parameters>
+        </altera:altera_assignments>
+      </spirit:vendorExtensions>
+    </spirit:busInterface>
+  </spirit:busInterfaces>
+  <spirit:model>
+    <spirit:views>
+      <spirit:view>
+        <spirit:name>QUARTUS_SYNTH</spirit:name>
+        <spirit:envIdentifier>:quartus.altera.com:</spirit:envIdentifier>
+        <spirit:modelName>altera_mult_add</spirit:modelName>
+        <spirit:fileSetRef>
+          <spirit:localName>QUARTUS_SYNTH</spirit:localName>
+        </spirit:fileSetRef>
+      </spirit:view>
+    </spirit:views>
+    <spirit:ports>
+      <spirit:port>
+        <spirit:name>result</spirit:name>
+        <spirit:wire>
+          <spirit:direction>out</spirit:direction>
+          <spirit:vector>
+            <spirit:left>0</spirit:left>
+            <spirit:right>31</spirit:right>
+          </spirit:vector>
+          <spirit:wireTypeDefs>
+            <spirit:wireTypeDef>
+              <spirit:typeName>STD_LOGIC_VECTOR</spirit:typeName>
+              <spirit:viewNameRef>QUARTUS_SYNTH</spirit:viewNameRef>
+            </spirit:wireTypeDef>
+          </spirit:wireTypeDefs>
+        </spirit:wire>
+      </spirit:port>
+      <spirit:port>
+        <spirit:name>dataa_0</spirit:name>
+        <spirit:wire>
+          <spirit:direction>in</spirit:direction>
+          <spirit:vector>
+            <spirit:left>0</spirit:left>
+            <spirit:right>7</spirit:right>
+          </spirit:vector>
+          <spirit:wireTypeDefs>
+            <spirit:wireTypeDef>
+              <spirit:typeName>STD_LOGIC_VECTOR</spirit:typeName>
+              <spirit:viewNameRef>QUARTUS_SYNTH</spirit:viewNameRef>
+            </spirit:wireTypeDef>
+          </spirit:wireTypeDefs>
+        </spirit:wire>
+      </spirit:port>
+      <spirit:port>
+        <spirit:name>dataa_1</spirit:name>
+        <spirit:wire>
+          <spirit:direction>in</spirit:direction>
+          <spirit:vector>
+            <spirit:left>0</spirit:left>
+            <spirit:right>7</spirit:right>
+          </spirit:vector>
+          <spirit:wireTypeDefs>
+            <spirit:wireTypeDef>
+              <spirit:typeName>STD_LOGIC_VECTOR</spirit:typeName>
+              <spirit:viewNameRef>QUARTUS_SYNTH</spirit:viewNameRef>
+            </spirit:wireTypeDef>
+          </spirit:wireTypeDefs>
+        </spirit:wire>
+      </spirit:port>
+      <spirit:port>
+        <spirit:name>datab_0</spirit:name>
+        <spirit:wire>
+          <spirit:direction>in</spirit:direction>
+          <spirit:vector>
+            <spirit:left>0</spirit:left>
+            <spirit:right>7</spirit:right>
+          </spirit:vector>
+          <spirit:wireTypeDefs>
+            <spirit:wireTypeDef>
+              <spirit:typeName>STD_LOGIC_VECTOR</spirit:typeName>
+              <spirit:viewNameRef>QUARTUS_SYNTH</spirit:viewNameRef>
+            </spirit:wireTypeDef>
+          </spirit:wireTypeDefs>
+        </spirit:wire>
+      </spirit:port>
+      <spirit:port>
+        <spirit:name>datab_1</spirit:name>
+        <spirit:wire>
+          <spirit:direction>in</spirit:direction>
+          <spirit:vector>
+            <spirit:left>0</spirit:left>
+            <spirit:right>7</spirit:right>
+          </spirit:vector>
+          <spirit:wireTypeDefs>
+            <spirit:wireTypeDef>
+              <spirit:typeName>STD_LOGIC_VECTOR</spirit:typeName>
+              <spirit:viewNameRef>QUARTUS_SYNTH</spirit:viewNameRef>
+            </spirit:wireTypeDef>
+          </spirit:wireTypeDefs>
+        </spirit:wire>
+      </spirit:port>
+      <spirit:port>
+        <spirit:name>clock0</spirit:name>
+        <spirit:wire>
+          <spirit:direction>in</spirit:direction>
+          <spirit:wireTypeDefs>
+            <spirit:wireTypeDef>
+              <spirit:typeName>STD_LOGIC</spirit:typeName>
+              <spirit:viewNameRef>QUARTUS_SYNTH</spirit:viewNameRef>
+            </spirit:wireTypeDef>
+          </spirit:wireTypeDefs>
+        </spirit:wire>
+      </spirit:port>
+    </spirit:ports>
+  </spirit:model>
+  <spirit:vendorExtensions>
+    <altera:entity_info>
+      <spirit:vendor>Intel Corporation</spirit:vendor>
+      <spirit:library>a10_mac_8bitx2</spirit:library>
+      <spirit:name>altera_mult_add</spirit:name>
+      <spirit:version>17.1</spirit:version>
+    </altera:entity_info>
+    <altera:altera_module_parameters>
+      <spirit:parameters>
+        <spirit:parameter>
+          <spirit:name>number_of_multipliers</spirit:name>
+          <spirit:displayName>What is the number of multipliers?</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="number_of_multipliers">2</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>width_a</spirit:name>
+          <spirit:displayName>How wide should the A input buses be?</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="width_a">8</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>width_b</spirit:name>
+          <spirit:displayName>How wide should the B input buses be?</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="width_b">8</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>width_result</spirit:name>
+          <spirit:displayName>How wide should the 'result' output bus be?</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="width_result">32</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_4th_asynchronous_clear</spirit:name>
+          <spirit:displayName>Create a 4th asynchronous clear input option</spirit:displayName>
+          <spirit:value spirit:format="bool" spirit:id="gui_4th_asynchronous_clear">false</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_associated_clock_enable</spirit:name>
+          <spirit:displayName>Create an associated clock enable for each clock</spirit:displayName>
+          <spirit:value spirit:format="bool" spirit:id="gui_associated_clock_enable">false</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_output_register</spirit:name>
+          <spirit:displayName>Register output of the adder unit</spirit:displayName>
+          <spirit:value spirit:format="bool" spirit:id="gui_output_register">true</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>output_register</spirit:name>
+          <spirit:displayName>output_register</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="output_register">CLOCK0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_output_register_clock</spirit:name>
+          <spirit:displayName>What is the source for clock input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_output_register_clock">CLOCK0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_output_register_aclr</spirit:name>
+          <spirit:displayName>What is the source for asynchronous clear input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_output_register_aclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>output_aclr</spirit:name>
+          <spirit:displayName>output_aclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="output_aclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_output_register_sclr</spirit:name>
+          <spirit:displayName>What is the source for synchronous clear input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_output_register_sclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>output_sclr</spirit:name>
+          <spirit:displayName>output_sclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="output_sclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_multiplier1_direction</spirit:name>
+          <spirit:displayName>What operation should be perfomed on outputs of the first pair of multipliers</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_multiplier1_direction">ADD</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>multiplier1_direction</spirit:name>
+          <spirit:displayName>multiplier1_direction</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="multiplier1_direction">ADD</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>port_addnsub1</spirit:name>
+          <spirit:displayName>port_addnsub1</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="port_addnsub1">PORT_UNUSED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_addnsub_multiplier_register1</spirit:name>
+          <spirit:displayName>Register 'addnsub1' input</spirit:displayName>
+          <spirit:value spirit:format="bool" spirit:id="gui_addnsub_multiplier_register1">false</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>addnsub_multiplier_register1</spirit:name>
+          <spirit:displayName>addnsub_multiplier_register1</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="addnsub_multiplier_register1">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_addnsub_multiplier_register1_clock</spirit:name>
+          <spirit:displayName>What is the source for clock input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_addnsub_multiplier_register1_clock">CLOCK0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_addnsub_multiplier_aclr1</spirit:name>
+          <spirit:displayName>What is the source for asynchronous clear input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_addnsub_multiplier_aclr1">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>addnsub_multiplier_aclr1</spirit:name>
+          <spirit:displayName>addnsub_multiplier_aclr1</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="addnsub_multiplier_aclr1">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_addnsub_multiplier_sclr1</spirit:name>
+          <spirit:displayName>What is the source for synchronous clear input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_addnsub_multiplier_sclr1">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>addnsub_multiplier_sclr1</spirit:name>
+          <spirit:displayName>addnsub_multiplier_sclr1</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="addnsub_multiplier_sclr1">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_multiplier3_direction</spirit:name>
+          <spirit:displayName>What operation should be perfomed on outputs of the second pair of multipliers</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_multiplier3_direction">ADD</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>multiplier3_direction</spirit:name>
+          <spirit:displayName>multiplier3_direction</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="multiplier3_direction">ADD</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>port_addnsub3</spirit:name>
+          <spirit:displayName>port_addnsub3</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="port_addnsub3">PORT_UNUSED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_addnsub_multiplier_register3</spirit:name>
+          <spirit:displayName>Register 'addnsub3' input</spirit:displayName>
+          <spirit:value spirit:format="bool" spirit:id="gui_addnsub_multiplier_register3">false</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>addnsub_multiplier_register3</spirit:name>
+          <spirit:displayName>addnsub_multiplier_register3</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="addnsub_multiplier_register3">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_addnsub_multiplier_register3_clock</spirit:name>
+          <spirit:displayName>What is the source for clock input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_addnsub_multiplier_register3_clock">CLOCK0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_addnsub_multiplier_aclr3</spirit:name>
+          <spirit:displayName>What is the source for asynchronous clear input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_addnsub_multiplier_aclr3">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>addnsub_multiplier_aclr3</spirit:name>
+          <spirit:displayName>addnsub_multiplier_aclr3</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="addnsub_multiplier_aclr3">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_addnsub_multiplier_sclr3</spirit:name>
+          <spirit:displayName>What is the source for synchronous clear input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_addnsub_multiplier_sclr3">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>addnsub_multiplier_sclr3</spirit:name>
+          <spirit:displayName>addnsub_multiplier_sclr3</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="addnsub_multiplier_sclr3">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_use_subnadd</spirit:name>
+          <spirit:displayName>Enable 'use_subnadd'</spirit:displayName>
+          <spirit:value spirit:format="bool" spirit:id="gui_use_subnadd">false</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>use_subnadd</spirit:name>
+          <spirit:displayName>use_subnadd</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="use_subnadd">NO</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_representation_a</spirit:name>
+          <spirit:displayName>What is the representation format for Multipliers A inputs?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_representation_a">SIGNED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>representation_a</spirit:name>
+          <spirit:displayName>representation_a</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="representation_a">SIGNED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_register_signa</spirit:name>
+          <spirit:displayName>Register 'signa' input</spirit:displayName>
+          <spirit:value spirit:format="bool" spirit:id="gui_register_signa">false</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>port_signa</spirit:name>
+          <spirit:displayName>port_signa</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="port_signa">PORT_UNUSED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>signed_register_a</spirit:name>
+          <spirit:displayName>signed_register_a</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="signed_register_a">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_register_signa_clock</spirit:name>
+          <spirit:displayName>What is the source for clock input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_register_signa_clock">CLOCK0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_register_signa_aclr</spirit:name>
+          <spirit:displayName>What is the source for asynchronous clear input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_register_signa_aclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>signed_aclr_a</spirit:name>
+          <spirit:displayName>signed_aclr_a</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="signed_aclr_a">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_register_signa_sclr</spirit:name>
+          <spirit:displayName>What is the source for synchronous clear input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_register_signa_sclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>signed_sclr_a</spirit:name>
+          <spirit:displayName>signed_sclr_a</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="signed_sclr_a">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_representation_b</spirit:name>
+          <spirit:displayName>What is the representation format for Multipliers B inputs?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_representation_b">SIGNED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>port_signb</spirit:name>
+          <spirit:displayName>port_signb</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="port_signb">PORT_UNUSED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>representation_b</spirit:name>
+          <spirit:displayName>representation_b</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="representation_b">SIGNED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_register_signb</spirit:name>
+          <spirit:displayName>Register 'signb' input</spirit:displayName>
+          <spirit:value spirit:format="bool" spirit:id="gui_register_signb">false</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>signed_register_b</spirit:name>
+          <spirit:displayName>signed_register_b</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="signed_register_b">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_register_signb_clock</spirit:name>
+          <spirit:displayName>What is the source for clock input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_register_signb_clock">CLOCK0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_register_signb_aclr</spirit:name>
+          <spirit:displayName>What is the source for asynchronous clear input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_register_signb_aclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>signed_aclr_b</spirit:name>
+          <spirit:displayName>signed_aclr_b</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="signed_aclr_b">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_register_signb_sclr</spirit:name>
+          <spirit:displayName>What is the source for synchronous clear input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_register_signb_sclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>signed_sclr_b</spirit:name>
+          <spirit:displayName>signed_sclr_b</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="signed_sclr_b">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_input_register_a</spirit:name>
+          <spirit:displayName>Register input A of the multiplier</spirit:displayName>
+          <spirit:value spirit:format="bool" spirit:id="gui_input_register_a">false</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_input_register_a_clock</spirit:name>
+          <spirit:displayName>What is the source for clock input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_input_register_a_clock">CLOCK0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_input_register_a_aclr</spirit:name>
+          <spirit:displayName>What is the source for asynchronous clear input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_input_register_a_aclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_input_register_a_sclr</spirit:name>
+          <spirit:displayName>What is the source for synchronous clear input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_input_register_a_sclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_register_a0</spirit:name>
+          <spirit:displayName>input_register_a0</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_register_a0">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_register_a1</spirit:name>
+          <spirit:displayName>input_register_a1</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_register_a1">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_register_a2</spirit:name>
+          <spirit:displayName>input_register_a2</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_register_a2">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_register_a3</spirit:name>
+          <spirit:displayName>input_register_a3</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_register_a3">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_aclr_a0</spirit:name>
+          <spirit:displayName>input_aclr_a0</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_aclr_a0">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_aclr_a1</spirit:name>
+          <spirit:displayName>input_aclr_a1</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_aclr_a1">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_aclr_a2</spirit:name>
+          <spirit:displayName>input_aclr_a2</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_aclr_a2">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_aclr_a3</spirit:name>
+          <spirit:displayName>input_aclr_a3</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_aclr_a3">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_sclr_a0</spirit:name>
+          <spirit:displayName>input_sclr_a0</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_sclr_a0">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_sclr_a1</spirit:name>
+          <spirit:displayName>input_sclr_a1</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_sclr_a1">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_sclr_a2</spirit:name>
+          <spirit:displayName>input_sclr_a2</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_sclr_a2">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_sclr_a3</spirit:name>
+          <spirit:displayName>input_sclr_a3</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_sclr_a3">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_input_register_b</spirit:name>
+          <spirit:displayName>Register input B of the multiplier</spirit:displayName>
+          <spirit:value spirit:format="bool" spirit:id="gui_input_register_b">false</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_input_register_b_clock</spirit:name>
+          <spirit:displayName>What is the source for clock input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_input_register_b_clock">CLOCK0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_input_register_b_aclr</spirit:name>
+          <spirit:displayName>What is the source for asynchronous clear input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_input_register_b_aclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_input_register_b_sclr</spirit:name>
+          <spirit:displayName>What is the source for synchronous clear input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_input_register_b_sclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_register_b0</spirit:name>
+          <spirit:displayName>input_register_b0</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_register_b0">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_register_b1</spirit:name>
+          <spirit:displayName>input_register_b1</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_register_b1">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_register_b2</spirit:name>
+          <spirit:displayName>input_register_b2</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_register_b2">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_register_b3</spirit:name>
+          <spirit:displayName>input_register_b3</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_register_b3">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_aclr_b0</spirit:name>
+          <spirit:displayName>input_aclr_b0</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_aclr_b0">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_aclr_b1</spirit:name>
+          <spirit:displayName>input_aclr_b1</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_aclr_b1">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_aclr_b2</spirit:name>
+          <spirit:displayName>input_aclr_b2</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_aclr_b2">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_aclr_b3</spirit:name>
+          <spirit:displayName>input_aclr_b3</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_aclr_b3">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_sclr_b0</spirit:name>
+          <spirit:displayName>input_sclr_b0</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_sclr_b0">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_sclr_b1</spirit:name>
+          <spirit:displayName>input_sclr_b1</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_sclr_b1">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_sclr_b2</spirit:name>
+          <spirit:displayName>input_sclr_b2</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_sclr_b2">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_sclr_b3</spirit:name>
+          <spirit:displayName>input_sclr_b3</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_sclr_b3">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_multiplier_a_input</spirit:name>
+          <spirit:displayName>What is the input A of the multiplier connected to?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_multiplier_a_input">Multiplier input</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_scanouta_register</spirit:name>
+          <spirit:displayName>Register output of the scan chain</spirit:displayName>
+          <spirit:value spirit:format="bool" spirit:id="gui_scanouta_register">false</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_scanouta_register_clock</spirit:name>
+          <spirit:displayName>What is the source for clock input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_scanouta_register_clock">CLOCK0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_scanouta_register_aclr</spirit:name>
+          <spirit:displayName>What is the source for asynchronous clear input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_scanouta_register_aclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_scanouta_register_sclr</spirit:name>
+          <spirit:displayName>What is the source for synchronous clear input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_scanouta_register_sclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>scanouta_register</spirit:name>
+          <spirit:displayName>scanouta_register</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="scanouta_register">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>scanouta_aclr</spirit:name>
+          <spirit:displayName>scanouta_aclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="scanouta_aclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>scanouta_sclr</spirit:name>
+          <spirit:displayName>scanouta_sclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="scanouta_sclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_source_a0</spirit:name>
+          <spirit:displayName>input_source_a0</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_source_a0">DATAA</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_source_a1</spirit:name>
+          <spirit:displayName>input_source_a1</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_source_a1">DATAA</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_source_a2</spirit:name>
+          <spirit:displayName>input_source_a2</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_source_a2">DATAA</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_source_a3</spirit:name>
+          <spirit:displayName>input_source_a3</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_source_a3">DATAA</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_multiplier_b_input</spirit:name>
+          <spirit:displayName>What is the input B of the multiplier connected to?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_multiplier_b_input">Multiplier input</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_source_b0</spirit:name>
+          <spirit:displayName>input_source_b0</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_source_b0">DATAB</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_source_b1</spirit:name>
+          <spirit:displayName>input_source_b1</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_source_b1">DATAB</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_source_b2</spirit:name>
+          <spirit:displayName>input_source_b2</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_source_b2">DATAB</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_source_b3</spirit:name>
+          <spirit:displayName>input_source_b3</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_source_b3">DATAB</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_multiplier_register</spirit:name>
+          <spirit:displayName>Register output of the multiplier</spirit:displayName>
+          <spirit:value spirit:format="bool" spirit:id="gui_multiplier_register">false</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_multiplier_register_clock</spirit:name>
+          <spirit:displayName>What is the source for clock input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_multiplier_register_clock">CLOCK0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_multiplier_register_aclr</spirit:name>
+          <spirit:displayName>What is the source for asynchronous clear input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_multiplier_register_aclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_multiplier_register_sclr</spirit:name>
+          <spirit:displayName>What is the source for synchronous clear input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_multiplier_register_sclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>multiplier_register0</spirit:name>
+          <spirit:displayName>multiplier_register0</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="multiplier_register0">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>multiplier_register1</spirit:name>
+          <spirit:displayName>multiplier_register1</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="multiplier_register1">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>multiplier_register2</spirit:name>
+          <spirit:displayName>multiplier_register2</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="multiplier_register2">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>multiplier_register3</spirit:name>
+          <spirit:displayName>multiplier_register3</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="multiplier_register3">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>multiplier_aclr0</spirit:name>
+          <spirit:displayName>multiplier_aclr0</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="multiplier_aclr0">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>multiplier_aclr1</spirit:name>
+          <spirit:displayName>multiplier_aclr1</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="multiplier_aclr1">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>multiplier_aclr2</spirit:name>
+          <spirit:displayName>multiplier_aclr2</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="multiplier_aclr2">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>multiplier_aclr3</spirit:name>
+          <spirit:displayName>multiplier_aclr3</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="multiplier_aclr3">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>multiplier_sclr0</spirit:name>
+          <spirit:displayName>multiplier_sclr0</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="multiplier_sclr0">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>multiplier_sclr1</spirit:name>
+          <spirit:displayName>multiplier_sclr1</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="multiplier_sclr1">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>multiplier_sclr2</spirit:name>
+          <spirit:displayName>multiplier_sclr2</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="multiplier_sclr2">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>multiplier_sclr3</spirit:name>
+          <spirit:displayName>multiplier_sclr3</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="multiplier_sclr3">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>preadder_mode</spirit:name>
+          <spirit:displayName>Select preadder mode</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="preadder_mode">SIMPLE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_preadder_direction</spirit:name>
+          <spirit:displayName>Select preadder direction</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_preadder_direction">ADD</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>preadder_direction_0</spirit:name>
+          <spirit:displayName>preadder_direction_0</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="preadder_direction_0">ADD</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>preadder_direction_1</spirit:name>
+          <spirit:displayName>preadder_direction_1</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="preadder_direction_1">ADD</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>preadder_direction_2</spirit:name>
+          <spirit:displayName>preadder_direction_2</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="preadder_direction_2">ADD</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>preadder_direction_3</spirit:name>
+          <spirit:displayName>preadder_direction_3</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="preadder_direction_3">ADD</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>width_c</spirit:name>
+          <spirit:displayName>How wide should the C input buses be?</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="width_c">16</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_datac_input_register</spirit:name>
+          <spirit:displayName>Register datac input</spirit:displayName>
+          <spirit:value spirit:format="bool" spirit:id="gui_datac_input_register">false</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_datac_input_register_clock</spirit:name>
+          <spirit:displayName>What is the source for clock input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_datac_input_register_clock">CLOCK0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_datac_input_register_aclr</spirit:name>
+          <spirit:displayName>What is the source for asynchronous clear input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_datac_input_register_aclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_datac_input_register_sclr</spirit:name>
+          <spirit:displayName>What is the source for synchronous clear input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_datac_input_register_sclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_register_c0</spirit:name>
+          <spirit:displayName>input_register_c0</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_register_c0">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_register_c1</spirit:name>
+          <spirit:displayName>input_register_c1</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_register_c1">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_register_c2</spirit:name>
+          <spirit:displayName>input_register_c2</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_register_c2">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_register_c3</spirit:name>
+          <spirit:displayName>input_register_c3</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_register_c3">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_aclr_c0</spirit:name>
+          <spirit:displayName>input_aclr_c0</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_aclr_c0">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_aclr_c1</spirit:name>
+          <spirit:displayName>input_aclr_c1</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_aclr_c1">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_aclr_c2</spirit:name>
+          <spirit:displayName>input_aclr_c2</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_aclr_c2">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_aclr_c3</spirit:name>
+          <spirit:displayName>input_aclr_c3</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_aclr_c3">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_sclr_c0</spirit:name>
+          <spirit:displayName>input_sclr_c0</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_sclr_c0">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_sclr_c1</spirit:name>
+          <spirit:displayName>input_sclr_c1</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_sclr_c1">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_sclr_c2</spirit:name>
+          <spirit:displayName>input_sclr_c2</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_sclr_c2">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_sclr_c3</spirit:name>
+          <spirit:displayName>input_sclr_c3</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_sclr_c3">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>width_coef</spirit:name>
+          <spirit:displayName>How wide should the coef width be?</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="width_coef">18</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_coef_register</spirit:name>
+          <spirit:displayName>Register the coefsel inputs</spirit:displayName>
+          <spirit:value spirit:format="bool" spirit:id="gui_coef_register">false</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_coef_register_clock</spirit:name>
+          <spirit:displayName>What is the source for clock input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_coef_register_clock">CLOCK0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_coef_register_aclr</spirit:name>
+          <spirit:displayName>What is the source for asynchronous clear input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_coef_register_aclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_coef_register_sclr</spirit:name>
+          <spirit:displayName>What is the source for synchronous clear input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_coef_register_sclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coefsel0_register</spirit:name>
+          <spirit:displayName>coefsel0_register</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="coefsel0_register">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coefsel1_register</spirit:name>
+          <spirit:displayName>coefsel1_register</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="coefsel1_register">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coefsel2_register</spirit:name>
+          <spirit:displayName>coefsel2_register</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="coefsel2_register">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coefsel3_register</spirit:name>
+          <spirit:displayName>coefsel3_register</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="coefsel3_register">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coefsel0_aclr</spirit:name>
+          <spirit:displayName>coefsel0_aclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="coefsel0_aclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coefsel1_aclr</spirit:name>
+          <spirit:displayName>coefsel1_aclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="coefsel1_aclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coefsel2_aclr</spirit:name>
+          <spirit:displayName>coefsel2_aclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="coefsel2_aclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coefsel3_aclr</spirit:name>
+          <spirit:displayName>coefsel3_aclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="coefsel3_aclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coefsel0_sclr</spirit:name>
+          <spirit:displayName>coefsel0_sclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="coefsel0_sclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coefsel1_sclr</spirit:name>
+          <spirit:displayName>coefsel1_sclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="coefsel1_sclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coefsel2_sclr</spirit:name>
+          <spirit:displayName>coefsel2_sclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="coefsel2_sclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coefsel3_sclr</spirit:name>
+          <spirit:displayName>coefsel3_sclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="coefsel3_sclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coef0_0</spirit:name>
+          <spirit:displayName>Coef0_0</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="coef0_0">0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coef0_1</spirit:name>
+          <spirit:displayName>Coef0_1</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="coef0_1">0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coef0_2</spirit:name>
+          <spirit:displayName>Coef0_2</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="coef0_2">0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coef0_3</spirit:name>
+          <spirit:displayName>Coef0_3</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="coef0_3">0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coef0_4</spirit:name>
+          <spirit:displayName>Coef0_4</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="coef0_4">0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coef0_5</spirit:name>
+          <spirit:displayName>Coef0_5</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="coef0_5">0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coef0_6</spirit:name>
+          <spirit:displayName>Coef0_6</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="coef0_6">0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coef0_7</spirit:name>
+          <spirit:displayName>Coef0_7</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="coef0_7">0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coef1_0</spirit:name>
+          <spirit:displayName>Coef1_0</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="coef1_0">0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coef1_1</spirit:name>
+          <spirit:displayName>Coef1_1</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="coef1_1">0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coef1_2</spirit:name>
+          <spirit:displayName>Coef1_2</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="coef1_2">0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coef1_3</spirit:name>
+          <spirit:displayName>Coef1_3</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="coef1_3">0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coef1_4</spirit:name>
+          <spirit:displayName>Coef1_4</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="coef1_4">0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coef1_5</spirit:name>
+          <spirit:displayName>Coef1_5</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="coef1_5">0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coef1_6</spirit:name>
+          <spirit:displayName>Coef1_6</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="coef1_6">0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coef1_7</spirit:name>
+          <spirit:displayName>Coef1_7</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="coef1_7">0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coef2_0</spirit:name>
+          <spirit:displayName>Coef2_0</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="coef2_0">0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coef2_1</spirit:name>
+          <spirit:displayName>Coef2_1</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="coef2_1">0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coef2_2</spirit:name>
+          <spirit:displayName>Coef2_2</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="coef2_2">0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coef2_3</spirit:name>
+          <spirit:displayName>Coef2_3</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="coef2_3">0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coef2_4</spirit:name>
+          <spirit:displayName>Coef2_4</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="coef2_4">0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coef2_5</spirit:name>
+          <spirit:displayName>Coef2_5</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="coef2_5">0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coef2_6</spirit:name>
+          <spirit:displayName>Coef2_6</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="coef2_6">0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coef2_7</spirit:name>
+          <spirit:displayName>Coef2_7</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="coef2_7">0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coef3_0</spirit:name>
+          <spirit:displayName>Coef3_0</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="coef3_0">0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coef3_1</spirit:name>
+          <spirit:displayName>Coef3_1</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="coef3_1">0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coef3_2</spirit:name>
+          <spirit:displayName>Coef3_2</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="coef3_2">0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coef3_3</spirit:name>
+          <spirit:displayName>Coef3_3</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="coef3_3">0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coef3_4</spirit:name>
+          <spirit:displayName>Coef3_4</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="coef3_4">0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coef3_5</spirit:name>
+          <spirit:displayName>Coef3_5</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="coef3_5">0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coef3_6</spirit:name>
+          <spirit:displayName>Coef3_6</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="coef3_6">0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coef3_7</spirit:name>
+          <spirit:displayName>Coef3_7</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="coef3_7">0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>accumulator</spirit:name>
+          <spirit:displayName>Enable accumulator?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="accumulator">NO</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>accum_direction</spirit:name>
+          <spirit:displayName>What is the accumulator operation type?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="accum_direction">ADD</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_ena_preload_const</spirit:name>
+          <spirit:displayName>Enable preload constant</spirit:displayName>
+          <spirit:value spirit:format="bool" spirit:id="gui_ena_preload_const">false</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_accumulate_port_select</spirit:name>
+          <spirit:displayName>What is the input of accumulate port connected to?</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="gui_accumulate_port_select">0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>use_sload_accum_port</spirit:name>
+          <spirit:displayName>use_sload_accum_port</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="use_sload_accum_port">NO</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>loadconst_value</spirit:name>
+          <spirit:displayName>Select value for preload constant</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="loadconst_value">64</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_accum_sload_register</spirit:name>
+          <spirit:displayName>Register input of accum_sload</spirit:displayName>
+          <spirit:value spirit:format="bool" spirit:id="gui_accum_sload_register">false</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_accum_sload_register_clock</spirit:name>
+          <spirit:displayName>What is the source for clock input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_accum_sload_register_clock">CLOCK0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_accum_sload_register_aclr</spirit:name>
+          <spirit:displayName>What is the source for asynchronous clear input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_accum_sload_register_aclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_accum_sload_register_sclr</spirit:name>
+          <spirit:displayName>What is the source for synchronous clear input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_accum_sload_register_sclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>accum_sload_register</spirit:name>
+          <spirit:displayName>accum_sload_register</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="accum_sload_register">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>accum_sload_aclr</spirit:name>
+          <spirit:displayName>accum_sload_aclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="accum_sload_aclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>accum_sload_sclr</spirit:name>
+          <spirit:displayName>accum_sload_sclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="accum_sload_sclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_double_accum</spirit:name>
+          <spirit:displayName>Enable double accumulator</spirit:displayName>
+          <spirit:value spirit:format="bool" spirit:id="gui_double_accum">false</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>double_accum</spirit:name>
+          <spirit:displayName>double_accum</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="double_accum">NO</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>width_chainin</spirit:name>
+          <spirit:displayName>width_chainin</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="width_chainin">1</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>chainout_adder</spirit:name>
+          <spirit:displayName>Enable chainout adder</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="chainout_adder">NO</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>chainout_adder_direction</spirit:name>
+          <spirit:displayName>What is the chainout adder operation type?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="chainout_adder_direction">ADD</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>port_negate</spirit:name>
+          <spirit:displayName>Enable 'negate' input for chainout adder?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="port_negate">PORT_UNUSED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>negate_register</spirit:name>
+          <spirit:displayName>Register 'negate' input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="negate_register">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>negate_aclr</spirit:name>
+          <spirit:displayName>What is the source for asynchronous clear input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="negate_aclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>negate_sclr</spirit:name>
+          <spirit:displayName>What is the source for synchronous clear input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="negate_sclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_systolic_delay</spirit:name>
+          <spirit:displayName>Enable systolic delay registers</spirit:displayName>
+          <spirit:value spirit:format="bool" spirit:id="gui_systolic_delay">false</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_systolic_delay_clock</spirit:name>
+          <spirit:displayName>What is the source for clock input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_systolic_delay_clock">CLOCK0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_systolic_delay_aclr</spirit:name>
+          <spirit:displayName>What is the source for asynchronous clear input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_systolic_delay_aclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_systolic_delay_sclr</spirit:name>
+          <spirit:displayName>What is the source for synchronous clear input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_systolic_delay_sclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>systolic_delay1</spirit:name>
+          <spirit:displayName>systolic_delay1</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="systolic_delay1">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>systolic_aclr1</spirit:name>
+          <spirit:displayName>systolic_aclr1</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="systolic_aclr1">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>systolic_sclr1</spirit:name>
+          <spirit:displayName>systolic_sclr1</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="systolic_sclr1">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>systolic_delay3</spirit:name>
+          <spirit:displayName>systolic_delay3</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="systolic_delay3">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>systolic_aclr3</spirit:name>
+          <spirit:displayName>systolic_aclr3</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="systolic_aclr3">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>systolic_sclr3</spirit:name>
+          <spirit:displayName>systolic_sclr3</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="systolic_sclr3">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_pipelining</spirit:name>
+          <spirit:displayName>Do you want to add pipeline register to the input?</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="gui_pipelining">0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>latency</spirit:name>
+          <spirit:displayName>Please specify the number of latency clock cycles</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="latency">0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_input_latency_clock</spirit:name>
+          <spirit:displayName>What is the source for clock input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_input_latency_clock">CLOCK0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_input_latency_aclr</spirit:name>
+          <spirit:displayName>What is the source for asynchronous clear input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_input_latency_aclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>gui_input_latency_sclr</spirit:name>
+          <spirit:displayName>What is the source for synchronous clear input?</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="gui_input_latency_sclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_a0_latency_clock</spirit:name>
+          <spirit:displayName>input_a0_latency_clock</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_a0_latency_clock">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_a1_latency_clock</spirit:name>
+          <spirit:displayName>input_a1_latency_clock</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_a1_latency_clock">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_a2_latency_clock</spirit:name>
+          <spirit:displayName>input_a2_latency_clock</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_a2_latency_clock">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_a3_latency_clock</spirit:name>
+          <spirit:displayName>input_a3_latency_clock</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_a3_latency_clock">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_a0_latency_aclr</spirit:name>
+          <spirit:displayName>input_a0_latency_aclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_a0_latency_aclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_a1_latency_aclr</spirit:name>
+          <spirit:displayName>input_a1_latency_aclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_a1_latency_aclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_a2_latency_aclr</spirit:name>
+          <spirit:displayName>input_a2_latency_aclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_a2_latency_aclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_a3_latency_aclr</spirit:name>
+          <spirit:displayName>input_a3_latency_aclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_a3_latency_aclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_a0_latency_sclr</spirit:name>
+          <spirit:displayName>input_a0_latency_sclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_a0_latency_sclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_a1_latency_sclr</spirit:name>
+          <spirit:displayName>input_a1_latency_sclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_a1_latency_sclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_a2_latency_sclr</spirit:name>
+          <spirit:displayName>input_a2_latency_sclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_a2_latency_sclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_a3_latency_sclr</spirit:name>
+          <spirit:displayName>input_a3_latency_sclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_a3_latency_sclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_b0_latency_clock</spirit:name>
+          <spirit:displayName>input_b0_latency_clock</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_b0_latency_clock">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_b1_latency_clock</spirit:name>
+          <spirit:displayName>input_b1_latency_clock</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_b1_latency_clock">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_b2_latency_clock</spirit:name>
+          <spirit:displayName>input_b2_latency_clock</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_b2_latency_clock">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_b3_latency_clock</spirit:name>
+          <spirit:displayName>input_b3_latency_clock</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_b3_latency_clock">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_b0_latency_aclr</spirit:name>
+          <spirit:displayName>input_b0_latency_aclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_b0_latency_aclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_b1_latency_aclr</spirit:name>
+          <spirit:displayName>input_b1_latency_aclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_b1_latency_aclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_b2_latency_aclr</spirit:name>
+          <spirit:displayName>input_b2_latency_aclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_b2_latency_aclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_b3_latency_aclr</spirit:name>
+          <spirit:displayName>input_b3_latency_aclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_b3_latency_aclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_b0_latency_sclr</spirit:name>
+          <spirit:displayName>input_b0_latency_sclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_b0_latency_sclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_b1_latency_sclr</spirit:name>
+          <spirit:displayName>input_b1_latency_sclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_b1_latency_sclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_b2_latency_sclr</spirit:name>
+          <spirit:displayName>input_b2_latency_sclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_b2_latency_sclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_b3_latency_sclr</spirit:name>
+          <spirit:displayName>input_b3_latency_sclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_b3_latency_sclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_c0_latency_clock</spirit:name>
+          <spirit:displayName>input_c0_latency_clock</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_c0_latency_clock">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_c1_latency_clock</spirit:name>
+          <spirit:displayName>input_c1_latency_clock</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_c1_latency_clock">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_c2_latency_clock</spirit:name>
+          <spirit:displayName>input_c2_latency_clock</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_c2_latency_clock">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_c3_latency_clock</spirit:name>
+          <spirit:displayName>input_c3_latency_clock</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_c3_latency_clock">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_c0_latency_aclr</spirit:name>
+          <spirit:displayName>input_c0_latency_aclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_c0_latency_aclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_c1_latency_aclr</spirit:name>
+          <spirit:displayName>input_c1_latency_aclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_c1_latency_aclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_c2_latency_aclr</spirit:name>
+          <spirit:displayName>input_c2_latency_aclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_c2_latency_aclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_c3_latency_aclr</spirit:name>
+          <spirit:displayName>input_c3_latency_aclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_c3_latency_aclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_c0_latency_sclr</spirit:name>
+          <spirit:displayName>input_c0_latency_sclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_c0_latency_sclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_c1_latency_sclr</spirit:name>
+          <spirit:displayName>input_c1_latency_sclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_c1_latency_sclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_c2_latency_sclr</spirit:name>
+          <spirit:displayName>input_c2_latency_sclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_c2_latency_sclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>input_c3_latency_sclr</spirit:name>
+          <spirit:displayName>input_c3_latency_sclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="input_c3_latency_sclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coefsel0_latency_clock</spirit:name>
+          <spirit:displayName>coefsel0_latency_clock</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="coefsel0_latency_clock">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coefsel1_latency_clock</spirit:name>
+          <spirit:displayName>coefsel1_latency_clock</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="coefsel1_latency_clock">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coefsel2_latency_clock</spirit:name>
+          <spirit:displayName>coefsel2_latency_clock</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="coefsel2_latency_clock">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coefsel3_latency_clock</spirit:name>
+          <spirit:displayName>coefsel3_latency_clock</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="coefsel3_latency_clock">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coefsel0_latency_aclr</spirit:name>
+          <spirit:displayName>coefsel0_latency_aclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="coefsel0_latency_aclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coefsel1_latency_aclr</spirit:name>
+          <spirit:displayName>coefsel1_latency_aclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="coefsel1_latency_aclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coefsel2_latency_aclr</spirit:name>
+          <spirit:displayName>coefsel2_latency_aclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="coefsel2_latency_aclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coefsel3_latency_aclr</spirit:name>
+          <spirit:displayName>coefsel3_latency_aclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="coefsel3_latency_aclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coefsel0_latency_sclr</spirit:name>
+          <spirit:displayName>coefsel0_latency_sclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="coefsel0_latency_sclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coefsel1_latency_sclr</spirit:name>
+          <spirit:displayName>coefsel1_latency_sclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="coefsel1_latency_sclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coefsel2_latency_sclr</spirit:name>
+          <spirit:displayName>coefsel2_latency_sclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="coefsel2_latency_sclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>coefsel3_latency_sclr</spirit:name>
+          <spirit:displayName>coefsel3_latency_sclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="coefsel3_latency_sclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>signed_latency_clock_a</spirit:name>
+          <spirit:displayName>signed_latency_clock_a</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="signed_latency_clock_a">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>signed_latency_aclr_a</spirit:name>
+          <spirit:displayName>signed_latency_aclr_a</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="signed_latency_aclr_a">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>signed_latency_sclr_a</spirit:name>
+          <spirit:displayName>signed_latency_sclr_a</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="signed_latency_sclr_a">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>signed_latency_clock_b</spirit:name>
+          <spirit:displayName>signed_latency_clock_b</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="signed_latency_clock_b">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>signed_latency_aclr_b</spirit:name>
+          <spirit:displayName>signed_latency_aclr_b</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="signed_latency_aclr_b">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>signed_latency_sclr_b</spirit:name>
+          <spirit:displayName>signed_latency_sclr_b</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="signed_latency_sclr_b">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>addnsub_multiplier_latency_clock1</spirit:name>
+          <spirit:displayName>addnsub_multiplier_latency_clock1</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="addnsub_multiplier_latency_clock1">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>addnsub_multiplier_latency_aclr1</spirit:name>
+          <spirit:displayName>addnsub_multiplier_latency_aclr1</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="addnsub_multiplier_latency_aclr1">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>addnsub_multiplier_latency_sclr1</spirit:name>
+          <spirit:displayName>addnsub_multiplier_latency_sclr1</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="addnsub_multiplier_latency_sclr1">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>addnsub_multiplier_latency_clock3</spirit:name>
+          <spirit:displayName>addnsub_multiplier_latency_clock3</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="addnsub_multiplier_latency_clock3">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>addnsub_multiplier_latency_aclr3</spirit:name>
+          <spirit:displayName>addnsub_multiplier_latency_aclr3</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="addnsub_multiplier_latency_aclr3">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>addnsub_multiplier_latency_sclr3</spirit:name>
+          <spirit:displayName>addnsub_multiplier_latency_sclr3</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="addnsub_multiplier_latency_sclr3">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>accum_sload_latency_clock</spirit:name>
+          <spirit:displayName>accum_sload_latency_clock</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="accum_sload_latency_clock">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>accum_sload_latency_aclr</spirit:name>
+          <spirit:displayName>accum_sload_latency_aclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="accum_sload_latency_aclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>accum_sload_latency_sclr</spirit:name>
+          <spirit:displayName>accum_sload_latency_sclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="accum_sload_latency_sclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>negate_latency_clock</spirit:name>
+          <spirit:displayName>negate_latency_clock</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="negate_latency_clock">UNREGISTERED</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>negate_latency_aclr</spirit:name>
+          <spirit:displayName>negate_latency_aclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="negate_latency_aclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>negate_latency_sclr</spirit:name>
+          <spirit:displayName>negate_latency_sclr</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="negate_latency_sclr">NONE</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>selected_device_family</spirit:name>
+          <spirit:displayName>selected_device_family</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="selected_device_family">Arria 10</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>reg_autovec_sim</spirit:name>
+          <spirit:displayName>reg_autovec_sim</spirit:displayName>
+          <spirit:value spirit:format="bool" spirit:id="reg_autovec_sim">false</spirit:value>
+        </spirit:parameter>
+      </spirit:parameters>
+    </altera:altera_module_parameters>
+    <altera:altera_system_parameters>
+      <spirit:parameters>
+        <spirit:parameter>
+          <spirit:name>device</spirit:name>
+          <spirit:displayName>Device</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="device">10AX115S2F45I2SGES</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>deviceFamily</spirit:name>
+          <spirit:displayName>Device family</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="deviceFamily">Arria 10</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>deviceSpeedGrade</spirit:name>
+          <spirit:displayName>Device Speed Grade</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="deviceSpeedGrade">2</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>generationId</spirit:name>
+          <spirit:displayName>Generation Id</spirit:displayName>
+          <spirit:value spirit:format="long" spirit:id="generationId">0</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>bonusData</spirit:name>
+          <spirit:displayName>bonusData</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="bonusData">bonusData 
+{
+   element mult_add_0
+   {
+      datum _sortIndex
+      {
+         value = "0";
+         type = "int";
+      }
+   }
+}
+</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>hideFromIPCatalog</spirit:name>
+          <spirit:displayName>Hide from IP Catalog</spirit:displayName>
+          <spirit:value spirit:format="bool" spirit:id="hideFromIPCatalog">true</spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>lockedInterfaceDefinition</spirit:name>
+          <spirit:displayName>lockedInterfaceDefinition</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="lockedInterfaceDefinition"></spirit:value>
+        </spirit:parameter>
+        <spirit:parameter>
+          <spirit:name>systemInfos</spirit:name>
+          <spirit:displayName>systemInfos</spirit:displayName>
+          <spirit:value spirit:format="string" spirit:id="systemInfos"><![CDATA[<systemInfosDefinition>
+    <connPtSystemInfos/>
+</systemInfosDefinition>]]></spirit:value>
+        </spirit:parameter>
+      </spirit:parameters>
+    </altera:altera_system_parameters>
+    <altera:altera_interface_boundary>
+      <altera:interface_mapping altera:name="clock0" altera:internal="mult_add_0.clock0" altera:type="conduit" altera:dir="end">
+        <altera:port_mapping altera:name="clock0" altera:internal="clock0"></altera:port_mapping>
+      </altera:interface_mapping>
+      <altera:interface_mapping altera:name="dataa_0" altera:internal="mult_add_0.dataa_0" altera:type="conduit" altera:dir="end">
+        <altera:port_mapping altera:name="dataa_0" altera:internal="dataa_0"></altera:port_mapping>
+      </altera:interface_mapping>
+      <altera:interface_mapping altera:name="dataa_1" altera:internal="mult_add_0.dataa_1" altera:type="conduit" altera:dir="end">
+        <altera:port_mapping altera:name="dataa_1" altera:internal="dataa_1"></altera:port_mapping>
+      </altera:interface_mapping>
+      <altera:interface_mapping altera:name="datab_0" altera:internal="mult_add_0.datab_0" altera:type="conduit" altera:dir="end">
+        <altera:port_mapping altera:name="datab_0" altera:internal="datab_0"></altera:port_mapping>
+      </altera:interface_mapping>
+      <altera:interface_mapping altera:name="datab_1" altera:internal="mult_add_0.datab_1" altera:type="conduit" altera:dir="end">
+        <altera:port_mapping altera:name="datab_1" altera:internal="datab_1"></altera:port_mapping>
+      </altera:interface_mapping>
+      <altera:interface_mapping altera:name="result" altera:internal="mult_add_0.result" altera:type="conduit" altera:dir="end">
+        <altera:port_mapping altera:name="result" altera:internal="result"></altera:port_mapping>
+      </altera:interface_mapping>
+    </altera:altera_interface_boundary>
+    <altera:altera_has_warnings>false</altera:altera_has_warnings>
+    <altera:altera_has_errors>false</altera:altera_has_errors>
+  </spirit:vendorExtensions>
+</spirit:component>

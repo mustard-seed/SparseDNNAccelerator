@@ -1,3 +1,5 @@
+#include "rtl_lib.hpp"
+
 unsigned char leadingZeroCounter (unsigned char bitmask) {
     unsigned char count = 0;
     unsigned char countPlus1 = 0;
