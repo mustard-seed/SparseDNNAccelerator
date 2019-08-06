@@ -94,6 +94,29 @@ typedef cl_uchar t_simdblock_channel_offset;
 typedef cl_ushort t_streamblock_address;
 #endif
 
+//=============================
+//Structs used in the flexible bitmask compression test
+#ifdef FLEXIBLE_BITMASK_COMPRESSION
+#ifdef INTELFPGA_CL
+typedef struct {
+    char values [TRANSFER_SIZE];
+} t_transfer_block;
+#else
+//typedef struct {
+//    cl_char values [SIMD_SIZE];
+//} t_simdblock_value;
+typedef struct {
+    cl_char values [TRANSFER_SIZE];
+} t_transfer_block;
+
+typedef cl_uchar t_simdblock_channel_offset;
+
+typedef cl_ushort t_streamblock_address;
+#endif
+#endif
+//=====================================
+
+
 #ifdef INTELFPGA_CL
 #include "ihc_apint.h"
 typedef uint4_t t_zCount;

@@ -6,6 +6,8 @@
 
 unsigned char countNumLeadingZeros (unsigned char bitmask);
 
+unsigned char countNumOnes (unsigned char bitmask);
+
 compressedTensor::compressedTensor (std::vector<fixedPointNumber> & fixedPointVector,
                                     unsigned short _num3DTensors,
                                     unsigned short _channel,
@@ -573,3 +575,398 @@ unsigned char countNumLeadingZeros (unsigned char bitmask) {
     }
     return count;
 }
+
+unsigned char countNumOnes (unsigned char bitmask) 
+{
+    unsigned char count = 0;
+    for (int i=0; i<8; i++) {
+        if ((bitmask & 0x01) == 0x1) {
+            count++;
+        }
+        bitmask >>= 0x1;
+    }
+    return count;
+}
+
+#ifdef FLEXIBLE_BITMASK_COMPRESSION
+flexibleDirectCompressedTensor::flexibleDirectCompressedTensor (std::vector<fixedPointNumber> & fixedPointVector,
+                                    unsigned short _num3DTensors,
+                                    unsigned short _channel,
+                                    unsigned short _width,
+                                    unsigned short _height,
+                                    unsigned short _maxScalarIndexInChannelGroup,
+                                    unsigned char _maxScalarIndexInCompressionBlock,
+                                    unsigned char _maxScalarIndexInTransferBlock,
+                                    bool _isKernel
+                                    ) 
+{
+    //Assign values to the member variables
+    num3DTensors = _num3DTensors;
+    channel = _channel;
+    width = _width;
+    height = _height;
+    maxScalarIndexInChannelGroup = _maxScalarIndexInChannelGroup;
+    maxScalarIndexInCompressionBlock = _maxScalarIndexInCompressionBlock;
+    maxScalarIndexInTransferBlock = _maxScalarIndexInTransferBlock;
+    isKernel = _isKernel;
+
+    //Compute the number of transfer blocks in a compression block
+    //Need an extra one in the numerator to account for the bitmask
+    unsigned char numTransferBlocksPerCompressionBlock
+            =  (unsigned short) std::ceil ( (float) (1 + _maxScalarIndexInCompressionBlock + 1) / (float) (_maxScalarIndexInTransferBlock + 1));
+
+    //==========================================================
+    //Compute the memory stride and allocate space in the vectors
+    if (isKernel) {
+        unsigned short numCompressionBlocksInChannel =
+                (unsigned short) std::ceil ( (float) channel / (float) (_maxScalarIndexInCompressionBlock + 1) );
+
+        externalMemoryAddressStride = width*height*(numTransferBlocksPerCompressionBlock*numCompressionBlocksInChannel);
+        valueVector.resize(externalMemoryAddressStride*num3DTensors);
+        streamBlockAddressVector.resize(num3DTensors);
+     }
+    else {
+        //Channel group size should divide channel size
+        assert( _channel % (_maxScalarIndexInChannelGroup + 1) == 0 );
+        assert (num3DTensors == 1);
+        unsigned short numChannelGroups = _channel / (_maxScalarIndexInChannelGroup + 1);
+        unsigned short numCompressionBlocksInChannelGroup =
+                (unsigned short) std::ceil ( (float) (maxScalarIndexInChannelGroup + 1) / (float) (_maxScalarIndexInCompressionBlock + 1) );
+        externalMemoryAddressStride =
+                width * (numCompressionBlocksInChannelGroup * numChannelGroups * numTransferBlocksPerCompressionBlock);
+        valueVector.resize(height * externalMemoryAddressStride);
+        streamBlockAddressVector.resize(num3DTensors * width * height * numChannelGroups );
+    }
+    //============================================================
+
+    //Trackers of the position in the compressed vector and the stream block address vector
+    int iCompressVectorBase = 0;
+    int iStreamBlockAddressVector = 0;
+
+    //Keep track of the address of each stream block along the channels
+    cl_ushort streamBlockAddress = 0;
+    int iFullVector = 0;
+    for (int iTensor=0; iTensor < num3DTensors; iTensor++){
+        for (int iHeight=0; iHeight < height; iHeight++) {
+            //Set the pointer of the compression bector
+            int iCompressVector = iCompressVectorBase;
+            for (int iWidth=0; iWidth < width; iWidth++) {
+
+               //Buffer for the current compression window. Default values are zero
+               std::vector<cl_char> compressionBlock(maxScalarIndexInCompressionBlock+1, 0);
+
+               //Tracker of the scalar in the compression window
+               int iScalarInCompressionBlock = 0;
+
+                //Stream block address is reset to zero at the beginning of every strip
+                //If the tensor is an I/O
+                if (!isKernel) {
+                    streamBlockAddress = 0;
+                }
+
+                for (int iChannel=0, iChannelInGroup=0;
+                     iChannel < channel;
+                     iChannel++, iFullVector++) {
+                    //Float to fixed point conversion
+                    fixedPointNumber fpNumber = fixedPointVector.at(iFullVector);
+                    char fpValue = ( (fpNumber.getBits()) & (fpNumber.getMask()) );
+
+                    //std::cout <<"iFullVector is "<<iFullVector<<std::endl;
+                    //std::cout <<"iScalarInCompressionBlock is "<<iScalarInCompressionBlock<<std::endl;
+
+                    compressionBlock.at(iScalarInCompressionBlock++) = fpValue;
+
+                    //Indicator of whether a compression block has been formed.
+                    bool compressionBlockFormed =
+                            (iScalarInCompressionBlock > maxScalarIndexInCompressionBlock)
+                            || (iChannel == (channel - 1))
+                            || ((iChannelInGroup == maxScalarIndexInChannelGroup) && (!isKernel));
+
+
+                    if ( compressionBlockFormed ) {
+                        //If we are at the end of the channel or a channel group (only matter for kernel),
+                        //and a compression block is yet formed
+                        //then we need to pad 0s
+                       while (iScalarInCompressionBlock <= maxScalarIndexInCompressionBlock) {
+                           compressionBlock.at(iScalarInCompressionBlock++) = 0x0;
+                        }
+
+                       iScalarInCompressionBlock = 0;
+
+                       //Compute the bitmask, and form the blocks
+                       unsigned char bitmask = 0x0;
+                       for (unsigned int i=0; i<=maxScalarIndexInCompressionBlock; i++) {
+                           char fpValue = compressionBlock.at(i);
+                           unsigned char bit = (fpValue != 0x0) ?
+                                       0x01 : 0x00;
+                           bitmask |= (bit << i);
+                       } // for bitmask
+
+                       //Populate the value vector
+                       unsigned char iTransferBlock = 0;
+                       t_transfer_block transferBlock;
+                       //First load the bitmask
+                       transferBlock.values[iTransferBlock++] = bitmask;
+
+                       //iterate through the compression block and transfer the non-zero values
+                       for (int i=0; i<=maxScalarIndexInCompressionBlock; i++) {
+                           auto fpValue = compressionBlock.at(i);
+                           if (fpValue != 0x0) {
+                               transferBlock.values[iTransferBlock++] = fpValue;
+                               //std::cout <<"Preserved i = "<<i<<std::endl;
+                           }
+
+                           //GOTTCHA!!!!
+                           //Push the transfer block if we have filled it or we have reached the end of the
+                           //compression block and in the processing of filling one
+                           if ((iTransferBlock > maxScalarIndexInTransferBlock)
+                                || ((i == maxScalarIndexInCompressionBlock) && (iTransferBlock > 0)))
+                           {
+                                valueVector.at(iCompressVector++) = transferBlock;
+                                streamBlockAddress++;
+                                iTransferBlock = 0;
+                           }
+                       } // for element in compression block
+
+                       //If we are compressing a filter and we are at its end
+                       //Then we need to store the number of transfer blocks that the
+                       //Compressed filter take
+                       if (isKernel
+                               && (iWidth == (width - 1))
+                               && (iHeight == (height - 1))
+                               && (iChannel == (channel - 1))
+                               ) {
+                           //std::cout <<"Updating streamBlockAddressVector. Filter"<<std::endl;
+                           streamBlockAddressVector.at(iStreamBlockAddressVector++)
+                                   = streamBlockAddress;
+                       }
+
+                       //If we are compressing an activtion tensor and we are at its end
+                       //or at the end of one of its channel groups
+                       //Then we need to store the number of transfer blocks that the
+                       //Compressed channel group takes
+                       else if ((!isKernel)
+                               && (iChannelInGroup == maxScalarIndexInChannelGroup)
+                               ) {
+                           //std::cout <<"Updating streamBlockAddressVector. Activation. iChannelInGroup = "
+                           //         <<iChannelInGroup<<std::endl;
+                           streamBlockAddressVector.at(iStreamBlockAddressVector++)
+                                   = streamBlockAddress;
+                       }
+                    } // if compression block is formed
+
+                    //Some indices updates
+                    iChannelInGroup++;
+                    if (iChannelInGroup > maxScalarIndexInChannelGroup) {
+                        iChannelInGroup = 0;
+                    }
+                } // for channel
+            } // for width
+            //Need to stride the value vector here if we are compressing an activation
+            if (!isKernel) {
+                iCompressVectorBase += externalMemoryAddressStride;
+             }
+            else {
+                iCompressVectorBase = iCompressVector;
+            }
+        } // for height
+        //Need to stride the value vector here if we are compressing a filters
+        if (isKernel) {
+            //Transfer blocks in a kernel are placed next to each other.
+            //iCompressVectorBase += externalMemoryAddressStride;
+            streamBlockAddress = 0x0;
+        }
+     } // for Tensor
+}
+
+//Helper function used to decode a compressed tensor
+int decodeFlexibleDirectCompressedTensor(
+        flexibleDirectCompressedTensor compTensor
+        ,std::vector<float> & denseTensor
+        ,char fracWidth
+        ,char intWidth) 
+{
+
+
+    //Dimension of the uncompressed, un-vectorized tensor
+    unsigned short num3DTensors = compTensor.num3DTensors;
+    unsigned short channel = compTensor.channel;
+    unsigned short width = compTensor.width;
+    unsigned short height = compTensor.height;
+    bool isKernel = compTensor.isKernel;
+
+    //Compression parameters
+    unsigned short maxScalarIndexInChannelGroup = compTensor.maxScalarIndexInChannelGroup;
+    unsigned char maxScalarIndexInCompressionBlock
+        = compTensor.maxScalarIndexInCompressionBlock;
+    unsigned char maxScalarIndexInTransferBlock
+        = compTensor.maxScalarIndexInTransferBlock;
+
+    //Word stride between the start of adjacent rows in the external memory
+    unsigned int externalMemoryAddressStride 
+        = compTensor.externalMemoryAddressStride;
+
+    //Allocate space for the dense tensor
+    denseTensor.resize(num3DTensors*channel*width*height, 0.0f);
+
+    //Computer same bounds
+    unsigned int numStreamBlocksInTensor =
+            isKernel ? 
+            num3DTensors 
+            : height * width * channel / (maxScalarIndexInChannelGroup + 1);
+
+    //Initilize some counters
+    int iCompressVectorBase = 0;
+    int iCompressVector = 0;
+    int iWidth = 0;
+    int iHeight = 0;
+    int iTensor = 0;
+    int iChannelBase = 0;
+
+    int countTransferBlocks = 0;
+
+
+
+    //Read the stream blocks, one at a time
+    for (unsigned int iStreamBlock=0; 
+        iStreamBlock < numStreamBlocksInTensor;
+        iStreamBlock++)
+    {
+        //std::cout <<"flexibleDirectDecompression. iStreamBlock="<<iStreamBlock<<std::endl;
+        //Need to know how many transfer blocks are there in the stream block that we 
+        //are about to read
+        int numTransferBlockInStreamBlock;
+        if (isKernel) 
+        {
+           numTransferBlockInStreamBlock = 
+            compTensor.streamBlockAddressVector.at(iStreamBlock);
+        }
+        else
+        {
+            if (iChannelBase==0) 
+            {
+                numTransferBlockInStreamBlock = 
+                    compTensor.streamBlockAddressVector.at(iStreamBlock);
+            }
+            else 
+            {
+                 numTransferBlockInStreamBlock =
+                    compTensor.streamBlockAddressVector.at(iStreamBlock)
+                    - compTensor.streamBlockAddressVector.at(iStreamBlock - 1);
+            }
+
+        } // if/else blocks that assign to numTransferBlockInStreamBlock
+
+        //============Expands a compression block============
+        // A assemble vector for the decompression
+        std::vector<char> vectorCompressionBlock;
+        unsigned char bitmask;
+
+        bool updateBitmask = true;
+        unsigned char numNZValuesInCompressionBlock;
+        unsigned char countNZValuesInCompressionBlock;
+
+        //Decode each stream block
+        for (int i=0; i<numTransferBlockInStreamBlock; i++) {
+            t_transfer_block transferBlock = 
+                compTensor.valueVector.at(iCompressVector++);
+
+            countTransferBlocks++;
+
+            if (updateBitmask) {
+                bitmask = transferBlock.values[0];
+                numNZValuesInCompressionBlock = countNumOnes(bitmask);
+                countNZValuesInCompressionBlock = 0;
+                vectorCompressionBlock.resize(0);
+
+                for (int j=1; j<=maxScalarIndexInTransferBlock; j++) 
+                {
+                    vectorCompressionBlock.push_back(transferBlock.values[j]);
+                }
+                countNZValuesInCompressionBlock += (maxScalarIndexInTransferBlock);
+                updateBitmask = false;
+
+            }
+            else {
+                for (int j=0; j<=maxScalarIndexInTransferBlock; j++) 
+                {
+                    vectorCompressionBlock.push_back(transferBlock.values[j]);
+                }
+                countNZValuesInCompressionBlock += (maxScalarIndexInTransferBlock + 1);
+            }
+
+            //If a compression block has been formed then we need to decompress it
+            if (countNZValuesInCompressionBlock >= numNZValuesInCompressionBlock) {
+                //Setup for the next round
+                updateBitmask = true;
+
+                //=================================================
+                //Transfer scalars from the compression block to the dense vector
+                unsigned char positionInCompressionBlock = 0;
+                int iVectorCompressionBlock = 0;
+                while (bitmask != 0)
+                {
+                    unsigned char numLeadingZeros = countNumLeadingZeros(bitmask);
+                    unsigned char indexInCompressionBlock = positionInCompressionBlock + numLeadingZeros;
+                    bitmask = bitmask >> (numLeadingZeros + 1);
+                    positionInCompressionBlock = indexInCompressionBlock + 1;
+                    int iChannel = iChannelBase + (int) indexInCompressionBlock;
+
+                    fixedPointNumber fpValue (
+                        ((short) vectorCompressionBlock.at(iVectorCompressionBlock++)), fracWidth, intWidth );
+                    int iDenseVector = 
+                        iTensor * height * width * channel
+                        + iHeight * width * channel
+                        + iWidth * channel
+                        + iChannel;
+                    //std::cout <<"Bitmask, iTensor, iHeight, iWidth, iChannel: "
+                     //   <<(unsigned int) bitmask<<" "<<iTensor<<" "<<iHeight<<" "<<iWidth<<" "<<iChannel<<std::endl;
+                    denseTensor.at(iDenseVector) = fpValue.convert2Float();
+                }
+
+                //Update the trackers
+                int numScalarsRemainInChannelGroup = 
+                    (maxScalarIndexInChannelGroup + 1)
+                    - (iChannelBase % (maxScalarIndexInChannelGroup + 1));
+                int numScalarsAdded;
+                if (!isKernel) 
+                { 
+                    numScalarsAdded = 
+                        numScalarsRemainInChannelGroup < (maxScalarIndexInCompressionBlock + 1) ?
+                        numScalarsRemainInChannelGroup : (maxScalarIndexInCompressionBlock + 1);
+                }
+                else 
+                {
+                    numScalarsAdded = maxScalarIndexInCompressionBlock + 1;
+                }
+
+                iChannelBase += numScalarsAdded;
+                //std::cout <<"iChannelBase "<<iChannelBase<<std::endl;
+                if (iChannelBase >= channel)
+                {
+                    //std::cout <<"Resetting iChannelBase"<<std::endl;
+                    iChannelBase = 0;
+                    iWidth = (iWidth == (width - 1)) ? 0 : iWidth + 1;
+                        if (iWidth == 0) 
+                        {
+                            iHeight = (iHeight == (height - 1)) ? 0: iHeight + 1;
+                            if (iHeight == 0) 
+                            {
+                                iTensor++;
+                            }
+                            if (!isKernel) 
+                            {
+                                iCompressVectorBase += externalMemoryAddressStride;
+                                iCompressVector = iCompressVectorBase;
+                            }
+                        } // height update
+                } // width update
+            } // if a compression block has been formed
+        }  //for-loop. Expands atream block
+        //=====================================================
+    }
+
+    return countTransferBlocks;
+
+}
+#endif
