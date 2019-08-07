@@ -1149,11 +1149,11 @@ __kernel void compressionWindowAssembler ()
 					//EMULATOR_PRINT(("[assembler] bitmaskA: %u \n", bitmaskA));
 				}
 
-				uint1_t offset = (stateActivation == ASSEMBLER_STATE_LOAD_BITMASK) ?
+				uint3_t offset = (stateActivation == ASSEMBLER_STATE_LOAD_BITMASK) ?
 					0X1 : 0X0; 
 
 				#pragma unroll
-				for (uint5_t i=0; i<TRANSFER_SIZE; i++)
+				for (uint3_t i=0; i<TRANSFER_SIZE; i++)
 				{
 					if (i >= offset)
 					{
@@ -1202,11 +1202,11 @@ __kernel void compressionWindowAssembler ()
 					//EMULATOR_PRINT(("[assembler] bitmaskW: %u \n", bitmaskW));
 				}
 
-				uint1_t offset = (stateWeight == ASSEMBLER_STATE_LOAD_BITMASK) ?
+				uint3_t offset = (stateWeight == ASSEMBLER_STATE_LOAD_BITMASK) ?
 					0X1 : 0X0; 
 
 				#pragma unroll
-				for (uint5_t i=0; i<TRANSFER_SIZE; i++)
+				for (uint3_t i=0; i<TRANSFER_SIZE; i++)
 				{
 					if (i >= offset)
 					{
@@ -1261,6 +1261,7 @@ __attribute__((max_global_work_dim(0)))
 __attribute__((autorun))
 __kernel void comppressionWindowAligner ()
 {
+
 	while (true) {
 		t_alignment_output alignedCompressionWindow;
 		t_alignment_input inputCompressionWindow =
@@ -1278,7 +1279,8 @@ __kernel void comppressionWindowAligner ()
 	}
 }
 
-
+#define STATE_DISPATCHER_LOAD 0X0
+#define STATE_DISPATCHER_SEND 0X1
 #define BITWIDTH_COMPRESSION_WINDOW_INDEX 3
 #define MASK_COMPRESSION_WINDOW_INDEX 0x7
 __attribute__((task))
@@ -1286,59 +1288,86 @@ __attribute__((max_global_work_dim(0)))
 __attribute__((autorun))
 __kernel void dispatcher ()
 {
-	t_alignment_output alignedCompressionWindow = 
-			read_channel_intel(channel_alignmentOutput);
 
+	uint1_t state = STATE_DISPATCHER_LOAD;
+	t_compression_window weightWindow;
+	t_compression_window activationWindow;
+	bool isLast;
 
-	t_compression_window weightWindow = alignedCompressionWindow.weightWindow;
-	t_compression_window activationWindow = alignedCompressionWindow.activationWindow;
-	bool isLast = alignedCompressionWindow.isLast;
-	unsigned long alignmentData = alignedCompressionWindow.alignmentData;
-	unsigned char numOperands = (alignmentData >> 48) & 0xFF;
-	unsigned int indicesW = (alignmentData >> 24) & 0xFFFFFF;
-	unsigned int indicesA = (alignmentData) & 0xFFFFFF;
+	unsigned char numOperands;
+	unsigned int indicesW;
+	unsigned int indicesA;
 	//EMULATOR_PRINT ( ("[dispatcher]: numOperands: %u, indicesW: %u indicesA :%u \n", 
 	//	numOperands & 0xFF, indicesW, indicesA));
 
-	unsigned char countOperands = 0;
-	while (countOperands < numOperands) {
-		t_simd_operand simdActivations;
-		t_simd_operand simdWeights;
-
-		#pragma unroll
-		for (unsigned char i=0; i<SIMD_SIZE; i++)
+	unsigned char countOperands;
+	while (true) {
+		if (state == STATE_DISPATCHER_LOAD)
 		{
-			unsigned char indexW = 
-				(indicesW >> (i*BITWIDTH_COMPRESSION_WINDOW_INDEX))
-				& MASK_COMPRESSION_WINDOW_INDEX;
-			char w = ((countOperands + i) < numOperands) ?
-				weightWindow.values[indexW] : 0x0;
-			simdWeights.values[i] = w;
+			bool readSuccess;
+			t_alignment_output alignedCompressionWindow
+				= read_channel_nb_intel(channel_alignmentOutput, &readSuccess);
+			if (readSuccess)
+			{
+				state = STATE_DISPATCHER_SEND;
 
-			unsigned char indexA = 
-				(indicesA >> (i*BITWIDTH_COMPRESSION_WINDOW_INDEX))
-				& MASK_COMPRESSION_WINDOW_INDEX;
-			char a = ((countOperands + i) < numOperands) ?
-				activationWindow.values[indexA] : 0x0;
-			simdActivations.values[i] = a;
+				weightWindow = alignedCompressionWindow.weightWindow;
+				activationWindow = alignedCompressionWindow.activationWindow;
+				isLast = alignedCompressionWindow.isLast;
+				unsigned long alignmentData = alignedCompressionWindow.alignmentData;
+				numOperands = (alignmentData >> 48) & 0xFF;
+				indicesW = (alignmentData >> 24) & 0xFFFFFF;
+				indicesA = (alignmentData) & 0xFFFFFF;
+				countOperands = 0;
+			}
+		} // if state == STATE_DISPATCHER_SEND
+		else if (state == STATE_DISPATCHER_SEND)
+		{
+			t_simd_operand simdActivations;
+			t_simd_operand simdWeights;
 
-			//EMULATOR_PRINT ( ("[dispatcher]: w: %u a: %u\n", w & 0xFF, a & 0xFF) );
-			//EMULATOR_PRINT ( ("[dispatcher]: wIndex: %u aIndex :%u \n", indexW & 0xFF, indexA & 0xFF));
-		}
+			#pragma unroll
+			for (unsigned char i=0; i<SIMD_SIZE; i++)
+			{
+				unsigned char indexW = 
+					(indicesW >> (i*BITWIDTH_COMPRESSION_WINDOW_INDEX))
+					& MASK_COMPRESSION_WINDOW_INDEX;
+				char w = ((countOperands + i) < numOperands) ?
+					weightWindow.values[indexW] : 0x0;
+				simdWeights.values[i] = w;
 
+				unsigned char indexA = 
+					(indicesA >> (i*BITWIDTH_COMPRESSION_WINDOW_INDEX))
+					& MASK_COMPRESSION_WINDOW_INDEX;
+				char a = ((countOperands + i) < numOperands) ?
+					activationWindow.values[indexA] : 0x0;
+				simdActivations.values[i] = a;
 
-		t_mac_operands operands;
-		operands.weights = simdWeights;
-		operands.activations = simdActivations;
-		operands.isLast = (countOperands + SIMD_SIZE) >= numOperands ?
-			isLast: false;
+				//EMULATOR_PRINT ( ("[dispatcher]: w: %u a: %u\n", w & 0xFF, a & 0xFF) );
+				//EMULATOR_PRINT ( ("[dispatcher]: wIndex: %u aIndex :%u \n", indexW & 0xFF, indexA & 0xFF));
+			}
 
-		write_channel_intel(channel_macOperandsInput, operands);
+			t_mac_operands operands;
+			operands.weights = simdWeights;
+			operands.activations = simdActivations;
+			operands.isLast = (countOperands + SIMD_SIZE) >= numOperands ?
+				isLast: false;
 
-		countOperands += SIMD_SIZE;
-		indicesW = indicesW >> (SIMD_SIZE*BITWIDTH_COMPRESSION_WINDOW_INDEX);
-		indicesA = indicesA >> (SIMD_SIZE*BITWIDTH_COMPRESSION_WINDOW_INDEX);
-	} // process one compression window
+			bool writeSuccess;
+			writeSuccess = write_channel_nb_intel(channel_macOperandsInput, operands);
+
+			if (writeSuccess)
+			{
+				countOperands += SIMD_SIZE;
+				indicesW = indicesW >> (SIMD_SIZE*BITWIDTH_COMPRESSION_WINDOW_INDEX);
+				indicesA = indicesA >> (SIMD_SIZE*BITWIDTH_COMPRESSION_WINDOW_INDEX);
+				if (countOperands >= numOperands)
+				{
+					state = STATE_DISPATCHER_LOAD;
+				}
+			}
+		}	// if state == STATE_DISPATCHER_SEND
+	} // while
 
 }
 

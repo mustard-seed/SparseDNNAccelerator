@@ -1,5 +1,5 @@
 `timescale 1 ps / 1 ps
-module c5_mac_8bitx4 (
+module c5_mac_8bitx2 (
 		input   clock,
 		input   resetn,
 		input   ivalid, 
@@ -20,7 +20,7 @@ module c5_mac_8bitx4 (
 	assign oready = 1'b1;
 	// ivalid, iready, resetn are ignored
 
-	c5_mac_8bitx4_0002 inst (
+	c5_mac_8bitx2_0002 inst (
 		.result  (result),  //  result.result
 		.dataa_0 (dataa_0), // dataa_0.dataa_0
 		.dataa_1 (dataa_1), // dataa_1.dataa_1

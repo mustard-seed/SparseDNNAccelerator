@@ -1,5 +1,5 @@
 `timescale 1 ps / 1 ps
-module a10_mac_8bitx4 (
+module a10_mac_8bitx2 (
 		input   clock,
 		input   resetn,
 		input   ivalid, 
