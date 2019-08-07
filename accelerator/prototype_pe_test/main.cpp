@@ -57,6 +57,13 @@ std::vector<t_spValueAndZCount, boost::alignment::aligned_allocator<t_spValueAnd
 t_aligned_compression_scalar_vector;
 
 typedef
+std::vector<t_pe_prototype_instruction_host,
+boost::alignment::aligned_allocator<t_pe_prototype_instruction_host, aocl_utils_cpp::AOCL_ALIGNMENT>>
+//std::vector<cl_short>
+t_aligned_instruction_vector;
+
+#ifdef DIRECT_COMPRESSION_SIMD
+typedef
 std::vector<t_simdblock_host, boost::alignment::aligned_allocator<t_simdblock_host, aocl_utils_cpp::AOCL_ALIGNMENT>>
 //std::vector<cl_short>
 t_aligned_compression_simd_vector;
@@ -70,14 +77,9 @@ typedef
 std::vector<t_spValueAndZCountUnpackedHost, boost::alignment::aligned_allocator<t_spValueAndZCountUnpackedHost, aocl_utils_cpp::AOCL_ALIGNMENT>>
 //std::vector<cl_short>
 t_aligned_compression_scalar_host_vector;
-
-typedef
-std::vector<t_pe_prototype_instruction_host,
-boost::alignment::aligned_allocator<t_pe_prototype_instruction_host, aocl_utils_cpp::AOCL_ALIGNMENT>>
-//std::vector<cl_short>
-t_aligned_instruction_vector;
-
-class peTestFixture : public ::testing::Test {
+#endif
+class peTestFixture : public ::testing::Test
+{
 protected:
     std::string binaryFile;
     cl::Program program;
@@ -101,10 +103,18 @@ protected:
     cl::Buffer bufferDrainInput;
     cl::Buffer bufferDrainOutput;
 
+#ifdef DIRECT_COMPRESSION_SIMD
     t_aligned_compression_simd_vector inputActivationVector;
     t_aligned_compression_simd_vector outputActivationVector;
     t_aligned_compression_simd_vector inputWeightVector;
     t_aligned_compression_simd_vector outputWeightVector;
+#endif
+#ifdef FLEXIBLE_BITMASK_COMPRESSION
+    t_aligned_transfer_block_vector inputActivationVector;
+    t_aligned_transfer_block_vector outputActivationVector;
+    t_aligned_transfer_block_vector inputWeightVector;
+    t_aligned_transfer_block_vector outputWeightVector;
+#endif
     aligned_short_vector inputBiasVector;
     aligned_short_vector outputBiasVector;
     aligned_short_vector inputDrainVector;
@@ -344,10 +354,7 @@ protected:
                 idy < (PE_ROWS - 1) ? inputActivationVector.size() : 0;
         kernelTestInterface.setArg(12, numOutputActivationBlocks); //numOutputActivationBlocks
         //Allocate space for the output activation vector
-        for (int i=0; i<numOutputActivationBlocks; i++) {
-            t_simdblock_host brick;
-            outputActivationVector.push_back(brick);
-        }
+        outputActivationVector.resize(numOutputActivationBlocks);
 
         kernelTestInterface.setArg(13, (cl_ushort) inputWeightVector.size()); //numInputWeightBlocks
         //kernelTestInterface.setArg(15, (cl_ushort) startIndexWeightBlocks); //startIndexWeightBlocks,
@@ -355,10 +362,8 @@ protected:
                 idy < (PE_COLS - 1) ? inputWeightVector.size() : 0;
         kernelTestInterface.setArg(14, numOutputWeightBlocks); //numOutputWeightBlocks
         //Allocate space for the output activation vector
-        for (int i=0; i<numOutputWeightBlocks; i++) {
-            t_simdblock_host brick;
-            outputWeightVector.push_back(brick);
-        }
+        outputWeightVector.resize(numOutputWeightBlocks);
+
         kernelTestInterface.setArg(15, (cl_ushort) inputBiasVector.size()); //numInputBias
         cl_ushort numOutputBias =
                 idx < (PE_COLS - 1) ? inputBiasVector.size() : 0;
@@ -489,11 +494,170 @@ float dot_product_regular_vectors (
         );
 
 
-TEST_F (peTestFixture, testFixture) {
+TEST_F (peTestFixture, testFixture)
+{
     launch(IDX,IDY,0,0, false);
     EXPECT_TRUE (COMPRESSION_VEC_SIZE == 4);
     EXPECT_TRUE(true);
 }
+
+//TEST_F (peTestFixture, testPlayfield) {
+///* Test goal: Verify the correctness of the bias loading, dot product and drainage capability
+// * Procedure: Load a bias into the PE, the stream compressed activation and weights, then read the result back. Verify that the bias read back approximately mataches the bias loaded in. Consider the effect of
+// * different fixed-point width
+// *
+//*/
+//    EXPECT_TRUE (COMPRESSION_VEC_SIZE == 4);
+
+//    //This test won't pass if fracIn > fractOut
+//    char fracIn = 5, fracOut = 6, fracW = 5;
+//    char intWidthIn = WEIGHT_BITWIDTH - fracIn - 1;
+//    char intWidthWeight = WEIGHT_BITWIDTH - fracW - 1;
+//    int targetIDX = IDX, targetIDY = IDY;
+//    float probOne = 1.0;
+
+//    unsigned int numElements = 16;
+//    unsigned short transmissionStartIndex = 0;
+//    unsigned short transmissionEndIndex = numElements - 1;
+//    unsigned short selectStartIndex = transmissionStartIndex; //must match the startIndex!
+
+//    EXPECT_TRUE(PE_COLS > targetIDX);
+//    EXPECT_TRUE(PE_ROWS > targetIDY);
+
+//    //First prepare the bias;
+//    //float biasFloat = 3.1415926;
+//    float biasFloat = 0.0;
+
+//    //Then convert the bias into a fixed point number;
+//    fixedPointNumber biasFPInput (biasFloat, fracW, WEIGHT_BITWIDTH);
+
+//    // Generate a block of activations
+//    std::vector<float> activationRealInput = initialize_vector(
+//                VECTOR_A_SEED,
+//                numElements,
+//                probOne,
+//                -3.14,
+//                3.14
+//                );
+//    //std::vector<float> activationRealInput = {-3.14f};
+
+//    // Generate a block of activations
+//    std::vector<float> weightRealInput = initialize_vector(
+//                VECTOR_B_SEED,
+//                numElements,
+//                1.0,
+//                -3.14,
+//                3.14
+//                );
+//    //std::vector<float> weightRealInput = {3.14f};
+
+//    //Compute the expected output;
+//    float expectedResultReal = dot_product_regular_vectors(activationRealInput, weightRealInput) + biasFloat;
+//    fixedPointNumber expectedOutputFP (expectedResultReal, fracOut, WEIGHT_BITWIDTH - fracOut - 1);
+
+//    //Prepare the input buffers
+//    inputBiasVector.push_back((short) biasFPInput.getBits());
+//    // Compress the activaion block
+//    std::vector<fixedPointNumber> fpActivationVector;
+//    std::vector<fixedPointNumber> fpWeightVector;
+
+//    fpActivationVector.resize(activationRealInput.size());
+//    fpWeightVector.resize(weightRealInput.size());
+
+//    for (int i=0; i<numElements; i++) {
+//        fixedPointNumber fpWeight(weightRealInput.at(i), fracW, intWidthWeight);
+//        fpWeightVector.at(i) = fpWeight;
+//        fixedPointNumber fpActivation(activationRealInput.at(i), fracIn, intWidthIn);
+//        fpActivationVector.at(i) = fpActivation;
+//    }
+
+//#ifdef DIRECT_COMPRESSION_SIMD
+//    std::cout<<"Comrpessing the weights"<<std::endl;
+//    directCompressedTensor compWTensor(
+//                fpWeightVector,
+//                1, //numTensors
+//                numElements, //channel
+//                1, //width
+//                1, //height
+//                7, //maxSimdBlockIndexInStreamBlock
+//                3, //maxScalarIndexInSimdBlock
+//                true //isKernel
+//                );
+
+//    std::cout<<"Comrpessing the activations"<<std::endl;
+//    directCompressedTensor compATensor(
+//                fpActivationVector,
+//                1, //numTensors
+//                numElements, //channel
+//                1, //width
+//                1, //height
+//                7, //maxSimdBlockIndexInStreamBlock
+//                3, //maxScalarIndexInSimdBlock
+//                true //isKernel
+//                );
+//#endif
+//#ifdef FLEXIBLE_BITMASK_COMPRESSION
+//    std::cout<<"Comrpessing the weights"<<std::endl;
+//    flexibleDirectCompressedTensor compWTensor(
+//                fpWeightVector,
+//                1, //numTensors
+//                numElements, //channel
+//                1, //width
+//                1, //height
+//                numElements - 1, //_maxScalarIndexInChannelGroup
+//                7, //_maxScalarIndexInCompressionBlock
+//                1, //_maxScalarIndexInTransferBlock
+//                true //isKernel
+//                );
+
+//    std::cout<<"Comrpessing the activations"<<std::endl;
+//    flexibleDirectCompressedTensor compATensor(
+//                fpActivationVector,
+//                1, //numTensors
+//                numElements, //channel
+//                1, //width
+//                1, //height
+//                numElements - 1, //_maxScalarIndexInChannelGroup
+//                7, //_maxScalarIndexInCompressionBlock
+//                1, //_maxScalarIndexInTransferBlock
+//                true //isKernel
+//                );
+//#endif
+
+//    std::cout <<"Transfer the compressed activations to the test harness"<<std::endl;
+//    inputActivationVector.resize(compATensor.streamBlockAddressVector.at(0));
+//    for (unsigned int i=0; i<compATensor.streamBlockAddressVector.at(0); i++) {
+//        inputActivationVector.at(i) = compATensor.valueVector.at(i);
+//    }
+
+//    std::cout <<"Transfer the compressed weights to the test harness"<<std::endl;
+//    inputWeightVector.resize(compWTensor.streamBlockAddressVector.at(0));
+//    for (unsigned int i=0; i<compWTensor.streamBlockAddressVector.at(0); i++) {
+//        inputWeightVector.at(i) = compWTensor.valueVector.at(i);
+//    }
+
+//    //Prepare the instruction
+
+//     t_pe_prototype_instruction_host dotProductInstruction =
+//     {
+//      .maxIDX = PE_COLS - 1,
+//      .maxIDY = PE_ROWS - 1,
+//      .fracW = fracW,
+//      .fracDin = fracIn,
+//      .fracDout = fracOut};
+//      inputInstructionVector.push_back(dotProductInstruction);
+
+//    launch(targetIDX, targetIDY, transmissionStartIndex, 0);
+
+//    //Compare the result
+//    short actualOutputFP = outputDrainVector.at(0);
+//    EXPECT_TRUE(
+//         (actualOutputFP & WEIGHT_MASK)
+//         == ((short) (expectedOutputFP.getBits() & WEIGHT_MASK) ))
+//         << "Actual output: "<<std::bitset<WEIGHT_BITWIDTH>(actualOutputFP & WEIGHT_MASK)
+//         <<std::endl<<"Expected output: "<<std::bitset<WEIGHT_BITWIDTH>((expectedOutputFP.getBits()) & WEIGHT_MASK)<<std::endl;
+
+//}
 
 TEST_F (peTestFixture, testLoadBiasDotProductAndDrainage) {
 /* Test goal: Verify the correctness of the bias loading, dot product and drainage capability
@@ -565,6 +729,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainage) {
         fpActivationVector.at(i) = fpActivation;
     }
 
+#ifdef DIRECT_COMPRESSION_SIMD
     std::cout<<"Comrpessing the weights"<<std::endl;
     directCompressedTensor compWTensor(
                 fpWeightVector,
@@ -588,6 +753,34 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainage) {
                 3, //maxScalarIndexInSimdBlock
                 true //isKernel
                 );
+#endif
+#ifdef FLEXIBLE_BITMASK_COMPRESSION
+    std::cout<<"Comrpessing the weights"<<std::endl;
+    flexibleDirectCompressedTensor compWTensor(
+                fpWeightVector,
+                1, //numTensors
+                numElements, //channel
+                1, //width
+                1, //height
+                numElements - 1, //_maxScalarIndexInChannelGroup
+                7, //_maxScalarIndexInCompressionBlock
+                1, //_maxScalarIndexInTransferBlock
+                true //isKernel
+                );
+
+    std::cout<<"Comrpessing the activations"<<std::endl;
+    flexibleDirectCompressedTensor compATensor(
+                fpActivationVector,
+                1, //numTensors
+                numElements, //channel
+                1, //width
+                1, //height
+                numElements - 1, //_maxScalarIndexInChannelGroup
+                7, //_maxScalarIndexInCompressionBlock
+                1, //_maxScalarIndexInTransferBlock
+                true //isKernel
+                );
+#endif
 
     std::cout <<"Transfer the compressed activations to the test harness"<<std::endl;
     inputActivationVector.resize(compATensor.streamBlockAddressVector.at(0));

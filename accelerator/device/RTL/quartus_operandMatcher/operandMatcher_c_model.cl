@@ -18,7 +18,7 @@ unsigned long operandMatcher8 (
 	unsigned int activationAccumWithGap = maskAccum (mutualBitmask, activationAccum);
 
 	unsigned int activationAccumDense = 
-		bubbleCollapse8 (shiftAccum, activationAccumwithGap);
+		bubbleCollapse8 (shiftAccum, activationAccumWithGap);
 
 	//Compute the dense indices of the weights
 	unsigned int weightAccum = accumulate8(bitmaskW);
@@ -26,7 +26,7 @@ unsigned long operandMatcher8 (
 	unsigned int weightAccumWithGap = maskAccum (mutualBitmask, weightAccum);
 
 	unsigned int weightAccumDense = 
-		bubbleCollapse8 (shiftAccum, weightAccumwithGap);
+		bubbleCollapse8 (shiftAccum, weightAccumWithGap);
 
 	//Count the pairs of operands
 	unsigned char pairCount = popCounter(mutualBitmask);
@@ -47,9 +47,9 @@ unsigned int accumulate8 (unsigned char bitmask) {
 
 	for (unsigned int i=1; i<8; i++) {
 		accumulators [i] =
-			( bitmask 
+			( ( bitmask 
 				& ( ((unsigned char) 0x1) <<  (i-1) ) ) 
-			>> (i-1);
+			>> (i-1) ) + accumulators [i-1];
 	} // for
 
 	//Assemble the output
@@ -108,7 +108,7 @@ unsigned int maskAccum (
 	return result;
 }
 
-unsigned char popCount (
+unsigned char popCounter (
 		unsigned char bitmask
 	) {
 	unsigned char count = 0;

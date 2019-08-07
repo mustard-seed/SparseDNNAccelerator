@@ -57,6 +57,8 @@ typedef struct  __attribute__((aligned(32))) __attribute__((packed)) {
 } t_spValueAndZCountUnpackedHost;
 #endif
 
+//Data structures used in direct compression SIMD
+//#ifdef DIRECT_COMPRESSION_SIMD
 #ifdef INTELFPGA_CL
 typedef struct __attribute__((packed)) {
     char values [SIMD_SIZE];
@@ -93,6 +95,7 @@ typedef cl_uchar t_simdblock_channel_offset;
 
 typedef cl_ushort t_streamblock_address;
 #endif
+//#endif //Data structures used in direct compression SIMD
 
 //=============================
 //Structs used in the flexible bitmask compression test
@@ -109,8 +112,6 @@ typedef struct {
     cl_char values [TRANSFER_SIZE];
 } t_transfer_block;
 
-typedef cl_uchar t_simdblock_channel_offset;
-
 typedef cl_ushort t_streamblock_address;
 #endif
 #endif
@@ -126,6 +127,7 @@ typedef uint12_t t_weight;
 typedef char t_operand;
 typedef int t_accumulator;
 
+#ifdef DIRECT_COMPRESSION_SIMD
 //With the max transport length and last bit annotation
 typedef struct __attribute__((packed)){
     char values [SIMD_SIZE];
@@ -141,6 +143,8 @@ typedef struct __attribute__((packed)){
     char maxTransportID;
 
 } t_simdblock_bitmask_tagged;
+#endif
+
 
 #ifdef PE_PROTOTYPE_TEST
 typedef short t_value;

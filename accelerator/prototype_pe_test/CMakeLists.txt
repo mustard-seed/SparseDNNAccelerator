@@ -5,7 +5,13 @@ set (TEST_NAME "prototypePE")
 set (PREPROCESSOR_DEFS
 #        -DWEIGHT_MEMORY_TEST
 #        -DHW_DEBUG
+#        -DDIRECT_COMPRESSION_SIMD
+         -DFLEXIBLE_BITMASK_COMPRESSION
         )
+add_definitions(
+#   -DDIRECT_COMPRESSION_SIMD
+    -DFLEXIBLE_BITMASK_COMPRESSION
+    )
 
 ############################################
 #First, we must be able to find Intel FPGA OpenCL SDK
@@ -57,8 +63,7 @@ set (rtl_directory ${PROJECT_SOURCE_DIR}/device/RTL
 )
 
 set (rtl_lib
-    -l rtl_lib.aoclib
-    -l leadingZero_lib.aoclib)
+    -l rtl_lib.aoclib)
 INCLUDE_DIRECTORIES (${rtl_directory})
 ###########################################################
 #Intel FPGA OpenCL SDK Compile and linkage configurations

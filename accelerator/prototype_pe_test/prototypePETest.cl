@@ -5,7 +5,6 @@
 #include "prototypePE_structs.hpp"
 #include "peComponents.hpp"
 #include "rtl_lib.hpp"
-#include "leadingZero_lib.hpp"
 
 
 #define PE_NUM_X PE_COLS
@@ -29,18 +28,8 @@ typedef struct __attribute__((packed)) {
 	unsigned char outputFracWidth;
 } t_drainTransportInstruction;
 
-/*
-typedef struct __attribute__((packed)) {
-	unsigned char mode;
-	// Number of bits assigned to the fraction width
-  	char fracW;
-  	char fracDin;
-  	char fracDout;
-  	uint1_t enable;
-} t_pSumManagerInstruction;
-*/
 
-
+#ifdef DIRECT_COMPRESSION_SIMD
 //With the final array
 typedef struct __attribute__((packed)){
 	char values [SIMD_SIZE];
@@ -52,38 +41,61 @@ typedef struct __attribute__((packed)){
 	t_simdblock_value values;
 	uint1_t isLast;
 } t_simdblock_bitmask;
+#endif
+
+#ifdef FLEXIBLE_BITMASK_COMPRESSION
+typedef struct __attribute__((packed)){
+    t_transfer_block values;
+    bool isLast;
+    char maxTransportID;
+} t_transferblock_tagged;
 
 typedef struct __attribute__((packed)){
-	t_simdblock_value weights;
-	t_simdblock_value activations;
-	uint1_t isLast;
-} t_mac_simd_operands;
+    t_transfer_block values;
+    bool isLast;
+} t_transferblock_local;
+
+typedef struct __attribute__((packed)) {
+    char values [COMPRESSION_WINDOW_SIZE];
+} t_compression_window;
+
+typedef struct __attribute__((packed)){
+    t_compression_window weightWindow;
+    t_compression_window activationWindow;
+    unsigned char bitmaskW;
+    unsigned char bitmaskA;
+    bool isLast;
+} t_alignment_input;
+
+typedef struct __attribute__((packed)){
+    t_compression_window weightWindow;
+    t_compression_window activationWindow;
+    unsigned long alignmentData;
+    bool isLast;
+} t_alignment_output;
+#endif //FLEXIBLE_BITMASK_COMPRESSION
 
 //MAC Operands
 typedef struct __attribute__((packed)) {
 	char values [SIMD_SIZE];
-} t_simdblock_mac;
+} t_simd_operand;
 
-t_accumulator madd (t_simdblock_value activations, t_simdblock_value weights) {
+typedef struct __attribute__((packed)){
+	t_simd_operand weights;
+	t_simd_operand activations;
+	uint1_t isLast;
+} t_mac_operands;
+
+t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 	t_accumulator output = 0x0;
 
-	#pragma unroll
-	for(int i=0; i<SIMD_SIZE/4; i++){
-		//output += input.data[i]*weights.data[i];
-		// use packed DSP blocks to improve efficiency
-		#if defined (ARRIA10)
-			output += a10_mac_8bitx4(
-				activations.values[i*4],
-				weights.values[i*4],
-				activations.values[i*4+1],
-				weights.values[i*4+1],
-				activations.values[i*4+2],
-				weights.values[i*4+2],
-				activations.values[i*4+3],
-				weights.values[i*4+3]
-				);
-		#elif defined (C5SOC)
-			output += c5_mac_8bitx4(
+	#ifdef DIRECT_COMPRESSION_SIMD
+		#pragma unroll
+		for(int i=0; i<SIMD_SIZE/4; i++){
+			//output += input.data[i]*weights.data[i];
+			// use packed DSP blocks to improve efficiency
+			#if defined (ARRIA10)
+				output += a10_mac_8bitx4(
 					activations.values[i*4],
 					weights.values[i*4],
 					activations.values[i*4+1],
@@ -93,19 +105,63 @@ t_accumulator madd (t_simdblock_value activations, t_simdblock_value weights) {
 					activations.values[i*4+3],
 					weights.values[i*4+3]
 					);
-		#else
-		#error Unsupported FPGA type!
-		#endif
-	}
+			#elif defined (C5SOC)
+				output += c5_mac_8bitx4(
+						activations.values[i*4],
+						weights.values[i*4],
+						activations.values[i*4+1],
+						weights.values[i*4+1],
+						activations.values[i*4+2],
+						weights.values[i*4+2],
+						activations.values[i*4+3],
+						weights.values[i*4+3]
+						);
+			#else
+			#error Unsupported FPGA type!
+			#endif
+		}
+	#endif
+	#ifdef FLEXIBLE_BITMASK_COMPRESSION
+		#pragma unroll
+		for(int i=0; i<SIMD_SIZE/2; i++){
+			//output += input.data[i]*weights.data[i];
+			// use packed DSP blocks to improve efficiency
+			#if defined (ARRIA10)
+				output += a10_mac_8bitx2(
+					activations.values[i*2],
+					weights.values[i*2],
+					activations.values[i*2+1],
+					weights.values[i*2+1]
+					);
+			#elif defined (C5SOC)
+				output += c5_mac_8bitx2(
+						activations.values[i*2],
+						weights.values[i*2],
+						activations.values[i*2+1],
+						weights.values[i*2+1]
+					);
+			#else
+			#error Unsupported FPGA type!
+			#endif
+		}
+	#endif
+
 	return output;
 }
 
 
-
+#ifdef DIRECT_COMPRESSION_SIMD
 channel t_simdblock_bitmask_tagged channel_activationInput __attribute__((depth(1)));
 channel t_simdblock_bitmask_tagged channel_activationOutput __attribute__((depth(1)));
 channel t_simdblock_bitmask_tagged channel_weightInput __attribute__((depth(1)));
 channel t_simdblock_bitmask_tagged channel_weightOutput __attribute__((depth(1)));
+#endif
+#ifdef FLEXIBLE_BITMASK_COMPRESSION
+channel t_transferblock_tagged channel_activationInput __attribute__((depth(1)));
+channel t_transferblock_tagged channel_activationOutput __attribute__((depth(1)));
+channel t_transferblock_tagged channel_weightInput __attribute__((depth(1)));
+channel t_transferblock_tagged channel_weightOutput __attribute__((depth(1)));
+#endif
 channel t_operand channel_biasInput __attribute__((depth(1)));
 channel t_operand channel_biasOutput __attribute__((depth(1)));
 channel t_accumulator channel_drainInput __attribute__((depth(1)));
@@ -115,18 +171,23 @@ channel t_pe_prototype_instruction channel_instructionOutputVertical __attribute
 channel t_pe_prototype_instruction channel_instructionOutputHorizontal __attribute__((depth(1)));
 
 channel t_operand channel_peBiasInput __attribute__((depth(0)));
-//channel t_pSumManagerInstruction channel_pSumManagerInstructionInput __attribute__((depth(0)));
-//channel t_convBlockTransportInstruction channel_activationTransportInstructionInput __attribute__((depth(0)));
-//channel t_convBlockTransportInstruction channel_weightTransportInstructionInput __attribute__((depth(0)));
 channel t_drainTransportInstruction channel_drainTransportInstruction __attribute__((depth(0)));
 
-//channel t_spValueAndZCountUnpacked channel_peWeightInput __attribute__((depth(0)));
-//channel t_spValueAndZCountUnpacked channel_peActivationInput __attribute__((depth(0)));
-
+#ifdef DIRECT_COMPRESSION_SIMD
 channel t_simdblock_bitmask channel_dpWeightInput __attribute__((depth(PE_VEC_FIFO_SIZE)));
 channel t_simdblock_bitmask channel_dpActivationInput __attribute__((depth(PE_VEC_FIFO_SIZE)));
+#endif
+
+#ifdef FLEXIBLE_BITMASK_COMPRESSION
+channel t_transferblock_local channel_dpWeightInput __attribute__((depth(PE_VEC_FIFO_SIZE)));
+channel t_transferblock_local channel_dpActivationInput __attribute__((depth(PE_VEC_FIFO_SIZE)));
+
+channel t_alignment_input channel_alignmentInput __attribute__((depth(0)));
+channel t_alignment_output channel_alignmentOutput __attribute__((depth(0)));
+
+#endif
 //channel t_operand channel_pSumManagerActivationInput __attribute__((depth(0)));
-channel t_mac_simd_operands channel_macOperandsInput __attribute__((depth(0)));
+channel t_mac_operands channel_macOperandsInput __attribute__((depth(0)));
 //channel t_accumulator channel_pSumManagerMacInput __attribute__((depth(0)));
 
 channel t_accumulator channel_peDrainOutput __attribute__((depth(0)));
@@ -299,18 +360,32 @@ __kernel void kernelWeightTransport (
 
 	//t_simdblock_di_tagged block = read_channel_intel(channel_weightInput);
 	//t_simdblock_di peBlock;
-	t_simdblock_bitmask_tagged block = read_channel_intel(channel_weightInput);
+	#ifdef DIRECT_COMPRESSION_SIMD
+	t_simdblock_bitmask_tagged block;
 	t_simdblock_bitmask peBlock;
+	#endif
+
+	#ifdef FLEXIBLE_BITMASK_COMPRESSION
+	t_transferblock_tagged block;
+	t_transferblock_local peBlock;
+	#endif
+
+	block = read_channel_intel(channel_weightInput);
 	#pragma unroll
 	for (unsigned char i=0; i<SIMD_SIZE; i++) {
-		peBlock.values.values[i] = block.values[i];
+		#ifdef DIRECT_COMPRESSION_SIMD
+			peBlock.values.values[i] = block.values[i];
+		#endif
+		#ifdef FLEXIBLE_BITMASK_COMPRESSION
+			peBlock.values.values[i] = block.values.values[i];
+		#endif
 	}
 	//peBlock.streamingBlockIndex = block.streamingBlockIndex;
 	peBlock.isLast = block.isLast;
 
 	if (idy < (PE_ROWS - 1)){
 		if ( idy < block.maxTransportID ) {
-			EMULATOR_PRINT ( ("[kernelWeightTransport]: Waiting to pass a weight block to the output\n") );
+			//EMULATOR_PRINT ( ("[kernelWeightTransport]: Waiting to pass a weight block to the output\n") );
 			write_channel_intel(channel_weightOutput, block);
 		}
 	}
@@ -329,20 +404,32 @@ __kernel void kernelActivationTransport (
 	int idx = IDX;
 	int idy = IDY;
 
-	//t_simdblock_di_tagged block = read_channel_intel(channel_activationInput);
-	//t_simdblock_di peBlock;
-	t_simdblock_bitmask_tagged block = read_channel_intel(channel_activationInput);
+	#ifdef DIRECT_COMPRESSION_SIMD
+	t_simdblock_bitmask_tagged block;
 	t_simdblock_bitmask peBlock;
+	#endif
+
+	#ifdef FLEXIBLE_BITMASK_COMPRESSION
+	t_transferblock_tagged block;
+	t_transferblock_local peBlock;
+	#endif
+
+	block = read_channel_intel(channel_activationInput);
 	#pragma unroll
 	for (unsigned char i=0; i<SIMD_SIZE; i++) {
-		peBlock.values.values[i] = block.values[i];
+		#ifdef DIRECT_COMPRESSION_SIMD
+			peBlock.values.values[i] = block.values[i];
+		#endif
+		#ifdef FLEXIBLE_BITMASK_COMPRESSION
+			peBlock.values.values[i] = block.values.values[i];
+		#endif
 	}
 	//peBlock.streamingBlockIndex = block.streamingBlockIndex;
 	peBlock.isLast = block.isLast;
 
 	if (idx < (PE_COLS - 1)){
 		if ( idx < block.maxTransportID ) {
-			EMULATOR_PRINT ( ("[kernelWeightTransport]: Waiting to pass an activation block to the output\n") );
+			//EMULATOR_PRINT ( ("[kernelWeightTransport]: Waiting to pass an activation block to the output\n") );
 			write_channel_intel(channel_activationOutput, block);
 		}
 	}
@@ -355,10 +442,18 @@ __kernel void kernelActivationTransport (
 __attribute__((task))
 __attribute__((max_global_work_dim(0)))
 __kernel void kernelTestInterface (
-		__global t_simdblock_host* restrict pActivationInput,
-		__global t_simdblock_host* restrict pActivationOutput,
-		__global t_simdblock_host* restrict pWeightInput,
-		__global t_simdblock_host* restrict pWeightOutput,
+		#ifdef DIRECT_COMPRESSION_SIMD
+			__global t_simdblock_host* restrict pActivationInput,
+			__global t_simdblock_host* restrict pActivationOutput,
+			__global t_simdblock_host* restrict pWeightInput,
+			__global t_simdblock_host* restrict pWeightOutput,
+		#endif
+		#ifdef FLEXIBLE_BITMASK_COMPRESSION
+			__global t_transfer_block* restrict pActivationInput,
+			__global t_transfer_block* restrict pActivationOutput,
+			__global t_transfer_block* restrict pWeightInput,
+			__global t_transfer_block* restrict pWeightOutput,
+		#endif
 		__global short * restrict pBiasIn,
 		__global short * restrict pBiasOut,
 		__global short * restrict pDrainIn, 
@@ -424,14 +519,20 @@ __kernel void kernelTestInterface (
 
 		if (countInputActivationBlocks < numInputActivationBlocks) {
 			bool valid;
-			t_simdblock_host block = pActivationInput[countInputActivationBlocks];
-			//t_vecUnpacked unpackedValue;
-			//decodeRunLength(&value, &unpackedValue, numActivationTracker);
-			//t_simdblock_di_tagged taggedBlock;
-			t_simdblock_bitmask_tagged taggedBlock;
+			#ifdef DIRECT_COMPRESSION_SIMD
+				t_simdblock_host block;
+				t_simdblock_bitmask_tagged taggedBlock;
+			#endif
+			#ifdef FLEXIBLE_BITMASK_COMPRESSION
+				t_transfer_block block;
+				t_transferblock_tagged taggedBlock;
+			#endif
+			
+			block = pActivationInput[countInputActivationBlocks];
+
 			#pragma unroll
 			for (unsigned char i=0; i<SIMD_SIZE; i++) {
-				taggedBlock.values[i] = block.values[i];
+				taggedBlock.values.values[i] = block.values[i];
 			}
 
 			//uint6_t indexInStreamingBlock = indexActivationTracker + (uint6_t) block.runLength; 
@@ -452,32 +553,45 @@ __kernel void kernelTestInterface (
 		if ( (0x1FF & idy) < (PE_NUM_Y - 1) ) {
 			if (countOutputActivationBlocks < numOutputActivationBlocks) {
 				bool valid;
-				//t_simdblock_di_tagged block = read_channel_nb_intel(channel_activationOutput, &valid);
-				t_simdblock_bitmask_tagged block = read_channel_nb_intel(channel_activationOutput, &valid);
+				#ifdef DIRECT_COMPRESSION_SIMD
+					t_simdblock_host block;
+					t_simdblock_bitmask_tagged taggedBlock;
+				#endif
+				#ifdef FLEXIBLE_BITMASK_COMPRESSION
+					t_transfer_block block;
+					t_transferblock_tagged taggedBlock;
+				#endif
+				taggedBlock = read_channel_nb_intel(channel_activationOutput, &valid);
 				if (valid) {
-					t_simdblock_host hostBlock;
 					
 					#pragma unroll
 					for (unsigned char i=0; i<SIMD_SIZE; i++) {
-						hostBlock.values[i] = block.values[i];
+						block.values[i] = taggedBlock.values.values[i];
 					}
 					//hostBlock.runLength = block.streamingBlockIndex;
-					pActivationOutput[countOutputActivationBlocks++] = hostBlock;
-					EMULATOR_PRINT ( ("[kernelTestInferace]: Collected %d out of %d activation blocks\n", countOutputActivationBlocks, numOutputActivationBlocks) );
+					pActivationOutput[countOutputActivationBlocks++] = block;
+					//EMULATOR_PRINT ( ("[kernelTestInferace]: Collected %d out of %d activation blocks\n", countOutputActivationBlocks, numOutputActivationBlocks) );
 				}
 			}
 		}
 
 		if (countInputWeightBlocks < numInputWeightBlocks) {
 			bool valid;
-			t_simdblock_host block = pWeightInput[countInputWeightBlocks];
-			//t_vecUnpacked unpackedValue;
-			//decodeRunLength(&value, &unpackedValue, numActivationTracker);
-			//t_simdblock_di_tagged taggedBlock;
-			t_simdblock_bitmask_tagged taggedBlock;
+
+			#ifdef DIRECT_COMPRESSION_SIMD
+				t_simdblock_host block;
+				t_simdblock_bitmask_tagged taggedBlock;
+			#endif
+			#ifdef FLEXIBLE_BITMASK_COMPRESSION
+				t_transfer_block block;
+				t_transferblock_tagged taggedBlock;
+			#endif
+
+			block = pWeightInput[countInputWeightBlocks];
+
 			#pragma unroll
 			for (unsigned char i=0; i<SIMD_SIZE; i++) {
-				taggedBlock.values[i] = block.values[i];
+				taggedBlock.values.values[i] = block.values[i];
 			}
 
 			//uint6_t indexInStreamingBlock = indexWeightTracker + (uint6_t) block.runLength; 
@@ -498,19 +612,26 @@ __kernel void kernelTestInterface (
 		if ( (0x1FF & idx) < (PE_NUM_X - 1) ) {
 			if (countOutputWeightBlocks < numOutputWeightBlocks) {
 				bool valid;
-				//t_vecUnpacked value = read_channel_nb_intel(channel_weightOutput, &valid);
-				//t_simdblock_di_tagged block = read_channel_nb_intel(channel_weightOutput, &valid);
-				t_simdblock_bitmask_tagged block = read_channel_nb_intel(channel_weightOutput, &valid);
+				#ifdef DIRECT_COMPRESSION_SIMD
+					t_simdblock_host block;
+					t_simdblock_bitmask_tagged taggedBlock;
+				#endif
+				#ifdef FLEXIBLE_BITMASK_COMPRESSION
+					t_transfer_block block;
+					t_transferblock_tagged taggedBlock;
+				#endif
+
+				taggedBlock = read_channel_nb_intel(channel_weightOutput, &valid);
+
 				if (valid) {
-					t_simdblock_host hostBlock;
 					
 					#pragma unroll
 					for (unsigned char i=0; i<SIMD_SIZE; i++) {
-						hostBlock.values[i] = block.values[i];
+						block.values[i] = taggedBlock.values.values[i];
 					}
 					//hostBlock.runLength = block.streamingBlockIndex;
-					pWeightOutput[countOutputWeightBlocks++] = hostBlock;
-					EMULATOR_PRINT ( ("[kernelTestInferace]: Collected %d out of %d weight blocks\n", countOutputWeightBlocks, numOutputWeightBlocks) );
+					pWeightOutput[countOutputWeightBlocks++] = block;
+					//EMULATOR_PRINT ( ("[kernelTestInferace]: Collected %d out of %d weight blocks\n", countOutputWeightBlocks, numOutputWeightBlocks) );
 				}
 			}
 		}
@@ -603,6 +724,8 @@ __kernel void kernelTestInterface (
 }
 
 
+#ifdef DIRECT_COMPRESSION_SIMD
+
 #define DP_LOAD_STATE_LOAD_BITMASK 0X0
 #define DP_LOAD_STATE_FILL_WINDOW 0X1
 #define DP_LOAD_STATE_DONE 0x2
@@ -611,10 +734,6 @@ __kernel void kernelTestInterface (
 #define DP_MATCH_STATE_DRAIN_WINDOW 0X1
 #define DP_MATCH_STATE_SEND_LAST 0x2
 #define DP_MATCH_STATE_DONE 0x3
-
-typedef struct {
-	t_simdblock_value values[8];
-} t_simdblock_window;
 
 #define TRUE 0X1
 #define FALSE 0x0
@@ -648,7 +767,7 @@ __kernel void kernelDotProductDispatcher (
 	uint1_t regActivationIsLast;
 	unsigned char regLoadActivationPosition;
 
-	t_simdblock_value ramActivationBuffer[8][2];
+	t_simdb_operand ramActivationBuffer[8][2];
 
 	//==========Registers used for loading the weight==============
 	uint2_t regStateLoadWeight = DP_LOAD_STATE_LOAD_BITMASK;
@@ -656,7 +775,7 @@ __kernel void kernelDotProductDispatcher (
 	unsigned char regRunningWeightBitMask = 0;
 	uint1_t regWeightIsLast;
 
-	t_simdblock_value ramWeightBuffer[8][2];
+	t_simd_operand ramWeightBuffer[8][2];
 
 	unsigned char regLoadWeightPosition;
 
@@ -725,7 +844,12 @@ __kernel void kernelDotProductDispatcher (
 					regRunningActivationBitMask = newBitMask;
 
 					//Update the activaiton buffer window
-					ramActivationBuffer[index][regLoadSide & 0x1] = activationBlob.values;
+					//ramActivationBuffer[index][regLoadSide & 0x1] = activationBlob.values;
+					#pragma unroll
+					for (int i=0; i<SIMD_SIZE; i++) {
+						ramActivationBuffer[index][regLoadSide & 0x1].values[i]
+							= activationBlob.values[i];
+					}
 
 					//Calculate the new state
 					newStateLoadActivation = (newBitMask == 0x0) ?
@@ -795,7 +919,12 @@ __kernel void kernelDotProductDispatcher (
 					regRunningWeightBitMask = newBitMask;
 
 					//Update the activaiton buffer window
-					ramWeightBuffer[index][regLoadSide & 0x1] = weightBlob.values;
+					//ramWeightBuffer[index][regLoadSide & 0x1] = weightBlob.values;
+					#pragma unroll
+					for (int i=0; i<SIMD_SIZE; i++) {
+						ramWeightBuffer[index][regLoadSide & 0x1].values[i]
+							= weightBlob.values[i];
+					}
 
 					//Calculate the new state
 					newStateLoadWeight = (newBitMask == 0x0) ?
@@ -817,7 +946,7 @@ __kernel void kernelDotProductDispatcher (
 		unsigned char newDrainPosition = 0;
 		uint1_t newDrainIsLast = false;
 		unsigned char drainIndex = 0;
-		t_mac_simd_operands operands;
+		t_mac_operand operands;
 
 		//Local variable computation
 		switch (regStateDrain) {
@@ -943,16 +1072,17 @@ __kernel void kernelDotProductDispatcher (
 __attribute__((task))
 __attribute__((max_global_work_dim(0)))
 __attribute__((autorun))
-__kernel void mac () {
+__kernel void mac () 
+{
 	t_accumulator pSum = 0;
 	uint1_t proceed = TRUE;
 	while (proceed == TRUE) {
 		bool readSuccess;
-		t_mac_simd_operands operands = read_channel_nb_intel(channel_macOperandsInput, &readSuccess);
+		t_mac_operands operands = read_channel_nb_intel(channel_macOperandsInput, &readSuccess);
 		if (readSuccess) {
 			bool isLast = operands.isLast;
 			if (!isLast) {
-				t_simdblock_value activations, weights;
+				t_simd_operand activations, weights;
 				activations = operands.activations;
 				weights = operands.weights;
 				t_accumulator tempPSum = madd(activations, weights);
@@ -969,3 +1099,268 @@ __kernel void mac () {
 	}
 
 }
+#endif //DIRECT_COMPRESSION_SIMD
+
+#ifdef FLEXIBLE_BITMASK_COMPRESSION
+#define ASSEMBLER_STATE_LOAD_BITMASK 0X0
+#define ASSEMBLER_STATE_LOAD_VALUE 0X1
+#define ASSEMBLER_STATE_WAIT 0x2
+#define TRUE 0X1
+#define FALSE 0x0
+
+__attribute__((task))
+__attribute__((max_global_work_dim(0)))
+__attribute__((autorun))
+__kernel void compressionWindowAssembler ()
+{
+	t_alignment_input compressionWindow;
+	unsigned char countActivation = 0;
+	unsigned char countWeight = 0;
+	unsigned char numActivation;
+	unsigned char numWeight;
+	uint2_t stateActivation = ASSEMBLER_STATE_LOAD_BITMASK;
+	uint2_t stateWeight = ASSEMBLER_STATE_LOAD_BITMASK;
+	//bool isLastActivation;
+	bool isLastWeight;
+
+	while (true)
+	{
+		//================ACTIVATION========================
+		t_transferblock_local activationTransferBlock;
+		uint2_t nextStateActivation;
+		bool activationReadSuccess;
+		if (stateActivation == ASSEMBLER_STATE_LOAD_BITMASK
+			|| stateActivation == ASSEMBLER_STATE_LOAD_VALUE)
+		{
+			activationTransferBlock = read_channel_nb_intel (
+						channel_dpActivationInput,
+						&activationReadSuccess
+					);
+
+			if (activationReadSuccess)
+			{
+				//isLastActivation = activationTransferBlock.isLast;
+
+				if (stateActivation == ASSEMBLER_STATE_LOAD_BITMASK)
+				{
+					unsigned char bitmaskA = activationTransferBlock.values.values[0];
+					numActivation = popCounter(bitmaskA);
+					compressionWindow.bitmaskA = bitmaskA;
+					//EMULATOR_PRINT(("[assembler] bitmaskA: %u \n", bitmaskA));
+				}
+
+				uint1_t offset = (stateActivation == ASSEMBLER_STATE_LOAD_BITMASK) ?
+					0X1 : 0X0; 
+
+				#pragma unroll
+				for (uint5_t i=0; i<TRANSFER_SIZE; i++)
+				{
+					if (i >= offset)
+					{
+						compressionWindow.activationWindow.values[countActivation+i-offset]
+							= activationTransferBlock.values.values[i];
+						//EMULATOR_PRINT(("[assembler] activation value: %u \n", activationTransferBlock.values.values[i] & 0xFF));
+					}
+				} // for. Transfer the values in the transfer block to the compression window
+
+				countActivation += (unsigned char)(TRANSFER_SIZE - offset);
+
+				//State update
+				if (countActivation >= numActivation)
+				{
+					nextStateActivation = ASSEMBLER_STATE_WAIT;
+				}
+				else {
+					nextStateActivation = ASSEMBLER_STATE_LOAD_VALUE;
+				}
+
+			} // if activationReadSuccess
+		}
+		//===================================================
+
+		//================WEIGHT========================
+		t_transferblock_local weightTransferBlock;
+		uint2_t nextStateWeight;
+		bool weightReadSuccess;
+		if (stateWeight == ASSEMBLER_STATE_LOAD_BITMASK
+			|| stateWeight == ASSEMBLER_STATE_LOAD_VALUE)
+		{
+			weightTransferBlock = read_channel_nb_intel (
+						channel_dpWeightInput,
+						&weightReadSuccess
+					);
+
+			if (weightReadSuccess)
+			{
+				isLastWeight = weightTransferBlock.isLast;
+
+				if (stateWeight == ASSEMBLER_STATE_LOAD_BITMASK)
+				{
+					unsigned char bitmaskW = weightTransferBlock.values.values[0];
+					numWeight = popCounter(bitmaskW);
+					compressionWindow.bitmaskW = bitmaskW;
+					//EMULATOR_PRINT(("[assembler] bitmaskW: %u \n", bitmaskW));
+				}
+
+				uint1_t offset = (stateWeight == ASSEMBLER_STATE_LOAD_BITMASK) ?
+					0X1 : 0X0; 
+
+				#pragma unroll
+				for (uint5_t i=0; i<TRANSFER_SIZE; i++)
+				{
+					if (i >= offset)
+					{
+						compressionWindow.weightWindow.values[countWeight+i-offset]
+							= weightTransferBlock.values.values[i];
+						//EMULATOR_PRINT(("[assembler] weight value: %u \n", weightTransferBlock.values.values[i] & 0xFF));
+					}
+				} // for. Transfer the values in the transfer block to the compression window
+
+				countWeight += (unsigned char)(TRANSFER_SIZE - offset);
+
+				//State update
+				if (countWeight >= numWeight)
+				{
+					nextStateWeight = ASSEMBLER_STATE_WAIT;
+				}
+				else 
+				{
+					nextStateWeight = ASSEMBLER_STATE_LOAD_VALUE;
+				}
+
+			} // if weightReadSuccess
+		}
+		//===================================================
+
+		//===============Sending==============================
+		if ((stateActivation == ASSEMBLER_STATE_WAIT) 
+			&& (stateWeight == ASSEMBLER_STATE_WAIT))
+		{
+			compressionWindow.isLast = isLastWeight;
+			bool writeSuccess;
+			writeSuccess = write_channel_nb_intel(channel_alignmentInput, compressionWindow);
+			if (writeSuccess)
+			{
+				nextStateWeight = ASSEMBLER_STATE_LOAD_BITMASK;
+				nextStateActivation = ASSEMBLER_STATE_LOAD_BITMASK;
+				countActivation = 0;
+				countWeight = 0;
+			}
+		}
+		//===================================================
+
+		//================Next state update==================
+		stateWeight = nextStateWeight;
+		stateActivation = nextStateActivation;
+		//===================================================
+	} // while true
+} // end of kernel
+
+__attribute__((task))
+__attribute__((max_global_work_dim(0)))
+__attribute__((autorun))
+__kernel void comppressionWindowAligner ()
+{
+	while (true) {
+		t_alignment_output alignedCompressionWindow;
+		t_alignment_input inputCompressionWindow =
+			read_channel_intel(channel_alignmentInput);
+
+		alignedCompressionWindow.isLast = inputCompressionWindow.isLast;
+		alignedCompressionWindow.activationWindow = inputCompressionWindow.activationWindow;
+		alignedCompressionWindow.weightWindow = inputCompressionWindow.weightWindow;
+		alignedCompressionWindow.alignmentData = operandMatcher8(
+				inputCompressionWindow.bitmaskW,
+				inputCompressionWindow.bitmaskA
+			);
+		//EMULATOR_PRINT(("[aligner]: alignmentData: %lu \n", alignedCompressionWindow.alignmentData));
+		write_channel_intel(channel_alignmentOutput, alignedCompressionWindow);
+	}
+}
+
+
+#define BITWIDTH_COMPRESSION_WINDOW_INDEX 3
+#define MASK_COMPRESSION_WINDOW_INDEX 0x7
+__attribute__((task))
+__attribute__((max_global_work_dim(0)))
+__attribute__((autorun))
+__kernel void dispatcher ()
+{
+	t_alignment_output alignedCompressionWindow = 
+			read_channel_intel(channel_alignmentOutput);
+
+
+	t_compression_window weightWindow = alignedCompressionWindow.weightWindow;
+	t_compression_window activationWindow = alignedCompressionWindow.activationWindow;
+	bool isLast = alignedCompressionWindow.isLast;
+	unsigned long alignmentData = alignedCompressionWindow.alignmentData;
+	unsigned char numOperands = (alignmentData >> 48) & 0xFF;
+	unsigned int indicesW = (alignmentData >> 24) & 0xFFFFFF;
+	unsigned int indicesA = (alignmentData) & 0xFFFFFF;
+	//EMULATOR_PRINT ( ("[dispatcher]: numOperands: %u, indicesW: %u indicesA :%u \n", 
+	//	numOperands & 0xFF, indicesW, indicesA));
+
+	unsigned char countOperands = 0;
+	while (countOperands < numOperands) {
+		t_simd_operand simdActivations;
+		t_simd_operand simdWeights;
+
+		#pragma unroll
+		for (unsigned char i=0; i<SIMD_SIZE; i++)
+		{
+			unsigned char indexW = 
+				(indicesW >> (i*BITWIDTH_COMPRESSION_WINDOW_INDEX))
+				& MASK_COMPRESSION_WINDOW_INDEX;
+			char w = ((countOperands + i) < numOperands) ?
+				weightWindow.values[indexW] : 0x0;
+			simdWeights.values[i] = w;
+
+			unsigned char indexA = 
+				(indicesA >> (i*BITWIDTH_COMPRESSION_WINDOW_INDEX))
+				& MASK_COMPRESSION_WINDOW_INDEX;
+			char a = ((countOperands + i) < numOperands) ?
+				activationWindow.values[indexA] : 0x0;
+			simdActivations.values[i] = a;
+
+			//EMULATOR_PRINT ( ("[dispatcher]: w: %u a: %u\n", w & 0xFF, a & 0xFF) );
+			//EMULATOR_PRINT ( ("[dispatcher]: wIndex: %u aIndex :%u \n", indexW & 0xFF, indexA & 0xFF));
+		}
+
+
+		t_mac_operands operands;
+		operands.weights = simdWeights;
+		operands.activations = simdActivations;
+		operands.isLast = (countOperands + SIMD_SIZE) >= numOperands ?
+			isLast: false;
+
+		write_channel_intel(channel_macOperandsInput, operands);
+
+		countOperands += SIMD_SIZE;
+		indicesW = indicesW >> (SIMD_SIZE*BITWIDTH_COMPRESSION_WINDOW_INDEX);
+		indicesA = indicesA >> (SIMD_SIZE*BITWIDTH_COMPRESSION_WINDOW_INDEX);
+	} // process one compression window
+
+}
+
+__attribute__((task))
+__attribute__((max_global_work_dim(0)))
+__attribute__((autorun))
+__kernel void mac ()
+{
+	t_accumulator pSum = 0;
+	while (true) {
+		t_mac_operands operands = read_channel_intel(channel_macOperandsInput);
+		bool isLast = operands.isLast;
+		t_simd_operand activations, weights;
+		activations = operands.activations;
+		weights = operands.weights;
+		t_accumulator tempPSum = madd(activations, weights);
+		pSum += tempPSum;
+		if (isLast) 
+		{
+			write_channel_intel(channel_peDrainOutput, pSum);
+			pSum = 0;
+		}
+	}
+}
+#endif

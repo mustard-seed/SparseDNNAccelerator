@@ -71,9 +71,11 @@
 //Number of encoded values to be transfered together
 #define COMPRESSION_VEC_SIZE 4
 
-#define SIMD_SIZE 4
+#define SIMD_SIZE 2
 #define SYNC_SIZE 8
 #define MAX_SIMD_BLOCK_INDEX 0x0FF
+
+#define COMPRESSION_WINDOW_SIZE 8
 #define TRANSFER_SIZE 2
 
 #define KERNEL_CACHE_LANES PE_ROWS

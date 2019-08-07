@@ -29,6 +29,10 @@ unsigned char popCounter (
 		unsigned char bitmask
 	);
 
+//  [23:0] Packed indices of A; 
+//  [47:24] Packed indices of W; 
+//  [51:48] Number of pairs; 
+//  [63:52]: Padding
 unsigned long operandMatcher8 (
 		unsigned char bitmaskW,
 		unsigned char bitmaskA
