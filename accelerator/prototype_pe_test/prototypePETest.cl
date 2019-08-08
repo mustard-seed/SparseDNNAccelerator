@@ -571,6 +571,7 @@ __kernel void kernelTestInterface (
 					//hostBlock.runLength = block.streamingBlockIndex;
 					pActivationOutput[countOutputActivationBlocks++] = block;
 					//EMULATOR_PRINT ( ("[kernelTestInferace]: Collected %d out of %d activation blocks\n", countOutputActivationBlocks, numOutputActivationBlocks) );
+					//DEBUG_PRINT ( ("[kernelTestInferace]: Collected %d out of %d activation blocks\n", countOutputActivationBlocks, numOutputActivationBlocks) );
 				}
 			}
 		}
@@ -632,6 +633,7 @@ __kernel void kernelTestInterface (
 					//hostBlock.runLength = block.streamingBlockIndex;
 					pWeightOutput[countOutputWeightBlocks++] = block;
 					//EMULATOR_PRINT ( ("[kernelTestInferace]: Collected %d out of %d weight blocks\n", countOutputWeightBlocks, numOutputWeightBlocks) );
+					//DEBUG_PRINT ( ("[kernelTestInferace]: Collected %d out of %d weight blocks\n", countOutputWeightBlocks, numOutputWeightBlocks) );
 				}
 			}
 		}
@@ -1104,7 +1106,8 @@ __kernel void mac ()
 #ifdef FLEXIBLE_BITMASK_COMPRESSION
 #define ASSEMBLER_STATE_LOAD_BITMASK 0X0
 #define ASSEMBLER_STATE_LOAD_VALUE 0X1
-#define ASSEMBLER_STATE_WAIT 0x2
+#define ASSEMBLER_STATE_ALIGN 0x2
+#define ASSEMBLER_STATE_WAIT 0x3
 #define TRUE 0X1
 #define FALSE 0x0
 
@@ -1114,6 +1117,7 @@ __attribute__((autorun))
 __kernel void compressionWindowAssembler ()
 {
 	t_alignment_input compressionWindow;
+	//t_alignment_output alignedCompressionWindow;
 	unsigned char countActivation = 0;
 	unsigned char countWeight = 0;
 	unsigned char numActivation;
@@ -1140,13 +1144,14 @@ __kernel void compressionWindowAssembler ()
 			if (activationReadSuccess)
 			{
 				//isLastActivation = activationTransferBlock.isLast;
+				//DEBUG_PRINT(("[Assembler] Activation read!\n"));
 
 				if (stateActivation == ASSEMBLER_STATE_LOAD_BITMASK)
 				{
 					unsigned char bitmaskA = activationTransferBlock.values.values[0];
 					numActivation = popCounter(bitmaskA);
 					compressionWindow.bitmaskA = bitmaskA;
-					//EMULATOR_PRINT(("[assembler] bitmaskA: %u \n", bitmaskA));
+					EMULATOR_PRINT(("[assembler] bitmaskA: %u \n", bitmaskA));
 				}
 
 				uint3_t offset = (stateActivation == ASSEMBLER_STATE_LOAD_BITMASK) ?
@@ -1159,7 +1164,7 @@ __kernel void compressionWindowAssembler ()
 					{
 						compressionWindow.activationWindow.values[countActivation+i-offset]
 							= activationTransferBlock.values.values[i];
-						//EMULATOR_PRINT(("[assembler] activation value: %u \n", activationTransferBlock.values.values[i] & 0xFF));
+						EMULATOR_PRINT(("[assembler] activation value: %u \n", activationTransferBlock.values.values[i] & 0xFF));
 					}
 				} // for. Transfer the values in the transfer block to the compression window
 
@@ -1168,13 +1173,17 @@ __kernel void compressionWindowAssembler ()
 				//State update
 				if (countActivation >= numActivation)
 				{
-					nextStateActivation = ASSEMBLER_STATE_WAIT;
+					nextStateActivation = ASSEMBLER_STATE_ALIGN;
 				}
 				else {
 					nextStateActivation = ASSEMBLER_STATE_LOAD_VALUE;
 				}
 
 			} // if activationReadSuccess
+			else 
+			{
+				nextStateActivation = stateActivation;
+			}
 		}
 		//===================================================
 
@@ -1193,13 +1202,14 @@ __kernel void compressionWindowAssembler ()
 			if (weightReadSuccess)
 			{
 				isLastWeight = weightTransferBlock.isLast;
+				//DEBUG_PRINT(("[Assembler] Weight read!\n"));
 
 				if (stateWeight == ASSEMBLER_STATE_LOAD_BITMASK)
 				{
 					unsigned char bitmaskW = weightTransferBlock.values.values[0];
 					numWeight = popCounter(bitmaskW);
 					compressionWindow.bitmaskW = bitmaskW;
-					//EMULATOR_PRINT(("[assembler] bitmaskW: %u \n", bitmaskW));
+					EMULATOR_PRINT(("[assembler] bitmaskW: %u \n", bitmaskW));
 				}
 
 				uint3_t offset = (stateWeight == ASSEMBLER_STATE_LOAD_BITMASK) ?
@@ -1212,7 +1222,7 @@ __kernel void compressionWindowAssembler ()
 					{
 						compressionWindow.weightWindow.values[countWeight+i-offset]
 							= weightTransferBlock.values.values[i];
-						//EMULATOR_PRINT(("[assembler] weight value: %u \n", weightTransferBlock.values.values[i] & 0xFF));
+						EMULATOR_PRINT(("[assembler] weight value: %u \n", weightTransferBlock.values.values[i] & 0xFF));
 					}
 				} // for. Transfer the values in the transfer block to the compression window
 
@@ -1221,7 +1231,7 @@ __kernel void compressionWindowAssembler ()
 				//State update
 				if (countWeight >= numWeight)
 				{
-					nextStateWeight = ASSEMBLER_STATE_WAIT;
+					nextStateWeight = ASSEMBLER_STATE_ALIGN;
 				}
 				else 
 				{
@@ -1229,25 +1239,34 @@ __kernel void compressionWindowAssembler ()
 				}
 
 			} // if weightReadSuccess
+			else 
+			{
+				nextStateWeight = stateWeight;
+			}
 		}
 		//===================================================
 
 		//===============Sending==============================
-		if ((stateActivation == ASSEMBLER_STATE_WAIT) 
-			&& (stateWeight == ASSEMBLER_STATE_WAIT))
+		if ((stateActivation == ASSEMBLER_STATE_ALIGN) 
+			&& (stateWeight == ASSEMBLER_STATE_ALIGN))
 		{
-			compressionWindow.isLast = isLastWeight;
-			bool writeSuccess;
-			writeSuccess = write_channel_nb_intel(channel_alignmentInput, compressionWindow);
-			if (writeSuccess)
-			{
-				nextStateWeight = ASSEMBLER_STATE_LOAD_BITMASK;
-				nextStateActivation = ASSEMBLER_STATE_LOAD_BITMASK;
-				countActivation = 0;
-				countWeight = 0;
-			}
+			t_alignment_output alignedCompressionWindow;
+			alignedCompressionWindow.isLast = isLastWeight;
+			alignedCompressionWindow.activationWindow = compressionWindow.activationWindow;
+			alignedCompressionWindow.weightWindow = compressionWindow.weightWindow;
+			alignedCompressionWindow.alignmentData = operandMatcher8(
+				compressionWindow.bitmaskW,
+				compressionWindow.bitmaskA
+			);
+			
+			//DEBUG_PRINT(("[Assembler] SENT!!!\n"));
+			nextStateWeight = ASSEMBLER_STATE_LOAD_BITMASK;
+			nextStateActivation = ASSEMBLER_STATE_LOAD_BITMASK;
+			countActivation = 0;
+			countWeight = 0;
+			write_channel_intel(channel_alignmentOutput, alignedCompressionWindow);
+
 		}
-		//===================================================
 
 		//================Next state update==================
 		stateWeight = nextStateWeight;
@@ -1256,122 +1275,6 @@ __kernel void compressionWindowAssembler ()
 	} // while true
 } // end of kernel
 
-__attribute__((task))
-__attribute__((max_global_work_dim(0)))
-__attribute__((autorun))
-__kernel void comppressionWindowAligner ()
-{
-
-	while (true) {
-		t_alignment_output alignedCompressionWindow;
-		t_alignment_input inputCompressionWindow =
-			read_channel_intel(channel_alignmentInput);
-
-		alignedCompressionWindow.isLast = inputCompressionWindow.isLast;
-		alignedCompressionWindow.activationWindow = inputCompressionWindow.activationWindow;
-		alignedCompressionWindow.weightWindow = inputCompressionWindow.weightWindow;
-		alignedCompressionWindow.alignmentData = operandMatcher8(
-				inputCompressionWindow.bitmaskW,
-				inputCompressionWindow.bitmaskA
-			);
-		//EMULATOR_PRINT(("[aligner]: alignmentData: %lu \n", alignedCompressionWindow.alignmentData));
-		write_channel_intel(channel_alignmentOutput, alignedCompressionWindow);
-	}
-}
-
-/*
-#define STATE_DISPATCHER_LOAD 0X0
-#define STATE_DISPATCHER_SEND 0X1
-#define BITWIDTH_COMPRESSION_WINDOW_INDEX 3
-#define MASK_COMPRESSION_WINDOW_INDEX 0x7
-__attribute__((task))
-__attribute__((max_global_work_dim(0)))
-__attribute__((autorun))
-__kernel void dispatcher ()
-{
-
-	uint1_t state = STATE_DISPATCHER_LOAD;
-	t_compression_window weightWindow;
-	t_compression_window activationWindow;
-	bool isLast;
-
-	unsigned char numOperands;
-	unsigned int indicesW;
-	unsigned int indicesA;
-	//EMULATOR_PRINT ( ("[dispatcher]: numOperands: %u, indicesW: %u indicesA :%u \n", 
-	//	numOperands & 0xFF, indicesW, indicesA));
-
-	unsigned char countOperands;
-	while (true) {
-		if (state == STATE_DISPATCHER_LOAD)
-		{
-			bool readSuccess;
-			t_alignment_output alignedCompressionWindow
-				= read_channel_nb_intel(channel_alignmentOutput, &readSuccess);
-			if (readSuccess)
-			{
-				state = STATE_DISPATCHER_SEND;
-
-				weightWindow = alignedCompressionWindow.weightWindow;
-				activationWindow = alignedCompressionWindow.activationWindow;
-				isLast = alignedCompressionWindow.isLast;
-				unsigned long alignmentData = alignedCompressionWindow.alignmentData;
-				numOperands = (alignmentData >> 48) & 0xFF;
-				indicesW = (alignmentData >> 24) & 0xFFFFFF;
-				indicesA = (alignmentData) & 0xFFFFFF;
-				countOperands = 0;
-			}
-		} // if state == STATE_DISPATCHER_SEND
-		else if (state == STATE_DISPATCHER_SEND)
-		{
-			t_simd_operand simdActivations;
-			t_simd_operand simdWeights;
-
-			#pragma unroll
-			for (unsigned char i=0; i<SIMD_SIZE; i++)
-			{
-				unsigned char indexW = 
-					(indicesW >> (i*BITWIDTH_COMPRESSION_WINDOW_INDEX))
-					& MASK_COMPRESSION_WINDOW_INDEX;
-				char w = ((countOperands + i) < numOperands) ?
-					weightWindow.values[indexW] : 0x0;
-				simdWeights.values[i] = w;
-
-				unsigned char indexA = 
-					(indicesA >> (i*BITWIDTH_COMPRESSION_WINDOW_INDEX))
-					& MASK_COMPRESSION_WINDOW_INDEX;
-				char a = ((countOperands + i) < numOperands) ?
-					activationWindow.values[indexA] : 0x0;
-				simdActivations.values[i] = a;
-
-				//EMULATOR_PRINT ( ("[dispatcher]: w: %u a: %u\n", w & 0xFF, a & 0xFF) );
-				//EMULATOR_PRINT ( ("[dispatcher]: wIndex: %u aIndex :%u \n", indexW & 0xFF, indexA & 0xFF));
-			}
-
-			t_mac_operands operands;
-			operands.weights = simdWeights;
-			operands.activations = simdActivations;
-			operands.isLast = (countOperands + SIMD_SIZE) >= numOperands ?
-				isLast: false;
-
-			bool writeSuccess;
-			writeSuccess = write_channel_nb_intel(channel_macOperandsInput, operands);
-
-			if (writeSuccess)
-			{
-				countOperands += SIMD_SIZE;
-				indicesW = indicesW >> (SIMD_SIZE*BITWIDTH_COMPRESSION_WINDOW_INDEX);
-				indicesA = indicesA >> (SIMD_SIZE*BITWIDTH_COMPRESSION_WINDOW_INDEX);
-				if (countOperands >= numOperands)
-				{
-					state = STATE_DISPATCHER_LOAD;
-				}
-			}
-		}	// if state == STATE_DISPATCHER_SEND
-	} // while
-
-}
-*/
 #define BITWIDTH_COMPRESSION_WINDOW_INDEX 3
 #define MASK_COMPRESSION_WINDOW_INDEX 0x7
 #define MAC_STATE_LOAD_WINDOW 0x0
@@ -1404,6 +1307,7 @@ __kernel void mac ()
 				= read_channel_nb_intel(channel_alignmentOutput, &readSuccess);
 			if (readSuccess)
 			{
+				//DEBUG_PRINT(("[MAC] Read Success!\n"));
 				state = MAC_STATE_PROCESS_WINDOW;
 
 				weightWindow = alignedCompressionWindow.weightWindow;
@@ -1467,6 +1371,7 @@ __kernel void mac ()
 			writeSuccess = write_channel_nb_intel(channel_peDrainOutput, pSum);
 			if (writeSuccess)
 			{
+				//DEBUG_PRINT(("[MAC] Sending!\n"));
 				state = MAC_STATE_LOAD_WINDOW;
 				pSum = 0;
 			}

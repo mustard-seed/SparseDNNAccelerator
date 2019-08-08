@@ -29,7 +29,7 @@
            Otherwise, it is not required.
            If CAPACITY is strictly less than EXPECTED_LATENCY, the compiler will automatically 
            insert capacity-balancing FIFOs after this function when required. -->
-      <CAPACITY value="2"/>
+      <CAPACITY value="1"/>
       
       <!-- Set to "yes" to indicate that this function has side-effects. Calls to functions
            with side-effects will not be optimized away and only valid data will be fed

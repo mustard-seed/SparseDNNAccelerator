@@ -1,17 +1,13 @@
 include (${PROJECT_SOURCE_DIR}/config.cmake)
 
-set (TEST_NAME "prototypePE")
+set (TEST_NAME "flexibleBitmaskCompression")
 
 set (PREPROCESSOR_DEFS
 #        -DWEIGHT_MEMORY_TEST
-        -DHW_DEBUG
-#        -DDIRECT_COMPRESSION_SIMD
-         -DFLEXIBLE_BITMASK_COMPRESSION
+#        -DHW_DEBUG
+        -DFLEXIBLE_BITMASK_COMPRESSION
         )
-add_definitions(
-#   -DDIRECT_COMPRESSION_SIMD
-    -DFLEXIBLE_BITMASK_COMPRESSION
-    )
+add_definitions(-DFLEXIBLE_BITMASK_COMPRESSION -DFPGA_DEVICE)
 
 ############################################
 #First, we must be able to find Intel FPGA OpenCL SDK
@@ -62,8 +58,6 @@ set (intel_fpga_libraries
 set (rtl_directory ${PROJECT_SOURCE_DIR}/device/RTL
 )
 
-set (rtl_lib
-    -l rtl_lib.aoclib)
 INCLUDE_DIRECTORIES (${rtl_directory})
 ###########################################################
 #Intel FPGA OpenCL SDK Compile and linkage configurations
@@ -115,13 +109,11 @@ INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIRS})
 #####################################
 ##Add unit test for the host library below
 #####################################
-add_definitions(-DFPGA_DEVICE)
-add_executable (${TEST_NAME}_host ${HOST_SRC})
-target_link_libraries(${TEST_NAME}_host ${Boost_LIBRARIES} gtest_main)
+add_executable (${TEST_NAME}_test ${HOST_SRC})
+target_link_libraries(${TEST_NAME}_test ${Boost_LIBRARIES} gtest_main)
 target_compile_definitions(
-    ${TEST_NAME}_host
+    ${TEST_NAME}_test
     PUBLIC
-    ${PREPROCESSOR_DEFS}
     )
 
 
@@ -133,102 +125,19 @@ if ("${intelfpga_host_libraries}" STREQUAL "")
         )
     #Need to remove the newline, or the make file will complain "missing separator"
     string(REGEX REPLACE "\n$" "" aocl_link_config "${aocl_link_config}")
-    target_link_libraries(${TEST_NAME}_host ${aocl_link_config})
+    target_link_libraries(${TEST_NAME}_test ${aocl_link_config})
 else()
-    target_link_libraries(${TEST_NAME}_host
+    target_link_libraries(${TEST_NAME}_test
          ${intelfpga_host_libraries}
          ${intelfpga_device_libraries}
          )
 endif()
 
-target_link_libraries(${TEST_NAME}_host
+target_link_libraries(${TEST_NAME}_test
          rt
          pthread
     )
-set_target_properties (${TEST_NAME}_host PROPERTIES "CMAKE_CXX_FLAGS" "${CMAKE_CXX_FLAGS}")
-
-
-####################################
-##Generate the hardware targets
-####################################
-
-include (${PROJECT_SOURCE_DIR}/aoc.cmake)
-
-# Find the kernel source files. Note, GLOB isn't the recommended way. One needs to touch the CMakesList.txt to effect changes
-file(GLOB_RECURSE kernel_files
-     ${PROJECT_SOURCE_DIR}/device/peComponents.cl
-     ${CMAKE_CURRENT_SOURCE_DIR}/prototypePETest.cl
-)
-
-add_aoc_target (
-    TARGET_NAME ${TEST_NAME}
-    TARGET_TYPE EMULATION
-    SOURCES_LIST ${kernel_files} 
-    HEADER_DIR ${PROJECT_SOURCE_DIR}/device
-    RTL_DIR ${rtl_directory}
-    PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}
-    RTL_LIB ${rtl_lib}
-    )
-
-add_aoc_target (
-    TARGET_NAME ${TEST_NAME}
-    TARGET_TYPE RTL_ONLY
-    SOURCES_LIST ${kernel_files} 
-    HEADER_DIR ${PROJECT_SOURCE_DIR}/device
-    RTL_DIR ${rtl_directory} 
-    PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}
-    RTL_LIB ${rtl_lib}
-    )
-
-add_aoc_target (
-    TARGET_NAME ${TEST_NAME}
-    TARGET_TYPE NORMAL_HW
-    SOURCES_LIST ${kernel_files} 
-    HEADER_DIR ${PROJECT_SOURCE_DIR}/device
-    RTL_DIR ${rtl_directory} 
-    PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}
-    RTL_LIB ${rtl_lib}
-    )
-
-add_aoc_target (
-    TARGET_NAME ${TEST_NAME}
-    TARGET_TYPE RELEASE_HW
-    SOURCES_LIST ${kernel_files}
-    HEADER_DIR ${PROJECT_SOURCE_DIR}/device
-    RTL_DIR ${rtl_directory}
-    PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}
-    RTL_LIB ${rtl_lib}
-    )
-
-add_aoc_target (
-    TARGET_NAME ${TEST_NAME}
-    TARGET_TYPE PROFILE_HW
-    SOURCES_LIST ${kernel_files} 
-    HEADER_DIR ${PROJECT_SOURCE_DIR}/device
-    RTL_DIR ${rtl_directory} 
-    PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}
-    RTL_LIB ${rtl_lib}
-    )
-
-add_aoc_target (
-    TARGET_NAME ${TEST_NAME}
-    TARGET_TYPE FAST_COMPILE_HW
-    SOURCES_LIST ${kernel_files}
-    HEADER_DIR ${PROJECT_SOURCE_DIR}/device
-    RTL_DIR ${rtl_directory}
-    PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}
-    RTL_LIB ${rtl_lib}
-    )
-
-#add_aoc_target (
-#    TARGET_NAME ${TEST_NAME}
-#    TARGET_TYPE SIMULATION
-#    SOURCES_LIST ${kernel_files}
-#    HEADER_DIR ${PROJECT_SOURCE_DIR}/device
-#    RTL_DIR ${rtl_directory}
-#    PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}
-#    #RTL_LIB ${rtl_lib})
-#    )
+set_target_properties (${TEST_NAME}_test PROPERTIES "CMAKE_CXX_FLAGS" "${CMAKE_CXX_FLAGS}")
 
 
 

@@ -222,16 +222,16 @@ assign {hex4, hex3, hex2, hex1, hex0} = {2'b00, result};
 //=======================================================
 //  Structural coding
 //=======================================================
-	c5_mac_8bitx4_0002 c5_mac_8bitx4_inst (
+	c5_mac_8bitx3_0002 c5_mac_8bitx3_inst (
 		.result  (result),  //  result.result
 		.dataa_0 ({4'b0000, SW[3:0]}), // dataa_0.dataa_0
 		.dataa_1 (8'h00), // dataa_1.dataa_1
 		.dataa_2 (8'h00), // dataa_2.dataa_2
-		.dataa_3 (8'h00), // dataa_3.dataa_3
+		//.dataa_3 (8'h00), // dataa_3.dataa_3
 		.datab_0 ({4'b0000, SW[7:4]}), // datab_0.datab_0
 		.datab_1 (8'h00), // datab_1.datab_1
 		.datab_2 (8'h00), // datab_2.datab_2
-		.datab_3 (8'h00), // datab_3.datab_3
+		//.datab_3 (8'h00), // datab_3.datab_3
 		.clock0  (CLOCK_50)   //  clock0.clock0
 	);
 

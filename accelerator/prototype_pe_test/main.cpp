@@ -668,7 +668,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainage) {
     EXPECT_TRUE (COMPRESSION_VEC_SIZE == 4);
 
     //This test won't pass if fracIn > fractOut
-    char fracIn = 5, fracOut = 6, fracW = 5;
+    char fracIn = 2, fracOut = 3, fracW = 2;
     char intWidthIn = WEIGHT_BITWIDTH - fracIn - 1;
     char intWidthWeight = WEIGHT_BITWIDTH - fracW - 1;
     int targetIDX = IDX, targetIDY = IDY;
