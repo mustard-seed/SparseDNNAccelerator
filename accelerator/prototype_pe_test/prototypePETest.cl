@@ -1385,7 +1385,7 @@ __kernel void mac ()
 	uint2_t state = MAC_STATE_LOAD_WINDOW;
 
 
-	t_accumulator pSum;
+	t_accumulator pSum = 0;
 	t_compression_window weightWindow;
 	t_compression_window activationWindow;
 	bool isLast;
@@ -1414,7 +1414,6 @@ __kernel void mac ()
 				indicesW = (alignmentData >> 24) & 0xFFFFFF;
 				indicesA = (alignmentData) & 0xFFFFFF;
 				countOperands = 0;
-				pSum = 0;
 			}
 		}
 		else if (state == MAC_STATE_PROCESS_WINDOW)
@@ -1447,6 +1446,8 @@ __kernel void mac ()
 			t_accumulator tempPSum = madd(simdActivations, simdWeights);
 			pSum += tempPSum;
 			countOperands += SIMD_SIZE;
+			indicesW = indicesW >> (SIMD_SIZE*BITWIDTH_COMPRESSION_WINDOW_INDEX);
+			indicesA = indicesA >> (SIMD_SIZE*BITWIDTH_COMPRESSION_WINDOW_INDEX);
 
 			if (countOperands >= numOperands)
 			{
@@ -1467,6 +1468,7 @@ __kernel void mac ()
 			if (writeSuccess)
 			{
 				state = MAC_STATE_LOAD_WINDOW;
+				pSum = 0;
 			}
 		}
 	}
