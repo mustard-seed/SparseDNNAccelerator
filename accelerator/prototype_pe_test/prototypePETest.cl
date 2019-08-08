@@ -1279,6 +1279,7 @@ __kernel void comppressionWindowAligner ()
 	}
 }
 
+/*
 #define STATE_DISPATCHER_LOAD 0X0
 #define STATE_DISPATCHER_SEND 0X1
 #define BITWIDTH_COMPRESSION_WINDOW_INDEX 3
@@ -1370,25 +1371,103 @@ __kernel void dispatcher ()
 	} // while
 
 }
-
+*/
+#define BITWIDTH_COMPRESSION_WINDOW_INDEX 3
+#define MASK_COMPRESSION_WINDOW_INDEX 0x7
+#define MAC_STATE_LOAD_WINDOW 0x0
+#define MAC_STATE_PROCESS_WINDOW 0x1
+#define MAC_STATE_WRITE_PSUM 0x2
 __attribute__((task))
 __attribute__((max_global_work_dim(0)))
 __attribute__((autorun))
 __kernel void mac ()
 {
-	t_accumulator pSum = 0;
+	uint2_t state = MAC_STATE_LOAD_WINDOW;
+
+
+	t_accumulator pSum;
+	t_compression_window weightWindow;
+	t_compression_window activationWindow;
+	bool isLast;
+
+	unsigned char numOperands;
+	unsigned char countOperands;
+	unsigned int indicesW;
+	unsigned int indicesA;
+
 	while (true) {
-		t_mac_operands operands = read_channel_intel(channel_macOperandsInput);
-		bool isLast = operands.isLast;
-		t_simd_operand activations, weights;
-		activations = operands.activations;
-		weights = operands.weights;
-		t_accumulator tempPSum = madd(activations, weights);
-		pSum += tempPSum;
-		if (isLast) 
+
+		if (state == MAC_STATE_LOAD_WINDOW)
 		{
-			write_channel_intel(channel_peDrainOutput, pSum);
-			pSum = 0;
+			bool readSuccess;
+			t_alignment_output alignedCompressionWindow
+				= read_channel_nb_intel(channel_alignmentOutput, &readSuccess);
+			if (readSuccess)
+			{
+				state = MAC_STATE_PROCESS_WINDOW;
+
+				weightWindow = alignedCompressionWindow.weightWindow;
+				activationWindow = alignedCompressionWindow.activationWindow;
+				isLast = alignedCompressionWindow.isLast;
+				unsigned long alignmentData = alignedCompressionWindow.alignmentData;
+				numOperands = (alignmentData >> 48) & 0xFF;
+				indicesW = (alignmentData >> 24) & 0xFFFFFF;
+				indicesA = (alignmentData) & 0xFFFFFF;
+				countOperands = 0;
+				pSum = 0;
+			}
+		}
+		else if (state == MAC_STATE_PROCESS_WINDOW)
+		{
+
+			t_simd_operand simdActivations;
+			t_simd_operand simdWeights;
+
+			#pragma unroll
+			for (unsigned char i=0; i<SIMD_SIZE; i++)
+			{
+				unsigned char indexW = 
+					(indicesW >> (i*BITWIDTH_COMPRESSION_WINDOW_INDEX))
+					& MASK_COMPRESSION_WINDOW_INDEX;
+				char w = ((countOperands + i) < numOperands) ?
+					weightWindow.values[indexW] : 0x0;
+				simdWeights.values[i] = w;
+
+				unsigned char indexA = 
+					(indicesA >> (i*BITWIDTH_COMPRESSION_WINDOW_INDEX))
+					& MASK_COMPRESSION_WINDOW_INDEX;
+				char a = ((countOperands + i) < numOperands) ?
+					activationWindow.values[indexA] : 0x0;
+				simdActivations.values[i] = a;
+
+				//EMULATOR_PRINT ( ("[dispatcher]: w: %u a: %u\n", w & 0xFF, a & 0xFF) );
+				//EMULATOR_PRINT ( ("[dispatcher]: wIndex: %u aIndex :%u \n", indexW & 0xFF, indexA & 0xFF));
+			}
+
+			t_accumulator tempPSum = madd(simdActivations, simdWeights);
+			pSum += tempPSum;
+			countOperands += SIMD_SIZE;
+
+			if (countOperands >= numOperands)
+			{
+				if (isLast)
+				{
+					state = MAC_STATE_WRITE_PSUM;
+				}
+				else
+				{
+					state = MAC_STATE_LOAD_WINDOW;
+				}
+			}
+		} // if state == MAC_STATE_PROCESS_WINDOW
+		else
+		{
+			bool writeSuccess;
+			writeSuccess = write_channel_nb_intel(channel_peDrainOutput, pSum);
+			if (writeSuccess)
+			{
+				state = MAC_STATE_LOAD_WINDOW;
+			}
 		}
 	}
 }
