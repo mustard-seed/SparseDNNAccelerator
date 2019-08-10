@@ -7,7 +7,7 @@ fixedPointNumber::fixedPointNumber (float _realNumber
                                     ,char _fracWidth
                                     ,char _intWidth){
     //Make sure the number of bits for magnitude and the sign can fit within 32
-    assert (_fracWidth + _intWidth < 16);
+    assert (_fracWidth + _intWidth < 8);
 
     //Find the precision
     resolution = 1.0f / (float) (1 << _fracWidth);
@@ -26,27 +26,27 @@ fixedPointNumber::fixedPointNumber (float _realNumber
                 );
 
     //Preserve the magnitude and the sign bit
-    short bitMask = ~ (0xFFFF << (totalWidth + 1));
+    unsigned char bitMask = ~ (0xFF << (totalWidth + 1));
     bits = bitMask & bits;
 }
 
-fixedPointNumber::fixedPointNumber (short _bits,
+fixedPointNumber::fixedPointNumber (char _bits,
                                     char _fracWidth,
                                     char _intWidth)
 {
     assert (_fracWidth + _intWidth < 16);
-    bits = _bits & (~ (0xFFFF << (_fracWidth + _intWidth + 1)) );
+    bits = _bits & (~ (0xFF << (_fracWidth + _intWidth + 1)) );
     fractionWidth = _fracWidth;
     integerWidth = _intWidth;
     resolution = 1.0f / (float) (1 << _fracWidth);
 }
 
-short fixedPointNumber::getBits() {
+char fixedPointNumber::getBits() {
     return bits;
 }
 
-short fixedPointNumber::getMask() {
-    return ~(0xFFFF << (fractionWidth + integerWidth + 1));
+unsigned char fixedPointNumber::getMask() {
+    return ~(0xFF << (fractionWidth + integerWidth + 1));
 }
 
 int fixedPointNumber::getFracWidth() {
@@ -60,8 +60,8 @@ int fixedPointNumber::getIntWidth() {
 
 float fixedPointNumber::convert2Float () {
     //Need to perform sign extend
-    short signBit = 0x1 & (bits >> (fractionWidth + integerWidth));
-    short fullBits =
+    char signBit = 0x1 & (bits >> (fractionWidth + integerWidth));
+    char fullBits =
             signBit > 0 ?
             bits | 0xFFFF << (fractionWidth + integerWidth) :
             bits;

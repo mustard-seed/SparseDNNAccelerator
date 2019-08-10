@@ -23,7 +23,7 @@ module a10_mac_8bitx2 (
 
 
 	a10_mac_8bitx2_altera_mult_add_171_72klhga inst (
-		.result  (result_18b),  //  result.result
+		.result  (result),  //  result.result
 		.dataa_0 (dataa_0), // dataa_0.dataa_0
 		.dataa_1 (dataa_1), // dataa_1.dataa_1
 		.datab_0 (datab_0), // datab_0.datab_0

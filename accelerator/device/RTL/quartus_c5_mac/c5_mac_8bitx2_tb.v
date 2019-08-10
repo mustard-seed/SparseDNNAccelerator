@@ -28,6 +28,8 @@ module tb_c5_mac_8bitx2();
         {dataa1, dataa0, datab1, datab0} = 32'h00000000;
         #10 ;
         {dataa1, dataa0, datab1, datab0} = 32'h01010101;
+        #10
+        {dataa1, dataa0, datab1, datab0} = 32'h0101FFFF;
     end
 
     always #5 clk = ~clk;

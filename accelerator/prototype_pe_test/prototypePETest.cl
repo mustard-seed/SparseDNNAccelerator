@@ -329,14 +329,14 @@ __kernel void kernelDrainTransport (
 					// final truncation
 					result = 0xFF & (accumulatorBiased>>0x01);  // remove the last rounding bit
 					
-					EMULATOR_PRINT ( ("[kernelDrainTransport]: Waiting to write pSum %d \n", drainCount) );
+					//EMULATOR_PRINT ( ("[kernelDrainTransport]: Waiting to write pSum %d \n", drainCount) );
 					//write_channel_intel(channel_drainOutput, result);
 					write_channel_intel(channel_drainOutput, result);
 					drainCount++;
 				}
 
 				if (drainCount == numPSumToSend) {
-					EMULATOR_PRINT ( ("[kernelDrainTransport]: Committed the pSum\n") );
+					//EMULATOR_PRINT ( ("[kernelDrainTransport]: Committed the pSum\n") );
 					drainCount = 0;
 					drainState = 0x0;
 				}
@@ -1180,9 +1180,10 @@ __kernel void kernelPE ()
 
 				if (stateActivation == ASSEMBLER_STATE_LOAD_BITMASK)
 				{
-					bitmaskA[regLoadSide] = activationTransferBlock.values.values[0];
-					numActivation = popCounter(bitmaskA[regLoadSide]);
-					EMULATOR_PRINT(("[assembler] bitmaskA: %u \n", bitmaskA[regLoadSide]));
+					unsigned char bitmask = activationTransferBlock.values.values[0];
+					bitmaskA[regLoadSide] = bitmask;
+					numActivation = popCounter(bitmask);
+					//EMULATOR_PRINT(("[assembler] bitmaskA: %u \n", bitmask));
 				}
 
 				uint3_t offset = (stateActivation == ASSEMBLER_STATE_LOAD_BITMASK) ?
@@ -1195,7 +1196,7 @@ __kernel void kernelPE ()
 					{
 						activationWindow[countActivation+i-offset][regLoadSide]
 							= activationTransferBlock.values.values[i];
-						EMULATOR_PRINT(("[assembler] activation value: %u \n", activationTransferBlock.values.values[i] & 0xFF));
+						//EMULATOR_PRINT(("[assembler] activation value: %u \n", activationTransferBlock.values.values[i] & 0xFF));
 					}
 				} // for. Transfer the values in the transfer block to the compression window
 
@@ -1233,9 +1234,10 @@ __kernel void kernelPE ()
 
 				if (stateWeight == ASSEMBLER_STATE_LOAD_BITMASK)
 				{
-					bitmaskW[regLoadSide] = weightTransferBlock.values.values[0];
-					numWeight = popCounter(bitmaskW[regLoadSide]);
-					EMULATOR_PRINT(("[assembler] bitmaskW: %u \n", bitmaskW[regLoadSide]));
+					unsigned char bitmask =  weightTransferBlock.values.values[0];
+					bitmaskW[regLoadSide] = bitmask; 
+					numWeight = popCounter(bitmask);
+					//EMULATOR_PRINT(("[assembler] bitmaskW: %u \n", bitmask));
 				}
 
 				uint3_t offset = (stateWeight == ASSEMBLER_STATE_LOAD_BITMASK) ?
@@ -1248,7 +1250,7 @@ __kernel void kernelPE ()
 					{
 						weightWindow[countWeight+i-offset][regLoadSide]
 							= weightTransferBlock.values.values[i];
-						EMULATOR_PRINT(("[assembler] weight value: %u \n", weightTransferBlock.values.values[i] & 0xFF));
+						//EMULATOR_PRINT(("[assembler] weight value: %u \n", weightTransferBlock.values.values[i] & 0xFF));
 					}
 				} // for. Transfer the values in the transfer block to the compression window
 
@@ -1308,7 +1310,7 @@ __kernel void kernelPE ()
 				//char a = activationWindow[i][(~regLoadSide) & 0x1];
 				simdActivations.values[i] = a;
 
-				//EMULATOR_PRINT ( ("[dispatcher]: w: %u a: %u\n", w & 0xFF, a & 0xFF) );
+				//EMULATOR_PRINT ( ("[dispatcher]: w: %#04x a: %#04x \n", w & 0xFF, a & 0xFF) );
 				//EMULATOR_PRINT ( ("[dispatcher]: wIndex: %u aIndex :%u \n", indexW & 0xFF, indexA & 0xFF));
 			}
 
@@ -1332,15 +1334,16 @@ __kernel void kernelPE ()
 		} // if state == MAC_STATE_PROCESS_WINDOW
 		else if (stateMac == MAC_STATE_WRITE_PSUM)
 		{
-			//bool writeSuccess;
-			//writeSuccess = write_channel_nb_intel(channel_peDrainOutput, pSum);
-			write_channel_intel(channel_peDrainOutput, pSum);
-			//if (writeSuccess)
-			//{
+			bool writeSuccess;
+			writeSuccess = write_channel_nb_intel(channel_peDrainOutput, pSum);
+			//write_channel_intel(channel_peDrainOutput, pSum);
+			if (writeSuccess)
+			{
 				//DEBUG_PRINT(("[MAC] Sending!\n"));
 				nextStateMac = MAC_STATE_WAIT;
+				EMULATOR_PRINT(("[MAC] Commit. pSum value: %u \n", pSum));
 				pSum = 0;
-			//}
+			}
 		}
 		//===================SWAP===========================
 		//Take an extra iteration for swapping, otherwise Fmax is low

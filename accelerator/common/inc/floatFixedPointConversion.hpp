@@ -3,7 +3,7 @@
 
 class fixedPointNumber {
     private:
-        short bits;
+        char bits;
         char fractionWidth;
         char integerWidth;
         float resolution;
@@ -12,12 +12,12 @@ class fixedPointNumber {
         fixedPointNumber (float _realNumber
                           ,char _fracWidth
                           ,char _intWidth);
-        fixedPointNumber (short _bits,
+        fixedPointNumber (char _bits,
                           char _fracWidth,
                           char _intWidth);
 
-        short getBits ();
-        short getMask ();
+        char getBits ();
+        unsigned char getMask ();
         int getFracWidth ();
         int getIntWidth ();
 

@@ -224,7 +224,7 @@ int decodeTensor(compressedTensor compTensor, std::vector<float> & denseTensor, 
             //Write the scalars in the simd block to the dense vector
             for (int i=0; i< simdBlockSize; i++) {
                 if (iChannel < channel) {
-                    fixedPointNumber fpValue ( (short) (simdBlock.values[i]), fracWidth, intWidth);
+                    fixedPointNumber fpValue ( (char) (simdBlock.values[i]), fracWidth, intWidth);
                     denseTensor.at(iDenseVector++) = fpValue.convert2Float();
                     iChannel++;
                 }
@@ -526,7 +526,7 @@ int decodeDirectCompressedTensor(directCompressedTensor compTensor, std::vector<
                     //Write the scalars in the simd block to the dense vector
                     for (int i=0; i< simdBlockSize; i++) {
                         if (iChannel < channel) {
-                            fixedPointNumber fpValue ( (short) (simdBlock.values[i]), fracWidth, intWidth);
+                            fixedPointNumber fpValue ( (char) (simdBlock.values[i]), fracWidth, intWidth);
                             denseTensor.at(iDenseVector++) = fpValue.convert2Float();
                             iChannel++;
                         }
@@ -913,7 +913,7 @@ int decodeFlexibleDirectCompressedTensor(
                     int iChannel = iChannelBase + (int) indexInCompressionBlock;
 
                     fixedPointNumber fpValue (
-                        ((short) vectorCompressionBlock.at(iVectorCompressionBlock++)), fracWidth, intWidth );
+                        (char) (vectorCompressionBlock.at(iVectorCompressionBlock++)), fracWidth, intWidth );
                     int iDenseVector = 
                         iTensor * height * width * channel
                         + iHeight * width * channel

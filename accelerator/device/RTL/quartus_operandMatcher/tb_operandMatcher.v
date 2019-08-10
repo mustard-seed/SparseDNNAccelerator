@@ -1,4 +1,4 @@
-`timescale 1 ps / 1 ps
+`timescale 1 ns / 1 ps
 module operandMatcher_tb;
 	reg clock, resetn;
 	reg [7:0] bitmaskW, bitmaskA;
