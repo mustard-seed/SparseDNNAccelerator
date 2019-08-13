@@ -652,12 +652,18 @@ TEST_F (peTestFixture, testPlayfield) {
     launch(targetIDX, targetIDY, transmissionStartIndex, 0);
 
     //Compare the result
-    short actualOutputFP = outputDrainVector.at(0);
+    char actualOutputFP = outputDrainVector.at(0);
+
+    float actualOutputReal = fixedPointNumber(actualOutputFP, fracOut, WEIGHT_BITWIDTH-fracOut-1).convert2Float();
+
+    std::cout <<"Expected output bits: "<<std::bitset<WEIGHT_BITWIDTH>((expectedOutputFP.getBits()) & WEIGHT_MASK)<<std::endl;
+    std::cout <<"Actual output bits: "<<std::bitset<WEIGHT_BITWIDTH>((actualOutputFP & WEIGHT_MASK))<<std::endl;
+
     EXPECT_TRUE(
-         (actualOutputFP & WEIGHT_MASK)
-         == ((short) (expectedOutputFP.getBits() & WEIGHT_MASK) ))
-         << "Actual output: "<<std::bitset<WEIGHT_BITWIDTH>(actualOutputFP & WEIGHT_MASK)
-         <<std::endl<<"Expected output: "<<std::bitset<WEIGHT_BITWIDTH>((expectedOutputFP.getBits()) & WEIGHT_MASK)<<std::endl;
+         std::abs(actualOutputReal - expectedOutputFP.convert2Float()) <= 1.0 / (1 << fracOut))
+         << "Actual output: "<<actualOutputReal<<" "<<std::bitset<WEIGHT_BITWIDTH>(actualOutputFP & WEIGHT_MASK)
+         <<std::endl<<"Expected output: "<<expectedOutputFP.convert2Float()<<" "<<std::bitset<WEIGHT_BITWIDTH>((expectedOutputFP.getBits()) & WEIGHT_MASK)<<std::endl
+         <<"Golden output: "<<expectedResultReal<<std::endl;
 
 }
 
@@ -811,14 +817,18 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageZero) {
     launch(targetIDX, targetIDY, transmissionStartIndex, 0);
 
     //Compare the result
-    short actualOutputFP = outputDrainVector.at(0);
+    char actualOutputFP = outputDrainVector.at(0);
 
-    std::cout <<"Expected output: "<<std::bitset<WEIGHT_BITWIDTH>((expectedOutputFP.getBits()) & WEIGHT_MASK)<<std::endl;
-    std::cout << "Actual output: "<<std::bitset<WEIGHT_BITWIDTH>(actualOutputFP & WEIGHT_MASK) << std::endl;
+    float actualOutputReal = fixedPointNumber(actualOutputFP, fracOut, WEIGHT_BITWIDTH-fracOut-1).convert2Float();
+
+    std::cout <<"Expected output bits: "<<std::bitset<WEIGHT_BITWIDTH>((expectedOutputFP.getBits()) & WEIGHT_MASK)<<std::endl;
+    std::cout <<"Actual output bits: "<<std::bitset<WEIGHT_BITWIDTH>((actualOutputFP & WEIGHT_MASK))<<std::endl;
 
     EXPECT_TRUE(
-         (actualOutputFP & WEIGHT_MASK)
-         == ((short) (expectedOutputFP.getBits() & WEIGHT_MASK) ));
+         std::abs(actualOutputReal - expectedOutputFP.convert2Float()) <= 1.0 / (1 << fracOut))
+         << "Actual output: "<<actualOutputReal<<" "<<std::bitset<WEIGHT_BITWIDTH>(actualOutputFP & WEIGHT_MASK)
+         <<std::endl<<"Expected output: "<<expectedOutputFP.convert2Float()<<" "<<std::bitset<WEIGHT_BITWIDTH>((expectedOutputFP.getBits()) & WEIGHT_MASK)<<std::endl
+         <<"Golden output: "<<expectedResultReal<<std::endl;
 }
 
 TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageHalf) {
@@ -970,16 +980,19 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageHalf) {
     launch(targetIDX, targetIDY, transmissionStartIndex, 0);
 
     //Compare the result
-    short actualOutputFP = outputDrainVector.at(0);
+    char actualOutputFP = outputDrainVector.at(0);
 
-    std::cout <<"Expected output: "<<std::bitset<WEIGHT_BITWIDTH>((expectedOutputFP.getBits()) & WEIGHT_MASK)<<std::endl;
-    std::cout << "Actual output: "<<std::bitset<WEIGHT_BITWIDTH>(actualOutputFP & WEIGHT_MASK) << std::endl;
+    float actualOutputReal = fixedPointNumber(actualOutputFP, fracOut, WEIGHT_BITWIDTH-fracOut-1).convert2Float();
+
+    std::cout <<"Expected output bits: "<<std::bitset<WEIGHT_BITWIDTH>((expectedOutputFP.getBits()) & WEIGHT_MASK)<<std::endl;
+    std::cout <<"Actual output bits: "<<std::bitset<WEIGHT_BITWIDTH>((actualOutputFP & WEIGHT_MASK))<<std::endl;
 
     EXPECT_TRUE(
-         (actualOutputFP & WEIGHT_MASK)
-         == ((short) (expectedOutputFP.getBits() & WEIGHT_MASK) ));
+         std::abs(actualOutputReal - expectedOutputFP.convert2Float()) <= 1.0 / (1 << fracOut))
+         << "Actual output: "<<actualOutputReal<<" "<<std::bitset<WEIGHT_BITWIDTH>(actualOutputFP & WEIGHT_MASK)
+         <<std::endl<<"Expected output: "<<expectedOutputFP.convert2Float()<<" "<<std::bitset<WEIGHT_BITWIDTH>((expectedOutputFP.getBits()) & WEIGHT_MASK)<<std::endl
+         <<"Golden output: "<<expectedResultReal<<std::endl;
 }
-
 
 TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageOneLong) {
 /* Test goal: Verify the correctness of the bias loading, dot product and drainage capability
@@ -1130,14 +1143,18 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageOneLong) {
     launch(targetIDX, targetIDY, transmissionStartIndex, 0);
 
     //Compare the result
-    short actualOutputFP = outputDrainVector.at(0);
+    char actualOutputFP = outputDrainVector.at(0);
 
-    std::cout <<"Expected output: "<<std::bitset<WEIGHT_BITWIDTH>((expectedOutputFP.getBits()) & WEIGHT_MASK)<<std::endl;
-    std::cout << "Actual output: "<<std::bitset<WEIGHT_BITWIDTH>(actualOutputFP & WEIGHT_MASK) << std::endl;
+    float actualOutputReal = fixedPointNumber(actualOutputFP, fracOut, WEIGHT_BITWIDTH-fracOut-1).convert2Float();
+
+    std::cout <<"Expected output bits: "<<std::bitset<WEIGHT_BITWIDTH>((expectedOutputFP.getBits()) & WEIGHT_MASK)<<std::endl;
+    std::cout <<"Actual output bits: "<<std::bitset<WEIGHT_BITWIDTH>((actualOutputFP & WEIGHT_MASK))<<std::endl;
 
     EXPECT_TRUE(
-         (actualOutputFP & WEIGHT_MASK)
-         == ((short) (expectedOutputFP.getBits() & WEIGHT_MASK) ));
+         std::abs(actualOutputReal - expectedOutputFP.convert2Float()) <= 1.0 / (1 << fracOut))
+         << "Actual output: "<<actualOutputReal<<" "<<std::bitset<WEIGHT_BITWIDTH>(actualOutputFP & WEIGHT_MASK)
+         <<std::endl<<"Expected output: "<<expectedOutputFP.convert2Float()<<" "<<std::bitset<WEIGHT_BITWIDTH>((expectedOutputFP.getBits()) & WEIGHT_MASK)<<std::endl
+         <<"Golden output: "<<expectedResultReal<<std::endl;
 }
 
 TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageOneShort) {
@@ -1289,14 +1306,18 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageOneShort) {
     launch(targetIDX, targetIDY, transmissionStartIndex, 0);
 
     //Compare the result
-    short actualOutputFP = outputDrainVector.at(0);
+    char actualOutputFP = outputDrainVector.at(0);
 
-    std::cout <<"Expected output: "<<std::bitset<WEIGHT_BITWIDTH>((expectedOutputFP.getBits()) & WEIGHT_MASK)<<std::endl;
-    std::cout << "Actual output: "<<std::bitset<WEIGHT_BITWIDTH>(actualOutputFP & WEIGHT_MASK) << std::endl;
+    float actualOutputReal = fixedPointNumber(actualOutputFP, fracOut, WEIGHT_BITWIDTH-fracOut-1).convert2Float();
+
+    std::cout <<"Expected output bits: "<<std::bitset<WEIGHT_BITWIDTH>((expectedOutputFP.getBits()) & WEIGHT_MASK)<<std::endl;
+    std::cout <<"Actual output bits: "<<std::bitset<WEIGHT_BITWIDTH>((actualOutputFP & WEIGHT_MASK))<<std::endl;
 
     EXPECT_TRUE(
-         (actualOutputFP & WEIGHT_MASK)
-         == ((short) (expectedOutputFP.getBits() & WEIGHT_MASK) ));
+         std::abs(actualOutputReal - expectedOutputFP.convert2Float()) <= 1.0 / (1 << fracOut))
+         << "Actual output: "<<actualOutputReal<<" "<<std::bitset<WEIGHT_BITWIDTH>(actualOutputFP & WEIGHT_MASK)
+         <<std::endl<<"Expected output: "<<expectedOutputFP.convert2Float()<<" "<<std::bitset<WEIGHT_BITWIDTH>((expectedOutputFP.getBits()) & WEIGHT_MASK)<<std::endl
+         <<"Golden output: "<<expectedResultReal<<std::endl;
 }
 #endif
 

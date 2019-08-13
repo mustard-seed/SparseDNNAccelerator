@@ -60,10 +60,10 @@ int fixedPointNumber::getIntWidth() {
 
 float fixedPointNumber::convert2Float () {
     //Need to perform sign extend
-    char signBit = 0x1 & (bits >> (fractionWidth + integerWidth));
-    char fullBits =
-            signBit > 0 ?
-            bits | 0xFFFF << (fractionWidth + integerWidth) :
-            bits;
-    return (float) fullBits * resolution;
+    //char signBit = 0x1 & (bits >> (fractionWidth + integerWidth));
+    //char fullBits =
+    //        signBit > 0 ?
+    //        bits | 0xFFFF << (fractionWidth + integerWidth) :
+    //        bits;
+    return ((signed char) (bits & 0xFF)) * resolution;
 }
