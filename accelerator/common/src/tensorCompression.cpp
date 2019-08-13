@@ -611,9 +611,10 @@ flexibleDirectCompressedTensor::flexibleDirectCompressedTensor (std::vector<fixe
     isKernel = _isKernel;
 
     //Compute the number of transfer blocks in a compression block
-    //Need an extra one in the numerator to account for the bitmask
+    //Need an extra one at the end to account for the bitmask
+    // which occupies its own transfer block
     unsigned char numTransferBlocksPerCompressionBlock
-            =  (unsigned short) std::ceil ( (float) (1 + _maxScalarIndexInCompressionBlock + 1) / (float) (_maxScalarIndexInTransferBlock + 1));
+            =  (unsigned char) std::ceil ( (float) (1 + _maxScalarIndexInCompressionBlock) / (float) (_maxScalarIndexInTransferBlock + 1)) + 1;
 
     //==========================================================
     //Compute the memory stride and allocate space in the vectors
@@ -703,10 +704,16 @@ flexibleDirectCompressedTensor::flexibleDirectCompressedTensor (std::vector<fixe
                        } // for bitmask
 
                        //Populate the value vector
-                       unsigned char iTransferBlock = 0;
                        t_transfer_block transferBlock;
                        //First load the bitmask
-                       transferBlock.values[iTransferBlock++] = bitmask;
+                       transferBlock.values[0] = bitmask;
+
+                       //std::cout <<"bitmask L: "<<(int)(bitmask & 0xFF)<<std::endl;
+
+
+                       valueVector.at(iCompressVector++) = transferBlock;
+                        unsigned char iTransferBlock = 0;
+                       streamBlockAddress++;
 
                        //iterate through the compression block and transfer the non-zero values
                        for (int i=0; i<=maxScalarIndexInCompressionBlock; i++) {
@@ -868,7 +875,7 @@ int decodeFlexibleDirectCompressedTensor(
 
         //Decode each stream block
         for (int i=0; i<numTransferBlockInStreamBlock; i++) {
-            t_transfer_block transferBlock = 
+            t_transfer_block transferBlock =
                 compTensor.valueVector.at(iCompressVector++);
 
             countTransferBlocks++;
@@ -878,14 +885,14 @@ int decodeFlexibleDirectCompressedTensor(
                 numNZValuesInCompressionBlock = countNumOnes(bitmask);
                 countNZValuesInCompressionBlock = 0;
                 vectorCompressionBlock.resize(0);
-
-                for (int j=1; j<=maxScalarIndexInTransferBlock; j++) 
-                {
-                    vectorCompressionBlock.push_back(transferBlock.values[j]);
-                }
-                countNZValuesInCompressionBlock += (maxScalarIndexInTransferBlock);
+                //std::cout <<"bitmask R: "<<(int)(bitmask & 0xFF)<<std::endl;
+                //std::cout <<"numNZValuesInCompressionBlock: "<<(int)(numNZValuesInCompressionBlock)<<std::endl;
                 updateBitmask = false;
-
+//                for (int j=1; j<=maxScalarIndexInTransferBlock; j++)
+//                {
+//                    vectorCompressionBlock.push_back(transferBlock.values[j]);
+//                }
+//                countNZValuesInCompressionBlock += (maxScalarIndexInTransferBlock);
             }
             else {
                 for (int j=0; j<=maxScalarIndexInTransferBlock; j++) 

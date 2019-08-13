@@ -1138,8 +1138,8 @@ __kernel void kernelPE ()
 	uint1_t regLoadSide = 0x0;
 
 	//========Assembler side registers====================
-	unsigned char countActivation = 0;
-	unsigned char countWeight = 0;
+	unsigned char countActivation;
+	unsigned char countWeight;
 	unsigned char numActivation;
 	unsigned char numWeight;
 	uint2_t stateActivation = ASSEMBLER_STATE_LOAD_BITMASK;
@@ -1183,24 +1183,28 @@ __kernel void kernelPE ()
 					unsigned char bitmask = activationTransferBlock.values.values[0];
 					bitmaskA[regLoadSide] = bitmask;
 					numActivation = popCounter(bitmask);
-					//EMULATOR_PRINT(("[assembler] bitmaskA: %u \n", bitmask));
+					countActivation = 0;
+					//EMULATOR_PRINT(("[assembler] bitmaskA: %#04x \n", bitmask));
 				}
-
-				uint3_t offset = (stateActivation == ASSEMBLER_STATE_LOAD_BITMASK) ?
-					0X1 : 0X0; 
-
-				#pragma unroll
-				for (uint3_t i=0; i<TRANSFER_SIZE; i++)
+				else
 				{
-					if (i >= offset)
-					{
-						activationWindow[countActivation+i-offset][regLoadSide]
-							= activationTransferBlock.values.values[i];
-						//EMULATOR_PRINT(("[assembler] activation value: %u \n", activationTransferBlock.values.values[i] & 0xFF));
-					}
-				} // for. Transfer the values in the transfer block to the compression window
 
-				countActivation += (unsigned char)(TRANSFER_SIZE - offset);
+					//uint3_t offset = (stateActivation == ASSEMBLER_STATE_LOAD_BITMASK) ?
+					//	0X1 : 0X0; 
+
+					#pragma unroll
+					for (uint3_t i=0; i<TRANSFER_SIZE; i++)
+					{
+						//if (i >= offset)
+						//{
+							activationWindow[countActivation+i][regLoadSide]
+								= activationTransferBlock.values.values[i];
+							//EMULATOR_PRINT(("[assembler] activation value: %#04x \n", activationTransferBlock.values.values[i] & 0xFF));
+						//}
+					} // for. Transfer the values in the transfer block to the compression window
+
+					countActivation += (unsigned char)(TRANSFER_SIZE);
+				}
 
 				//State update
 				if (countActivation >= numActivation)
@@ -1237,24 +1241,28 @@ __kernel void kernelPE ()
 					unsigned char bitmask =  weightTransferBlock.values.values[0];
 					bitmaskW[regLoadSide] = bitmask; 
 					numWeight = popCounter(bitmask);
-					//EMULATOR_PRINT(("[assembler] bitmaskW: %u \n", bitmask));
+					countWeight = 0;
+					//EMULATOR_PRINT(("[assembler] bitmaskW: %#04x \n", bitmask));
 				}
-
-				uint3_t offset = (stateWeight == ASSEMBLER_STATE_LOAD_BITMASK) ?
-					0X1 : 0X0; 
-
-				#pragma unroll
-				for (uint3_t i=0; i<TRANSFER_SIZE; i++)
+				else
 				{
-					if (i >= offset)
-					{
-						weightWindow[countWeight+i-offset][regLoadSide]
-							= weightTransferBlock.values.values[i];
-						//EMULATOR_PRINT(("[assembler] weight value: %u \n", weightTransferBlock.values.values[i] & 0xFF));
-					}
-				} // for. Transfer the values in the transfer block to the compression window
 
-				countWeight += (unsigned char)(TRANSFER_SIZE - offset);
+					//uint3_t offset = (stateWeight == ASSEMBLER_STATE_LOAD_BITMASK) ?
+					//	0X1 : 0X0; 
+
+					#pragma unroll
+					for (uint3_t i=0; i<TRANSFER_SIZE; i++)
+					{
+						//if (i >= offset)
+						//{
+							weightWindow[countWeight+i][regLoadSide]
+								= weightTransferBlock.values.values[i];
+							//EMULATOR_PRINT(("[assembler] weight value: %#04x \n", weightTransferBlock.values.values[i] & 0xFF));
+						//}
+					} // for. Transfer the values in the transfer block to the compression window
+
+					countWeight += (unsigned char)(TRANSFER_SIZE);
+				}
 
 				//State update
 				if (countWeight >= numWeight)
@@ -1336,13 +1344,15 @@ __kernel void kernelPE ()
 		{
 			bool writeSuccess;
 			writeSuccess = write_channel_nb_intel(channel_peDrainOutput, pSum);
+
 			//write_channel_intel(channel_peDrainOutput, pSum);
 			if (writeSuccess)
 			{
 				//DEBUG_PRINT(("[MAC] Sending!\n"));
-				nextStateMac = MAC_STATE_WAIT;
-				EMULATOR_PRINT(("[MAC] Commit. pSum value: %u \n", pSum));
 				pSum = 0;
+				nextStateMac = MAC_STATE_WAIT;
+				//EMULATOR_PRINT(("[MAC] Commit. pSum value: %#04x \n", pSum));
+				//pSum = 0;
 			}
 		}
 		//===================SWAP===========================
@@ -1354,11 +1364,10 @@ __kernel void kernelPE ()
 			nextStateWeight = ASSEMBLER_STATE_LOAD_BITMASK;
 			nextStateActivation = ASSEMBLER_STATE_LOAD_BITMASK;
 			nextStateMac = MAC_STATE_ALIGN;
-			
-			countActivation = 0;
-			countWeight = 0;
 
 			regLoadSide = ~regLoadSide;
+			//countActivation = 0;
+			//countWeight = 0;
 
 		}
 

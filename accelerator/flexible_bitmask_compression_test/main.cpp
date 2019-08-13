@@ -25,6 +25,8 @@
 #define K_SIZE 3
 #define MAX_DATA_LENGTH 1048576
 
+//#define PLAY
+
 typedef
 std::vector<cl_float, boost::alignment::aligned_allocator<cl_float, aocl_utils_cpp::AOCL_ALIGNMENT>>
 //std::vector<cl_ushort>
@@ -53,69 +55,69 @@ t_aligned_float_vector initialize_vector(unsigned seed,
     return vector;
 }
 
+#ifdef PLAY
+TEST (hostInfrastructureTest, playField) {
+    char fracWidth = 4, intWidth = 3;
+    float bernProb = 1.0;
+    int numTensors = 1;
+    int height = 1;
+    int width = 1;
+    int channel = 16;
+    int seed = 1256;
+    float min = 1.0;
+    float max = 2.0;
+    int numElements = numTensors * height * width * channel;
 
-//TEST (hostInfrastructureTest, playField) {
-//    char fracWidth = 4, intWidth = 3;
-//    float bernProb = 0.05;
-//    int numTensors = 1;
-//    int height = 64;
-//    int width = 64;
-//    int channel = 256;
-//    int seed = 1256;
-//    float min = 1.0;
-//    float max = 2.0;
-//    int numElements = numTensors * height * width * channel;
-
-//    unsigned short maxScalarIndexInChannelGroup = 15;
-//    unsigned  char maxScalarIndexInCompressionBlock = 7;
-//    unsigned char maxScalarIndexInTransferBlock = 1;
-//    bool isKernel = false;
-//    t_aligned_float_vector floatVector = initialize_vector(
-//                seed,
-//                bernProb,
-//                numTensors,
-//                height,
-//                width,
-//                channel,
-//                min,
-//                max
-//                );
+    unsigned short maxScalarIndexInChannelGroup = 15;
+    unsigned  char maxScalarIndexInCompressionBlock = 7;
+    unsigned char maxScalarIndexInTransferBlock = 1;
+    bool isKernel = true;
+    t_aligned_float_vector floatVector = initialize_vector(
+                seed,
+                bernProb,
+                numTensors,
+                height,
+                width,
+                channel,
+                min,
+                max
+                );
 
 
-//    std::vector<fixedPointNumber> fpVector;
-//    fpVector.resize(numElements);
+    std::vector<fixedPointNumber> fpVector;
+    fpVector.resize(numElements);
 
-//    for (int i=0; i<numElements; i++) {
-//        fixedPointNumber fpValue(floatVector.at(i), fracWidth, intWidth);
-//        fpVector.at(i) = fpValue;
-//    }
+    for (int i=0; i<numElements; i++) {
+        fixedPointNumber fpValue(floatVector.at(i), fracWidth, intWidth);
+        fpVector.at(i) = fpValue;
+    }
 
-//    std::cout <<"Start to compress the tensor"<<std::endl;
-//    flexibleDirectCompressedTensor compTensor(
-//                fpVector,
-//                numTensors,
-//                channel,
-//                width,
-//                height,
-//                maxScalarIndexInChannelGroup,
-//                maxScalarIndexInCompressionBlock,
-//                maxScalarIndexInTransferBlock,
-//                isKernel
-//                );
+    std::cout <<"Start to compress the tensor"<<std::endl;
+    flexibleDirectCompressedTensor compTensor(
+                fpVector,
+                numTensors,
+                channel,
+                width,
+                height,
+                maxScalarIndexInChannelGroup,
+                maxScalarIndexInCompressionBlock,
+                maxScalarIndexInTransferBlock,
+                isKernel
+                );
 
-//    std::cout <<"Start to decode the tensor"<<std::endl;
-//    std::vector<float> decodedVector;
-//    decodeFlexibleDirectCompressedTensor(compTensor, decodedVector, fracWidth, intWidth);
+    std::cout <<"Start to decode the tensor"<<std::endl;
+    std::vector<float> decodedVector;
+    decodeFlexibleDirectCompressedTensor(compTensor, decodedVector, fracWidth, intWidth);
 
-//    std::cout <<"Comparing the decoded tensor and the original tensor"<<std::endl;
-//    for (int i=0; i<numElements; i++) {
-//        float orig = floatVector.at(i);
-//        float newValue = decodedVector.at(i);
-//        EXPECT_TRUE(std::abs(orig-newValue) < 1.0f / (1 << fracWidth))
-//                << "i, Original Value, New Value: "<<i<<" "<<orig<<" "<<newValue<<std::endl;
-//    }
-//}
-
+    std::cout <<"Comparing the decoded tensor and the original tensor"<<std::endl;
+    for (int i=0; i<numElements; i++) {
+        float orig = floatVector.at(i);
+        float newValue = decodedVector.at(i);
+        EXPECT_TRUE(std::abs(orig-newValue) < 1.0f / (1 << fracWidth))
+                << "i, Original Value, New Value: "<<i<<" "<<orig<<" "<<newValue<<std::endl;
+    }
+}
+#else
 TEST (hostInfrastructureTest, compressionTestKernel) {
     char fracWidth = 4, intWidth = 3;
     float bernProb = 0.05;
@@ -307,7 +309,7 @@ TEST (hostInfrastructureTest, compressionTestGroupedActivation) {
                 << "i, Original Value, New Value: "<<i<<" "<<orig<<" "<<newValue<<std::endl;
     }
 }
-
+#endif
 int main(int argc, char* argv[]) {
 
     ::testing::InitGoogleTest( &argc, argv);

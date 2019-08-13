@@ -65,5 +65,5 @@ float fixedPointNumber::convert2Float () {
     //        signBit > 0 ?
     //        bits | 0xFFFF << (fractionWidth + integerWidth) :
     //        bits;
-    return ((signed char) (bits & 0xFF)) * resolution;
+    return (signed char) (bits & 0xFF) * resolution;
 }

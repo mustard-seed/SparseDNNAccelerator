@@ -538,8 +538,8 @@ TEST_F (peTestFixture, testPlayfield) {
                 VECTOR_A_SEED,
                 numElements,
                 probOne,
-                -3.14,
-                3.14
+                -1.14,
+                1.14
                 );
     //std::vector<float> activationRealInput = {-3.14f};
 
@@ -548,8 +548,8 @@ TEST_F (peTestFixture, testPlayfield) {
                 VECTOR_B_SEED,
                 numElements,
                 probOne,
-                -3.14,
-                3.14
+                -1.14,
+                1.14
                 );
     //std::vector<float> weightRealInput = {3.14f};
 
