@@ -158,12 +158,17 @@ public:
     unsigned short maxScalarIndexInChannelGroup;
 
 
-    //The maximum index (starts from 0) of a scalar found inside a compression blcok
-    //Equal to the size of compression block minus 1
+    //The maximum index (starts from 0) of a cluster found inside a compression blcok
+    unsigned char maxClusterIndexInCompressionBlock;
+
+    //The maximum scalar index (0) inside a compression block. Derived from the other values
     unsigned char maxScalarIndexInCompressionBlock;
 
-    //The maximum index (starts from 0) of a suriving scalar found inside a transfer block
-    unsigned char maxScalarIndexInTransferBlock;
+    //The maximum index (starts from 0) of a suriving cluster found inside a transfer block
+    unsigned char maxClusterIndexInTransferBlock;
+
+    //The maximum index of a scalar in a cluster (size of cluster - 1)
+    unsigned char maxScalarIndexInCluster;
 
     //Word stride between the start of contiguous compression region in the external memory
     //In the case of kernel tensor, the contiguous compression region is sized at the number of words in the
@@ -182,8 +187,9 @@ public:
             unsigned short _width,
             unsigned short _height,
             unsigned short _maxScalarIndexInChannelGroup,
-            unsigned char _maxScalarIndexInCompressionBlock,
-            unsigned char _maxScalarIndexInTransferBlock,
+            unsigned char _maxClusterIndexInCompressionBlock,
+            unsigned char _maxClusterIndexInTransferBlock,
+            unsigned char _maxScalarIndexInCluster,
             bool _isKernel
             );
 

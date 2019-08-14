@@ -25,7 +25,7 @@
 #define K_SIZE 3
 #define MAX_DATA_LENGTH 1048576
 
-//#define PLAY
+///#define PLAY
 
 typedef
 std::vector<cl_float, boost::alignment::aligned_allocator<cl_float, aocl_utils_cpp::AOCL_ALIGNMENT>>
@@ -62,15 +62,16 @@ TEST (hostInfrastructureTest, playField) {
     int numTensors = 1;
     int height = 1;
     int width = 1;
-    int channel = 16;
+    int channel = 17;
     int seed = 1256;
     float min = 1.0;
     float max = 2.0;
     int numElements = numTensors * height * width * channel;
 
     unsigned short maxScalarIndexInChannelGroup = 15;
-    unsigned  char maxScalarIndexInCompressionBlock = 7;
-    unsigned char maxScalarIndexInTransferBlock = 1;
+    unsigned  char maxClusterIndexInCompressionBlock = COMPRESSION_WINDOW_SIZE - 1;
+    unsigned char maxClusterIndexInTransferBlock = TRANSFER_SIZE - 1;
+    unsigned char maxScalarIndexInCluster = CLUSTER_SIZE - 1;
     bool isKernel = true;
     t_aligned_float_vector floatVector = initialize_vector(
                 seed,
@@ -100,8 +101,9 @@ TEST (hostInfrastructureTest, playField) {
                 width,
                 height,
                 maxScalarIndexInChannelGroup,
-                maxScalarIndexInCompressionBlock,
-                maxScalarIndexInTransferBlock,
+                maxClusterIndexInCompressionBlock,
+                maxClusterIndexInTransferBlock,
+                maxScalarIndexInCluster,
                 isKernel
                 );
 
@@ -131,9 +133,11 @@ TEST (hostInfrastructureTest, compressionTestKernel) {
     int numElements = numTensors * height * width * channel;
 
     unsigned short maxScalarIndexInChannelGroup = channel - 1;
-    unsigned char maxScalarIndexInCompressionBlock = 7;
-    unsigned char maxScalarIndexInTransferBlock = 1;
+    unsigned  char maxClusterIndexInCompressionBlock = COMPRESSION_WINDOW_SIZE - 1;
+    unsigned char maxClusterIndexInTransferBlock = TRANSFER_SIZE - 1;
+    unsigned char maxScalarIndexInCluster = CLUSTER_SIZE - 1;
     bool isKernel = true;
+
     t_aligned_float_vector floatVector = initialize_vector(
                 seed,
                 bernProb,
@@ -162,8 +166,9 @@ TEST (hostInfrastructureTest, compressionTestKernel) {
                 width,
                 height,
                 maxScalarIndexInChannelGroup,
-                maxScalarIndexInCompressionBlock,
-                maxScalarIndexInTransferBlock,
+                maxClusterIndexInCompressionBlock,
+                maxClusterIndexInTransferBlock,
+                maxScalarIndexInCluster,
                 isKernel
                 );
 
@@ -194,9 +199,10 @@ TEST (hostInfrastructureTest, compressionTestGroupedKernel) {
     float max = 2.0;
     int numElements = numTensors * height * width * channel;
 
-    unsigned short maxScalarIndexInChannelGroup = 0;
-    unsigned  char maxScalarIndexInCompressionBlock = 7;
-    unsigned char maxScalarIndexInTransferBlock = 1;
+    unsigned short maxScalarIndexInChannelGroup = channel - 1;
+    unsigned  char maxClusterIndexInCompressionBlock = COMPRESSION_WINDOW_SIZE - 1;
+    unsigned char maxClusterIndexInTransferBlock = TRANSFER_SIZE - 1;
+    unsigned char maxScalarIndexInCluster = CLUSTER_SIZE - 1;
     bool isKernel = true;
     t_aligned_float_vector floatVector = initialize_vector(
                 seed,
@@ -226,8 +232,9 @@ TEST (hostInfrastructureTest, compressionTestGroupedKernel) {
                 width,
                 height,
                 maxScalarIndexInChannelGroup,
-                maxScalarIndexInCompressionBlock,
-                maxScalarIndexInTransferBlock,
+                maxClusterIndexInCompressionBlock,
+                maxClusterIndexInTransferBlock,
+                maxScalarIndexInCluster,
                 isKernel
                 );
 
@@ -259,8 +266,9 @@ TEST (hostInfrastructureTest, compressionTestGroupedActivation) {
     int numElements = numTensors * height * width * channel;
 
     unsigned short maxScalarIndexInChannelGroup = 15;
-    unsigned  char maxScalarIndexInCompressionBlock = 7;
-    unsigned char maxScalarIndexInTransferBlock = 1;
+    unsigned  char maxClusterIndexInCompressionBlock = COMPRESSION_WINDOW_SIZE - 1;
+    unsigned char maxClusterIndexInTransferBlock = TRANSFER_SIZE - 1;
+    unsigned char maxScalarIndexInCluster = CLUSTER_SIZE - 1;
     bool isKernel = false;
     t_aligned_float_vector floatVector = initialize_vector(
                 seed,
@@ -290,8 +298,9 @@ TEST (hostInfrastructureTest, compressionTestGroupedActivation) {
                 width,
                 height,
                 maxScalarIndexInChannelGroup,
-                maxScalarIndexInCompressionBlock,
-                maxScalarIndexInTransferBlock,
+                maxClusterIndexInCompressionBlock,
+                maxClusterIndexInTransferBlock,
+                maxScalarIndexInCluster,
                 isKernel
                 );
 

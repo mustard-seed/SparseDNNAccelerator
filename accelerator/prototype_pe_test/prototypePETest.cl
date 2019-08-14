@@ -77,7 +77,7 @@ typedef struct __attribute__((packed)){
 
 //MAC Operands
 typedef struct __attribute__((packed)) {
-	char values [SIMD_SIZE];
+	char values [4];
 } t_simd_operand;
 
 typedef struct __attribute__((packed)){
@@ -89,11 +89,12 @@ typedef struct __attribute__((packed)){
 t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 	t_accumulator output = 0x0;
 
-	#ifdef DIRECT_COMPRESSION_SIMD
+	//#ifdef DIRECT_COMPRESSION_SIMD
 		#pragma unroll
-		for(int i=0; i<SIMD_SIZE/4; i++){
+		for(int i=0; i<SIMD_SIZE*CLUSTER_SIZE/4; i++){
 			//output += input.data[i]*weights.data[i];
 			// use packed DSP blocks to improve efficiency
+			unsigned char i=0;
 			#if defined (ARRIA10)
 				output += a10_mac_8bitx4(
 					activations.values[i*4],
@@ -120,8 +121,9 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 			#error Unsupported FPGA type!
 			#endif
 		}
-	#endif
-	#ifdef FLEXIBLE_BITMASK_COMPRESSION
+	//#endif
+	//#ifdef FLEXIBLE_BITMASK_COMPRESSION
+	/*
 		#pragma unroll
 		for(int i=0; i<SIMD_SIZE/2; i++){
 			//output += input.data[i]*weights.data[i];
@@ -144,7 +146,8 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 			#error Unsupported FPGA type!
 			#endif
 		}
-	#endif
+		*/
+	//#endif
 
 	return output;
 }
@@ -1127,8 +1130,8 @@ __kernel void kernelPE ()
 {
 	//================Ping-ponged registers========================
 	//BRAM for storing the compression windows
-	char activationWindow[COMPRESSION_WINDOW_SIZE][2];
-	char weightWindow[COMPRESSION_WINDOW_SIZE][2];
+	t_cluster activationWindow[COMPRESSION_WINDOW_SIZE][2];
+	t_cluster weightWindow[COMPRESSION_WINDOW_SIZE][2];
 
 	//Flags that indicates whether we are at the last window
 	bool isLast[2];
@@ -1159,6 +1162,7 @@ __kernel void kernelPE ()
 	#pragma ivdep array(weightWindow)
 	while (true)
 	{
+
 		//================ACTIVATION========================
 		
 		uint2_t nextStateActivation = stateActivation;
@@ -1180,8 +1184,8 @@ __kernel void kernelPE ()
 
 				if (stateActivation == ASSEMBLER_STATE_LOAD_BITMASK)
 				{
-					unsigned char bitmask = activationTransferBlock.values.values[0];
-					bitmaskA[regLoadSide] = bitmask;
+					unsigned char bitmask = activationTransferBlock.values.values[0].cluster_values[0];
+					bitmaskA[regLoadSide & 0x01] = bitmask;
 					numActivation = popCounter(bitmask);
 					countActivation = 0;
 					//EMULATOR_PRINT(("[assembler] bitmaskA: %#04x \n", bitmask));
@@ -1197,7 +1201,7 @@ __kernel void kernelPE ()
 					{
 						//if (i >= offset)
 						//{
-							activationWindow[countActivation+i][regLoadSide]
+							activationWindow[countActivation+i][regLoadSide & 0x01]
 								= activationTransferBlock.values.values[i];
 							//EMULATOR_PRINT(("[assembler] activation value: %#04x \n", activationTransferBlock.values.values[i] & 0xFF));
 						//}
@@ -1238,8 +1242,8 @@ __kernel void kernelPE ()
 
 				if (stateWeight == ASSEMBLER_STATE_LOAD_BITMASK)
 				{
-					unsigned char bitmask =  weightTransferBlock.values.values[0];
-					bitmaskW[regLoadSide] = bitmask; 
+					unsigned char bitmask =  weightTransferBlock.values.values[0].cluster_values[0];
+					bitmaskW[regLoadSide & 0x01] = bitmask; 
 					numWeight = popCounter(bitmask);
 					countWeight = 0;
 					//EMULATOR_PRINT(("[assembler] bitmaskW: %#04x \n", bitmask));
@@ -1255,7 +1259,7 @@ __kernel void kernelPE ()
 					{
 						//if (i >= offset)
 						//{
-							weightWindow[countWeight+i][regLoadSide]
+							weightWindow[countWeight+i][regLoadSide & 0x01]
 								= weightTransferBlock.values.values[i];
 							//EMULATOR_PRINT(("[assembler] weight value: %#04x \n", weightTransferBlock.values.values[i] & 0xFF));
 						//}
@@ -1298,6 +1302,13 @@ __kernel void kernelPE ()
 
 			t_simd_operand simdActivations;
 			t_simd_operand simdWeights;
+			t_cluster zeros;
+			#pragma unroll
+			for (int i=0; i<CLUSTER_SIZE; i++)
+			{
+				zeros.cluster_values[i] = 0x0;
+			}
+
 
 			#pragma unroll
 			for (unsigned char i=0; i<SIMD_SIZE; i++)
@@ -1305,18 +1316,23 @@ __kernel void kernelPE ()
 				unsigned char indexW = 
 					(indicesW >> (i*BITWIDTH_COMPRESSION_WINDOW_INDEX))
 					& MASK_COMPRESSION_WINDOW_INDEX;
-				char w = ((countOperands + i) < numOperands) ?
-					weightWindow[indexW][(~regLoadSide) & 0x1] : 0x0;
+				t_cluster w = ((countOperands + i) < numOperands) ?
+					weightWindow[indexW][(~regLoadSide) & 0x01] : zeros;
 				//char w = weightWindow[i][(~regLoadSide) & 0x1];
-				simdWeights.values[i] = w;
+				//simdWeights.values[i] = w;
 
 				unsigned char indexA = 
 					(indicesA >> (i*BITWIDTH_COMPRESSION_WINDOW_INDEX))
 					& MASK_COMPRESSION_WINDOW_INDEX;
-				char a = ((countOperands + i) < numOperands) ?
-					activationWindow[indexA][(~regLoadSide) & 0x1] : 0x0;
+				t_cluster a = ((countOperands + i) < numOperands) ?
+					activationWindow[indexA][(~regLoadSide) & 0x01] : zeros;
 				//char a = activationWindow[i][(~regLoadSide) & 0x1];
-				simdActivations.values[i] = a;
+
+				for (unsigned char j=0; j<CLUSTER_SIZE; j++)
+				{
+					simdActivations.values[SIMD_SIZE*i + j] = a.cluster_values[j];
+					simdWeights.values[SIMD_SIZE*i + j] = w.cluster_values[j];
+				}
 
 				//EMULATOR_PRINT ( ("[dispatcher]: w: %#04x a: %#04x \n", w & 0xFF, a & 0xFF) );
 				//EMULATOR_PRINT ( ("[dispatcher]: wIndex: %u aIndex :%u \n", indexW & 0xFF, indexA & 0xFF));
@@ -1355,8 +1371,10 @@ __kernel void kernelPE ()
 				//pSum = 0;
 			}
 		}
-		//===================SWAP===========================
-		//Take an extra iteration for swapping, otherwise Fmax is low
+
+
+	//===================SWAP===========================
+	//Take an extra iteration for swapping, otherwise Fmax is low
 		if ( (stateActivation == ASSEMBLER_STATE_WAIT)
 			&& (stateWeight == ASSEMBLER_STATE_WAIT)
 			&& (stateMac == MAC_STATE_WAIT) )
@@ -1369,7 +1387,7 @@ __kernel void kernelPE ()
 			//countActivation = 0;
 			//countWeight = 0;
 
-		}
+		}	
 
 		//================Next state update==================
 		stateWeight = nextStateWeight;
