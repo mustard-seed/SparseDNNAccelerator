@@ -497,23 +497,13 @@ __kernel void kernelTestInterface (
 	int idy = IDY;
 
 	while (
-			(countInputActivationBlocks < numInputActivationBlocks)
-			||
 			(countOutputActivationBlocks < numOutputActivationBlocks)
-			||
-			(countInputWeightBlocks < numInputWeightBlocks)
 			||
 			(countOutputWeightBlocks < numOutputWeightBlocks)
 			||
-			(countInputBias < numInputBias)
-			||
 			(countOutputBias < numOutputBias)
 			||
-			(countInputDrain < numInputDrain)
-			||
 			(countOutputDrain < numOutputDrain)
-			||
-			(countInputInstruction < numInputInstruction)
 			||
 			(countOutputInstructionVertical < numOutputInstructionVertical)
 			||
@@ -572,7 +562,8 @@ __kernel void kernelTestInterface (
 						block.values[i] = taggedBlock.values.values[i];
 					}
 					//hostBlock.runLength = block.streamingBlockIndex;
-					pActivationOutput[countOutputActivationBlocks++] = block;
+					//pActivationOutput[countOutputActivationBlocks++] = block;
+					countOutputActivationBlocks++;
 					//EMULATOR_PRINT ( ("[kernelTestInferace]: Collected %d out of %d activation blocks\n", countOutputActivationBlocks, numOutputActivationBlocks) );
 					//DEBUG_PRINT ( ("[kernelTestInferace]: Collected %d out of %d activation blocks\n", countOutputActivationBlocks, numOutputActivationBlocks) );
 				}
@@ -634,7 +625,8 @@ __kernel void kernelTestInterface (
 						block.values[i] = taggedBlock.values.values[i];
 					}
 					//hostBlock.runLength = block.streamingBlockIndex;
-					pWeightOutput[countOutputWeightBlocks++] = block;
+					//pWeightOutput[countOutputWeightBlocks++] = block;
+					countOutputWeightBlocks++;
 					//EMULATOR_PRINT ( ("[kernelTestInferace]: Collected %d out of %d weight blocks\n", countOutputWeightBlocks, numOutputWeightBlocks) );
 					//DEBUG_PRINT ( ("[kernelTestInferace]: Collected %d out of %d weight blocks\n", countOutputWeightBlocks, numOutputWeightBlocks) );
 				}
@@ -1188,7 +1180,7 @@ __kernel void kernelPE ()
 					bitmaskA[regLoadSide & 0x01] = bitmask;
 					numActivation = popCounter(bitmask);
 					countActivation = 0;
-					//EMULATOR_PRINT(("[assembler] bitmaskA: %#04x \n", bitmask));
+					EMULATOR_PRINT(("[assembler] bitmaskA: %#04x \n", bitmask));
 				}
 				else
 				{
@@ -1203,7 +1195,9 @@ __kernel void kernelPE ()
 						//{
 							activationWindow[countActivation+i][regLoadSide & 0x01]
 								= activationTransferBlock.values.values[i];
-							//EMULATOR_PRINT(("[assembler] activation value: %#04x \n", activationTransferBlock.values.values[i] & 0xFF));
+							EMULATOR_PRINT(("[assembler] activation value: %#04x %#04x \n"
+								, activationTransferBlock.values.values[i].cluster_values[0] & 0xFF
+								, activationTransferBlock.values.values[i].cluster_values[1] & 0xFF));
 						//}
 					} // for. Transfer the values in the transfer block to the compression window
 
@@ -1237,7 +1231,7 @@ __kernel void kernelPE ()
 
 			if (weightReadSuccess)
 			{
-				isLast[regLoadSide] = weightTransferBlock.isLast;
+				isLast[regLoadSide & 0x01] = weightTransferBlock.isLast;
 				//DEBUG_PRINT(("[Assembler] Weight read!\n"));
 
 				if (stateWeight == ASSEMBLER_STATE_LOAD_BITMASK)
@@ -1246,7 +1240,7 @@ __kernel void kernelPE ()
 					bitmaskW[regLoadSide & 0x01] = bitmask; 
 					numWeight = popCounter(bitmask);
 					countWeight = 0;
-					//EMULATOR_PRINT(("[assembler] bitmaskW: %#04x \n", bitmask));
+					EMULATOR_PRINT(("[assembler] bitmaskW: %#04x \n", bitmask));
 				}
 				else
 				{
@@ -1261,7 +1255,9 @@ __kernel void kernelPE ()
 						//{
 							weightWindow[countWeight+i][regLoadSide & 0x01]
 								= weightTransferBlock.values.values[i];
-							//EMULATOR_PRINT(("[assembler] weight value: %#04x \n", weightTransferBlock.values.values[i] & 0xFF));
+							EMULATOR_PRINT(("[assembler] weight value: %#04x %#04x \n"
+								, weightTransferBlock.values.values[i].cluster_values[0] & 0xFF
+								, weightTransferBlock.values.values[i].cluster_values[1] & 0xFF));
 						//}
 					} // for. Transfer the values in the transfer block to the compression window
 
@@ -1291,11 +1287,31 @@ __kernel void kernelPE ()
 				bitmaskW [(~regLoadSide) & 0x1],
 				bitmaskA [(~regLoadSide) & 0x1]
 			);
-			nextStateMac = MAC_STATE_PROCESS_WINDOW;
 			numOperands = (alignmentData >> 48) & 0xFF;
 			indicesW = (alignmentData >> 24) & 0xFFFFFF;
 			indicesA = (alignmentData) & 0xFFFFFF;
 			countOperands = 0; 
+			EMULATOR_PRINT ( ("[aligner]: indicesW: %#06x indicesA: %#06x numOperands: %#04x \n"
+					, indicesW, indicesA,  numOperands) );
+
+			/*
+			if (countOperands >= numOperands)
+			{
+				if (isLast[(~regLoadSide) & 0x1])
+				{
+					nextStateMac = MAC_STATE_WRITE_PSUM;
+				}
+				else
+				{
+					nextStateMac = MAC_STATE_WAIT;
+				}
+			}
+			else
+			{
+				nextStateMac = MAC_STATE_PROCESS_WINDOW;
+			}
+			*/
+			nextStateMac = MAC_STATE_PROCESS_WINDOW;
 		}
 		else if (stateMac == MAC_STATE_PROCESS_WINDOW)
 		{
@@ -1328,14 +1344,16 @@ __kernel void kernelPE ()
 					activationWindow[indexA][(~regLoadSide) & 0x01] : zeros;
 				//char a = activationWindow[i][(~regLoadSide) & 0x1];
 
+				#pragma unroll
 				for (unsigned char j=0; j<CLUSTER_SIZE; j++)
 				{
 					simdActivations.values[SIMD_SIZE*i + j] = a.cluster_values[j];
 					simdWeights.values[SIMD_SIZE*i + j] = w.cluster_values[j];
 				}
 
-				//EMULATOR_PRINT ( ("[dispatcher]: w: %#04x a: %#04x \n", w & 0xFF, a & 0xFF) );
-				//EMULATOR_PRINT ( ("[dispatcher]: wIndex: %u aIndex :%u \n", indexW & 0xFF, indexA & 0xFF));
+				EMULATOR_PRINT ( ("[dispatcher]: w0: %#04x w1: %#04x a0: %#04x a1: %#04x \n"
+					, w.cluster_values[0] & 0xFF, w.cluster_values[1] & 0xFF,  a.cluster_values[0] & 0xFF, a.cluster_values[1] & 0xFF) );
+				EMULATOR_PRINT ( ("[dispatcher]: wIndex: %u aIndex :%u \n", indexW & 0xFF, indexA & 0xFF));
 			}
 
 			t_accumulator tempPSum = madd(simdActivations, simdWeights);
@@ -1365,9 +1383,9 @@ __kernel void kernelPE ()
 			if (writeSuccess)
 			{
 				//DEBUG_PRINT(("[MAC] Sending!\n"));
+				EMULATOR_PRINT(("[MAC] Commit. pSum value: %#04x \n", pSum));
 				pSum = 0;
 				nextStateMac = MAC_STATE_WAIT;
-				//EMULATOR_PRINT(("[MAC] Commit. pSum value: %#04x \n", pSum));
 				//pSum = 0;
 			}
 		}
@@ -1375,9 +1393,9 @@ __kernel void kernelPE ()
 
 	//===================SWAP===========================
 	//Take an extra iteration for swapping, otherwise Fmax is low
-		if ( (stateActivation == ASSEMBLER_STATE_WAIT)
-			&& (stateWeight == ASSEMBLER_STATE_WAIT)
-			&& (stateMac == MAC_STATE_WAIT) )
+		if ( (nextStateActivation == ASSEMBLER_STATE_WAIT)
+			&& (nextStateWeight == ASSEMBLER_STATE_WAIT)
+			&& (nextStateMac == MAC_STATE_WAIT) )
 		{
 			nextStateWeight = ASSEMBLER_STATE_LOAD_BITMASK;
 			nextStateActivation = ASSEMBLER_STATE_LOAD_BITMASK;
