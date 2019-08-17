@@ -90,7 +90,11 @@ protected:
 
     cl::CommandQueue clCQTestInterface;
 
+    cl::CommandQueue clCQPE;
+
     cl::Kernel kernelTestInterface;
+
+    cl::Kernel kernelPE;
 
     cl::Buffer bufferInstructionInput;
     cl::Buffer bufferInstructionOutputH;
@@ -127,6 +131,8 @@ protected:
     //Profile function
     cl_int (*get_profile_fn)(cl_device_id, cl_program, cl_bool,cl_bool,cl_bool,size_t, void *,size_t *,cl_int *);
 
+    //Reset function
+    //cl_int (*reset_fn)(cl_context, cl_uint, const cl_device_id*);
 
     void SetUp() override {
 #ifdef ARRIA10
@@ -162,6 +168,9 @@ protected:
         kernelTestInterface = cl::Kernel(program, "kernelTestInterface", &status);
         aocl_utils_cpp::checkError(status, "Failed to create the test interface kernel!");
 
+        kernelPE = cl::Kernel(program, "kernelPE", &status);
+         aocl_utils_cpp::checkError(status, "Failed to create the PE kernel!");
+
         clCQTestInterface = cl::CommandQueue(
                     clContext,
                     clDevice,
@@ -169,6 +178,14 @@ protected:
                     &status
                     );
         aocl_utils_cpp::checkError(status, "Failed to setup the test interface command queue!");
+
+        clCQPE = cl::CommandQueue(
+                    clContext,
+                    clDevice,
+                    CL_QUEUE_PROFILING_ENABLE,
+                    &status
+                    );
+        aocl_utils_cpp::checkError(status, "Failed to setup the PE command queue!");
 
         bufferInstructionInput = cl::Buffer (
                         clContext,
@@ -272,6 +289,7 @@ protected:
 
         get_profile_fn = (cl_int (*) (cl_device_id, cl_program, cl_bool,cl_bool,cl_bool,size_t, void *,size_t *,cl_int *))clGetExtensionFunctionAddress("clGetProfileDataDeviceIntelFPGA");
 
+        //reset_fn = (cl_int (*) (cl_context, cl_uint, const cl_device_id*))clGetExtensionFunctionAddress("clResetKernelsIntelFPGA");
         std::cout <<"AOCL setup compelete"<<std::endl;
 
         //Need to setup numInstructions, idx, and idy separately
@@ -409,10 +427,15 @@ protected:
         kernelTestInterface.setArg(22, (cl_uchar)MAX_IDX);
         kernelTestInterface.setArg(23, (cl_uchar)MAX_IDY);
 
+
+        //(*reset_fn)(this->clContext(), 1, (this->clDevice()));
+
+        kernelPE.setArg(0, (cl_ushort)0x7FF);
+
         cl::Event event;
         //Launch kernels
+        clCQPE.enqueueTask(kernelPE);
         clCQTestInterface.enqueueTask(kernelTestInterface, NULL, &event);
-
         //Retrieve data
         clCQTestInterface.finish();
 
@@ -513,12 +536,12 @@ float dot_product_regular_vectors (
         );
 
 
-TEST_F (peTestFixture, testFixture)
-{
-    launch(IDX,IDY,0,0, false);
-    EXPECT_TRUE (COMPRESSION_VEC_SIZE == 4);
-    EXPECT_TRUE(true);
-}
+//TEST_F (peTestFixture, testFixture)
+//{
+//    launch(IDX,IDY,0,0, false);
+//    EXPECT_TRUE (COMPRESSION_VEC_SIZE == 4);
+//    EXPECT_TRUE(true);
+//}
 
 #ifdef PLAY
 TEST_F (peTestFixture, testPlayfield) {
@@ -565,14 +588,14 @@ TEST_F (peTestFixture, testPlayfield) {
     std::vector<float> weightRealInput (numElements, 0.45);
 
 
-        activationRealInput.at(12) = 0.00;
-        activationRealInput.at(13) = 0.20;
-        activationRealInput.at(14) = 0.00;
-        activationRealInput.at(15) = 0.20;
-        weightRealInput.at(12) = 0.20;
-        weightRealInput.at(13) = 0.00;
-        weightRealInput.at(14) = 0.20;
-        weightRealInput.at(15) = 0.00;
+    for (int i=0; i<4; i++)
+    {
+        for (int j=4*i; j < 4*i+4; j++)
+        {
+            activationRealInput.at(j) = 0.25*(i+1);
+            weightRealInput.at(j) = 0.25*(i+1);
+        }
+    }
 
 
     // Generate a block of activations

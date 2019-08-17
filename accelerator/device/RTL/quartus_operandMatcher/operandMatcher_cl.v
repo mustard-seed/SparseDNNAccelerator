@@ -172,8 +172,8 @@ module operandMatcher8 (
 
 
 	//Declare the registers
-	reg [BITMASK_LENGTH-1:0] regBitmaskW;
-	reg [BITMASK_LENGTH-1:0] regBitmaskA;
+	//reg [BITMASK_LENGTH-1:0] regBitmaskW;
+	//reg [BITMASK_LENGTH-1:0] regBitmaskA;
 	//reg [BITMASK_LENGTH-1:0] regMutualBitmask;
 	//reg [ACCUM_LENGTH-1:0] regShiftAccum;
 	//reg [ACCUM_LENGTH-1:0]  regActivationMaskedAccum;
@@ -296,8 +296,8 @@ module operandMatcher8 (
 	//Registers update
 	always @ (posedge clock) begin
 		if (resetn == 1'b0) begin
-			regBitmaskW <= {BITMASK_LENGTH{1'b0}};
-			regBitmaskA <= {BITMASK_LENGTH{1'b0}};
+			//regBitmaskW <= {BITMASK_LENGTH{1'b0}};
+			//regBitmaskA <= {BITMASK_LENGTH{1'b0}};
 			//regMutualBitmask <= {BITMASK_LENGTH{1'b0}};
 			//regShiftAccum <= {ACCUM_LENGTH{1'b0}};
 			//regActivationMaskedAccum <= {ACCUM_LENGTH{1'b0}};
@@ -311,8 +311,8 @@ module operandMatcher8 (
 			//regShiftAccum <= wireShiftAccum;
 			//regActivationMaskedAccum <= wireActivationMaskedAccum;
 			//regWeightMaskedAccum <= wireWeightMaskedAccum;
-			regBitmaskW <= bitmaskW;
-			regBitmaskA <= bitmaskA;
+			//regBitmaskW <= bitmaskW;
+			//regBitmaskA <= bitmaskA;
 			regActivationDenseAccum <= wireActivationDenseAccum;
 			regWeightDenseAccum <= wireWeightDenseAccum;
 			regBitWidthCount <= wireBitWidthCount;
@@ -322,6 +322,8 @@ module operandMatcher8 (
 	//Assign the final output
 	assign result = 
 		{{12{1'b0}}, regBitWidthCount, regWeightDenseAccum, regActivationDenseAccum};
+	//assign result = 
+	//	{{12{1'b0}}, wireBitWidthCount, wireWeightDenseAccum, wireActivationDenseAccum};
 	
 
 

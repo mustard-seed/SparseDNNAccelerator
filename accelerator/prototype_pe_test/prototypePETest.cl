@@ -96,7 +96,7 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 			// use packed DSP blocks to improve efficiency
 			unsigned char i=0;
 			#if defined (ARRIA10)
-				output += a10_mac_8bitx4(
+				output = a10_mac_8bitx4(
 					activations.values[i*4],
 					weights.values[i*4],
 					activations.values[i*4+1],
@@ -107,7 +107,7 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 					weights.values[i*4+3]
 					);
 			#elif defined (C5SOC)
-				output += c5_mac_8bitx4(
+				output = c5_mac_8bitx4(
 						activations.values[i*4],
 						weights.values[i*4],
 						activations.values[i*4+1],
@@ -1117,13 +1117,13 @@ __kernel void mac ()
 
 __attribute__((task))
 __attribute__((max_global_work_dim(0)))
-__attribute__((autorun))
-__kernel void kernelPE ()
+//__attribute__((autorun))
+__kernel void kernelPE (unsigned short maxDebugCount)
 {
 	//================Ping-ponged registers========================
 	//BRAM for storing the compression windows
-	t_cluster activationWindow[COMPRESSION_WINDOW_SIZE][2];
-	t_cluster weightWindow[COMPRESSION_WINDOW_SIZE][2];
+	t_cluster activationWindow[COMPRESSION_WINDOW_SIZE][2]; 
+	t_cluster weightWindow[COMPRESSION_WINDOW_SIZE][2]; 
 
 	//Flags that indicates whether we are at the last window
 	bool isLast[2];
@@ -1150,8 +1150,13 @@ __kernel void kernelPE ()
 	unsigned int indicesW;
 	unsigned int indicesA;
 
+	//================Debug====================
+	unsigned short debugCount = 0;
+
 	#pragma ivdep array(activationWindow)
 	#pragma ivdep array(weightWindow)
+	//#pragma ivdep safelen(7)
+	//#pragma ivdep
 	while (true)
 	{
 
@@ -1200,6 +1205,15 @@ __kernel void kernelPE ()
 								, activationTransferBlock.values.values[i].cluster_values[1] & 0xFF));
 						//}
 					} // for. Transfer the values in the transfer block to the compression window
+
+					if (debugCount < maxDebugCount)
+					{
+						DEBUG_PRINT(("[PE] ActivationTransferBlock [0-4]: %#04x %#04x %#04x %#04x\n",
+							activationTransferBlock.values.values[0].cluster_values[0] & 0xFF, 
+							activationTransferBlock.values.values[0].cluster_values[1] & 0xFF,
+							activationTransferBlock.values.values[1].cluster_values[0] & 0xFF,
+							activationTransferBlock.values.values[1].cluster_values[1] & 0xFF));
+					}
 
 					countActivation += (unsigned char)(TRANSFER_SIZE);
 				}
@@ -1260,6 +1274,15 @@ __kernel void kernelPE ()
 								, weightTransferBlock.values.values[i].cluster_values[1] & 0xFF));
 						//}
 					} // for. Transfer the values in the transfer block to the compression window
+
+					if (debugCount < maxDebugCount)
+					{
+						DEBUG_PRINT(("[PE] weightTransferBlock [0-4]: %#04x %#04x %#04x %#04x\n",
+							weightTransferBlock.values.values[0].cluster_values[0] & 0xFF, 
+							weightTransferBlock.values.values[0].cluster_values[1] & 0xFF,
+							weightTransferBlock.values.values[1].cluster_values[0] & 0xFF,
+							weightTransferBlock.values.values[1].cluster_values[1] & 0xFF));
+					}
 
 					countWeight += (unsigned char)(TRANSFER_SIZE);
 				}
@@ -1356,8 +1379,26 @@ __kernel void kernelPE ()
 				EMULATOR_PRINT ( ("[dispatcher]: wIndex: %u aIndex :%u \n", indexW & 0xFF, indexA & 0xFF));
 			}
 
+
 			t_accumulator tempPSum = madd(simdActivations, simdWeights);
 			pSum += tempPSum;
+			if (debugCount < maxDebugCount)
+				{
+					DEBUG_PRINT(("[PE Dispatcher] a0, a1, a1, a2: %#04x %#04x %#04x %#04x\n",
+						simdActivations.values[0] & 0xFF, 
+						simdActivations.values[1] & 0xFF,
+						simdActivations.values[2] & 0xFF,
+						simdActivations.values[3] & 0xFF));
+
+					DEBUG_PRINT(("[PE Dispatcher] w0, w1, w2, w3: %#04x %#04x %#04x %#04x\n",
+						simdWeights.values[0] & 0xFF, 
+						simdWeights.values[1] & 0xFF,
+						simdWeights.values[2] & 0xFF,
+						simdWeights.values[3] & 0xFF));
+
+					DEBUG_PRINT(("[PE Madd] Psum %#04x\n", pSum));
+
+				}
 			countOperands += SIMD_SIZE;
 			indicesW = indicesW >> (SIMD_SIZE*BITWIDTH_COMPRESSION_WINDOW_INDEX);
 			indicesA = indicesA >> (SIMD_SIZE*BITWIDTH_COMPRESSION_WINDOW_INDEX);
@@ -1384,6 +1425,7 @@ __kernel void kernelPE ()
 			{
 				//DEBUG_PRINT(("[MAC] Sending!\n"));
 				EMULATOR_PRINT(("[MAC] Commit. pSum value: %#04x \n", pSum));
+				DEBUG_PRINT(("[PE Psum] Commit. %#04x\n", pSum));
 				pSum = 0;
 				nextStateMac = MAC_STATE_WAIT;
 				//pSum = 0;
@@ -1393,9 +1435,9 @@ __kernel void kernelPE ()
 
 	//===================SWAP===========================
 	//Take an extra iteration for swapping, otherwise Fmax is low
-		if ( (nextStateActivation == ASSEMBLER_STATE_WAIT)
-			&& (nextStateWeight == ASSEMBLER_STATE_WAIT)
-			&& (nextStateMac == MAC_STATE_WAIT) )
+		if ( (stateActivation == ASSEMBLER_STATE_WAIT)
+			&& (stateWeight == ASSEMBLER_STATE_WAIT)
+			&& (stateMac == MAC_STATE_WAIT) )
 		{
 			nextStateWeight = ASSEMBLER_STATE_LOAD_BITMASK;
 			nextStateActivation = ASSEMBLER_STATE_LOAD_BITMASK;
@@ -1405,7 +1447,20 @@ __kernel void kernelPE ()
 			//countActivation = 0;
 			//countWeight = 0;
 
-		}	
+		}
+
+		//================DEBUG==============================
+		if (debugCount < maxDebugCount)
+		{
+			DEBUG_PRINT(("[PE] countWeight, %#03x\n", countWeight));
+			DEBUG_PRINT(("[PE] countActivation: %#03x\n", countActivation));
+			DEBUG_PRINT(("[PE] countOperands: %#03x\n", countOperands));
+			DEBUG_PRINT(("[PE] indicesW: %#03x\n", indicesW));
+			DEBUG_PRINT(("[PE] indicesA: %#03x\n", indicesA));
+			debugCount++;
+		}
+		
+		//===================================================
 
 		//================Next state update==================
 		stateWeight = nextStateWeight;

@@ -70,6 +70,7 @@
       <FILE name="operandMatcher_cl.v" />
    </REQUIREMENTS>
   </FUNCTION>
+
   <FUNCTION name="popCounter" module="popCounterWrapper">
     <ATTRIBUTES>
       <!-- Setting IS_STALL_FREE="yes" means the function neither generates stalls internally nor can it 
