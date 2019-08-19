@@ -22,7 +22,7 @@
            For variable latency functions, pipeline around this function will be balanced to this 
            value. Setting EXPECTED_LATENCY to a different value will still produce correct results
            but may affect number of stalls inside the pipeline. -->
-      <EXPECTED_LATENCY value="2"/>
+      <EXPECTED_LATENCY value="1"/>
       
       <!-- Number of multiple inputs that can be processed simultaneously by this function.
            If IS_STALL_FREE="no" and IS_FIXED_LATENCY="no", the CAPACITY value must be specified.

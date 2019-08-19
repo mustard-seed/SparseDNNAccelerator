@@ -195,7 +195,7 @@ module operandMatcher8 (
 	wire [BITWIDTH_COUNT-1:0] wireBitWidthCount;
 
 	//Structural coding
-	assign wireMutualBitmask = regBitmaskA & regBitmaskW;
+	assign wireMutualBitmask = bitmaskA & bitmaskW;
 	assign wireNegatedMutualBitmask = ~wireMutualBitmask;
 
 	accumulator # (.BITMASK_LENGTH(BITMASK_LENGTH),
@@ -208,13 +208,13 @@ module operandMatcher8 (
 	accumulator # (.BITMASK_LENGTH(BITMASK_LENGTH),
 			.INDEX_BITWIDTH(INDEX_BITWIDTH))
 	inst_accumulator_activationAccumulator 
-		(.bitmask(regBitmaskA),
+		(.bitmask(bitmaskA),
 		 .index(wireActivationAccum));
 
 	accumulator # (.BITMASK_LENGTH(BITMASK_LENGTH),
 			.INDEX_BITWIDTH(INDEX_BITWIDTH))
 	inst_accumulator_weightAccumulator 
-		(.bitmask(regBitmaskW),
+		(.bitmask(bitmaskW),
 		 .index(wireWeightAccum));
 
 

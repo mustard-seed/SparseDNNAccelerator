@@ -94,9 +94,8 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 		for(int i=0; i<SIMD_SIZE*CLUSTER_SIZE/4; i++){
 			//output += input.data[i]*weights.data[i];
 			// use packed DSP blocks to improve efficiency
-			unsigned char i=0;
 			#if defined (ARRIA10)
-				output = a10_mac_8bitx4(
+				output += a10_mac_8bitx4(
 					activations.values[i*4],
 					weights.values[i*4],
 					activations.values[i*4+1],
@@ -107,7 +106,7 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 					weights.values[i*4+3]
 					);
 			#elif defined (C5SOC)
-				output = c5_mac_8bitx4(
+				output += c5_mac_8bitx4(
 						activations.values[i*4],
 						weights.values[i*4],
 						activations.values[i*4+1],
@@ -1117,8 +1116,8 @@ __kernel void mac ()
 
 __attribute__((task))
 __attribute__((max_global_work_dim(0)))
-//__attribute__((autorun))
-__kernel void kernelPE (unsigned short maxDebugCount)
+__attribute__((autorun))
+__kernel void kernelPE ()
 {
 	//================Ping-ponged registers========================
 	//BRAM for storing the compression windows
@@ -1151,7 +1150,7 @@ __kernel void kernelPE (unsigned short maxDebugCount)
 	unsigned int indicesA;
 
 	//================Debug====================
-	unsigned short debugCount = 0;
+	//unsigned short debugCount = 0;
 
 	#pragma ivdep array(activationWindow)
 	#pragma ivdep array(weightWindow)
@@ -1185,7 +1184,7 @@ __kernel void kernelPE (unsigned short maxDebugCount)
 					bitmaskA[regLoadSide & 0x01] = bitmask;
 					numActivation = popCounter(bitmask);
 					countActivation = 0;
-					EMULATOR_PRINT(("[assembler] bitmaskA: %#04x \n", bitmask));
+					//EMULATOR_PRINT(("[assembler] bitmaskA: %#04x \n", bitmask));
 				}
 				else
 				{
@@ -1200,20 +1199,20 @@ __kernel void kernelPE (unsigned short maxDebugCount)
 						//{
 							activationWindow[countActivation+i][regLoadSide & 0x01]
 								= activationTransferBlock.values.values[i];
-							EMULATOR_PRINT(("[assembler] activation value: %#04x %#04x \n"
-								, activationTransferBlock.values.values[i].cluster_values[0] & 0xFF
-								, activationTransferBlock.values.values[i].cluster_values[1] & 0xFF));
+							//EMULATOR_PRINT(("[assembler] activation value: %#04x %#04x \n"
+							//	, activationTransferBlock.values.values[i].cluster_values[0] & 0xFF
+							//	, activationTransferBlock.values.values[i].cluster_values[1] & 0xFF));
 						//}
 					} // for. Transfer the values in the transfer block to the compression window
 
-					if (debugCount < maxDebugCount)
-					{
-						DEBUG_PRINT(("[PE] ActivationTransferBlock [0-4]: %#04x %#04x %#04x %#04x\n",
-							activationTransferBlock.values.values[0].cluster_values[0] & 0xFF, 
-							activationTransferBlock.values.values[0].cluster_values[1] & 0xFF,
-							activationTransferBlock.values.values[1].cluster_values[0] & 0xFF,
-							activationTransferBlock.values.values[1].cluster_values[1] & 0xFF));
-					}
+					//if (debugCount < maxDebugCount)
+					//{
+					//	DEBUG_PRINT(("[PE] ActivationTransferBlock [0-4]: %#04x %#04x %#04x %#04x\n",
+					//		activationTransferBlock.values.values[0].cluster_values[0] & 0xFF, 
+					//		activationTransferBlock.values.values[0].cluster_values[1] & 0xFF,
+					//		activationTransferBlock.values.values[1].cluster_values[0] & 0xFF,
+					//		activationTransferBlock.values.values[1].cluster_values[1] & 0xFF));
+					//}
 
 					countActivation += (unsigned char)(TRANSFER_SIZE);
 				}
@@ -1254,7 +1253,7 @@ __kernel void kernelPE (unsigned short maxDebugCount)
 					bitmaskW[regLoadSide & 0x01] = bitmask; 
 					numWeight = popCounter(bitmask);
 					countWeight = 0;
-					EMULATOR_PRINT(("[assembler] bitmaskW: %#04x \n", bitmask));
+					//EMULATOR_PRINT(("[assembler] bitmaskW: %#04x \n", bitmask));
 				}
 				else
 				{
@@ -1269,20 +1268,20 @@ __kernel void kernelPE (unsigned short maxDebugCount)
 						//{
 							weightWindow[countWeight+i][regLoadSide & 0x01]
 								= weightTransferBlock.values.values[i];
-							EMULATOR_PRINT(("[assembler] weight value: %#04x %#04x \n"
-								, weightTransferBlock.values.values[i].cluster_values[0] & 0xFF
-								, weightTransferBlock.values.values[i].cluster_values[1] & 0xFF));
+							//EMULATOR_PRINT(("[assembler] weight value: %#04x %#04x \n"
+							//	, weightTransferBlock.values.values[i].cluster_values[0] & 0xFF
+							//	, weightTransferBlock.values.values[i].cluster_values[1] & 0xFF));
 						//}
 					} // for. Transfer the values in the transfer block to the compression window
 
-					if (debugCount < maxDebugCount)
-					{
-						DEBUG_PRINT(("[PE] weightTransferBlock [0-4]: %#04x %#04x %#04x %#04x\n",
-							weightTransferBlock.values.values[0].cluster_values[0] & 0xFF, 
-							weightTransferBlock.values.values[0].cluster_values[1] & 0xFF,
-							weightTransferBlock.values.values[1].cluster_values[0] & 0xFF,
-							weightTransferBlock.values.values[1].cluster_values[1] & 0xFF));
-					}
+					//if (debugCount < maxDebugCount)
+					//{
+					//	DEBUG_PRINT(("[PE] weightTransferBlock [0-4]: %#04x %#04x %#04x %#04x\n",
+					//		weightTransferBlock.values.values[0].cluster_values[0] & 0xFF, 
+					//		weightTransferBlock.values.values[0].cluster_values[1] & 0xFF,
+					//		weightTransferBlock.values.values[1].cluster_values[0] & 0xFF,
+					//		weightTransferBlock.values.values[1].cluster_values[1] & 0xFF));
+					//}
 
 					countWeight += (unsigned char)(TRANSFER_SIZE);
 				}
@@ -1314,8 +1313,8 @@ __kernel void kernelPE (unsigned short maxDebugCount)
 			indicesW = (alignmentData >> 24) & 0xFFFFFF;
 			indicesA = (alignmentData) & 0xFFFFFF;
 			countOperands = 0; 
-			EMULATOR_PRINT ( ("[aligner]: indicesW: %#06x indicesA: %#06x numOperands: %#04x \n"
-					, indicesW, indicesA,  numOperands) );
+			//EMULATOR_PRINT ( ("[aligner]: indicesW: %#06x indicesA: %#06x numOperands: %#04x \n"
+			//		, indicesW, indicesA,  numOperands) );
 
 			/*
 			if (countOperands >= numOperands)
@@ -1374,31 +1373,31 @@ __kernel void kernelPE (unsigned short maxDebugCount)
 					simdWeights.values[SIMD_SIZE*i + j] = w.cluster_values[j];
 				}
 
-				EMULATOR_PRINT ( ("[dispatcher]: w0: %#04x w1: %#04x a0: %#04x a1: %#04x \n"
-					, w.cluster_values[0] & 0xFF, w.cluster_values[1] & 0xFF,  a.cluster_values[0] & 0xFF, a.cluster_values[1] & 0xFF) );
-				EMULATOR_PRINT ( ("[dispatcher]: wIndex: %u aIndex :%u \n", indexW & 0xFF, indexA & 0xFF));
+				//EMULATOR_PRINT ( ("[dispatcher]: w0: %#04x w1: %#04x a0: %#04x a1: %#04x \n"
+				//	, w.cluster_values[0] & 0xFF, w.cluster_values[1] & 0xFF,  a.cluster_values[0] & 0xFF, a.cluster_values[1] & 0xFF) );
+				//EMULATOR_PRINT ( ("[dispatcher]: wIndex: %u aIndex :%u \n", indexW & 0xFF, indexA & 0xFF));
 			}
 
 
 			t_accumulator tempPSum = madd(simdActivations, simdWeights);
 			pSum += tempPSum;
-			if (debugCount < maxDebugCount)
-				{
-					DEBUG_PRINT(("[PE Dispatcher] a0, a1, a1, a2: %#04x %#04x %#04x %#04x\n",
-						simdActivations.values[0] & 0xFF, 
-						simdActivations.values[1] & 0xFF,
-						simdActivations.values[2] & 0xFF,
-						simdActivations.values[3] & 0xFF));
+			//if (debugCount < maxDebugCount)
+			//	{
+			//		DEBUG_PRINT(("[PE Dispatcher] a0, a1, a1, a2: %#04x %#04x %#04x %#04x\n",
+			//			simdActivations.values[0] & 0xFF, 
+			//			simdActivations.values[1] & 0xFF,
+			//			simdActivations.values[2] & 0xFF,
+			//			simdActivations.values[3] & 0xFF));
 
-					DEBUG_PRINT(("[PE Dispatcher] w0, w1, w2, w3: %#04x %#04x %#04x %#04x\n",
-						simdWeights.values[0] & 0xFF, 
-						simdWeights.values[1] & 0xFF,
-						simdWeights.values[2] & 0xFF,
-						simdWeights.values[3] & 0xFF));
+			//		DEBUG_PRINT(("[PE Dispatcher] w0, w1, w2, w3: %#04x %#04x %#04x %#04x\n",
+			//			simdWeights.values[0] & 0xFF, 
+			//			simdWeights.values[1] & 0xFF,
+			//			simdWeights.values[2] & 0xFF,
+			//			simdWeights.values[3] & 0xFF));
 
-					DEBUG_PRINT(("[PE Madd] Psum %#04x\n", pSum));
+			//		DEBUG_PRINT(("[PE Madd] Psum %#04x\n", pSum));
 
-				}
+			//	}
 			countOperands += SIMD_SIZE;
 			indicesW = indicesW >> (SIMD_SIZE*BITWIDTH_COMPRESSION_WINDOW_INDEX);
 			indicesA = indicesA >> (SIMD_SIZE*BITWIDTH_COMPRESSION_WINDOW_INDEX);
@@ -1425,7 +1424,7 @@ __kernel void kernelPE (unsigned short maxDebugCount)
 			{
 				//DEBUG_PRINT(("[MAC] Sending!\n"));
 				EMULATOR_PRINT(("[MAC] Commit. pSum value: %#04x \n", pSum));
-				DEBUG_PRINT(("[PE Psum] Commit. %#04x\n", pSum));
+				//DEBUG_PRINT(("[PE Psum] Commit. %#04x\n", pSum));
 				pSum = 0;
 				nextStateMac = MAC_STATE_WAIT;
 				//pSum = 0;
@@ -1450,15 +1449,15 @@ __kernel void kernelPE (unsigned short maxDebugCount)
 		}
 
 		//================DEBUG==============================
-		if (debugCount < maxDebugCount)
-		{
-			DEBUG_PRINT(("[PE] countWeight, %#03x\n", countWeight));
-			DEBUG_PRINT(("[PE] countActivation: %#03x\n", countActivation));
-			DEBUG_PRINT(("[PE] countOperands: %#03x\n", countOperands));
-			DEBUG_PRINT(("[PE] indicesW: %#03x\n", indicesW));
-			DEBUG_PRINT(("[PE] indicesA: %#03x\n", indicesA));
-			debugCount++;
-		}
+		//if (debugCount < maxDebugCount)
+		//{
+		//	DEBUG_PRINT(("[PE] countWeight, %#03x\n", countWeight));
+		//	DEBUG_PRINT(("[PE] countActivation: %#03x\n", countActivation));
+		//	DEBUG_PRINT(("[PE] countOperands: %#03x\n", countOperands));
+		//	DEBUG_PRINT(("[PE] indicesW: %#03x\n", indicesW));
+		//	DEBUG_PRINT(("[PE] indicesA: %#03x\n", indicesA));
+		//	debugCount++;
+		//}
 		
 		//===================================================
 

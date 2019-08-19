@@ -31,12 +31,12 @@
 #define FRAC_WIDTH 8
 #define INT_WIDTH 3
 #define MAX_INSTRUCTION_SIZE 64
-//#define MAX_DATA_LENGTH 32784
-#define MAX_DATA_LENGTH 1024
+#define MAX_DATA_LENGTH 32784
+//#define MAX_DATA_LENGTH 1024
 
 #define MAX_IDX 1
 #define MAX_IDY 1
-#define PLAY
+//#define PLAY
 typedef
 std::vector<cl_ushort, boost::alignment::aligned_allocator<cl_ushort, aocl_utils_cpp::AOCL_ALIGNMENT>>
 //std::vector<cl_ushort>
@@ -168,8 +168,8 @@ protected:
         kernelTestInterface = cl::Kernel(program, "kernelTestInterface", &status);
         aocl_utils_cpp::checkError(status, "Failed to create the test interface kernel!");
 
-        kernelPE = cl::Kernel(program, "kernelPE", &status);
-         aocl_utils_cpp::checkError(status, "Failed to create the PE kernel!");
+//        kernelPE = cl::Kernel(program, "kernelPE", &status);
+//         aocl_utils_cpp::checkError(status, "Failed to create the PE kernel!");
 
         clCQTestInterface = cl::CommandQueue(
                     clContext,
@@ -179,12 +179,12 @@ protected:
                     );
         aocl_utils_cpp::checkError(status, "Failed to setup the test interface command queue!");
 
-        clCQPE = cl::CommandQueue(
-                    clContext,
-                    clDevice,
-                    CL_QUEUE_PROFILING_ENABLE,
-                    &status
-                    );
+//        clCQPE = cl::CommandQueue(
+//                    clContext,
+//                    clDevice,
+//                    CL_QUEUE_PROFILING_ENABLE,
+//                    &status
+//                    );
         aocl_utils_cpp::checkError(status, "Failed to setup the PE command queue!");
 
         bufferInstructionInput = cl::Buffer (
@@ -430,11 +430,11 @@ protected:
 
         //(*reset_fn)(this->clContext(), 1, (this->clDevice()));
 
-        kernelPE.setArg(0, (cl_ushort)0x7FF);
+        //kernelPE.setArg(0, (cl_ushort)0x7FF);
 
         cl::Event event;
         //Launch kernels
-        clCQPE.enqueueTask(kernelPE);
+        //clCQPE.enqueueTask(kernelPE);
         clCQTestInterface.enqueueTask(kernelTestInterface, NULL, &event);
         //Retrieve data
         clCQTestInterface.finish();
@@ -1395,8 +1395,8 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageOneShort) {
                 VECTOR_A_SEED,
                 numElements,
                 probOne,
-                -3.14,
-                3.14
+                0.49,
+                0.51
                 );
     //std::vector<float> activationRealInput = {-3.14f};
 
@@ -1405,8 +1405,8 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageOneShort) {
                 VECTOR_B_SEED,
                 numElements,
                 probOne,
-                -3.14,
-                3.14
+                0.49,
+                0.51
                 );
     //std::vector<float> weightRealInput = {3.14f};
 
