@@ -71,7 +71,9 @@
    </REQUIREMENTS>
   </FUNCTION>
 
-  <FUNCTION name="popCounter" module="popCounterWrapper">
+<!--////////////////////////////////////////////////////////////-->
+  <!--////////////////////////////////////////////////////////////-->
+    <FUNCTION name="popCounter" module="popCounterWrapper">
     <ATTRIBUTES>
       <!-- Setting IS_STALL_FREE="yes" means the function neither generates stalls internally nor can it 
            properly handle incoming stalls (because it simply ignores its stall/valid inputs). If set
@@ -140,5 +142,6 @@
       <FILE name="popCounterWrapper_cl.v" />
    </REQUIREMENTS>
   </FUNCTION>
+  <!--////////////////////////////////////////////////////////////-->
 </RTL_SPEC>
 

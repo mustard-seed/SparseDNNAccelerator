@@ -283,36 +283,14 @@ module operandMatcher8 (
 			.outputWithoutGap(wireWeightDenseAccum)
 		);
 
-	//Register initials
-	//initial begin
-		//regMutualBitmask = {BITMASK_LENGTH{1'b0}};
-		//regShiftAccum = {ACCUM_LENGTH{1'b0}};
-		//regActivationMaskedAccum = {ACCUM_LENGTH{1'b0}};
-		//regWeightMaskedAccum = {ACCUM_LENGTH{1'b0}};
-		//regActivationDenseAccum = {ACCUM_LENGTH{1'b0}};
-		//regWeightDenseAccum = {ACCUM_LENGTH{1'b0}};
-		//regBitWidthCount = {BITWIDTH_COUNT{1'b0}};
-	//end
 	//Registers update
 	always @ (posedge clock) begin
 		if (resetn == 1'b0) begin
-			//regBitmaskW <= {BITMASK_LENGTH{1'b0}};
-			//regBitmaskA <= {BITMASK_LENGTH{1'b0}};
-			//regMutualBitmask <= {BITMASK_LENGTH{1'b0}};
-			//regShiftAccum <= {ACCUM_LENGTH{1'b0}};
-			//regActivationMaskedAccum <= {ACCUM_LENGTH{1'b0}};
-			//regWeightMaskedAccum <= {ACCUM_LENGTH{1'b0}};
 			regActivationDenseAccum <= {ACCUM_LENGTH{1'b0}};
 			regWeightDenseAccum <= {ACCUM_LENGTH{1'b0}};
 			regBitWidthCount <= {BITWIDTH_COUNT{1'b0}};
 		end
 		else begin
-			//regMutualBitmask <= wireMutualBitmask;
-			//regShiftAccum <= wireShiftAccum;
-			//regActivationMaskedAccum <= wireActivationMaskedAccum;
-			//regWeightMaskedAccum <= wireWeightMaskedAccum;
-			//regBitmaskW <= bitmaskW;
-			//regBitmaskA <= bitmaskA;
 			regActivationDenseAccum <= wireActivationDenseAccum;
 			regWeightDenseAccum <= wireWeightDenseAccum;
 			regBitWidthCount <= wireBitWidthCount;
@@ -325,8 +303,172 @@ module operandMatcher8 (
 	//assign result = 
 	//	{{12{1'b0}}, wireBitWidthCount, wireWeightDenseAccum, wireActivationDenseAccum};
 	
+endmodule
+
+module operandMatcher16 (
+		input   wire clock,
+		input   wire resetn,
+		input   wire ivalid, 
+		input   wire iready,
+		output  wire ovalid, 
+		output  wire oready,
+		
+		input  wire [15:0]  bitmaskW, //weight bitmask
+		input  wire [15:0]  bitmaskA, //Activation bitmask
+		
+		output wire [255:0] result  //  [63:0] Packed indices of A; [127:64] Packed indices of W; [132:128] Number of pairs; [255:133]: Padding
+	);
+	
+	//Ignoring resetn, ivalid, and iready
+
+	//tie the following signals to high
+	assign ovalid = 1'b1;
+	assign oready = 1'b1;
+
+	//Localdef
+	localparam BITMASK_LENGTH = 16;
+	localparam INDEX_BITWIDTH = 4;
+	localparam ACCUM_LENGTH = BITMASK_LENGTH * INDEX_BITWIDTH;
+	localparam BITWIDTH_COUNT = 5;
+
+
+	//Declare the registers
+	reg [BITMASK_LENGTH-1:0] regBitmaskW;
+	reg [BITMASK_LENGTH-1:0] regBitmaskA;
+	//reg [BITMASK_LENGTH-1:0] regMutualBitmask;
+	//reg [ACCUM_LENGTH-1:0] regShiftAccum;
+	//reg [ACCUM_LENGTH-1:0]  regActivationMaskedAccum;
+	//reg [ACCUM_LENGTH-1:0]  regWeightMaskedAccum;
+	reg [ACCUM_LENGTH-1:0]  regActivationDenseAccum;
+	reg [ACCUM_LENGTH-1:0]  regWeightDenseAccum;
+	reg [BITWIDTH_COUNT-1:0] regBitWidthCount;
+
+	//Structural wires
+	wire [BITMASK_LENGTH-1:0] wireMutualBitmask;
+	wire [BITMASK_LENGTH-1:0] wireNegatedMutualBitmask;
+	wire [ACCUM_LENGTH-1:0] wireShiftAccum;
+	wire [ACCUM_LENGTH-1:0]  wireActivationAccum;
+	wire [ACCUM_LENGTH-1:0]  wireWeightAccum;
+	wire [ACCUM_LENGTH-1:0]  wireActivationMaskedAccum;
+	wire [ACCUM_LENGTH-1:0]  wireWeightMaskedAccum;
+	wire [ACCUM_LENGTH-1:0]  wireActivationDenseAccum;
+	wire [ACCUM_LENGTH-1:0]  wireWeightDenseAccum;
+	wire [BITWIDTH_COUNT-1:0] wireBitWidthCount;
+
+	//Structural coding
+	assign wireMutualBitmask = regBitmaskA & regBitmaskW;
+	assign wireNegatedMutualBitmask = ~wireMutualBitmask;
+
+	accumulator # (.BITMASK_LENGTH(BITMASK_LENGTH),
+			.INDEX_BITWIDTH(INDEX_BITWIDTH))
+	inst_accumulator_shiftAccumulator 
+		(.bitmask(wireNegatedMutualBitmask),
+		 .index(wireShiftAccum));
+
+
+	accumulator # (.BITMASK_LENGTH(BITMASK_LENGTH),
+			.INDEX_BITWIDTH(INDEX_BITWIDTH))
+	inst_accumulator_activationAccumulator 
+		(.bitmask(regBitmaskA),
+		 .index(wireActivationAccum));
+
+	accumulator # (.BITMASK_LENGTH(BITMASK_LENGTH),
+			.INDEX_BITWIDTH(INDEX_BITWIDTH))
+	inst_accumulator_weightAccumulator 
+		(.bitmask(regBitmaskW),
+		 .index(wireWeightAccum));
+
+
+	extendAndMask 
+		# (
+			.BITMASK_LENGTH (BITMASK_LENGTH),
+			.INDEX_BITWIDTH (INDEX_BITWIDTH)
+		)
+		inst_extendAndMask_activationMask
+		(
+			.unmaskedIndices(wireActivationAccum),
+			.bitmask(wireMutualBitmask),
+			.maskedIndices(wireActivationMaskedAccum)
+		);
+
+	extendAndMask 
+		# (
+			.BITMASK_LENGTH (BITMASK_LENGTH),
+			.INDEX_BITWIDTH (INDEX_BITWIDTH)
+		)
+		inst_extendAndMask_weightMask
+		(
+			.unmaskedIndices(wireWeightAccum),
+			.bitmask(wireMutualBitmask),
+			.maskedIndices(wireWeightMaskedAccum)
+		);
+
+
+	//Logic for generating the condensed bitmask
+	popCounter
+		# (
+			.BITMASK_LENGTH (8),
+			.BITWIDTH_OUTPUT (4)
+		)
+		inst_popCounter_pairCount
+		(
+			.bitmask(wireMutualBitmask),
+			.count(wireBitWidthCount)
+		);
+
+	//Logic for generating the condensed activation indices
+	collapseBubble 
+		# (
+			.BITMASK_LENGTH (BITMASK_LENGTH),
+			.BITWIDTH_INDEX (INDEX_BITWIDTH),
+			.BITWIDTH_NUMBER (INDEX_BITWIDTH)
+		)
+		inst_collapseBubble_activation
+		(
+			.inputWithGap(wireActivationMaskedAccum),
+			.positions(wireShiftAccum),
+			.outputWithoutGap(wireActivationDenseAccum)
+		);
+
+	//Logic for generating the condensed activation indices
+	collapseBubble 
+		# (
+			.BITMASK_LENGTH (BITMASK_LENGTH),
+			.BITWIDTH_INDEX (INDEX_BITWIDTH),
+			.BITWIDTH_NUMBER (INDEX_BITWIDTH)
+		)
+		inst_collapseBubble_weight
+		(
+			.inputWithGap(wireWeightMaskedAccum),
+			.positions(wireShiftAccum),
+			.outputWithoutGap(wireWeightDenseAccum)
+		);
+
+	//Registers update
+	always @ (posedge clock) begin
+		if (resetn == 1'b0) begin
+			regBitmaskW <= {BITMASK_LENGTH{1'b0}};
+			regBitmaskA <= {BITMASK_LENGTH{1'b0}};
+			regActivationDenseAccum <= {ACCUM_LENGTH{1'b0}};
+			regWeightDenseAccum <= {ACCUM_LENGTH{1'b0}};
+			regBitWidthCount <= {BITWIDTH_COUNT{1'b0}};
+		end
+		else begin
+			regBitmaskW	<= bitmaskW;
+			regBitmaskA <= bitmaskA;
+			regActivationDenseAccum <= wireActivationDenseAccum;
+			regWeightDenseAccum <= wireWeightDenseAccum;
+			regBitWidthCount <= wireBitWidthCount;
+		end
+	end
+
+	//Assign the final output
+	assign result = 
+		{{123{1'b0}}, regBitWidthCount, regWeightDenseAccum, regActivationDenseAccum};
+	//assign result = 
+	//	{{12{1'b0}}, wireBitWidthCount, wireWeightDenseAccum, wireActivationDenseAccum};
+	
 
 
 
 endmodule
-
