@@ -168,8 +168,8 @@ protected:
         kernelTestInterface = cl::Kernel(program, "kernelTestInterface", &status);
         aocl_utils_cpp::checkError(status, "Failed to create the test interface kernel!");
 
-//        kernelPE = cl::Kernel(program, "kernelPE", &status);
-//         aocl_utils_cpp::checkError(status, "Failed to create the PE kernel!");
+        //kernelPE = cl::Kernel(program, "kernelPE", &status);
+        //aocl_utils_cpp::checkError(status, "Failed to create the PE kernel!");
 
         clCQTestInterface = cl::CommandQueue(
                     clContext,
@@ -583,18 +583,20 @@ TEST_F (peTestFixture, testPlayfield) {
 //                0.95
 //                );
     //std::vector<float> activationRealInput = {-3.14f};
-    std::vector<float> activationRealInput (numElements, 0.45);
+    std::vector<float> activationRealInput (numElements, 0.00);
 
-    std::vector<float> weightRealInput (numElements, 0.45);
+    std::vector<float> weightRealInput (numElements, 0.00);
 
 
     for (int i=0; i<4; i++)
     {
-        for (int j=4*i; j < 4*i+4; j++)
-        {
-            activationRealInput.at(j) = 0.25*(i+1);
-            weightRealInput.at(j) = 0.25*(i+1);
-        }
+        //if (i == 0) {
+            for (int j=4*i; j < 4*i+4; j++)
+            {
+                activationRealInput.at(j) = 0.25*(i+1);
+                weightRealInput.at(j) = 0.25*(i+1);
+            }
+        //}
     }
 
 

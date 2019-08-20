@@ -743,8 +743,8 @@ __kernel void kernelPE ()
 {
 	//================Ping-ponged registers========================
 	//BRAM for storing the compression windows
-	t_cluster activationWindow[COMPRESSION_WINDOW_SIZE][2]; 
-	t_cluster weightWindow[COMPRESSION_WINDOW_SIZE][2]; 
+	t_cluster activationWindow[COMPRESSION_WINDOW_SIZE+1][2]; 
+	t_cluster weightWindow[COMPRESSION_WINDOW_SIZE+1][2]; 
 
 	//Flags that indicates whether we are at the last window
 	bool isLast[2];
@@ -808,23 +808,25 @@ __kernel void kernelPE ()
 					countActivation = 0;
 					//EMULATOR_PRINT(("[assembler] bitmaskA: %#04x \n", bitmask));
 				}
-				else
-				{
+				//else
+				//{
 
-					//uint3_t offset = (stateActivation == ASSEMBLER_STATE_LOAD_BITMASK) ?
-					//	0X1 : 0X0; 
+					uint3_t offset = (stateActivation == ASSEMBLER_STATE_LOAD_BITMASK) ?
+						0X1 : 0X0; 
 
 					#pragma unroll
 					for (uint3_t i=0; i<TRANSFER_SIZE; i++)
 					{
-						//if (i >= offset)
-						//{
-							activationWindow[countActivation+i][regLoadSide & 0x01]
+						if (i >= offset)
+						{
+							activationWindow[countActivation+i-offset][regLoadSide & 0x01]
 								= activationTransferBlock.values.values[i];
 							//EMULATOR_PRINT(("[assembler] activation value: %#04x %#04x \n"
 							//	, activationTransferBlock.values.values[i].cluster_values[0] & 0xFF
 							//	, activationTransferBlock.values.values[i].cluster_values[1] & 0xFF));
-						//}
+							//EMULATOR_PRINT(("[assembler] activation offset, countActivation: %#04x %#04x\n"
+							//	, offset, countActivation));
+						}
 					} // for. Transfer the values in the transfer block to the compression window
 
 					//if (debugCount < maxDebugCount)
@@ -836,8 +838,8 @@ __kernel void kernelPE ()
 					//		activationTransferBlock.values.values[1].cluster_values[1] & 0xFF));
 					//}
 
-					countActivation += (unsigned char)(TRANSFER_SIZE);
-				}
+					countActivation += (unsigned char)(TRANSFER_SIZE - offset);
+				//}
 
 				//State update
 				if (countActivation >= numActivation)
@@ -877,23 +879,23 @@ __kernel void kernelPE ()
 					countWeight = 0;
 					//EMULATOR_PRINT(("[assembler] bitmaskW: %#04x \n", bitmask));
 				}
-				else
-				{
+				//else
+				//{
 
-					//uint3_t offset = (stateWeight == ASSEMBLER_STATE_LOAD_BITMASK) ?
-					//	0X1 : 0X0; 
+					uint3_t offset = (stateWeight == ASSEMBLER_STATE_LOAD_BITMASK) ?
+						0X1 : 0X0; 
 
 					#pragma unroll
 					for (uint3_t i=0; i<TRANSFER_SIZE; i++)
 					{
-						//if (i >= offset)
-						//{
-							weightWindow[countWeight+i][regLoadSide & 0x01]
+						if (i >= offset)
+						{
+							weightWindow[countWeight+i-offset][regLoadSide & 0x01]
 								= weightTransferBlock.values.values[i];
 							//EMULATOR_PRINT(("[assembler] weight value: %#04x %#04x \n"
 							//	, weightTransferBlock.values.values[i].cluster_values[0] & 0xFF
 							//	, weightTransferBlock.values.values[i].cluster_values[1] & 0xFF));
-						//}
+						}
 					} // for. Transfer the values in the transfer block to the compression window
 
 					//if (debugCount < maxDebugCount)
@@ -905,8 +907,8 @@ __kernel void kernelPE ()
 					//		weightTransferBlock.values.values[1].cluster_values[1] & 0xFF));
 					//}
 
-					countWeight += (unsigned char)(TRANSFER_SIZE);
-				}
+					countWeight += (unsigned char)(TRANSFER_SIZE - offset);
+				//}
 
 				//State update
 				if (countWeight >= numWeight)
@@ -997,7 +999,7 @@ __kernel void kernelPE ()
 
 				//EMULATOR_PRINT ( ("[dispatcher]: w0: %#04x w1: %#04x a0: %#04x a1: %#04x \n"
 				//	, w.cluster_values[0] & 0xFF, w.cluster_values[1] & 0xFF,  a.cluster_values[0] & 0xFF, a.cluster_values[1] & 0xFF) );
-				//EMULATOR_PRINT ( ("[dispatcher]: wIndex: %u aIndex :%u \n", indexW & 0xFF, indexA & 0xFF));
+				//EMULATOR_PRINT ( ("[dispatcher]: wIndex: %u aIndex :%u \n", (indexW) & 0xFF, (indexA) & 0xFF));
 			}
 
 

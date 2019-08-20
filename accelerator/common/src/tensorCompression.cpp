@@ -618,7 +618,7 @@ flexibleDirectCompressedTensor::flexibleDirectCompressedTensor (
     //Need an extra one at the end to account for the bitmask
     // which occupies its own transfer block
     unsigned char numTransferBlocksPerCompressionBlock
-            =  (unsigned char) std::ceil ( (float) (1 + maxClusterIndexInCompressionBlock) / (float) (maxClusterIndexInTransferBlock + 1)) + 1;
+            =  (unsigned char) std::ceil ( (float) (1 + maxClusterIndexInCompressionBlock + 1) / (float) (maxClusterIndexInTransferBlock + 1));
 
     //==========================================================
     //Compute the memory stride and allocate space in the vectors
@@ -723,9 +723,9 @@ flexibleDirectCompressedTensor::flexibleDirectCompressedTensor (
                        //std::cout <<"bitmask L: "<<(int)(bitmask & 0xFF)<<std::endl;
 
 
-                       valueVector.at(iCompressVector++) = transferBlock;
-                        unsigned char iTransferBlock = 0;
-                       streamBlockAddress++;
+                       //valueVector.at(iCompressVector++) = transferBlock;
+                        unsigned char iTransferBlock = 1; //account for the bitmask;
+                       //streamBlockAddress++;
 
                        //iterate through the compression block and transfer the non-zero values
                        for (int i=0; i<=maxClusterIndexInCompressionBlock; i++) {
@@ -911,11 +911,14 @@ int decodeFlexibleDirectCompressedTensor(
                 //std::cout <<"bitmask R: "<<(int)(bitmask & 0xFF)<<std::endl;
                 //std::cout <<"numNZClustersInCompressionBlock: "<<(int)(numNZClustersInCompressionBlock)<<std::endl;
                 updateBitmask = false;
-//                for (int j=1; j<=maxScalarIndexInTransferBlock; j++)
-//                {
-//                    vectorCompressionBlock.push_back(transferBlock.values[j]);
-//                }
-//                countNZValuesInCompressionBlock += (maxScalarIndexInTransferBlock);
+                for (int i=1; i<=maxClusterIndexInTransferBlock; i++)
+                {
+                    for (int j=0; j<=maxScalarIndexInCluster; j++)
+                    {
+                        vectorCompressionBlock.push_back(transferBlock.values[i].cluster_values[j]);
+                    }
+                }
+                 countNZClustersInCompressionBlock += (maxClusterIndexInTransferBlock);
             }
             else {
                 for (int i=0; i<=maxClusterIndexInTransferBlock; i++)
