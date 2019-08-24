@@ -10,6 +10,9 @@
 #define PE_NUM_X PE_COLS
 #define PE_NUM_Y PE_ROWS
 
+#define TRUE 0X1
+#define FALSE 0x0
+
 
 /*
 Used to control whether the weight/activation transport should forward the block received
@@ -46,13 +49,13 @@ typedef struct __attribute__((packed)){
 #ifdef FLEXIBLE_BITMASK_COMPRESSION
 typedef struct __attribute__((packed)){
     t_transfer_block values;
-    bool isLast;
+    uint1_t isLast;
     char maxTransportID;
 } t_transferblock_tagged;
 
 typedef struct __attribute__((packed)){
     t_transfer_block values;
-    bool isLast;
+    uint1_t isLast;
 } t_transferblock_local;
 
 typedef struct __attribute__((packed)) {
@@ -77,7 +80,7 @@ typedef struct __attribute__((packed)){
 
 //MAC Operands
 typedef struct __attribute__((packed)) {
-	char values [4];
+	char values [SIMD_SIZE*CLUSTER_SIZE];
 } t_simd_operand;
 
 typedef struct __attribute__((packed)){
@@ -528,8 +531,8 @@ __kernel void kernelTestInterface (
 			}
 
 			//uint6_t indexInStreamingBlock = indexActivationTracker + (uint6_t) block.runLength; 
-			unsigned char isLast = (countInputActivationBlocks == (numInputActivationBlocks - 1)) ?
-                0x1 : 0x0;
+			uint1_t isLast = (countInputActivationBlocks == (numInputActivationBlocks - 1)) ?
+				TRUE : FALSE;
             //taggedBlock.streamingBlockIndex = indexInStreamingBlock;
             taggedBlock.isLast = isLast;;
             taggedBlock.maxTransportID = maxIDY;
@@ -589,8 +592,8 @@ __kernel void kernelTestInterface (
 			}
 
 			//uint6_t indexInStreamingBlock = indexWeightTracker + (uint6_t) block.runLength; 
-			unsigned char isLast = (countInputWeightBlocks == (numInputWeightBlocks - 1)) ?
-                0x1 : 0x0;
+			uint1_t isLast = (countInputWeightBlocks == (numInputWeightBlocks - 1)) ? 
+				TRUE : FALSE;
             //taggedBlock.streamingBlockIndex = indexInStreamingBlock;
             taggedBlock.isLast = isLast;;
             taggedBlock.maxTransportID = maxIDX;
@@ -733,9 +736,6 @@ __kernel void kernelTestInterface (
 #define MAC_STATE_PROCESS_WINDOW 0x2
 #define MAC_STATE_WRITE_PSUM 0x3
 
-#define TRUE 0X1
-#define FALSE 0x0
-
 __attribute__((task))
 __attribute__((max_global_work_dim(0)))
 __attribute__((autorun))
@@ -747,7 +747,7 @@ __kernel void kernelPE ()
 	t_cluster weightWindow[COMPRESSION_WINDOW_SIZE+1][2]; 
 
 	//Flags that indicates whether we are at the last window
-	bool isLast[2];
+	uint1_t isLast[2];
 	unsigned char bitmaskA[2];
 	unsigned char bitmaskW[2];
 
@@ -811,22 +811,22 @@ __kernel void kernelPE ()
 				//else
 				//{
 
-					uint3_t offset = (stateActivation == ASSEMBLER_STATE_LOAD_BITMASK) ?
-						0X1 : 0X0; 
+					//uint3_t offset = (stateActivation == ASSEMBLER_STATE_LOAD_BITMASK) ?
+					//	0X1 : 0X0; 
 
 					#pragma unroll
 					for (uint3_t i=0; i<TRANSFER_SIZE; i++)
 					{
-						if (i >= offset)
-						{
-							activationWindow[countActivation+i-offset][regLoadSide & 0x01]
+						//if (i >= offset)
+						//{
+							activationWindow[countActivation+i][regLoadSide & 0x01]
 								= activationTransferBlock.values.values[i];
 							//EMULATOR_PRINT(("[assembler] activation value: %#04x %#04x \n"
 							//	, activationTransferBlock.values.values[i].cluster_values[0] & 0xFF
 							//	, activationTransferBlock.values.values[i].cluster_values[1] & 0xFF));
 							//EMULATOR_PRINT(("[assembler] activation offset, countActivation: %#04x %#04x\n"
 							//	, offset, countActivation));
-						}
+						//}
 					} // for. Transfer the values in the transfer block to the compression window
 
 					//if (debugCount < maxDebugCount)
@@ -838,11 +838,11 @@ __kernel void kernelPE ()
 					//		activationTransferBlock.values.values[1].cluster_values[1] & 0xFF));
 					//}
 
-					countActivation += (unsigned char)(TRANSFER_SIZE - offset);
+					countActivation += (unsigned char)(TRANSFER_SIZE);
 				//}
 
 				//State update
-				if (countActivation >= numActivation)
+				if (countActivation > numActivation) //countActivation needs to be strictly larger than numActivation
 				{
 					nextStateActivation = ASSEMBLER_STATE_WAIT;
 				}
@@ -882,20 +882,20 @@ __kernel void kernelPE ()
 				//else
 				//{
 
-					uint3_t offset = (stateWeight == ASSEMBLER_STATE_LOAD_BITMASK) ?
-						0X1 : 0X0; 
+					//uint3_t offset = (stateWeight == ASSEMBLER_STATE_LOAD_BITMASK) ?
+					//	0X1 : 0X0; 
 
 					#pragma unroll
 					for (uint3_t i=0; i<TRANSFER_SIZE; i++)
 					{
-						if (i >= offset)
-						{
-							weightWindow[countWeight+i-offset][regLoadSide & 0x01]
+						//if (i >= offset)
+						//{
+							weightWindow[countWeight+i][regLoadSide & 0x01]
 								= weightTransferBlock.values.values[i];
 							//EMULATOR_PRINT(("[assembler] weight value: %#04x %#04x \n"
 							//	, weightTransferBlock.values.values[i].cluster_values[0] & 0xFF
 							//	, weightTransferBlock.values.values[i].cluster_values[1] & 0xFF));
-						}
+						//}
 					} // for. Transfer the values in the transfer block to the compression window
 
 					//if (debugCount < maxDebugCount)
@@ -907,11 +907,11 @@ __kernel void kernelPE ()
 					//		weightTransferBlock.values.values[1].cluster_values[1] & 0xFF));
 					//}
 
-					countWeight += (unsigned char)(TRANSFER_SIZE - offset);
+					countWeight += (unsigned char)(TRANSFER_SIZE);
 				//}
 
 				//State update
-				if (countWeight >= numWeight)
+				if (countWeight > numWeight) //countWeight needs to be strictly larger than numWeight
 				{
 					nextStateWeight = ASSEMBLER_STATE_WAIT;
 				}
@@ -979,7 +979,7 @@ __kernel void kernelPE ()
 					(indicesW >> (i*BITWIDTH_COMPRESSION_WINDOW_INDEX))
 					& MASK_COMPRESSION_WINDOW_INDEX;
 				t_cluster w = ((countOperands + i) < numOperands) ?
-					weightWindow[indexW][(~regLoadSide) & 0x01] : zeros;
+					weightWindow[indexW+1][(~regLoadSide) & 0x01] : zeros;
 				//char w = weightWindow[i][(~regLoadSide) & 0x1];
 				//simdWeights.values[i] = w;
 
@@ -987,14 +987,14 @@ __kernel void kernelPE ()
 					(indicesA >> (i*BITWIDTH_COMPRESSION_WINDOW_INDEX))
 					& MASK_COMPRESSION_WINDOW_INDEX;
 				t_cluster a = ((countOperands + i) < numOperands) ?
-					activationWindow[indexA][(~regLoadSide) & 0x01] : zeros;
+					activationWindow[indexA+1][(~regLoadSide) & 0x01] : zeros;
 				//char a = activationWindow[i][(~regLoadSide) & 0x1];
 
 				#pragma unroll
 				for (unsigned char j=0; j<CLUSTER_SIZE; j++)
 				{
-					simdActivations.values[SIMD_SIZE*i + j] = a.cluster_values[j];
-					simdWeights.values[SIMD_SIZE*i + j] = w.cluster_values[j];
+					simdActivations.values[CLUSTER_SIZE*i + j] = a.cluster_values[j];
+					simdWeights.values[CLUSTER_SIZE*i + j] = w.cluster_values[j];
 				}
 
 				//EMULATOR_PRINT ( ("[dispatcher]: w0: %#04x w1: %#04x a0: %#04x a1: %#04x \n"
@@ -1021,14 +1021,14 @@ __kernel void kernelPE ()
 
 			//		DEBUG_PRINT(("[PE Madd] Psum %#04x\n", pSum));
 
-			//	}
+			//	}		
 			countOperands += SIMD_SIZE;
 			indicesW = indicesW >> (SIMD_SIZE*BITWIDTH_COMPRESSION_WINDOW_INDEX);
 			indicesA = indicesA >> (SIMD_SIZE*BITWIDTH_COMPRESSION_WINDOW_INDEX);
 
 			if (countOperands >= numOperands)
 			{
-				if (isLast[(~regLoadSide) & 0x1])
+				if (isLast[(~regLoadSide) & 0x1] == TRUE)
 				{
 					nextStateMac = MAC_STATE_WRITE_PSUM;
 				}

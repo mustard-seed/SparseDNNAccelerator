@@ -641,7 +641,7 @@ TEST_F (peTestFixture, testPlayfield) {
                 numElements - 1, //_maxScalarIndexInChannelGroup
                 7, //_maxClusterIndexInCompressionBlock
                 1, //_maxClusterIndexInTransferBlock
-                1, //_maxScalarIndexInClusterBlock
+                CLUSTER_SIZE-1, //_maxScalarIndexInClusterBlock
                 true //isKernel
                 );
 
@@ -655,7 +655,7 @@ TEST_F (peTestFixture, testPlayfield) {
                 numElements - 1, //_maxScalarIndexInChannelGroup
                 7, //_maxClusterIndexInCompressionBlock
                 1, //_maxClusterIndexInTransferBlock
-                1, //_maxScalarIndexInClusterBlock
+                CLUSTER_SIZE-1, //_maxScalarIndexInClusterBlock
                 true //isKernel
                 );
 #endif
@@ -808,7 +808,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageZero) {
                 numElements - 1, //_maxScalarIndexInChannelGroup
                 7, //_maxClusterIndexInCompressionBlock
                 1, //_maxClusterIndexInTransferBlock
-                1, //_maxScalarIndexInClusterBlock
+                CLUSTER_SIZE-1, //_maxScalarIndexInClusterBlock
                 true //isKernel
                 );
 
@@ -822,7 +822,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageZero) {
                 numElements - 1, //_maxScalarIndexInChannelGroup
                 7, //_maxClusterIndexInCompressionBlock
                 1, //_maxClusterIndexInTransferBlock
-                1, //_maxScalarIndexInClusterBlock
+                CLUSTER_SIZE-1, //_maxScalarIndexInClusterBlock
                 true //isKernel
                 );
 #endif
@@ -973,7 +973,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageHalfLong) {
                 numElements - 1, //_maxScalarIndexInChannelGroup
                 7, //_maxClusterIndexInCompressionBlock
                 1, //_maxClusterIndexInTransferBlock
-                1, //_maxScalarIndexInClusterBlock
+                CLUSTER_SIZE-1, //_maxScalarIndexInClusterBlock
                 true //isKernel
                 );
 
@@ -987,7 +987,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageHalfLong) {
                 numElements - 1, //_maxScalarIndexInChannelGroup
                 7, //_maxClusterIndexInCompressionBlock
                 1, //_maxClusterIndexInTransferBlock
-                1, //_maxScalarIndexInClusterBlock
+                CLUSTER_SIZE-1, //_maxScalarIndexInClusterBlock
                 true //isKernel
                 );
 #endif
@@ -1138,7 +1138,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainage025Long) {
                 numElements - 1, //_maxScalarIndexInChannelGroup
                 7, //_maxClusterIndexInCompressionBlock
                 1, //_maxClusterIndexInTransferBlock
-                1, //_maxScalarIndexInClusterBlock
+                CLUSTER_SIZE-1, //_maxScalarIndexInClusterBlock
                 true //isKernel
                 );
 
@@ -1152,7 +1152,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainage025Long) {
                 numElements - 1, //_maxScalarIndexInChannelGroup
                 7, //_maxClusterIndexInCompressionBlock
                 1, //_maxClusterIndexInTransferBlock
-                1, //_maxScalarIndexInClusterBlock
+                CLUSTER_SIZE-1, //_maxScalarIndexInClusterBlock
                 true //isKernel
                 );
 #endif
@@ -1303,7 +1303,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageOneLong) {
                 numElements - 1, //_maxScalarIndexInChannelGroup
                 7, //_maxClusterIndexInCompressionBlock
                 1, //_maxClusterIndexInTransferBlock
-                1, //_maxScalarIndexInClusterBlock
+                CLUSTER_SIZE-1, //_maxScalarIndexInClusterBlock
                 true //isKernel
                 );
 
@@ -1317,7 +1317,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageOneLong) {
                 numElements - 1, //_maxScalarIndexInChannelGroup
                 7, //_maxClusterIndexInCompressionBlock
                 1, //_maxClusterIndexInTransferBlock
-                1, //_maxScalarIndexInClusterBlock
+                CLUSTER_SIZE-1, //_maxScalarIndexInClusterBlock
                 true //isKernel
                 );
 #endif
@@ -1468,7 +1468,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageOneShort) {
                 numElements - 1, //_maxScalarIndexInChannelGroup
                 7, //_maxClusterIndexInCompressionBlock
                 1, //_maxClusterIndexInTransferBlock
-                1, //_maxScalarIndexInClusterBlock
+                CLUSTER_SIZE-1, //_maxScalarIndexInClusterBlock
                 true //isKernel
                 );
 
@@ -1482,7 +1482,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageOneShort) {
                 numElements - 1, //_maxScalarIndexInChannelGroup
                 7, //_maxClusterIndexInCompressionBlock
                 1, //_maxClusterIndexInTransferBlock
-                1, //_maxScalarIndexInClusterBlock
+                CLUSTER_SIZE-1, //_maxScalarIndexInClusterBlock
                 true //isKernel
                 );
 #endif
@@ -1633,7 +1633,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainage025Short) {
                 numElements - 1, //_maxScalarIndexInChannelGroup
                 7, //_maxClusterIndexInCompressionBlock
                 1, //_maxClusterIndexInTransferBlock
-                1, //_maxScalarIndexInClusterBlock
+                CLUSTER_SIZE-1, //_maxScalarIndexInClusterBlock
                 true //isKernel
                 );
 
@@ -1647,7 +1647,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainage025Short) {
                 numElements - 1, //_maxScalarIndexInChannelGroup
                 7, //_maxClusterIndexInCompressionBlock
                 1, //_maxClusterIndexInTransferBlock
-                1, //_maxScalarIndexInClusterBlock
+                CLUSTER_SIZE-1, //_maxScalarIndexInClusterBlock
                 true //isKernel
                 );
 #endif
