@@ -99,7 +99,7 @@ typedef cl_ushort t_streamblock_address;
 
 //=============================
 //Structs used in the flexible bitmask compression test
-#ifdef FLEXIBLE_BITMASK_COMPRESSION
+//#ifdef FLEXIBLE_BITMASK_COMPRESSION
 #define CLUSTER_SIZE 2
 #ifdef INTELFPGA_CL
 typedef struct {
@@ -115,7 +115,7 @@ typedef cl_ushort t_streamblock_address;
 typedef struct {
     t_cluster values [TRANSFER_SIZE];
 } t_transfer_block;
-#endif
+//#endif
 
 //=====================================
 

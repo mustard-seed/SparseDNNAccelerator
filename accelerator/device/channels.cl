@@ -5,6 +5,12 @@
 //Must include the following line in order to use channel
 #pragma OPENCL EXTENSION cl_intel_channels : enable
 
+typedef struct __attribute__((packed)){
+    t_transfer_block values;
+    uint1_t isLast;
+    char maxTransportID;
+} t_transferblock_tagged;
+
 channel t_tokenFillWeightCache channel_spWeightDMA __attribute__((depth(0)));
 channel bool channel_spWeightDMACommit __attribute__((depth(9)));
 
@@ -37,7 +43,8 @@ channel bool channel_weightCollectorStop [KERNEL_CACHE_LANES]__attribute__((dept
 #endif
 
 #ifdef SIMPLE_WEIGHT_STREAMER
-channel t_simdblock_di_tagged channel_weightLanes[PE_ROWS][PE_COLS] __attribute__((depth(0)));
+//channel t_transfer_block channel_weightLanes[PE_ROWS][PE_COLS] __attribute__((depth(0)));
+channel t_transferblock_tagged channel_weightLanes[PE_ROWS][PE_COLS] __attribute__((depth(0)));
 #endif
 
 #endif
