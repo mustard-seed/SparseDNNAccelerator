@@ -7,7 +7,7 @@ __attribute__((max_global_work_dim(0)))
 __kernel void nop () {}
 
 
-#define BURST_SIZE 8 //Unite: transfer blocks
+#define BURST_SIZE 8 //Unit: transfer blocks. 32 bytes / (4 bytes per cycle) = 8 / cycle
 
 #define MAX_CACHE_SIZE 1024
 #define WRITE_TO_CAHCE_SIDE 0x0
@@ -31,29 +31,91 @@ __kernel void kernelSimpleWeightStreamer (
 	volatile __global t_transfer_block* restrict pWeights, //Pointer to the filter weights in external memory
 	volatile __global t_spOffset* restrict pStreamBlockAddress,
 
-	unsigned int strideBetweenFilterInExternalMemory,
+	unsigned int strideExternalMemory, //Distance between the start of successive filters in DRAM in terms of transfer blocks
 
-	unsigned short outputWidth,
-	unsigned char numOutputWidthTile,
-	unsigned char sizeOutputWidthTile,
-	unsigned char sizeOutputWidthTile0, //Special case: for the left corner
+	unsigned short outputWidth, //Q
+	unsigned char sizeOutputWidthTile, //TQ
+	unsigned short numOutputWidthTile, // ceil (Q / TQ)
+	unsigned char sizeOutputWidthTile0, //Special case: TQ for the tiles on the left boundary
 
-	unsigned short outputHeight,
-	unsigned char numOutputHeightTile,
-	unsigned char sizeOutputHeightTile,
+	unsigned short outputHeight, //P
+	unsigned char numOutputHeightTile, //TP
+	unsigned char sizeOutputHeightTile, // ceil (P / TP)
 	unsigned char sizeOutputHeightTile0, //Special case: for the left corner
 
-	unsigned short numFiltersInKernel, //L
+	unsigned int numFiltersInKernel, //L
+
+	unsigned short numGroups, // L / G
+	unsigned short numFoldPerGroup // ceil (G / F)
+
 	) {
-	//Cache: SIMD blocks
-	t_transfer_block cacheSimdBlock [2][KERNEL_CACHE_DEPTH][PE_ROWS] __attribute__ ((numbanks(BURST_SIZE*PE_ROWS), bankwidth(CLUSTER_SIZE*TRANSFER_SIZE)));
+	typedef uint3_t t_state;
+	//Cache: NzBlocks blocks
+	t_transfer_block cacheNzBlocks [2][KERNEL_CACHE_DEPTH][PE_ROWS] __attribute__ ((numbanks(BURST_SIZE*PE_ROWS), bankwidth(CLUSTER_SIZE*TRANSFER_SIZE)));
 
 	//Cache: Cache address of the streaming blocks
-	t_spOffset cacheStreamingBlockAddress [4096];
+	t_spOffset cacheStreamingBlockAddress [4096] __attribute__((numbanks(PE_ROWS)));
 
 	//=============================================================
-	//Read all the streaming block address as soon as possible
+	//Read all the streaming block address in to BRAM as soon as possible
 	//==============================================================
+	{
+		unsigned int countFilters = 0;
+		while (countFilters < numFilters) {
+			//Unroll the loop to increase the transfer width and make better use of the BRAM bandwidth
+			#pragma unroll
+			for (unsigned char i=0; i<PE_ROWS; i++)
+			{
+				unsigned short filterIndex = counterFilters + i;
+				if (filterIndex < numFilters)
+				{
+					cacheStreamingBlockAddress[filterIndex] = pStreamBlockAddress[filterIndex];
+				}
+			}
+			countFilters += PE_ROWS;
+		}
+	}
+
+	bool proceed = true;
+
+	//======================Other shared variables============================
+	uint1_t regWriteSide = 0x0;
+
+
+
+
+	//====================Write into cache variables=======================
+	t_state stateWriteCache = WEIGHT_WRITE_CACHE_STREAM;
+
+	unsigned short iOutputHeightTileWrite = 0; //tp
+	unsigned short iOutputWidthTileWrite = 0; //tq
+	unsigned char iPeRowWrite;
+	unsigned char maxSizeOutputHeightTileWrite; //maxTP
+	unsigned char maxSizeOutputWidthTileWrite; //maxTQ
+	unsigned char maxRowsUsedWrite; //maxF
+
+	unsigned short iFilterGlobalWrite = 0; //iL
+	unsigned char iFilterLocalWrite = 0; //0 <= x <= maxRowUsedWrite
+	unsigned short iScalarInFilterWrite = 0; //iCg
+	unsigned short iFitlerInGroupWrite = 0; //gf * F
+
+	//===================Read from cache variables=========================
+
+	while (proceed) 
+	{
+		t_state nextStateWriteCache;
+		if (stateWriteCache == WEIGHT_WRITE_CACHE_STREAM)
+		{
+
+
+		} // WEIGHT_WRITE_CACHE_STREAM	
+		else if (stateWriteCache == WEIGHT_WRITE_CACHE_SETUP)
+		{
+			
+		} // WEIGHT_WRITE_CACHE_SETUP
+	}
+
+
 
 	
 }
