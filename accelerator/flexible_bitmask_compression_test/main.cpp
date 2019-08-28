@@ -62,6 +62,7 @@ TEST (hostInfrastructureTest, playField) {
     int numTensors = 1;
     int height = 1;
     int width = 1;
+    unsigned short tileSizeWidth = 32;
     int channel = 16;
     int seed = 1256;
     float min = 1.0;
@@ -100,6 +101,7 @@ TEST (hostInfrastructureTest, playField) {
                 channel,
                 width,
                 height,
+                tileSizeWidth,
                 maxScalarIndexInChannelGroup,
                 maxClusterIndexInCompressionBlock,
                 maxClusterIndexInTransferBlock,
@@ -126,6 +128,7 @@ TEST (hostInfrastructureTest, compressionTestKernel) {
     int numTensors = 512;
     int height = 3;
     int width = 3;
+    unsigned short tileSizeWidth = 32;
     int channel = 512;
     int seed = 1256;
     float min = 1.0;
@@ -165,6 +168,7 @@ TEST (hostInfrastructureTest, compressionTestKernel) {
                 channel,
                 width,
                 height,
+                tileSizeWidth,
                 maxScalarIndexInChannelGroup,
                 maxClusterIndexInCompressionBlock,
                 maxClusterIndexInTransferBlock,
@@ -187,12 +191,14 @@ TEST (hostInfrastructureTest, compressionTestKernel) {
     }
 }
 
+
 TEST (hostInfrastructureTest, compressionTestGroupedKernel) {
     char fracWidth = 4, intWidth = 3;
     float bernProb = 0.05;
     int numTensors = 256;
     int height = 3;
     int width = 3;
+    unsigned short tileSizeWidth = 32;
     int channel = 256;
     int seed = 1256;
     float min = 1.0;
@@ -231,6 +237,7 @@ TEST (hostInfrastructureTest, compressionTestGroupedKernel) {
                 channel,
                 width,
                 height,
+                tileSizeWidth,
                 maxScalarIndexInChannelGroup,
                 maxClusterIndexInCompressionBlock,
                 maxClusterIndexInTransferBlock,
@@ -259,6 +266,7 @@ TEST (hostInfrastructureTest, compressionTestGroupedActivation) {
     int numTensors = 1;
     int height = 64;
     int width = 64;
+    unsigned short tileSizeWidth = 32;
     int channel = 256;
     int seed = 1256;
     float min = 1.0;
@@ -297,6 +305,7 @@ TEST (hostInfrastructureTest, compressionTestGroupedActivation) {
                 channel,
                 width,
                 height,
+                tileSizeWidth,
                 maxScalarIndexInChannelGroup,
                 maxClusterIndexInCompressionBlock,
                 maxClusterIndexInTransferBlock,

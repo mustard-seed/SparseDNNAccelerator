@@ -149,6 +149,9 @@ public:
     unsigned short width;
     unsigned short height;
 
+    // Tiling information, only relevant for activation tensor
+    unsigned short tilingSizeWidth;
+
     //If is Kernel, each filter is one streaming block
     //Otherwise, the size of each streaming block is that of one synchorinization block
     bool isKernel;
@@ -186,6 +189,7 @@ public:
             unsigned short _channel,
             unsigned short _width,
             unsigned short _height,
+            unsigned short _tilingSizeWidth,
             unsigned short _maxScalarIndexInChannelGroup,
             unsigned char _maxClusterIndexInCompressionBlock,
             unsigned char _maxClusterIndexInTransferBlock,
