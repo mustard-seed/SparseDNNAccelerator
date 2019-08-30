@@ -47,17 +47,6 @@ typedef struct __attribute__((packed)){
 #endif
 
 #ifdef FLEXIBLE_BITMASK_COMPRESSION
-typedef struct __attribute__((packed)){
-    t_transfer_block values;
-    uint1_t isLast;
-    char maxTransportID;
-} t_transferblock_tagged;
-
-typedef struct __attribute__((packed)){
-    t_transfer_block values;
-    uint1_t isLast;
-} t_transferblock_local;
-
 typedef struct __attribute__((packed)) {
     char values [COMPRESSION_WINDOW_SIZE];
 } t_compression_window;

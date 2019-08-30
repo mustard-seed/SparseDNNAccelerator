@@ -5,12 +5,6 @@
 //Must include the following line in order to use channel
 #pragma OPENCL EXTENSION cl_intel_channels : enable
 
-typedef struct __attribute__((packed)){
-    t_transfer_block values;
-    uint1_t isLast;
-    char maxTransportID;
-} t_transferblock_tagged;
-
 channel t_tokenFillWeightCache channel_spWeightDMA __attribute__((depth(0)));
 channel bool channel_spWeightDMACommit __attribute__((depth(9)));
 

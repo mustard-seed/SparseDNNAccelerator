@@ -6,6 +6,10 @@
 #include "CL/cl.hpp"
 #endif
 
+#ifdef INTELFPGA_CL
+#include "ihc_apint.h"
+#endif
+
 /*! t_instruction
  * \brief VLIW instructions for controlling the accelerator
  */
@@ -115,6 +119,17 @@ typedef cl_ushort t_streamblock_address;
 typedef struct {
     t_cluster values [TRANSFER_SIZE];
 } t_transfer_block;
+
+typedef struct __attribute__((packed)){
+    t_transfer_block values;
+    uint1_t isLast;
+    char maxTransportID;
+} t_transferblock_tagged;
+
+typedef struct __attribute__((packed)){
+    t_transfer_block values;
+    uint1_t isLast;
+} t_transferblock_local;
 //#endif
 
 //=====================================
