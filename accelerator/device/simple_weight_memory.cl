@@ -8,7 +8,7 @@ __kernel void nop () {}
 
 
 #define BURST_SIZE_BYTE 32
-#define BURST_SIZE_TRANSFER_BLOCK BURST_SIZE_BYTE/CLUSTER_SIZE/TRANSFER_SIZE
+#define BURST_SIZE_TRANSFER_BLOCK  BURST_SIZE_BYTE/CLUSTER_SIZE/TRANSFER_SIZE
 
 #define MAX_CACHE_SIZE 1024
 #define WRITE_TO_CAHCE_SIDE 0x0
@@ -53,8 +53,8 @@ __kernel void kernelSimpleWeightStreamer (
 	) {
 	typedef uint3_t t_state;
 	//Cache: NzBlocks blocks
-	//t_transfer_block cacheNzBlocks [2][KERNEL_CACHE_DEPTH][PE_ROWS] __attribute__ ((numbanks(BURST_SIZE_TRANSFER_BLOCK * PE_ROWS), bankwidth(CLUSTER_SIZE*TRANSFER_SIZE)));
-	t_transfer_block cacheNzBlocks [2][PE_ROWS][KERNEL_CACHE_DEPTH] __attribute__ ((numbanks(BURST_SIZE_TRANSFER_BLOCK * PE_ROWS), bankwidth(CLUSTER_SIZE*TRANSFER_SIZE)));
+	t_transfer_block cacheNzBlocks [2][KERNEL_CACHE_DEPTH][PE_ROWS] __attribute__ ((numbanks(BURST_SIZE_TRANSFER_BLOCK * PE_ROWS / 2), bankwidth(CLUSTER_SIZE*TRANSFER_SIZE)));
+	//t_transfer_block cacheNzBlocks [2][PE_ROWS][KERNEL_CACHE_DEPTH] __attribute__ ((numbanks(BURST_SIZE_TRANSFER_BLOCK * PE_ROWS), bankwidth(CLUSTER_SIZE*TRANSFER_SIZE)));
 
 	//Cache: Cache address of the streaming blocks
 	t_spOffset cacheStreamingBlockAddress [4096] __attribute__((numbanks(PE_ROWS)));
@@ -148,6 +148,7 @@ __kernel void kernelSimpleWeightStreamer (
 
 
 	//===============State actions=======================================
+	#pragma ivdep array(cacheNzBlocks)
 	while (proceed) 
 	{
 		t_state nextStateWriteCache = stateWriteCache;
@@ -204,18 +205,18 @@ __kernel void kernelSimpleWeightStreamer (
 			maxTransferBlockInFilterWrite = cacheStreamingBlockAddress[iFilterGlobalWrite];
 			
 
-		} // WEIGHT_WRITE_CACHE_STREAM	
+		} // WEIGHT_WRITE_CACHE_SETUP	
 		else if (stateWriteCache == WEIGHT_WRITE_CACHE_STREAM)
 		{
 			//Load weights in burst. Make the most use of the DRAM bandwidth
-			#pragma unroll
+			//#pragma unroll
 			for (unsigned int i=0; i<BURST_SIZE_TRANSFER_BLOCK; i++)
 			{
-				cacheNzBlocks[regWriteSide][iPeRowWrite][iTransferBlockInFilterWrite + i]
+				cacheNzBlocks[regWriteSide][iTransferBlockInFilterWrite++][iPeRowWrite]
 					= pWeights[iTransferBlockDDR++];
 			}
 
-			iTransferBlockInFilterWrite += BURST_SIZE_TRANSFER_BLOCK;
+			//iTransferBlockInFilterWrite += BURST_SIZE_TRANSFER_BLOCK;
 			// Update the parameters once the nz values in one filter has been loaded from DRAM
 			if (iTransferBlockInFilterWrite >= maxTransferBlockInFilterWrite)
 			{
@@ -321,7 +322,7 @@ __kernel void kernelSimpleWeightStreamer (
 					{
 						finished = false;
 						t_transfer_block values = 
-							cacheNzBlocks[~regWriteSide][i][index];
+							cacheNzBlocks[~regWriteSide][index][i];
 						t_transferblock_tagged taggedBlock;
 						taggedBlock.values = values;
 						taggedBlock.maxTransportID = (maxColUsedRead - 1);
