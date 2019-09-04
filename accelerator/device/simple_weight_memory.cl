@@ -29,7 +29,7 @@ Important assumption: The address cache only stores the BRAM address of the firs
 */
 __attribute__((max_global_work_dim(0)))
 __kernel void kernelSimpleWeightStreamer (
-	 volatile __global t_transfer_block* restrict pWeights, //Pointer to the filter weights in external memory
+	 volatile __global t_dram_block* restrict pDramWeights, //Pointer to the filter weights in external memory
 	 volatile __global t_spOffset* restrict pStreamBlockAddress,
 
 	unsigned int strideExternalMemory, //Distance between the start of successive filters in DRAM in terms of transfer blocks
@@ -53,11 +53,11 @@ __kernel void kernelSimpleWeightStreamer (
 	) {
 	typedef uint3_t t_state;
 	//Cache: NzBlocks blocks
-	t_transfer_block cacheNzBlocks [2][KERNEL_CACHE_DEPTH][PE_ROWS] __attribute__ ((numbanks(BURST_SIZE_TRANSFER_BLOCK * PE_ROWS / 2), bankwidth(CLUSTER_SIZE*TRANSFER_SIZE)));
+	t_dram_block cacheNzBlocks [2][KERNEL_CACHE_DEPTH][PE_ROWS] __attribute__ ((numbanks(PE_ROWS), bankwidth(CLUSTER_SIZE*TRANSFER_SIZE*WIDE_SIZE)));
 	//t_transfer_block cacheNzBlocks [2][PE_ROWS][KERNEL_CACHE_DEPTH] __attribute__ ((numbanks(BURST_SIZE_TRANSFER_BLOCK * PE_ROWS), bankwidth(CLUSTER_SIZE*TRANSFER_SIZE)));
 
 	//Cache: Cache address of the streaming blocks
-	t_spOffset cacheStreamingBlockAddress [4096] __attribute__((numbanks(PE_ROWS)));
+	t_spOffset cacheStreamingBlockAddress [4096] __attribute__((numbanks(1)));
 
 	//=============================================================
 	//Read all the streaming block address in to BRAM as soon as possible
@@ -66,8 +66,8 @@ __kernel void kernelSimpleWeightStreamer (
 		unsigned int countFilters = 0;
 		while (countFilters < numFiltersInKernel) {
 			//Unroll the loop to increase the transfer width and make better use of the BRAM bandwidth
-			#pragma unroll
-			for (unsigned char i=0; i<PE_ROWS; i++)
+			#pragma unroll 2
+			for (unsigned char i=0; i<2; i++)
 			{
 				unsigned short filterIndex = countFilters + i;
 				if (filterIndex < numFiltersInKernel)
@@ -75,7 +75,7 @@ __kernel void kernelSimpleWeightStreamer (
 					cacheStreamingBlockAddress[filterIndex] = pStreamBlockAddress[filterIndex];
 				}
 			}
-			countFilters += PE_ROWS;
+			countFilters += 2;
 		}
 	}
 
@@ -210,11 +210,16 @@ __kernel void kernelSimpleWeightStreamer (
 		{
 			//Load weights in burst. Make the most use of the DRAM bandwidth
 			//#pragma unroll
-			for (unsigned int i=0; i<BURST_SIZE_TRANSFER_BLOCK; i++)
-			{
-				cacheNzBlocks[regWriteSide][iTransferBlockInFilterWrite++][iPeRowWrite]
-					= pWeights[iTransferBlockDDR++];
-			}
+			//for (unsigned int i=0; i<BURST_SIZE_TRANSFER_BLOCK; i++)
+			//{
+			//	cacheNzBlocks[regWriteSide][iTransferBlockInFilterWrite++][iPeRowWrite]
+			//		= pWeights[iTransferBlockDDR++];
+			//}
+			cacheNzBlocks[regWriteSide][iTransferBlockInFilterWrite >> WIDE_SIZE_OFFSET][iPeRowWrite]
+				= pDramWeights[iTransferBlockDDR >> WIDE_SIZE_OFFSET];
+
+			iTransferBlockInFilterWrite += WIDE_SIZE;
+			iTransferBlockDDR += WIDE_SIZE;
 
 			//iTransferBlockInFilterWrite += BURST_SIZE_TRANSFER_BLOCK;
 			// Update the parameters once the nz values in one filter has been loaded from DRAM
@@ -321,8 +326,8 @@ __kernel void kernelSimpleWeightStreamer (
 					if (index < numTransferBlock)
 					{
 						finished = false;
-						t_transfer_block values = 
-							cacheNzBlocks[~regWriteSide][index][i];
+						t_dram_block wideValues = cacheNzBlocks[~regWriteSide][index >> WIDE_SIZE_OFFSET][i];
+						t_transfer_block values = wideValues.transferBlocks[index & WIDE_SIZE_REMAINDER_MASK];
 						t_transferblock_tagged taggedBlock;
 						taggedBlock.values = values;
 						taggedBlock.maxTransportID = (maxColUsedRead - 1);
