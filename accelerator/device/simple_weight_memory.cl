@@ -14,15 +14,26 @@ __kernel void nop () {}
 #define WRITE_TO_CAHCE_SIDE 0x0
 #define READ_FROM_CACHE_SIDE 0x1
 
-#define WEIGHT_WRITE_CACHE_SETUP 0x0
-#define WEIGHT_WRITE_CACHE_STREAM 0x1
-#define WEIGHT_WRITE_CACHE_WAIT 0x2
-#define WEIGHT_WRITE_CACHE_FINISH 0X3
+#define WEIGHT_WRITE_CACHE_SETUP_PE_ROW 0x0
+#define WEIGHT_WRITE_CACHE_SETUP_FOLD_IN_GROUP 0x1
+#define WEIGHT_WRITE_CACHE_SETUP_GROUP 0x2
+#define WEIGHT_WRITE_CACHE_SETUP_TILES 0x3
+#define WEIGHT_WRITE_CACHE_SETUP_AUX_UPDATE 0x4
+#define WEIGHT_WRITE_CACHE_STREAM 0x5
+#define WEIGHT_WRITE_CACHE_WAIT 0x6
+#define WEIGHT_WRITE_CACHE_FINISH 0X7
 
-#define WEIGHT_READ_CACHE_SETUP 0x0
-#define WEIGHT_READ_CACHE_STREAM  0x1
-#define WEIGHT_READ_CACHE_WAIT  0x2
-#define WEIGHT_READ_CACHE_FINISH 0x4
+#define WEIGHT_READ_CACHE_SETUP_DIM_IN_TILE 0x0
+#define WEIGHT_READ_CACHE_SETUP_FOLD_GROUP 0x1
+#define WEIGHT_READ_CACHE_SETUP_TILES 0X2
+#define WEIGHT_READ_CACHE_SETUP_AUX_UPDATE 0x3
+#define WEIGHT_READ_CACHE_LOAD_ADDRESS 0x4
+#define WEIGHT_READ_CACHE_STREAM  0x5
+#define WEIGHT_READ_CACHE_WAIT  0x6
+#define WEIGHT_READ_CACHE_FINISH 0x7
+
+#define TRUE 0X1
+#define FALSE 0X0
 
 /*! kernelSimpleWeightStreamer
 Important assumption: The address cache only stores the BRAM address of the first streaming block in each strip.
@@ -115,7 +126,7 @@ __kernel void kernelSimpleWeightStreamer (
 	unsigned short iFoldInOutputHeightTileRead = 0; // p
 	unsigned short iFoldInOutputWidthTileRead = 0; // pq
 	unsigned short iPeRowRead = 0; //f
-	unsigned short iTransferBlockInFilterRead [PE_ROWS]; //iCg
+	unsigned short iTransferBlockInFilterRead[PE_ROWS]; //iCg
 	#pragma unroll
 	for (int i=0; i<PE_ROWS; i++)
 	{
@@ -137,7 +148,8 @@ __kernel void kernelSimpleWeightStreamer (
 	unsigned char maxColUsedRead = PE_COLS < (maxOutputWidthTileSize - iWidthInTileRead) ?
 				PE_COLS : (maxOutputWidthTileSize - iWidthInTileRead); //maxA
 	unsigned short maxTransferBlockInFilterRead [PE_ROWS];
-	#pragma unroll
+	unsigned char iMaxRowUsedRead;
+	#pragma unroll 1
 	for (int i=0; i<PE_ROWS; i++)
 	{
 		if (i<maxRowUsedRead)
@@ -152,60 +164,70 @@ __kernel void kernelSimpleWeightStreamer (
 	while (proceed) 
 	{
 		t_state nextStateWriteCache = stateWriteCache;
-		if (stateWriteCache == WEIGHT_WRITE_CACHE_SETUP)
+		if (stateWriteCache == WEIGHT_WRITE_CACHE_SETUP_PE_ROW)
 		{
-			//Cascaded update of the dataflow-loop variables
-			//The hiearchy of the nested-if blocks is the opposite to the hiearchy of the nested-for block
-			nextStateWriteCache = WEIGHT_WRITE_CACHE_STREAM;
+			nextStateWriteCache = WEIGHT_WRITE_CACHE_SETUP_FOLD_IN_GROUP;
 
-			//Auxilary variable udpate
-			iFilterGlobalWrite++;	
-
+			iFilterGlobalWrite++;
 			iPeRowWrite++;
-			if (iPeRowWrite >= maxRowUsedWrite)
+		}
+		else if (stateWriteCache == WEIGHT_WRITE_CACHE_SETUP_FOLD_IN_GROUP)
+		{
+			nextStateWriteCache = WEIGHT_WRITE_CACHE_SETUP_GROUP;
+			if (iPeRowWrite >= maxRowUsedRead)
 			{
 				iPeRowWrite = 0;
-
-				nextStateWriteCache = WEIGHT_WRITE_CACHE_WAIT;
-
 				iFilterInGroupWrite += maxRowUsedWrite;
-
 				iFoldInGroupWrite++;
-				if (iFoldInGroupWrite>=numFoldInGroup)
-				{
-					iFilterInGroupWrite = 0;
+			}
+		}
+		else if (stateWriteCache == WEIGHT_WRITE_CACHE_SETUP_GROUP)
+		{
+			nextStateWriteCache = WEIGHT_WRITE_CACHE_SETUP_TILES;
 
-					iFoldInGroupWrite = 0;
-					iGroupWrite++;
-					if (iGroupWrite>=numGroups)
-					{
-						iGroupWrite = 0;
-						iFilterGlobalWrite = 0;	
+			if (iFoldInGroupWrite>=numFoldInGroup)
+			{
+				iFilterInGroupWrite = 0;
+				iFoldInGroupWrite = 0;
+				iGroupWrite++;
+			}
+		}
+		else if (stateWriteCache == WEIGHT_WRITE_CACHE_SETUP_TILES)
+		{
+			nextStateWriteCache = WEIGHT_WRITE_CACHE_SETUP_AUX_UPDATE;
 
-						iOutputWidthTileWrite++;
-						if (iOutputWidthTileWrite>=numOutputWidthTile) {
-							iOutputWidthTileWrite = 0;
+			if (iGroupWrite>=numGroups)
+			{
+				iGroupWrite = 0;
 
-							iOutputHeightTileWrite++;
-							if (iOutputHeightTileWrite>=numOutputHeightTile)
-							{
-								nextStateWriteCache = WEIGHT_WRITE_CACHE_FINISH;
-							}
-						}
+				iOutputWidthTileWrite++;
+				if (iOutputWidthTileWrite>=numOutputWidthTile) {
+					iOutputWidthTileWrite = 0;
 
-						iTransferBlockFilterBaseDDR = 0;
-						iTransferBlockDDR = iTransferBlockFilterBaseDDR;
-						iFilterGlobalWrite = 0;
-					}
+					iOutputHeightTileWrite++;
 				}
 
+				iTransferBlockFilterBaseDDR = 0;
+				iTransferBlockDDR = iTransferBlockFilterBaseDDR;
+				iFilterGlobalWrite = 0;
+			}
+		}
+		else if (stateWriteCache == WEIGHT_WRITE_CACHE_SETUP_AUX_UPDATE)
+		{
+			nextStateWriteCache = WEIGHT_WRITE_CACHE_STREAM;
+			//maxF update
+			if (iPeRowWrite == 0) //a fold is about to be loaded
+			{
 				maxRowUsedWrite = PE_ROWS <  (numFiltersInGroup - iFilterInGroupWrite) ?
 					PE_ROWS : numFiltersInGroup - iFilterInGroupWrite;
+				nextStateWriteCache = WEIGHT_WRITE_CACHE_WAIT;
 			}
-			maxTransferBlockInFilterWrite = cacheStreamingBlockAddress[iFilterGlobalWrite];
-			
 
-		} // WEIGHT_WRITE_CACHE_SETUP	
+			if (iOutputHeightTileWrite>=numOutputHeightTile)
+			{
+				nextStateWriteCache = WEIGHT_WRITE_CACHE_FINISH;
+			}
+		}
 		else if (stateWriteCache == WEIGHT_WRITE_CACHE_STREAM)
 		{
 			//Load weights in burst. Make the most use of the DRAM bandwidth
@@ -226,7 +248,7 @@ __kernel void kernelSimpleWeightStreamer (
 			if (iTransferBlockInFilterWrite >= maxTransferBlockInFilterWrite)
 			{
 				iTransferBlockInFilterWrite = 0;
-				nextStateWriteCache = WEIGHT_WRITE_CACHE_SETUP;
+				nextStateWriteCache = WEIGHT_WRITE_CACHE_SETUP_PE_ROW;
 
 				//Tricky: the following variables are updated in WEIGHT_WRITE_CACHE_SETUP too.
 				iTransferBlockFilterBaseDDR += strideExternalMemory;
@@ -236,9 +258,16 @@ __kernel void kernelSimpleWeightStreamer (
 		} // WEIGHT_WRITE_CACHE_SETUP
 
 		t_state nextStateReadCache = stateReadCache;
-		if (stateReadCache == WEIGHT_READ_CACHE_SETUP)
+		if (stateReadCache == WEIGHT_READ_CACHE_SETUP_DIM_IN_TILE)
 		{
-			nextStateReadCache = WEIGHT_READ_CACHE_STREAM;
+			nextStateReadCache = WEIGHT_READ_CACHE_SETUP_FOLD_GROUP;
+			//iTransferBlockInFilterRead = 0;
+
+			#pragma unroll
+			for (unsigned char i=0; i<PE_ROWS; i++)
+			{
+				iTransferBlockInFilterRead[i] = 0x0;
+			}
 
 			iWidthInTileRead += maxColUsedRead;
 			if (iWidthInTileRead >= maxOutputWidthTileSize)
@@ -246,112 +275,155 @@ __kernel void kernelSimpleWeightStreamer (
 				iWidthInTileRead = 0;
 
 				iHeightInTileRead++;
-				if (iHeightInTileRead >= maxOutputHeightTileSize)
-				{
-					nextStateReadCache = WEIGHT_READ_CACHE_WAIT;
 
-					iHeightInTileRead = 0;
-
-					iFilterGlobalRead += maxRowUsedRead;
-					iFilterInGroupRead += maxRowUsedRead;
-
-
-					iFoldInGroupRead++;
-					if (iFoldInGroupRead >= numFoldInGroup)
-					{
-						iFoldInGroupRead = 0;
-
-						iFilterInGroupRead = 0;
-
-						iGroupRead++;
-						if (iGroupRead >= numGroups)
-						{
-							iGroupRead = 0;
-
-							iFilterGlobalRead = 0;
-
-							iWidthGlobalRead += maxOutputWidthTileSize;
-							maxOutputWidthTileSize = sizeOutputWidthTile < (outputWidth - iWidthGlobalRead) ?
-								sizeOutputWidthTile : (outputWidth - iWidthGlobalRead);
-
-							iOutputWidthTileRead++;
-							if (iOutputWidthTileRead >= numOutputWidthTile)
-							{
-								iOutputWidthTileRead = 0;
-								iWidthGlobalRead = 0;
-								maxOutputWidthTileSize = sizeOutputWidthTile0;
-
-								iHeightGlobalRead += maxOutputHeightTileSize;
-								maxOutputHeightTileSize = sizeOutputHeightTile < (outputHeight - iHeightGlobalRead) ?
-									sizeOutputHeightTile : (outputHeight - iHeightGlobalRead);
-
-								iOutputHeightTileRead++;
-								if (iOutputHeightTileRead >= numOutputHeightTile)
-								{
-									nextStateReadCache = WEIGHT_READ_CACHE_FINISH;
-								}
-							} // iOutputwidthTileRead
-
-							
-						} //iGroupRead
-						maxRowUsedRead = PE_ROWS < (numFiltersInGroup - iFilterInGroupRead) ?
-							PE_ROWS : (numFiltersInGroup - iFilterInGroupRead);
-						#pragma unroll
-						for (int i=0; i<PE_ROWS; i++)
-						{
-							if (i<maxRowUsedRead)
-							{
-								maxTransferBlockInFilterRead[i] = cacheStreamingBlockAddress[iFilterGlobalRead+i];
-							}
-						}
-
-					} //iFoldInGroupRead
-				} // iHeightInTileRead
-
-				maxColUsedRead = (PE_COLS < (maxOutputWidthTileSize - iWidthInTileRead)) ?
-					PE_COLS : (maxOutputWidthTileSize - iWidthInTileRead);
-			}
+			} //iWidthInTileRead
 		} // WEIGHT_READ_CACHE_SETUP
+		else if (stateReadCache == WEIGHT_READ_CACHE_SETUP_FOLD_GROUP)
+		{
+			nextStateReadCache = WEIGHT_READ_CACHE_SETUP_TILES;
+
+			if (iHeightInTileRead >= maxOutputHeightTileSize)
+			{
+				iHeightInTileRead = 0;
+
+				iFilterGlobalRead += maxRowUsedRead;
+				iFilterInGroupRead += maxRowUsedRead;
+
+				iFoldInGroupRead++;
+
+				if (iFoldInGroupRead >= numFoldInGroup)
+				{
+					iFoldInGroupRead = 0;
+					iFilterInGroupRead = 0;
+
+					iGroupRead++;
+
+				} //iFoldInGroupRead
+
+			} // iHeightInTileRead
+
+		} //WEIGHT_READ_CACHE_SETUP1
+		else if (stateReadCache == WEIGHT_READ_CACHE_SETUP_TILES)
+		{
+			nextStateReadCache = WEIGHT_READ_CACHE_SETUP_AUX_UPDATE;
+
+			if (iGroupRead >= numGroups)
+			{
+				iGroupRead = 0;
+
+				iFilterGlobalRead = 0;
+
+				iWidthGlobalRead += maxOutputWidthTileSize;
+				
+
+				iOutputWidthTileRead++;
+				if (iOutputWidthTileRead >= numOutputWidthTile)
+				{
+					iOutputWidthTileRead = 0;
+					iWidthGlobalRead = 0;
+
+					iHeightGlobalRead += maxOutputHeightTileSize;
+
+					iOutputHeightTileRead++;
+					if (iOutputHeightTileRead >= numOutputHeightTile)
+					{
+						nextStateReadCache = WEIGHT_READ_CACHE_FINISH;
+					}
+				} // iOutputwidthTileRead
+				
+			} //iGroupRead
+
+		} //WEIGHT_READ_CACHE_SETUP_AUX_UPDATE
+		else if (stateReadCache == WEIGHT_READ_CACHE_SETUP_AUX_UPDATE)
+		{
+			nextStateReadCache = WEIGHT_READ_CACHE_STREAM;
+			if ( (iWidthInTileRead == 0) 
+					&& (iHeightInTileRead == 0)
+					&& (iFoldInGroupRead == 0)
+					&& (iGroupRead == 0) )
+			{
+				maxOutputWidthTileSize = sizeOutputWidthTile < (outputWidth - iWidthGlobalRead) ?
+					sizeOutputWidthTile : (outputWidth - iWidthGlobalRead);
+
+				if (iOutputWidthTileRead == 0)
+				{
+					maxOutputWidthTileSize = sizeOutputWidthTile0;
+					maxOutputHeightTileSize = sizeOutputHeightTile < (outputHeight - iHeightGlobalRead) ?
+					sizeOutputHeightTile : (outputHeight - iHeightGlobalRead);
+				}
+
+			}
+
+			if ( (iHeightInTileRead == 0) && (iWidthInTileRead == 0) )
+			{
+				maxRowUsedRead = PE_ROWS < (numFiltersInGroup - iFilterInGroupRead) ?
+							PE_ROWS : (numFiltersInGroup - iFilterInGroupRead);
+				iMaxRowUsedRead = 0;
+				nextStateReadCache = WEIGHT_READ_CACHE_LOAD_ADDRESS;
+			}
+
+			maxColUsedRead = PE_COLS < (maxOutputWidthTileSize - iWidthInTileRead) ?
+				PE_COLS : maxOutputWidthTileSize - iWidthInTileRead;
+
+		}
+		else if (stateReadCache == WEIGHT_READ_CACHE_LOAD_ADDRESS)
+		{
+			maxTransferBlockInFilterRead[iMaxRowUsedRead] = cacheStreamingBlockAddress[iFilterGlobalRead+iMaxRowUsedRead];
+			iMaxRowUsedRead++;
+			if (iMaxRowUsedRead >= maxRowUsedRead)
+			{
+				nextStateReadCache = WEIGHT_READ_CACHE_WAIT;
+			}
+
+		} // WEIGHT_READ_CACHE_LOAD_ADDRESS
+
 		else if (stateReadCache == WEIGHT_READ_CACHE_STREAM)
 		{
 			//Keep streaming until we have drained all weights once
-			bool finished = true;
+			uint1_t finished[PE_ROWS];
+
 			#pragma unroll
 			for (unsigned char i=0; i<PE_ROWS; i++)
 			{
+				uint1_t finishedLocal = TRUE;
 				if (i<maxRowUsedRead)
 				{
 					unsigned short index = iTransferBlockInFilterRead[i];
 					unsigned short numTransferBlock = maxTransferBlockInFilterRead[i];
 					if (index < numTransferBlock)
 					{
-						finished = false;
+						finishedLocal = FALSE;
 						t_dram_block wideValues = cacheNzBlocks[~regWriteSide][index >> WIDE_SIZE_OFFSET][i];
+						//t_dram_block wideValues = cacheNzBlocks[~regWriteSide][index][i];
 						t_transfer_block values = wideValues.transferBlocks[index & WIDE_SIZE_REMAINDER_MASK];
+						//t_transfer_block values = wideValues.transferBlocks[0];
 						t_transferblock_tagged taggedBlock;
 						taggedBlock.values = values;
 						taggedBlock.maxTransportID = (maxColUsedRead - 1);
 						taggedBlock.isLast = (index == (numTransferBlock - 1)) ?
 							0x1 : 0x0;
-						bool writeSuccess;
-						writeSuccess = write_channel_nb_intel(channel_weightLanes[i][0], taggedBlock);
+						//bool writeSuccess;
+						bool writeSuccess = write_channel_nb_intel(channel_weightLanes[i][0], taggedBlock);
+						//write_channel_nb_intel(channel_weightLanes[i][0], taggedBlock);
 						if (writeSuccess)
 						{
 							index++;
-							iTransferBlockInFilterRead[i] = index;
 						}
+						iTransferBlockInFilterRead[i] = index;
 					}
 				}
+				finished[i] = finishedLocal;
 			} // for
-
-			if (finished)
+			//iTransferBlockInFilterRead++;
+			uint1_t finishedGlobal = TRUE;
+			#pragma unroll
+			for (unsigned char i=0; i<PE_ROWS; i++)
+			{	
+				finishedGlobal &= finished[i];
+			}
+			if (finishedGlobal == TRUE)
 			{
-				#pragma unroll
-				for (unsigned char i=0; i<PE_ROWS; i++)
-				{
-					iTransferBlockInFilterRead[i] = 0x0;
-				}
-				nextStateReadCache = WEIGHT_READ_CACHE_SETUP;
+				nextStateReadCache = WEIGHT_READ_CACHE_SETUP_DIM_IN_TILE;
 			}
 		} // WEIGHT_READ_CACHE_STREAM
 		else if ((stateReadCache == WEIGHT_READ_CACHE_WAIT) && (stateWriteCache == WEIGHT_WRITE_CACHE_WAIT))

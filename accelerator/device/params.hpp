@@ -59,7 +59,7 @@
 
 #define PACKET_SIZE 1
 
-#define PE_ROWS 2
+#define PE_ROWS 8
 #ifdef DSIMPLE_WEIGHT_STEAMER
 #define PE_COLS 1
 #else
