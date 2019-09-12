@@ -14,6 +14,7 @@ __kernel void nop () {}
 #define WRITE_TO_CAHCE_SIDE 0x0
 #define READ_FROM_CACHE_SIDE 0x1
 
+/*
 #define WEIGHT_WRITE_CACHE_SETUP_PE_ROW 0x0
 #define WEIGHT_WRITE_CACHE_SETUP_FOLD_IN_GROUP 0x1
 #define WEIGHT_WRITE_CACHE_SETUP_GROUP 0x2
@@ -31,6 +32,7 @@ __kernel void nop () {}
 #define WEIGHT_READ_CACHE_STREAM  0x5
 #define WEIGHT_READ_CACHE_WAIT  0x6
 #define WEIGHT_READ_CACHE_FINISH 0x7
+*/
 
 #define TRUE 0X1
 #define FALSE 0X0
@@ -39,7 +41,7 @@ __kernel void nop () {}
 Important assumption: The address cache only stores the BRAM address of the first streaming block in each strip.
 */
 __attribute__((max_global_work_dim(0)))
-__kernel void kernelSimpleWeightStreamer (
+__kernel void kernelFilterWriter (
 	 volatile __global t_dram_block* restrict pDramWeights, //Pointer to the filter weights in external memory
 	 volatile __global t_spOffset* restrict pStreamBlockAddress,
 
@@ -62,9 +64,9 @@ __kernel void kernelSimpleWeightStreamer (
 	unsigned short numFoldInGroup // ceil (G / F)
 
 	) {
-	typedef uint3_t t_state;
+	//typedef uint3_t t_state;
 	//Cache: NzBlocks blocks
-	t_dram_block cacheNzBlocks [2][KERNEL_CACHE_DEPTH][PE_ROWS] __attribute__ ((numbanks(PE_ROWS), bankwidth(CLUSTER_SIZE*TRANSFER_SIZE*WIDE_SIZE)));
+	//t_dram_block cacheNzBlocks [2][KERNEL_CACHE_DEPTH][PE_ROWS] __attribute__ ((numbanks(PE_ROWS), bankwidth(CLUSTER_SIZE*TRANSFER_SIZE*WIDE_SIZE)));
 	//t_transfer_block cacheNzBlocks [2][PE_ROWS][KERNEL_CACHE_DEPTH] __attribute__ ((numbanks(BURST_SIZE_TRANSFER_BLOCK * PE_ROWS), bankwidth(CLUSTER_SIZE*TRANSFER_SIZE)));
 
 	//Cache: Cache address of the streaming blocks
@@ -77,382 +79,329 @@ __kernel void kernelSimpleWeightStreamer (
 		unsigned int countFilters = 0;
 		while (countFilters < numFiltersInKernel) {
 			//Unroll the loop to increase the transfer width and make better use of the BRAM bandwidth
-			#pragma unroll 2
-			for (unsigned char i=0; i<2; i++)
-			{
-				unsigned short filterIndex = countFilters + i;
-				if (filterIndex < numFiltersInKernel)
-				{
-					cacheStreamingBlockAddress[filterIndex] = pStreamBlockAddress[filterIndex];
-				}
-			}
-			countFilters += 2;
+			//#pragma unroll 2
+			//for (unsigned char i=0; i<2; i++)
+			//{
+				//unsigned short filterIndex = countFilters + i;
+				//if (filterIndex < numFiltersInKernel)
+				//{
+					cacheStreamingBlockAddress[countFilters] = pStreamBlockAddress[countFilters];
+				//}
+			//}
+			countFilters += 1;
 		}
 	}
 
-	bool proceed = true;
+	//bool proceed = true;
 
 	//======================Other shared variables============================
-	uint1_t regWriteSide = 0x0;
+	//uint1_t regWriteSide = 0x0;
 
 	//====================Write into cache variables=======================
-	t_state stateWriteCache = WEIGHT_WRITE_CACHE_STREAM;
+	//t_state stateWriteCache = WEIGHT_WRITE_CACHE_STREAM;
 
-	unsigned short iOutputHeightTileWrite = 0; //tp
-	unsigned short iOutputWidthTileWrite = 0; //tq
-	unsigned short iGroupWrite = 0; // gl
-	unsigned short iFoldInGroupWrite = 0; //gf
-	unsigned char iPeRowWrite = 0; //f
-	unsigned short iTransferBlockInFilterWrite = 0; //iCg
+	//unsigned short iOutputHeightTile = 0; //tp
+	//unsigned short iOutputWidthTile = 0; //tq
+	//unsigned short iGroup = 0; // gl
+	//unsigned short iFoldInGroup = 0; //gf
+	//unsigned char iPeRow = 0; //f
+	//unsigned short iTransferBlockInFilter = 0; //iCg
 
-	unsigned short iFilterGlobalWrite = 0; //iL
-	unsigned short iFilterInGroupWrite = 0; //gf * F
-	unsigned int iTransferBlockFilterBaseDDR = 0;
-	unsigned int iTransferBlockDDR = iTransferBlockFilterBaseDDR;
+	//unsigned short iFilterGlobal = 0; //iL
+	//unsigned short iFilterInGroup = 0; //gf * F
+	//unsigned int iTransferBlockFilterBaseDDR = 0;
+	//unsigned int iTransferBlockDDR = iTransferBlockFilterBaseDDR;
+
+	unsigned short iHeightGlobal = 0; // countPCoveredByTP
+	//unsigned short iWidthGlobal = 0; //countQCovertedByTQ
 	
-	unsigned char maxRowUsedWrite = PE_ROWS < (numFiltersInGroup - iFilterInGroupWrite) ?
-				PE_ROWS : (numFiltersInGroup - iFilterInGroupWrite); //maxF
-	unsigned short maxTransferBlockInFilterWrite = cacheStreamingBlockAddress[iFilterGlobalWrite];
-
-
-
-	//===================Read from cache variables=========================
-	t_state stateReadCache = WEIGHT_READ_CACHE_WAIT;
-
-	unsigned short iOutputHeightTileRead = 0; //tp
-	unsigned short iOutputWidthTileRead = 0; //tq
-	unsigned short iGroupRead = 0; // gl
-	unsigned short iFoldInGroupRead = 0; //gf
-	unsigned short iFoldInOutputHeightTileRead = 0; // p
-	unsigned short iFoldInOutputWidthTileRead = 0; // pq
-	unsigned short iPeRowRead = 0; //f
-	unsigned short iTransferBlockInFilterRead[PE_ROWS]; //iCg
-	#pragma unroll
-	for (int i=0; i<PE_ROWS; i++)
-	{
-		iTransferBlockInFilterRead[i] = 0;
-	}
-
-	unsigned short iHeightGlobalRead = 0; // countPCoveredByTP
-	unsigned short iWidthGlobalRead = 0; //countQCovertedByTQ
-	unsigned short iFilterGlobalRead = 0; //iL Need this to access the streaming block sizes
-	unsigned short iFilterInGroupRead = 0; // gf * F
-	unsigned short iWidthInTileRead = 0; // pq * A
-	unsigned short iHeightInTileRead = 0;
-
+	//unsigned char maxRowUsed = PE_ROWS < (numFiltersInGroup - iFilterInGroup) ?
+	//			PE_ROWS : (numFiltersInGroup - iFilterInGroup); //maxF
+	//unsigned short maxTransferBlockInFilter = cacheStreamingBlockAddress[iFilterGlobal];
 	
-	unsigned char maxOutputHeightTileSize = sizeOutputHeightTile0; //maxTP
-	unsigned char maxOutputWidthTileSize = sizeOutputWidthTile0; //maxTQ
-	unsigned char maxRowUsedRead = PE_ROWS < (numFiltersInGroup - iFilterInGroupRead) ?
-				PE_ROWS : (numFiltersInGroup - iFilterInGroupRead); //maxF
-	unsigned char maxColUsedRead = PE_COLS < (maxOutputWidthTileSize - iWidthInTileRead) ?
-				PE_COLS : (maxOutputWidthTileSize - iWidthInTileRead); //maxA
-	unsigned short maxTransferBlockInFilterRead [PE_ROWS];
-	unsigned char iMaxRowUsedRead;
-	#pragma unroll 1
-	for (int i=0; i<PE_ROWS; i++)
+
+	//Loops
+	for (unsigned short iOutputHeightTile = 0; iOutputHeightTile < numOutputHeightTile; iOutputHeightTile++) //tp
 	{
-		if (i<maxRowUsedRead)
+		unsigned short maxTP_ = (iOutputHeightTile == 0) ? sizeOutputHeightTile0 : sizeOutputHeightTile;
+		unsigned short maxOutputHeightTileSize = (maxTP_ < (outputHeight - iHeightGlobal) ) ?
+			maxTP_ :  (outputHeight - iHeightGlobal);
+
+		unsigned short iWidthGlobal = 0; //countQCovertedByTQ
+
+		for (unsigned short iOutputWidthTile=0; iOutputWidthTile<numOutputWidthTile; iOutputHeightTile++) //tq
 		{
-			maxTransferBlockInFilterRead[i] = cacheStreamingBlockAddress[iFilterGlobalRead+i];
+			unsigned short maxTQ_ = (iOutputWidthTile == 0) ? sizeOutputWidthTile0 : sizeOutputWidthTile;
+			unsigned short maxOutputWidthTileSize = (maxTQ_ < (outputWidth - iWidthGlobal) ) ?
+				maxTQ_ :  (outputWidth - iWidthGlobal);
+
+			unsigned short iFilterGlobal = 0; //iL
+			unsigned int iTransferBlockFilterBaseDDR = 0;
+
+			for (unsigned short iGroup=0; iGroup<numGroups; iGroup++) //gl
+			{
+				unsigned short iFilterInGroup = 0; //gf * F
+				for (unsigned short iFoldInGroup=0; iFoldInGroup<numFoldInGroup; iFoldInGroup++) //gf
+				{
+					unsigned char maxRowUsed = PE_ROWS < (numFiltersInGroup - iFilterInGroup) ?
+						PE_ROWS : (numFiltersInGroup - iFilterInGroup); //maxF
+
+					for (unsigned char iPeRow=0; iPeRow<maxRowUsed; iPeRow++)
+					{
+						unsigned short maxTransferBlockInFilter = cacheStreamingBlockAddress[iFilterGlobal];
+						unsigned short maxDramBlockInFilter = ((maxTransferBlockInFilter & WIDE_SIZE_REMAINDER_MASK) > 0x0) ?
+							(maxTransferBlockInFilter >> WIDE_SIZE_OFFSET) + 1 : maxTransferBlockInFilter >> WIDE_SIZE_OFFSET;
+						unsigned short maxTransmitCount = maxDramBlockInFilter+1;
+						
+						t_filter_streamer_control control;
+						control.maxOutputHeightTileSize = maxOutputHeightTileSize;
+						control.maxOutputWidthTileSize = maxOutputWidthTileSize;
+						control.destinationRow = iPeRow;
+						control.numTransferBlocks = maxTransferBlockInFilter;
+						t_dram_block dramControl = filterStreamerControl2dramBlock(control);
+
+						unsigned int iTransferBlockDDR = iTransferBlockFilterBaseDDR;
+
+						for (unsigned short iTransmitCount=0; iTransmitCount<maxTransmitCount; iTransmitCount++)
+						{
+							t_dram_block block = (iTransmitCount == 0) ? dramControl : pDramWeights[iTransferBlockDDR >> WIDE_SIZE_OFFSET];
+							write_channel_intel(channel_filter_transport[0], block);
+							if (iTransmitCount!=0)
+							{
+								iTransferBlockDDR += WIDE_SIZE;
+							}
+						} // iTransmitCount
+
+						iTransferBlockFilterBaseDDR += strideExternalMemory;
+						iFilterGlobal++;
+
+					} // iPeRow
+
+					iFilterInGroup += maxRowUsed;	
+				} // iFoldInGroup
+			} //iGroup
+		} // iOutputWidthTile
+	}	// iOutputHeightTile
+}
+
+#define STATE_FILTER_TEE_HEADER 0X0
+#define STATE_FILTER_TEE_PAYLOAD 0X1
+
+#define SWITCH_FILTER_TEE_STREAMER 0X0
+#define SWITCH_FILTER_TEE_PASS 0x1
+/*! kernelFilterTee
+	\brief Pass a dram block to the assigned filter streamer or to the next filter tee
+*/
+__attribute__((max_global_work_dim(0)))
+__attribute__((autorun))
+__attribute__((num_compute_units(PE_ROWS)))
+__kernel void kernelFilterTee ()
+{
+	int rowID = get_compute_id(0);
+	uint1_t state = STATE_FILTER_TEE_HEADER;
+	uint1_t direction = SWITCH_FILTER_TEE_PASS;
+	unsigned short transferBlockCount;
+	unsigned short maxTransferBlockSize;
+	while (true)
+	{
+		t_dram_block block = read_channel_intel(channel_filter_transport[rowID]);
+
+		uint1_t nextState = state;
+		if (state == STATE_FILTER_TEE_HEADER)
+		{
+			t_filter_streamer_control control = dramBlock2FilterStreamerControl(block);
+			maxTransferBlockSize = control.numTransferBlocks;
+			transferBlockCount = 0;
+			int destinationRow = (int) control.destinationRow;
+			if (destinationRow > rowID)
+			{
+				direction = SWITCH_FILTER_TEE_PASS;
+			}
+			else
+			{
+				direction = SWITCH_FILTER_TEE_STREAMER;
+			}
+			nextState = STATE_FILTER_TEE_PAYLOAD;
+		}
+		else if (state == STATE_FILTER_TEE_PAYLOAD)
+		{
+			transferBlockCount += WIDE_SIZE;
+			if (transferBlockCount >= maxTransferBlockSize)
+			{
+				nextState = STATE_FILTER_TEE_HEADER;
+			}
+		}
+
+		//================transmission=======================
+
+		if (direction == SWITCH_FILTER_TEE_STREAMER)
+		{
+			write_channel_intel(channel_filter_local[rowID], block);
+		}
+		else 
+		{
+			if (rowID < (PE_ROWS - 1) )
+			{
+				write_channel_intel(channel_filter_transport[rowID+1], block);
+			} 
 		}
 	}
+}
 
+#define STATE_FILTER_STREAMER_WRITE_CACHE_SETUP 0X0
+#define STATE_FILTER_STREAMER_WRITE_CACHE_WRITE 0X1
+#define STATE_FILTER_STREAMER_WRITE_CACHE_WAIT 0X2
 
-	//===============State actions=======================================
-	#pragma ivdep array(cacheNzBlocks)
-	while (proceed) 
+#define STATE_FILTER_STREAMER_READ_CACHE_SETUP0 0X0
+#define STATE_FILTER_STREAMER_READ_CACHE_SETUP1 0x1
+#define STATE_FILTER_STREAMER_READ_CACHE_READ 0X2
+#define STATE_FILTER_STREAMER_READ_CACHE_WAIT 0X3
+
+/*! kernelFilterStreamer
+	\brief Stream filter values to the PE array
+*/
+__attribute__((max_global_work_dim(0)))
+__attribute__((autorun))
+__attribute__((num_compute_units(PE_ROWS)))
+__kernel void kernelFilterStreamer ()
+{
+	int rowID = get_compute_id(0);
+
+	typedef uint2_t t_state;
+	//important to size the bankwidth, otherwise the default 32 bit will be used, resulting in complex store logic
+	t_dram_block cacheNzBlocks [2][KERNEL_CACHE_DEPTH] __attribute__((bankwidth(BURST_SIZE_BYTE))); 
+	uint1_t regWriteSide = 0x0;
+	unsigned char maxOutputHeightTileSize[2]; //maxTP
+	unsigned char maxOutputWidthTileSize[2]; //maxTQ 
+	unsigned short maxTransferBlockInFilter[2]; //maxCg
+
+	//=================Write into cache variables=================
+	t_state stateWriteCache = STATE_FILTER_STREAMER_WRITE_CACHE_SETUP;
+	unsigned short iTransferBlockInFilterWrite; //iCg
+
+	//=================Read from cache variables=================
+	t_state stateReadCache = STATE_FILTER_STREAMER_READ_CACHE_WAIT;
+	unsigned short iTransferBlockInFilterRead; //iCg
+	unsigned char iWidthInOutputTileRead; //pq*A
+	unsigned char iHeightInOutputTileRead; //p
+	unsigned char maxColUsedRead; //maxA
+
+	while (true)
 	{
+		//===============Write side====================
 		t_state nextStateWriteCache = stateWriteCache;
-		if (stateWriteCache == WEIGHT_WRITE_CACHE_SETUP_PE_ROW)
 		{
-			nextStateWriteCache = WEIGHT_WRITE_CACHE_SETUP_FOLD_IN_GROUP;
-
-			iFilterGlobalWrite++;
-			iPeRowWrite++;
-		}
-		else if (stateWriteCache == WEIGHT_WRITE_CACHE_SETUP_FOLD_IN_GROUP)
-		{
-			nextStateWriteCache = WEIGHT_WRITE_CACHE_SETUP_GROUP;
-			if (iPeRowWrite >= maxRowUsedRead)
+			bool success = false;
+			t_dram_block writeBlock;
+			if ( (stateWriteCache == STATE_FILTER_STREAMER_WRITE_CACHE_SETUP)
+				|| (stateWriteCache == STATE_FILTER_STREAMER_WRITE_CACHE_WRITE) )
 			{
-				iPeRowWrite = 0;
-				iFilterInGroupWrite += maxRowUsedWrite;
-				iFoldInGroupWrite++;
-			}
-		}
-		else if (stateWriteCache == WEIGHT_WRITE_CACHE_SETUP_GROUP)
-		{
-			nextStateWriteCache = WEIGHT_WRITE_CACHE_SETUP_TILES;
-
-			if (iFoldInGroupWrite>=numFoldInGroup)
-			{
-				iFilterInGroupWrite = 0;
-				iFoldInGroupWrite = 0;
-				iGroupWrite++;
-			}
-		}
-		else if (stateWriteCache == WEIGHT_WRITE_CACHE_SETUP_TILES)
-		{
-			nextStateWriteCache = WEIGHT_WRITE_CACHE_SETUP_AUX_UPDATE;
-
-			if (iGroupWrite>=numGroups)
-			{
-				iGroupWrite = 0;
-
-				iOutputWidthTileWrite++;
-				if (iOutputWidthTileWrite>=numOutputWidthTile) {
-					iOutputWidthTileWrite = 0;
-
-					iOutputHeightTileWrite++;
-				}
-
-				iTransferBlockFilterBaseDDR = 0;
-				iTransferBlockDDR = iTransferBlockFilterBaseDDR;
-				iFilterGlobalWrite = 0;
-			}
-		}
-		else if (stateWriteCache == WEIGHT_WRITE_CACHE_SETUP_AUX_UPDATE)
-		{
-			nextStateWriteCache = WEIGHT_WRITE_CACHE_STREAM;
-			//maxF update
-			if (iPeRowWrite == 0) //a fold is about to be loaded
-			{
-				maxRowUsedWrite = PE_ROWS <  (numFiltersInGroup - iFilterInGroupWrite) ?
-					PE_ROWS : numFiltersInGroup - iFilterInGroupWrite;
-				nextStateWriteCache = WEIGHT_WRITE_CACHE_WAIT;
-			}
-
-			if (iOutputHeightTileWrite>=numOutputHeightTile)
-			{
-				nextStateWriteCache = WEIGHT_WRITE_CACHE_FINISH;
-			}
-		}
-		else if (stateWriteCache == WEIGHT_WRITE_CACHE_STREAM)
-		{
-			//Load weights in burst. Make the most use of the DRAM bandwidth
-			//#pragma unroll
-			//for (unsigned int i=0; i<BURST_SIZE_TRANSFER_BLOCK; i++)
-			//{
-			//	cacheNzBlocks[regWriteSide][iTransferBlockInFilterWrite++][iPeRowWrite]
-			//		= pWeights[iTransferBlockDDR++];
-			//}
-			cacheNzBlocks[regWriteSide][iTransferBlockInFilterWrite >> WIDE_SIZE_OFFSET][iPeRowWrite]
-				= pDramWeights[iTransferBlockDDR >> WIDE_SIZE_OFFSET];
-
-			iTransferBlockInFilterWrite += WIDE_SIZE;
-			iTransferBlockDDR += WIDE_SIZE;
-
-			//iTransferBlockInFilterWrite += BURST_SIZE_TRANSFER_BLOCK;
-			// Update the parameters once the nz values in one filter has been loaded from DRAM
-			if (iTransferBlockInFilterWrite >= maxTransferBlockInFilterWrite)
-			{
-				iTransferBlockInFilterWrite = 0;
-				nextStateWriteCache = WEIGHT_WRITE_CACHE_SETUP_PE_ROW;
-
-				//Tricky: the following variables are updated in WEIGHT_WRITE_CACHE_SETUP too.
-				iTransferBlockFilterBaseDDR += strideExternalMemory;
-				iTransferBlockDDR = iTransferBlockFilterBaseDDR;			
+				writeBlock = read_channel_nb_intel(channel_filter_local[rowID], &success);
 			}
 			
-		} // WEIGHT_WRITE_CACHE_SETUP
+			if (stateWriteCache == STATE_FILTER_STREAMER_WRITE_CACHE_SETUP)
+			{
+				if (success)
+				{
+					t_filter_streamer_control control = 
+						dramBlock2FilterStreamerControl(writeBlock);
+					maxOutputHeightTileSize[regWriteSide] = control.maxOutputHeightTileSize;
+					maxOutputWidthTileSize[regWriteSide] = control.maxOutputWidthTileSize;
+					maxTransferBlockInFilter[regWriteSide] = control.numTransferBlocks;
+					iTransferBlockInFilterWrite = 0;
+
+					nextStateWriteCache = STATE_FILTER_STREAMER_WRITE_CACHE_WRITE;
+				}
+			} // STATE_FILTER_STREAMER_WRITE_CACHE_SETUP
+			else if (stateWriteCache == STATE_FILTER_STREAMER_WRITE_CACHE_WRITE)
+			{
+				if (success)
+				{
+					unsigned short dramBlockIndex = (iTransferBlockInFilterWrite >> WIDE_SIZE_OFFSET);
+					cacheNzBlocks[regWriteSide][dramBlockIndex] = writeBlock;
+					iTransferBlockInFilterWrite += WIDE_SIZE;
+					if (iTransferBlockInFilterWrite >= maxTransferBlockInFilter[regWriteSide])
+					{
+						nextStateWriteCache = STATE_FILTER_STREAMER_WRITE_CACHE_WAIT;
+					}
+				}
+			} // STATE_FILTER_STREAMER_WRITE_CACHE_WRITE
+		} // WRITE
 
 		t_state nextStateReadCache = stateReadCache;
-		if (stateReadCache == WEIGHT_READ_CACHE_SETUP_DIM_IN_TILE)
+		
+		if (stateReadCache == STATE_FILTER_STREAMER_READ_CACHE_SETUP0)
 		{
-			nextStateReadCache = WEIGHT_READ_CACHE_SETUP_FOLD_GROUP;
-			//iTransferBlockInFilterRead = 0;
-
-			#pragma unroll
-			for (unsigned char i=0; i<PE_ROWS; i++)
-			{
-				iTransferBlockInFilterRead[i] = 0x0;
-			}
-
-			iWidthInTileRead += maxColUsedRead;
-			if (iWidthInTileRead >= maxOutputWidthTileSize)
-			{
-				iWidthInTileRead = 0;
-
-				iHeightInTileRead++;
-
-			} //iWidthInTileRead
-		} // WEIGHT_READ_CACHE_SETUP
-		else if (stateReadCache == WEIGHT_READ_CACHE_SETUP_FOLD_GROUP)
+			iWidthInOutputTileRead = 0;
+			iHeightInOutputTileRead = 0;
+			maxColUsedRead = (maxOutputWidthTileSize[(~regWriteSide) & 0x1] - iWidthInOutputTileRead) < PE_COLS ?
+				(maxOutputWidthTileSize[(~regWriteSide) & 0x1] - iWidthInOutputTileRead) : PE_COLS;
+			iTransferBlockInFilterRead = 0;
+			nextStateReadCache = STATE_FILTER_STREAMER_READ_CACHE_READ;
+		} // STATE_FILTER_STREAMER_READ_CACHE_SETUP0
+		else if (stateReadCache == STATE_FILTER_STREAMER_READ_CACHE_SETUP1)
 		{
-			nextStateReadCache = WEIGHT_READ_CACHE_SETUP_TILES;
+			nextStateReadCache = STATE_FILTER_STREAMER_READ_CACHE_READ;
 
-			if (iHeightInTileRead >= maxOutputHeightTileSize)
+			iTransferBlockInFilterRead = 0;
+			iWidthInOutputTileRead += maxColUsedRead;
+			
+			if (iWidthInOutputTileRead >= maxOutputWidthTileSize[(~regWriteSide) & 0x1])
 			{
-				iHeightInTileRead = 0;
+				iWidthInOutputTileRead = 0;
+				iHeightInOutputTileRead++;
 
-				iFilterGlobalRead += maxRowUsedRead;
-				iFilterInGroupRead += maxRowUsedRead;
-
-				iFoldInGroupRead++;
-
-				if (iFoldInGroupRead >= numFoldInGroup)
+				if (iHeightInOutputTileRead >= maxOutputHeightTileSize[(~regWriteSide) & 0x1])
 				{
-					iFoldInGroupRead = 0;
-					iFilterInGroupRead = 0;
-
-					iGroupRead++;
-
-				} //iFoldInGroupRead
-
-			} // iHeightInTileRead
-
-		} //WEIGHT_READ_CACHE_SETUP1
-		else if (stateReadCache == WEIGHT_READ_CACHE_SETUP_TILES)
-		{
-			nextStateReadCache = WEIGHT_READ_CACHE_SETUP_AUX_UPDATE;
-
-			if (iGroupRead >= numGroups)
-			{
-				iGroupRead = 0;
-
-				iFilterGlobalRead = 0;
-
-				iWidthGlobalRead += maxOutputWidthTileSize;
-				
-
-				iOutputWidthTileRead++;
-				if (iOutputWidthTileRead >= numOutputWidthTile)
-				{
-					iOutputWidthTileRead = 0;
-					iWidthGlobalRead = 0;
-
-					iHeightGlobalRead += maxOutputHeightTileSize;
-
-					iOutputHeightTileRead++;
-					if (iOutputHeightTileRead >= numOutputHeightTile)
-					{
-						nextStateReadCache = WEIGHT_READ_CACHE_FINISH;
-					}
-				} // iOutputwidthTileRead
-				
-			} //iGroupRead
-
-		} //WEIGHT_READ_CACHE_SETUP_AUX_UPDATE
-		else if (stateReadCache == WEIGHT_READ_CACHE_SETUP_AUX_UPDATE)
-		{
-			nextStateReadCache = WEIGHT_READ_CACHE_STREAM;
-			if ( (iWidthInTileRead == 0) 
-					&& (iHeightInTileRead == 0)
-					&& (iFoldInGroupRead == 0)
-					&& (iGroupRead == 0) )
-			{
-				maxOutputWidthTileSize = sizeOutputWidthTile < (outputWidth - iWidthGlobalRead) ?
-					sizeOutputWidthTile : (outputWidth - iWidthGlobalRead);
-
-				if (iOutputWidthTileRead == 0)
-				{
-					maxOutputWidthTileSize = sizeOutputWidthTile0;
-					maxOutputHeightTileSize = sizeOutputHeightTile < (outputHeight - iHeightGlobalRead) ?
-					sizeOutputHeightTile : (outputHeight - iHeightGlobalRead);
+					nextStateReadCache = STATE_FILTER_STREAMER_READ_CACHE_WAIT;
 				}
-
 			}
 
-			if ( (iHeightInTileRead == 0) && (iWidthInTileRead == 0) )
-			{
-				maxRowUsedRead = PE_ROWS < (numFiltersInGroup - iFilterInGroupRead) ?
-							PE_ROWS : (numFiltersInGroup - iFilterInGroupRead);
-				iMaxRowUsedRead = 0;
-				nextStateReadCache = WEIGHT_READ_CACHE_LOAD_ADDRESS;
-			}
+			maxColUsedRead = (maxOutputWidthTileSize[(~regWriteSide) & 0x1] - iWidthInOutputTileRead) < PE_COLS ?
+				(maxOutputWidthTileSize[(~regWriteSide) & 0x1] - iWidthInOutputTileRead) : PE_COLS;
 
-			maxColUsedRead = PE_COLS < (maxOutputWidthTileSize - iWidthInTileRead) ?
-				PE_COLS : maxOutputWidthTileSize - iWidthInTileRead;
-
-		}
-		else if (stateReadCache == WEIGHT_READ_CACHE_LOAD_ADDRESS)
+		} // STATE_FILTER_STREAMER_READ_CACHE_SETUP1
+		else if (stateReadCache == STATE_FILTER_STREAMER_READ_CACHE_READ)
 		{
-			maxTransferBlockInFilterRead[iMaxRowUsedRead] = cacheStreamingBlockAddress[iFilterGlobalRead+iMaxRowUsedRead];
-			iMaxRowUsedRead++;
-			if (iMaxRowUsedRead >= maxRowUsedRead)
+			unsigned short dramIndex = iTransferBlockInFilterRead >> WIDE_SIZE_OFFSET;
+			unsigned short indexInDramBlock = iTransferBlockInFilterRead & WIDE_SIZE_REMAINDER_MASK;
+			t_dram_block dramBlock = cacheNzBlocks[(~regWriteSide) & 0x1][dramIndex];
+			t_transfer_block tblock = dramBlock.transferBlocks[indexInDramBlock];
+			t_transferblock_tagged taggedBlock;
+			taggedBlock.values = tblock;
+			taggedBlock.maxTransportID = (maxColUsedRead - 1);
+			taggedBlock.isLast = ((iTransferBlockInFilterRead + 1) >= maxTransferBlockInFilter[(~regWriteSide) & 0x1]) ?
+				TRUE : FALSE;
+			bool success = false;
+			success = write_channel_nb_intel(channel_weightLanes[rowID][0], taggedBlock);
+			if (success)
 			{
-				nextStateReadCache = WEIGHT_READ_CACHE_WAIT;
-			}
-
-		} // WEIGHT_READ_CACHE_LOAD_ADDRESS
-
-		else if (stateReadCache == WEIGHT_READ_CACHE_STREAM)
-		{
-			//Keep streaming until we have drained all weights once
-			uint1_t finished[PE_ROWS];
-
-			#pragma unroll
-			for (unsigned char i=0; i<PE_ROWS; i++)
-			{
-				uint1_t finishedLocal = TRUE;
-				if (i<maxRowUsedRead)
+				if ((iTransferBlockInFilterRead + 1) >= maxTransferBlockInFilter[(~regWriteSide) & 0x1])
 				{
-					unsigned short index = iTransferBlockInFilterRead[i];
-					unsigned short numTransferBlock = maxTransferBlockInFilterRead[i];
-					if (index < numTransferBlock)
-					{
-						finishedLocal = FALSE;
-						t_dram_block wideValues = cacheNzBlocks[~regWriteSide][index >> WIDE_SIZE_OFFSET][i];
-						//t_dram_block wideValues = cacheNzBlocks[~regWriteSide][index][i];
-						t_transfer_block values = wideValues.transferBlocks[index & WIDE_SIZE_REMAINDER_MASK];
-						//t_transfer_block values = wideValues.transferBlocks[0];
-						t_transferblock_tagged taggedBlock;
-						taggedBlock.values = values;
-						taggedBlock.maxTransportID = (maxColUsedRead - 1);
-						taggedBlock.isLast = (index == (numTransferBlock - 1)) ?
-							0x1 : 0x0;
-						//bool writeSuccess;
-						bool writeSuccess = write_channel_nb_intel(channel_weightLanes[i][0], taggedBlock);
-						//write_channel_nb_intel(channel_weightLanes[i][0], taggedBlock);
-						if (writeSuccess)
-						{
-							index++;
-						}
-						iTransferBlockInFilterRead[i] = index;
-					}
+					nextStateReadCache = STATE_FILTER_STREAMER_READ_CACHE_SETUP1;
 				}
-				finished[i] = finishedLocal;
-			} // for
-			//iTransferBlockInFilterRead++;
-			uint1_t finishedGlobal = TRUE;
-			#pragma unroll
-			for (unsigned char i=0; i<PE_ROWS; i++)
-			{	
-				finishedGlobal &= finished[i];
+				else
+				{
+					iTransferBlockInFilterRead++;
+				}
 			}
-			if (finishedGlobal == TRUE)
-			{
-				nextStateReadCache = WEIGHT_READ_CACHE_SETUP_DIM_IN_TILE;
-			}
-		} // WEIGHT_READ_CACHE_STREAM
-		else if ((stateReadCache == WEIGHT_READ_CACHE_WAIT) && (stateWriteCache == WEIGHT_WRITE_CACHE_WAIT))
+		} // STATE_FILTER_STREAMER_READ_CACHE_READ
+
+		if ( (stateWriteCache == STATE_FILTER_STREAMER_WRITE_CACHE_WAIT) 
+			&& (stateReadCache == STATE_FILTER_STREAMER_READ_CACHE_WAIT) )
 		{
-			regWriteSide = (~regWriteSide) & 0x1;
-			nextStateWriteCache = WEIGHT_WRITE_CACHE_STREAM;
-			nextStateReadCache = WEIGHT_READ_CACHE_STREAM;
-		}
-		else if ((stateReadCache == WEIGHT_READ_CACHE_WAIT) && (stateWriteCache == WEIGHT_WRITE_CACHE_FINISH))
-		{
-			regWriteSide = (~regWriteSide) & 0x1;
-			nextStateReadCache = WEIGHT_READ_CACHE_STREAM;
-		}
-		else if ((stateReadCache == WEIGHT_READ_CACHE_FINISH) && (stateWriteCache == WEIGHT_WRITE_CACHE_WAIT))
-		{
-			regWriteSide = (~regWriteSide) & 0x1;
-			nextStateWriteCache = WEIGHT_WRITE_CACHE_STREAM;
-		}
-		else if ((stateReadCache == WEIGHT_READ_CACHE_FINISH) && (stateWriteCache == WEIGHT_WRITE_CACHE_FINISH))
-		{
-			proceed = false;
+			nextStateReadCache = STATE_FILTER_STREAMER_READ_CACHE_SETUP0;
+			nextStateWriteCache = STATE_FILTER_STREAMER_WRITE_CACHE_SETUP;
 		}
 
-		//==================Final state update===================================
-		stateWriteCache = nextStateWriteCache;
 		stateReadCache = nextStateReadCache;
-	}// while 
-	
+		stateWriteCache = nextStateWriteCache;
+
+	} // while
+
+
 }
+
 
 /*! kernelTensorChecker
 	\brief Examine the transfer blocks that belong to the same filter received on a given channel to the host 
