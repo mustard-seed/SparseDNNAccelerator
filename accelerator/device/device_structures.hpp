@@ -124,6 +124,42 @@ typedef struct {
     t_transfer_block transferBlocks[WIDE_SIZE];
 } t_dram_block;
 
+typedef struct {
+    unsigned char maxOutputHeightTileSize; //maxTP
+    unsigned char maxOutputWidthTileSize; //maxTQ
+    unsigned char destinationRow; //f
+    unsigned short numTransferBlocks;
+
+} t_filter_streamer_control;
+
+t_filter_streamer_control dramBlock2FilterStreamerControl (t_dram_block block)
+{
+    t_filter_streamer_control control;
+    control.maxOutputHeightTileSize
+        = block.transferBlocks[0].values[0].cluster_values[0];
+    control.maxOutputWidthTileSize
+        = block.transferBlocks[1].values[0].cluster_values[0];
+    control.destinationRow 
+        = block.transferBlocks[2].values[0].cluster_values[0];
+    control.numTransferBlocks
+        = ((unsigned short) (block.transferBlocks[3].values[0].cluster_values[0]))
+            | (((unsigned short) (block.transferBlocks[4].values[0].cluster_values[0])) << 8);
+
+    return control;
+}
+
+t_dram_block filterStreamerControl2dramBlock (t_filter_streamer_control control)
+{
+    t_dram_block block;
+    block.transferBlocks[0].values[0].cluster_values[0] = control.maxOutputHeightTileSize;
+    block.transferBlocks[1].values[0].cluster_values[0] = control.maxOutputWidthTileSize;
+    block.transferBlocks[2].values[0].cluster_values[0] = control.destinationRow;
+    block.transferBlocks[3].values[0].cluster_values[0] = control.numTransferBlocks & 0xFF;
+    block.transferBlocks[4].values[0].cluster_values[0] = ((control.numTransferBlocks >> 8) & 0xFF);
+
+    return block;
+}
+
 typedef struct __attribute__((packed)){
     t_transfer_block values;
     uint1_t isLast;
