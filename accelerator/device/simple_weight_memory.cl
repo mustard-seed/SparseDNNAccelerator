@@ -43,18 +43,18 @@ Important assumption: The address cache only stores the BRAM address of the firs
 __attribute__((max_global_work_dim(0)))
 __kernel void kernelFilterWriter (
 	 volatile __global t_dram_block* restrict pDramWeights, //Pointer to the filter weights in external memory
-	 volatile __global t_spOffset* restrict pStreamBlockAddress,
+	 volatile __global t_streamblock_address* restrict pStreamBlockAddress,
 
 	unsigned int strideExternalMemory, //Distance between the start of successive filters in DRAM in terms of transfer blocks
 
 	unsigned short outputWidth, //Q
 	unsigned char sizeOutputWidthTile, //TQ
-	unsigned short numOutputWidthTile, // ceil (Q / TQ)
+	unsigned char numOutputWidthTile, // ceil (Q / TQ)
 	unsigned char sizeOutputWidthTile0, //Special case: TQ for the tiles on the left boundary
 
 	unsigned short outputHeight, //P
-	unsigned char numOutputHeightTile, //TP
-	unsigned char sizeOutputHeightTile, // ceil (P / TP)
+	unsigned char sizeOutputHeightTile, //TP
+	unsigned char numOutputHeightTile, // ceil (P / TP)
 	unsigned char sizeOutputHeightTile0, //Special case: for the left corner
 
 	unsigned int numFiltersInKernel, //L
@@ -75,6 +75,7 @@ __kernel void kernelFilterWriter (
 	//=============================================================
 	//Read all the streaming block address in to BRAM as soon as possible
 	//==============================================================
+	EMULATOR_PRINT(("[kernelFilterWriter] Reading the stream block addresses\n"));
 	{
 		unsigned int countFilters = 0;
 		while (countFilters < numFiltersInKernel) {
@@ -121,18 +122,18 @@ __kernel void kernelFilterWriter (
 	
 
 	//Loops
-	for (unsigned short iOutputHeightTile = 0; iOutputHeightTile < numOutputHeightTile; iOutputHeightTile++) //tp
+	for (unsigned char iOutputHeightTile = 0; iOutputHeightTile < numOutputHeightTile; iOutputHeightTile++) //tp
 	{
-		unsigned short maxTP_ = (iOutputHeightTile == 0) ? sizeOutputHeightTile0 : sizeOutputHeightTile;
-		unsigned short maxOutputHeightTileSize = (maxTP_ < (outputHeight - iHeightGlobal) ) ?
+		unsigned char maxTP_ = (iOutputHeightTile == 0) ? sizeOutputHeightTile0 : sizeOutputHeightTile;
+		unsigned char maxOutputHeightTileSize = (((unsigned short) maxTP_) < ((unsigned short) (outputHeight - iHeightGlobal)) ) ?
 			maxTP_ :  (outputHeight - iHeightGlobal);
 
 		unsigned short iWidthGlobal = 0; //countQCovertedByTQ
 
-		for (unsigned short iOutputWidthTile=0; iOutputWidthTile<numOutputWidthTile; iOutputHeightTile++) //tq
+		for (unsigned char iOutputWidthTile=0; iOutputWidthTile<numOutputWidthTile; iOutputWidthTile++) //tq
 		{
-			unsigned short maxTQ_ = (iOutputWidthTile == 0) ? sizeOutputWidthTile0 : sizeOutputWidthTile;
-			unsigned short maxOutputWidthTileSize = (maxTQ_ < (outputWidth - iWidthGlobal) ) ?
+			unsigned char maxTQ_ = (iOutputWidthTile == 0) ? sizeOutputWidthTile0 : sizeOutputWidthTile;
+			unsigned char  maxOutputWidthTileSize = ( ((unsigned short) maxTQ_) < ((unsigned short) (outputWidth - iWidthGlobal)) ) ?
 				maxTQ_ :  (outputWidth - iWidthGlobal);
 
 			unsigned short iFilterGlobal = 0; //iL
@@ -162,6 +163,8 @@ __kernel void kernelFilterWriter (
 
 						unsigned int iTransferBlockDDR = iTransferBlockFilterBaseDDR;
 
+						EMULATOR_PRINT(("[kernelFilterWriter] Sending filter %d to row %d. Number of transfer blocks: %d\n",
+							iFilterGlobal, iPeRow, maxTransferBlockInFilter));
 						for (unsigned short iTransmitCount=0; iTransmitCount<maxTransmitCount; iTransmitCount++)
 						{
 							t_dram_block block = (iTransmitCount == 0) ? dramControl : pDramWeights[iTransferBlockDDR >> WIDE_SIZE_OFFSET];
@@ -245,6 +248,8 @@ __kernel void kernelFilterTee ()
 				write_channel_intel(channel_filter_transport[rowID+1], block);
 			} 
 		}
+
+		state = nextState;
 	}
 }
 
@@ -286,6 +291,7 @@ __kernel void kernelFilterStreamer ()
 	unsigned char iHeightInOutputTileRead; //p
 	unsigned char maxColUsedRead; //maxA
 
+	#pragma ivdep array(cacheNzBlocks)
 	while (true)
 	{
 		//===============Write side====================
@@ -303,6 +309,7 @@ __kernel void kernelFilterStreamer ()
 			{
 				if (success)
 				{
+					EMULATOR_PRINT(("[kernelFilterStreamer %d] Received setup packet for a new filter\n", rowID));
 					t_filter_streamer_control control = 
 						dramBlock2FilterStreamerControl(writeBlock);
 					maxOutputHeightTileSize[regWriteSide] = control.maxOutputHeightTileSize;
@@ -392,6 +399,8 @@ __kernel void kernelFilterStreamer ()
 		{
 			nextStateReadCache = STATE_FILTER_STREAMER_READ_CACHE_SETUP0;
 			nextStateWriteCache = STATE_FILTER_STREAMER_WRITE_CACHE_SETUP;
+			EMULATOR_PRINT(("[kernelFilterStreamer %d] Swap\n", rowID));
+
 		}
 
 		stateReadCache = nextStateReadCache;
@@ -430,6 +439,7 @@ __kernel void kernelTensorChecker (
 
 		if (readStatus[channelID])
 		{
+
 			t_transferblock_tagged targetBlock = blocks[channelID];
 			if (countSequenceID == sequenceID)
 			{
@@ -438,6 +448,8 @@ __kernel void kernelTensorChecker (
 
 			if (targetBlock.isLast == 0x1)
 			{
+				EMULATOR_PRINT(("[kernelTensorChecker] Finished reading one sequence on target row %d\n", channelID));
+				EMULATOR_PRINT(("[kernelTensorChecker] Sequence ID: %d\n", countSequenceID));
 				countSequenceID++;		
 			}
 		}

@@ -124,6 +124,7 @@ typedef struct {
     t_transfer_block transferBlocks[WIDE_SIZE];
 } t_dram_block;
 
+#ifdef INTELFPGA_CL
 typedef struct {
     unsigned char maxOutputHeightTileSize; //maxTP
     unsigned char maxOutputWidthTileSize; //maxTQ
@@ -170,6 +171,7 @@ typedef struct __attribute__((packed)){
     t_transfer_block values;
     uint1_t isLast;
 } t_transferblock_local;
+#endif
 //#endif
 
 //=====================================

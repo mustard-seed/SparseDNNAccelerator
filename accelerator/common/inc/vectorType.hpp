@@ -25,5 +25,10 @@ t_aligned_streamblock_address_vector;
 typedef
 std::vector<t_transfer_block, boost::alignment::aligned_allocator<t_transfer_block, aocl_utils_cpp::AOCL_ALIGNMENT>>
 t_aligned_transfer_block_vector;
+
+typedef
+std::vector<t_dram_block, boost::alignment::aligned_allocator<t_dram_block, aocl_utils_cpp::AOCL_ALIGNMENT>>
+t_aligned_dram_block_vector;
+
 #endif
 #endif

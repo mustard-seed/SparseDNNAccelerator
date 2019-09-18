@@ -60,8 +60,8 @@
 #define PACKET_SIZE 1
 
 #define PE_ROWS 8
-#ifdef DSIMPLE_WEIGHT_STEAMER
-#define PE_COLS 1
+#ifdef SIMPLE_WEIGHT_STREAMER
+#define PE_COLS 4
 #else
 #define PE_COLS 2
 #endif
@@ -80,7 +80,7 @@
 #define CLUSTER_SIZE 2
 #define WIDE_SIZE 8  //Each cluster takes 4 bytes, so need 8 cluster size to populate 256 bits
 #define WIDE_SIZE_OFFSET 0x3 //Numnber of bits to shift the transfer block index to the right in order to recover the wide offset
-#define WIDE_SIZE_REMAINDER_MASK 0xF
+#define WIDE_SIZE_REMAINDER_MASK 0x7
 
 
 #define KERNEL_CACHE_LANES PE_ROWS

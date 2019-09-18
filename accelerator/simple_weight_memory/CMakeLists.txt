@@ -7,6 +7,7 @@ set (PREPROCESSOR_DEFS
 #        -DHW_DEBUG
         -DSIMPLE_WEIGHT_MEMORY_TEST
         -DSIMPLE_WEIGHT_STREAMER
+        -DFLEXIBLE_BITMASK_COMPRESSION
         )
 
 ############################################
