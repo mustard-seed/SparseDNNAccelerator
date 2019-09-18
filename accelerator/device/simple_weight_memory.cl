@@ -309,13 +309,14 @@ __kernel void kernelFilterStreamer ()
 			{
 				if (success)
 				{
-					EMULATOR_PRINT(("[kernelFilterStreamer %d] Received setup packet for a new filter\n", rowID));
 					t_filter_streamer_control control = 
 						dramBlock2FilterStreamerControl(writeBlock);
 					maxOutputHeightTileSize[regWriteSide] = control.maxOutputHeightTileSize;
 					maxOutputWidthTileSize[regWriteSide] = control.maxOutputWidthTileSize;
 					maxTransferBlockInFilter[regWriteSide] = control.numTransferBlocks;
 					iTransferBlockInFilterWrite = 0;
+
+					EMULATOR_PRINT(("[kernelFilterStreamer %d] Received setup packet for a new filter. Number of transfer blocks to follow: %d\n", rowID, control.numTransferBlocks));
 
 					nextStateWriteCache = STATE_FILTER_STREAMER_WRITE_CACHE_WRITE;
 				}
@@ -383,6 +384,13 @@ __kernel void kernelFilterStreamer ()
 			success = write_channel_nb_intel(channel_weightLanes[rowID][0], taggedBlock);
 			if (success)
 			{
+				EMULATOR_PRINT(("[kernelFilterStreamer %d] Sent tb %d: %d % d %d %d\n", 
+					rowID, 
+					iTransferBlockInFilterRead,
+					tblock.values[0].cluster_values[0],
+					tblock.values[0].cluster_values[1],
+					tblock.values[1].cluster_values[0],
+					tblock.values[1].cluster_values[1]));
 				if ((iTransferBlockInFilterRead + 1) >= maxTransferBlockInFilter[(~regWriteSide) & 0x1])
 				{
 					nextStateReadCache = STATE_FILTER_STREAMER_READ_CACHE_SETUP1;
@@ -399,6 +407,7 @@ __kernel void kernelFilterStreamer ()
 		{
 			nextStateReadCache = STATE_FILTER_STREAMER_READ_CACHE_SETUP0;
 			nextStateWriteCache = STATE_FILTER_STREAMER_WRITE_CACHE_SETUP;
+			regWriteSide = (~regWriteSide) & 0x1; 
 			EMULATOR_PRINT(("[kernelFilterStreamer %d] Swap\n", rowID));
 
 		}
@@ -428,10 +437,10 @@ __kernel void kernelTensorChecker (
 	unsigned int countSequenceID = 0;
 	unsigned int dramLocation = 0;
 
-	bool readStatus[PE_ROWS];
 	while (countSequenceID <= sequenceID)
 	{
 		t_transferblock_tagged blocks [PE_ROWS];
+		bool readStatus[PE_ROWS];
 		#pragma unroll 
 		for (unsigned char j=0; j<PE_ROWS; j++) {
 			blocks[j] = read_channel_nb_intel(channel_weightLanes[j][0], &(readStatus[j]) );
@@ -446,7 +455,7 @@ __kernel void kernelTensorChecker (
 				pHost[dramLocation++] = targetBlock.values;
 			}
 
-			if (targetBlock.isLast == 0x1)
+			if (targetBlock.isLast == TRUE)
 			{
 				EMULATOR_PRINT(("[kernelTensorChecker] Finished reading one sequence on target row %d\n", channelID));
 				EMULATOR_PRINT(("[kernelTensorChecker] Sequence ID: %d\n", countSequenceID));
