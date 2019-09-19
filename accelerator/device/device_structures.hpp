@@ -143,8 +143,8 @@ t_filter_streamer_control dramBlock2FilterStreamerControl (t_dram_block block)
     control.destinationRow 
         = block.transferBlocks[2].values[0].cluster_values[0];
     control.numTransferBlocks
-        = ((unsigned short) (block.transferBlocks[3].values[0].cluster_values[0]))
-            | (((unsigned short) (block.transferBlocks[4].values[0].cluster_values[0])) << 8);
+        = ( ( ( (short) (block.transferBlocks[3].values[0].cluster_values[0]) ) & 0xFF )
+            | ( (((short) (block.transferBlocks[4].values[0].cluster_values[0])) & 0xFF) << 8))  & 0xFFFF;
 
     return control;
 }

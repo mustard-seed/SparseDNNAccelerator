@@ -637,18 +637,19 @@ flexibleDirectCompressedTensor::flexibleDirectCompressedTensor (
     //Compute the number of transfer blocks in a compression block
     //Need an extra one at the end to account for the bitmask
     // which occupies its own transfer block
-    unsigned char numTransferBlocksPerCompressionBlock
-            =  (unsigned char) std::ceil ( (float) (1 + maxClusterIndexInCompressionBlock + 1) / (float) (maxClusterIndexInTransferBlock + 1));
+    unsigned int numTransferBlocksPerCompressionBlock
+            =  (unsigned int) std::ceil ( (float) (1 + maxClusterIndexInCompressionBlock + 1) / (float) (maxClusterIndexInTransferBlock + 1));
 
     //==========================================================
     //Compute the memory stride and allocate space in the vectors
     if (isKernel) {
-        unsigned short numCompressionBlocksInChannel =
-                (unsigned short) std::ceil ( (float) channel /
+        unsigned int numCompressionBlocksInChannel =
+                (unsigned int) std::ceil ( (float) channel /
                                              (float) ((_maxClusterIndexInCompressionBlock + 1) * (_maxScalarIndexInCluster + 1)) );
 
-        unsigned int tempStride = width*height*(numTransferBlocksPerCompressionBlock*numCompressionBlocksInChannel);
-        externalMemoryAddressStride = lcm(tempStride, (unsigned int) WIDE_SIZE); //DRAM stride needs to be a multiple of DRAM width and the storage requirement per filter
+        unsigned int tempStride = width*height*((unsigned int) numTransferBlocksPerCompressionBlock* (unsigned int) numCompressionBlocksInChannel);
+        //externalMemoryAddressStride = lcm(tempStride, (unsigned int) WIDE_SIZE); //DRAM stride needs to be a multiple of DRAM width and the storage requirement per filter
+        externalMemoryAddressStride = (unsigned int) std::ceil( ((float) (tempStride) ) / ((float) (WIDE_SIZE)) ) * WIDE_SIZE;
         valueVector.resize(externalMemoryAddressStride*num3DTensors);
         streamBlockAddressVector.resize(num3DTensors);
      }
@@ -656,12 +657,12 @@ flexibleDirectCompressedTensor::flexibleDirectCompressedTensor (
         //Channel group size should divide channel size
         assert( channel % (maxScalarIndexInChannelGroup + 1) == 0 );
         assert (num3DTensors == 1);
-        unsigned short numChannelGroups = channel / (maxScalarIndexInChannelGroup + 1);
-        unsigned short numCompressionBlocksInChannelGroup =
-                (unsigned short) std::ceil ( (float) (maxScalarIndexInChannelGroup + 1)
+        unsigned int numChannelGroups = channel / (maxScalarIndexInChannelGroup + 1);
+        unsigned int numCompressionBlocksInChannelGroup =
+                (unsigned int) std::ceil ( (float) (maxScalarIndexInChannelGroup + 1)
                                / (float) ((maxScalarIndexInCluster + 1) * (maxClusterIndexInCompressionBlock + 1)) );
         unsigned int tempStride = (numCompressionBlocksInChannelGroup * numChannelGroups * numTransferBlocksPerCompressionBlock);
-        externalMemoryAddressStride = lcm(tempStride, (unsigned int) WIDE_SIZE);
+        externalMemoryAddressStride = (unsigned int) std::ceil( ((float) (tempStride) ) / ((float) (WIDE_SIZE)) ) * WIDE_SIZE;
         valueVector.resize( width * height * externalMemoryAddressStride);
         streamBlockAddressVector.resize(num3DTensors * width * height * numChannelGroups );
     }
