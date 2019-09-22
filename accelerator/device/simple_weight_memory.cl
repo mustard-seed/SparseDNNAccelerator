@@ -7,7 +7,6 @@ __attribute__((max_global_work_dim(0)))
 __kernel void nop () {}
 
 
-#define BURST_SIZE_BYTE 32
 #define BURST_SIZE_TRANSFER_BLOCK  BURST_SIZE_BYTE/CLUSTER_SIZE/TRANSFER_SIZE
 
 #define MAX_CACHE_SIZE 1024
@@ -157,18 +156,21 @@ __kernel void kernelFilterWriter (
 						t_filter_streamer_control control;
 						control.maxOutputHeightTileSize = maxOutputHeightTileSize;
 						control.maxOutputWidthTileSize = maxOutputWidthTileSize;
-						control.destinationRow = iPeRow;
+						//control.destinationRow = iPeRow;
 						control.numTransferBlocks = maxTransferBlockInFilter;
 						t_dram_block dramControl = filterStreamerControl2dramBlock(control);
 
 						unsigned int iTransferBlockDDR = iTransferBlockFilterBaseDDR;
 
-						EMULATOR_PRINT(("[kernelFilterWriter] Sending filter %d to row %d. Number of transfer blocks: %d\n",
-							iFilterGlobal, iPeRow, maxTransferBlockInFilter));
+						EMULATOR_PRINT(("[kernelFilterWriter] Sending filter %d to row %d. (iHeightGlobal, iWidthGlobal): (%d, %d). Number of transfer blocks: %d\n",
+							iFilterGlobal, iPeRow, iHeightGlobal, iWidthGlobal, maxTransferBlockInFilter));
 						for (unsigned short iTransmitCount=0; iTransmitCount<maxTransmitCount; iTransmitCount++)
 						{
 							t_dram_block block = (iTransmitCount == 0) ? dramControl : pDramWeights[iTransferBlockDDR >> WIDE_SIZE_OFFSET];
-							write_channel_intel(channel_filter_transport[0], block);
+							t_dram_block_tagged taggedBlock;
+							taggedBlock.dramBlock = block;
+							taggedBlock.destinationRow = iPeRow;
+							write_channel_intel(channel_filter_transport[0], taggedBlock);
 							if (iTransmitCount!=0)
 							{
 								iTransferBlockDDR += WIDE_SIZE;
@@ -183,7 +185,9 @@ __kernel void kernelFilterWriter (
 					iFilterInGroup += maxRowUsed;	
 				} // iFoldInGroup
 			} //iGroup
+			iWidthGlobal += maxOutputWidthTileSize;
 		} // iOutputWidthTile
+		iHeightGlobal += maxOutputHeightTileSize;
 	}	// iOutputHeightTile
 }
 
@@ -201,15 +205,31 @@ __attribute__((num_compute_units(PE_ROWS)))
 __kernel void kernelFilterTee ()
 {
 	int rowID = get_compute_id(0);
-	uint1_t state = STATE_FILTER_TEE_HEADER;
-	uint1_t direction = SWITCH_FILTER_TEE_PASS;
-	unsigned short transferBlockCount;
-	unsigned short maxTransferBlockSize;
+	//uint1_t state = STATE_FILTER_TEE_HEADER;
+	//uint1_t direction = SWITCH_FILTER_TEE_PASS;
+	//unsigned short transferBlockCount;
+	//unsigned short maxTransferBlockSize;
 	while (true)
 	{
-		t_dram_block block = read_channel_intel(channel_filter_transport[rowID]);
+		t_dram_block_tagged taggedBlock = read_channel_intel(channel_filter_transport[rowID]);
 
-		uint1_t nextState = state;
+		int destinationRow = (int) taggedBlock.destinationRow;
+
+		if (destinationRow == rowID)
+		{
+			write_channel_intel(channel_filter_local[rowID], taggedBlock.dramBlock);
+		}
+		else
+		{
+			if (rowID < (PE_ROWS - 1) )
+			{
+				write_channel_intel(channel_filter_transport[rowID+1], taggedBlock);
+			}
+		}
+	}
+
+		//uint1_t nextState = state;
+		/*
 		if (state == STATE_FILTER_TEE_HEADER)
 		{
 			t_filter_streamer_control control = dramBlock2FilterStreamerControl(block);
@@ -250,7 +270,8 @@ __kernel void kernelFilterTee ()
 		}
 
 		state = nextState;
-	}
+		*/
+	//}
 }
 
 #define STATE_FILTER_STREAMER_WRITE_CACHE_SETUP 0X0
@@ -259,8 +280,9 @@ __kernel void kernelFilterTee ()
 
 #define STATE_FILTER_STREAMER_READ_CACHE_SETUP0 0X0
 #define STATE_FILTER_STREAMER_READ_CACHE_SETUP1 0x1
-#define STATE_FILTER_STREAMER_READ_CACHE_READ 0X2
-#define STATE_FILTER_STREAMER_READ_CACHE_WAIT 0X3
+#define STATE_FILTER_STREAMER_READ_CACHE_MAX_COL_SETUP 0x2
+#define STATE_FILTER_STREAMER_READ_CACHE_READ 0X3
+#define STATE_FILTER_STREAMER_READ_CACHE_WAIT 0X4
 
 /*! kernelFilterStreamer
 	\brief Stream filter values to the PE array
@@ -272,7 +294,7 @@ __kernel void kernelFilterStreamer ()
 {
 	int rowID = get_compute_id(0);
 
-	typedef uint2_t t_state;
+	typedef uint3_t t_state;
 	//important to size the bankwidth, otherwise the default 32 bit will be used, resulting in complex store logic
 	t_dram_block cacheNzBlocks [2][KERNEL_CACHE_DEPTH] __attribute__((bankwidth(BURST_SIZE_BYTE))); 
 	uint1_t regWriteSide = 0x0;
@@ -342,14 +364,14 @@ __kernel void kernelFilterStreamer ()
 		{
 			iWidthInOutputTileRead = 0;
 			iHeightInOutputTileRead = 0;
-			maxColUsedRead = (maxOutputWidthTileSize[(~regWriteSide) & 0x1] - iWidthInOutputTileRead) < PE_COLS ?
-				(maxOutputWidthTileSize[(~regWriteSide) & 0x1] - iWidthInOutputTileRead) : PE_COLS;
+			//maxColUsedRead = (maxOutputWidthTileSize[(~regWriteSide) & 0x1] - iWidthInOutputTileRead) < PE_COLS ?
+			//	(maxOutputWidthTileSize[(~regWriteSide) & 0x1] - iWidthInOutputTileRead) : PE_COLS;
 			iTransferBlockInFilterRead = 0;
-			nextStateReadCache = STATE_FILTER_STREAMER_READ_CACHE_READ;
+			nextStateReadCache = STATE_FILTER_STREAMER_READ_CACHE_MAX_COL_SETUP;
 		} // STATE_FILTER_STREAMER_READ_CACHE_SETUP0
 		else if (stateReadCache == STATE_FILTER_STREAMER_READ_CACHE_SETUP1)
 		{
-			nextStateReadCache = STATE_FILTER_STREAMER_READ_CACHE_READ;
+			nextStateReadCache = STATE_FILTER_STREAMER_READ_CACHE_MAX_COL_SETUP;
 
 			iTransferBlockInFilterRead = 0;
 			iWidthInOutputTileRead += maxColUsedRead;
@@ -365,10 +387,17 @@ __kernel void kernelFilterStreamer ()
 				}
 			}
 
+			//maxColUsedRead = (maxOutputWidthTileSize[(~regWriteSide) & 0x1] - iWidthInOutputTileRead) < PE_COLS ?
+			//	(maxOutputWidthTileSize[(~regWriteSide) & 0x1] - iWidthInOutputTileRead) : PE_COLS;
+
+		} // STATE_FILTER_STREAMER_READ_CACHE_SETUP1
+		else if (stateReadCache == STATE_FILTER_STREAMER_READ_CACHE_MAX_COL_SETUP)
+		{
 			maxColUsedRead = (maxOutputWidthTileSize[(~regWriteSide) & 0x1] - iWidthInOutputTileRead) < PE_COLS ?
 				(maxOutputWidthTileSize[(~regWriteSide) & 0x1] - iWidthInOutputTileRead) : PE_COLS;
 
-		} // STATE_FILTER_STREAMER_READ_CACHE_SETUP1
+			nextStateReadCache = STATE_FILTER_STREAMER_READ_CACHE_READ;
+		} //STATE_FILTER_STREAMER_READ_CACHE_MAX_COL_SETUP
 		else if (stateReadCache == STATE_FILTER_STREAMER_READ_CACHE_READ)
 		{
 			unsigned short dramIndex = iTransferBlockInFilterRead >> WIDE_SIZE_OFFSET;
@@ -384,6 +413,7 @@ __kernel void kernelFilterStreamer ()
 			success = write_channel_nb_intel(channel_weightLanes[rowID][0], taggedBlock);
 			if (success)
 			{
+				/*
 				EMULATOR_PRINT(("[kernelFilterStreamer %d] Sent tb %d: %d % d %d %d\n", 
 					rowID, 
 					iTransferBlockInFilterRead,
@@ -391,6 +421,7 @@ __kernel void kernelFilterStreamer ()
 					tblock.values[0].cluster_values[1],
 					tblock.values[1].cluster_values[0],
 					tblock.values[1].cluster_values[1]));
+				*/
 				if ((iTransferBlockInFilterRead + 1) >= maxTransferBlockInFilter[(~regWriteSide) & 0x1])
 				{
 					nextStateReadCache = STATE_FILTER_STREAMER_READ_CACHE_SETUP1;

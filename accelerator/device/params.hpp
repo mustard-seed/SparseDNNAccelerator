@@ -78,15 +78,18 @@
 #define COMPRESSION_WINDOW_SIZE 8
 #define TRANSFER_SIZE 2
 #define CLUSTER_SIZE 2
-#define WIDE_SIZE 8  //Each cluster takes 4 bytes, so need 8 cluster size to populate 256 bits
-#define WIDE_SIZE_OFFSET 0x3 //Numnber of bits to shift the transfer block index to the right in order to recover the wide offset
-#define WIDE_SIZE_REMAINDER_MASK 0x7
 
+#define BURST_SIZE_BYTE 16
 
 #define KERNEL_CACHE_LANES PE_ROWS
 #define KERNEL_CACHE_LANE_MASK 0x7
-#define KERNEL_CACHE_DEPTH 256
+#define KERNEL_CACHE_SIZE_BYTE 8192
+#define KERNEL_CACHE_DEPTH KERNEL_CACHE_SIZE_BYTE/BURST_SIZE_BYTE
 #define KERNEL_CACHE_DEPTH_MASK 0x03FF
+
+#define WIDE_SIZE BURST_SIZE_BYTE/CLUSTER_SIZE/TRANSFER_SIZE  //Each cluster takes 4 bytes, so need 8 cluster size to populate 256 bits
+#define WIDE_SIZE_OFFSET 0x2 //Numnber of bits to shift the transfer block index to the right in order to recover the wide offset
+#define WIDE_SIZE_REMAINDER_MASK 0x3
 
 #define KERNEL_INDEX_CACHE_DEPTH 512
 #define KERNEL_INDEX_CACHE_DEPTH_MASK 0x1FF

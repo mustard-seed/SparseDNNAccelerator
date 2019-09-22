@@ -39,7 +39,7 @@ channel bool channel_weightCollectorStop [KERNEL_CACHE_LANES]__attribute__((dept
 #ifdef SIMPLE_WEIGHT_STREAMER
 //channel t_transfer_block channel_weightLanes[PE_ROWS][PE_COLS] __attribute__((depth(0)));
 channel t_transferblock_tagged channel_weightLanes[PE_ROWS][PE_COLS] __attribute__((depth(0)));
-channel t_dram_block channel_filter_transport[PE_ROWS] __attribute__((depth(0))); //communication between filter streamer kernels
+channel t_dram_block_tagged channel_filter_transport[PE_ROWS] __attribute__((depth(0))); //communication between filter streamer kernels
 channel t_dram_block channel_filter_local[PE_ROWS] __attribute__((depth(0))); //communication between filter tee and streamer
 #endif
 

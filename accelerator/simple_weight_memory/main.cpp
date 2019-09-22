@@ -189,18 +189,22 @@ protected:
         auto numTransferBlocks = compressedFilters.valueVector.size();
         auto valueVectorSizeBytes = sizeTransferBlockElement * numTransferBlocks;
 
+        std::cout <<"Transferring the weights"<<std::endl;
+        cl::Event weightTransferEvent;
         status = clCQFilterWriter.enqueueWriteBuffer(bufferWeightWideInput,
                                              CL_TRUE,
                                              0,
                                              valueVectorSizeBytes,
                                              compressedFilters.valueVector.data(),
-                                             NULL);
+                                             NULL,
+                                             &weightTransferEvent);
         aocl_utils_cpp::checkError(status, "Failed to write the weight input vector");
         std::cout <<"Transferred "<<valueVectorSizeBytes<<" bytes in to bufferWeightWideInput"<<std::endl;
         std::cout <<"Each t_transfer_block takes up "<<sizeTransferBlockElement<<" bytes."<<std::endl;
         std::cout <<"Number of transfer blocks transmitted: "<<numTransferBlocks<<std::endl;
         std::cout <<"External memory stride in terms of transfer blocks: "<<compressedFilters.externalMemoryAddressStride<<std::endl;
 
+        std::cout <<"Transferring the stream addresses"<<std::endl;
         status = clCQFilterWriter.enqueueWriteBuffer(bufferTransferAddressInput,
                                              CL_TRUE,
                                              0,
@@ -209,6 +213,7 @@ protected:
                                              NULL);
         aocl_utils_cpp::checkError(status, "Failed to write the stream block address vector");
 
+        std::cout <<"Setting kernel arguments"<<std::endl;
         //Setup the buffer arguments and number of transfer for the test interface
         kernelFilterWriter.setArg(0, bufferWeightWideInput); //pDramWeights
         kernelFilterWriter.setArg(1, bufferTransferAddressInput); //pStreamBlockAddress
@@ -239,11 +244,15 @@ protected:
         kernelTensorChecker.setArg(1, (cl_uchar) targetPeRow);
         kernelTensorChecker.setArg(2, (cl_uint) sequenceID);
 
+        clCQFilterWriter.finish();
+        std::vector<cl::Event> elist;
+        elist.push_back(weightTransferEvent);
         cl::Event kernelEvent;
-        status = clCQTensorChecker.enqueueTask(kernelTensorChecker, NULL, &kernelEvent);
+        status = clCQTensorChecker.enqueueTask(kernelTensorChecker, &elist, &kernelEvent);
         aocl_utils_cpp::checkError(status, "Failed to launch the tensor checker kernel!");
 
-        status = clCQFilterWriter.enqueueTask(kernelFilterWriter);
+        std::cout <<"Launch!"<<std::endl;
+        status = clCQFilterWriter.enqueueTask(kernelFilterWriter, &elist);
         aocl_utils_cpp::checkError(status, "Failed to launch the filter writer kernel!");
 
         //Retrieve data
@@ -263,10 +272,15 @@ protected:
 
         aocl_utils_cpp::checkError(status, "Failed to read the tensor checker data back!");
 
+        cl_ulong weightTransferStartTime = weightTransferEvent.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+        cl_ulong weightTransferEndTime = weightTransferEvent.getProfilingInfo<CL_PROFILING_COMMAND_END>();
+        cl_double weightTransferRunTime = (cl_double)((weightTransferEndTime - weightTransferStartTime) * (cl_double)(1e-3));
+
         cl_ulong kernelStartTime = kernelEvent.getProfilingInfo<CL_PROFILING_COMMAND_START>();
         cl_ulong kernelEndTime = kernelEvent.getProfilingInfo<CL_PROFILING_COMMAND_END>();
         cl_double kernelRunTime = (cl_double)((kernelEndTime - kernelStartTime) * (cl_double)(1e-3));
 
+        std::cout <<"Weight transfer time (us): "<<weightTransferRunTime<<std::endl;
         std::cout <<"kernelTensorChecker run time (us): "<<kernelRunTime<<std::endl;
     } //launch
 
@@ -375,7 +389,34 @@ t_aligned_float_vector initialize_vector(unsigned seed,
     return vector;
 }
 
-#define PLAY
+std::vector<fixedPointNumber> initialize_deterministic_vector(
+            int numTensors,
+            int height,
+            int width,
+            int channel,
+            char fractionWidth,
+            char integerWidth
+        )
+{
+        int numElementsPerFilter = height * width * channel;
+        std::vector<fixedPointNumber> fpVector;
+        fpVector.resize(numElementsPerFilter*numTensors);
+
+        unsigned q=0;
+        for (unsigned i = 0; i<numTensors; i++)
+        {
+            char val = -128;
+            for (unsigned int j=0;j<numElementsPerFilter;j++, q++)
+            {
+                fpVector.at(q) = fixedPointNumber((char)val, fractionWidth, integerWidth);
+                val = (val==127) ? -128 : val + 1;
+            }
+        }
+
+        return fpVector;
+}
+
+//#define PLAY
 #ifdef PLAY
 TEST_F (testFixture, play) {
     //Fixed point convertion arguments and sparsity control
@@ -383,14 +424,15 @@ TEST_F (testFixture, play) {
     float bernProb = 1.0;
     int seed = 1999;
     float min = 1.0;
-    float max = 1.01;
+    float max = 3.0;
 
     //Kernel arugments
-    int numFilters = 2;
+    //int numFilters = 128;
+    int numFilters = 16;
     int kernelHeight = 3;
     int kernelWidth = 3;
     unsigned short tileSizeKernelWidth = 32; //not needed, to be removed after refactoring the compression code
-    int inputFeaturMapChannels = 512;
+    int inputFeaturMapChannels = 3;
     int numElements = numFilters * kernelHeight * kernelWidth * inputFeaturMapChannels;
 
     unsigned short maxScalarIndexInChannelGroup = inputFeaturMapChannels - 1;
@@ -399,12 +441,153 @@ TEST_F (testFixture, play) {
     unsigned char maxScalarIndexInCluster = CLUSTER_SIZE - 1;
 
     //Output tensor arguments
-    unsigned short outputWidth = 56;
+    unsigned short outputWidth = 16;
+    unsigned char sizeOutputWidthTile = 2;
+    unsigned char sizeOutputWidthTile0 = 1;
+    unsigned char numOutputWidthTile = (outputWidth < ((unsigned short) sizeOutputWidthTile0)) ?
+                1 : (unsigned char) (std::ceil( ((float) (outputWidth - sizeOutputWidthTile0)) / (float) (sizeOutputWidthTile) )) + 1;
+    unsigned short outputHeight = 16;
+    unsigned char sizeOutputHeightTile = 2;
+    unsigned char sizeOutputHeightTile0 = 1;
+    unsigned char numOutputHeightTile = (outputHeight < ((unsigned short) sizeOutputHeightTile0)) ?
+                1 : (unsigned char) (std::ceil( ((float) (outputHeight - sizeOutputHeightTile0)) / (float) (sizeOutputHeightTile) )) + 1;
+
+    unsigned short numFiltersInGroup = numFilters;
+    unsigned char numPeRows = PE_ROWS;
+    unsigned char numPeCols = PE_COLS;
+
+    //Target arguments
+    unsigned short targetOutputP = 15;
+    unsigned short targetOutputQ = 15;
+    unsigned short targetFilter = 15;
+
+    t_aligned_float_vector floatVector = initialize_vector(
+                seed,
+                bernProb,
+                numFilters,
+                kernelHeight,
+                kernelWidth,
+                inputFeaturMapChannels,
+                min,
+                max
+                );
+
+    std::vector<fixedPointNumber> fpVector;
+    fpVector.resize(numElements);
+
+    for (int i=0; i<numElements; i++) {
+        fixedPointNumber fpValue(floatVector.at(i), fracWidth, intWidth);
+        fpVector.at(i) = fpValue;
+    }
+
+//    std::vector<fixedPointNumber> fpVector = initialize_deterministic_vector(
+//                   numFilters,
+//                   kernelHeight,
+//                   kernelWidth,
+//                   inputFeaturMapChannels,
+//                   4,
+//                   3
+//                );
+
+    std::cout <<"Start to compress the kernel tensor"<<std::endl;
+    flexibleDirectCompressedTensor compTensor(
+                fpVector,
+                numFilters,
+                inputFeaturMapChannels,
+                kernelWidth,
+                kernelHeight,
+                tileSizeKernelWidth, //not needed
+                maxScalarIndexInChannelGroup,
+                maxClusterIndexInCompressionBlock,
+                maxClusterIndexInTransferBlock,
+                maxScalarIndexInCluster,
+                true //isKernel
+                );
+
+    std::cout <<"Calculate the filter row and sequence id to intercept"<<std::endl;
+    unsigned short numGroups = numFilters / ((unsigned int) numFiltersInGroup);
+    unsigned short numFoldsInGroup = (unsigned short) std::ceil( ((float) (numFiltersInGroup)) / ((float) (numPeRows)) );
+
+    t_filter_coordinates targetCoordinates =
+            calculateFilterCoordinates(
+                    outputWidth,
+                    numOutputWidthTile,
+                    sizeOutputWidthTile,
+                    sizeOutputWidthTile0,
+
+                    outputHeight,
+                    numOutputHeightTile,
+                    sizeOutputHeightTile,
+                    sizeOutputHeightTile0,
+
+                    numGroups,
+                    numFiltersInGroup,
+                    numFoldsInGroup,
+
+                    numPeRows,
+                    numPeCols,
+                    targetOutputP,
+                    targetOutputQ,
+                    targetFilter
+                );
+
+    //launch
+    std::cout <<"Launching the kernels"<<std::endl;
+    t_aligned_transfer_block_vector outputVector;
+    launch (
+        compTensor,
+        outputVector,
+
+        outputWidth,
+        sizeOutputWidthTile,
+        sizeOutputWidthTile0,
+
+        outputHeight,
+        sizeOutputHeightTile,
+        sizeOutputHeightTile0,
+
+        numFiltersInGroup,
+        numPeRows,
+
+        targetCoordinates.targetFilterRow,
+        targetFilter,
+        targetCoordinates.sequenceId
+       );
+
+    //Check the results
+    std::cout <<"Checking results"<<std::endl;
+    checkTensor(compTensor, outputVector, targetFilter);
+
+}
+#else
+TEST_F (testFixture, fullyConnectedSmall) {
+    //Fixed point convertion arguments and sparsity control
+    char fracWidth = 4, intWidth = 3;
+    float bernProb = 1.0;
+    int seed = 1256;
+    float min = 1.0;
+    float max = 1.01;
+
+    //Kernel arugments
+    int numFilters = 16;
+    int kernelHeight = 1;
+    int kernelWidth = 1;
+    unsigned short tileSizeKernelWidth = 32; //not needed, to be removed after refactoring the compression code
+    int inputFeaturMapChannels = 16;
+    int numElements = numFilters * kernelHeight * kernelWidth * inputFeaturMapChannels;
+
+    unsigned short maxScalarIndexInChannelGroup = inputFeaturMapChannels - 1;
+    unsigned  char maxClusterIndexInCompressionBlock = COMPRESSION_WINDOW_SIZE - 1;
+    unsigned char maxClusterIndexInTransferBlock = TRANSFER_SIZE - 1;
+    unsigned char maxScalarIndexInCluster = CLUSTER_SIZE - 1;
+
+    //Output tensor arguments
+    unsigned short outputWidth = 1;
     unsigned char sizeOutputWidthTile = 32;
     unsigned char sizeOutputWidthTile0 = 31;
     unsigned char numOutputWidthTile = (outputWidth < ((unsigned short) sizeOutputWidthTile0)) ?
                 1 : (unsigned char) (std::ceil( ((float) (outputWidth - sizeOutputWidthTile0)) / (float) (sizeOutputWidthTile) )) + 1;
-    unsigned short outputHeight = 56;
+    unsigned short outputHeight = 1;
     unsigned char sizeOutputHeightTile = 32;
     unsigned char sizeOutputHeightTile0 = 31;
     unsigned char numOutputHeightTile = (outputHeight < ((unsigned short) sizeOutputHeightTile0)) ?
@@ -415,9 +598,15 @@ TEST_F (testFixture, play) {
     unsigned char numPeCols = PE_COLS;
 
     //Target arguments
-    unsigned short targetOutputP = 55;
-    unsigned short targetOutputQ = 55;
-    unsigned short targetFilter = 1;
+#ifdef C5SOC
+    unsigned short targetOutputP = 0;
+    unsigned short targetOutputQ = 0;
+    unsigned short targetFilter = numFilters - 1;
+#else
+    unsigned short targetOutputP = 0;
+    unsigned short targetOutputQ = 0;
+    unsigned short targetFilter = 15;
+#endif
 
     t_aligned_float_vector floatVector = initialize_vector(
                 seed,
@@ -508,286 +697,148 @@ TEST_F (testFixture, play) {
     checkTensor(compTensor, outputVector, targetFilter);
 
 }
+
+TEST_F (testFixture, convSmall3by3) {
+    //Fixed point convertion arguments and sparsity control
+    char fracWidth = 4, intWidth = 3;
+    float bernProb = 0.1;
+    int seed = 1256;
+    float min = -2.0;
+    float max = 2.0;
+
+    //Kernel arugments
+    int numFilters = 4;
+    int kernelHeight = 3;
+    int kernelWidth = 3;
+    unsigned short tileSizeKernelWidth = 32; //not needed, to be removed after refactoring the compression code
+    int inputFeaturMapChannels = 4;
+    int numElements = numFilters * kernelHeight * kernelWidth * inputFeaturMapChannels;
+
+    unsigned short maxScalarIndexInChannelGroup = inputFeaturMapChannels - 1;
+    unsigned  char maxClusterIndexInCompressionBlock = COMPRESSION_WINDOW_SIZE - 1;
+    unsigned char maxClusterIndexInTransferBlock = TRANSFER_SIZE - 1;
+    unsigned char maxScalarIndexInCluster = CLUSTER_SIZE - 1;
+
+    //Output tensor arguments
+    unsigned short outputWidth = 48;
+    unsigned char sizeOutputWidthTile = 11;
+    unsigned char sizeOutputWidthTile0 = 5;
+    unsigned char numOutputWidthTile = (outputWidth < ((unsigned short) sizeOutputWidthTile0)) ?
+                1 : (unsigned char) (std::ceil( ((float) (outputWidth - sizeOutputWidthTile0)) / (float) (sizeOutputWidthTile) )) + 1;
+    unsigned short outputHeight = 48;
+    unsigned char sizeOutputHeightTile = 11;
+    unsigned char sizeOutputHeightTile0 = 5;
+    unsigned char numOutputHeightTile = (outputHeight < ((unsigned short) sizeOutputHeightTile0)) ?
+                1 : (unsigned char) (std::ceil( ((float) (outputHeight - sizeOutputHeightTile0)) / (float) (sizeOutputHeightTile) )) + 1;
+
+    unsigned short numFiltersInGroup = numFilters;
+    unsigned char numPeRows = PE_ROWS;
+    unsigned char numPeCols = PE_COLS;
+
+    //Target arguments
+#ifdef C5SOC
+    unsigned short targetOutputP = outputHeight - 1;
+    unsigned short targetOutputQ = outputWidth - 1 ;
+    unsigned short targetFilter = numFilters - 1;
 #else
-//TEST_F (testFixture, fullyConnectedSmall) {
-//    //Fixed point convertion arguments and sparsity control
-//    char fracWidth = 4, intWidth = 3;
-//    float bernProb = 1.0;
-//    int seed = 1256;
-//    float min = 1.0;
-//    float max = 1.01;
+    unsigned short targetOutputP = 11;
+    unsigned short targetOutputQ = 7;
+    unsigned short targetFilter = 3;
+#endif
 
-//    //Kernel arugments
-//    int numFilters = 16;
-//    int kernelHeight = 1;
-//    int kernelWidth = 1;
-//    unsigned short tileSizeKernelWidth = 32; //not needed, to be removed after refactoring the compression code
-//    int inputFeaturMapChannels = 16;
-//    int numElements = numFilters * kernelHeight * kernelWidth * inputFeaturMapChannels;
+    t_aligned_float_vector floatVector = initialize_vector(
+                seed,
+                bernProb,
+                numFilters,
+                kernelHeight,
+                kernelWidth,
+                inputFeaturMapChannels,
+                min,
+                max
+                );
 
-//    unsigned short maxScalarIndexInChannelGroup = inputFeaturMapChannels - 1;
-//    unsigned  char maxClusterIndexInCompressionBlock = COMPRESSION_WINDOW_SIZE - 1;
-//    unsigned char maxClusterIndexInTransferBlock = TRANSFER_SIZE - 1;
-//    unsigned char maxScalarIndexInCluster = CLUSTER_SIZE - 1;
+    std::vector<fixedPointNumber> fpVector;
+    fpVector.resize(numElements);
 
-//    //Output tensor arguments
-//    unsigned short outputWidth = 1;
-//    unsigned char sizeOutputWidthTile = 32;
-//    unsigned char sizeOutputWidthTile0 = 31;
-//    unsigned char numOutputWidthTile = (outputWidth < ((unsigned short) sizeOutputWidthTile0)) ?
-//                1 : (unsigned char) (std::ceil( ((float) (outputWidth - sizeOutputWidthTile0)) / (float) (sizeOutputWidthTile) )) + 1;
-//    unsigned short outputHeight = 1;
-//    unsigned char sizeOutputHeightTile = 32;
-//    unsigned char sizeOutputHeightTile0 = 31;
-//    unsigned char numOutputHeightTile = (outputHeight < ((unsigned short) sizeOutputHeightTile0)) ?
-//                1 : (unsigned char) (std::ceil( ((float) (outputHeight - sizeOutputHeightTile0)) / (float) (sizeOutputHeightTile) )) + 1;
+    for (int i=0; i<numElements; i++) {
+        fixedPointNumber fpValue(floatVector.at(i), fracWidth, intWidth);
+        fpVector.at(i) = fpValue;
+    }
 
-//    unsigned short numFiltersInGroup = numFilters;
-//    unsigned char numPeRows = PE_ROWS;
-//    unsigned char numPeCols = PE_COLS;
+    std::cout <<"Start to compress the kernel tensor"<<std::endl;
+    flexibleDirectCompressedTensor compTensor(
+                fpVector,
+                numFilters,
+                inputFeaturMapChannels,
+                kernelWidth,
+                kernelHeight,
+                tileSizeKernelWidth, //not needed
+                maxScalarIndexInChannelGroup,
+                maxClusterIndexInCompressionBlock,
+                maxClusterIndexInTransferBlock,
+                maxScalarIndexInCluster,
+                true //isKernel
+                );
 
-//    //Target arguments
-//#ifdef C5SOC
-//    unsigned short targetOutputP = 0;
-//    unsigned short targetOutputQ = 0;
-//    unsigned short targetFilter = numFilters - 1;
-//#else
-//    unsigned short targetOutputP = 0;
-//    unsigned short targetOutputQ = 0;
-//    unsigned short targetFilter = 15;
-//#endif
+    std::cout <<"Calculate the filter row and sequence id to intercept"<<std::endl;
+    unsigned short numGroups = numFilters / ((unsigned int) numFiltersInGroup);
+    unsigned short numFoldsInGroup = (unsigned short) std::ceil( ((float) (numFiltersInGroup)) / ((float) (numPeRows)) );
 
-//    t_aligned_float_vector floatVector = initialize_vector(
-//                seed,
-//                bernProb,
-//                numFilters,
-//                kernelHeight,
-//                kernelWidth,
-//                inputFeaturMapChannels,
-//                min,
-//                max
-//                );
+    t_filter_coordinates targetCoordinates =
+            calculateFilterCoordinates(
+                    outputWidth,
+                    numOutputWidthTile,
+                    sizeOutputWidthTile,
+                    sizeOutputWidthTile0,
 
-//    std::vector<fixedPointNumber> fpVector;
-//    fpVector.resize(numElements);
+                    outputHeight,
+                    numOutputHeightTile,
+                    sizeOutputHeightTile,
+                    sizeOutputHeightTile0,
 
-//    for (int i=0; i<numElements; i++) {
-//        fixedPointNumber fpValue(floatVector.at(i), fracWidth, intWidth);
-//        fpVector.at(i) = fpValue;
-//    }
+                    numGroups,
+                    numFiltersInGroup,
+                    numFoldsInGroup,
 
-//    std::cout <<"Start to compress the kernel tensor"<<std::endl;
-//    flexibleDirectCompressedTensor compTensor(
-//                fpVector,
-//                numFilters,
-//                inputFeaturMapChannels,
-//                kernelWidth,
-//                kernelHeight,
-//                tileSizeKernelWidth, //not needed
-//                maxScalarIndexInChannelGroup,
-//                maxClusterIndexInCompressionBlock,
-//                maxClusterIndexInTransferBlock,
-//                maxScalarIndexInCluster,
-//                true //isKernel
-//                );
+                    numPeRows,
+                    numPeCols,
+                    targetOutputP,
+                    targetOutputQ,
+                    targetFilter
+                );
 
-//    std::cout <<"Calculate the filter row and sequence id to intercept"<<std::endl;
-//    unsigned short numGroups = numFilters / ((unsigned int) numFiltersInGroup);
-//    unsigned short numFoldsInGroup = (unsigned short) std::ceil( ((float) (numFiltersInGroup)) / ((float) (numPeRows)) );
+    //launch
+    std::cout <<"Launching the kernels"<<std::endl;
+    t_aligned_transfer_block_vector outputVector;
+    launch (
+        compTensor,
+        outputVector,
 
-//    t_filter_coordinates targetCoordinates =
-//            calculateFilterCoordinates(
-//                    outputWidth,
-//                    numOutputWidthTile,
-//                    sizeOutputWidthTile,
-//                    sizeOutputWidthTile0,
+        outputWidth,
+        sizeOutputWidthTile,
+        sizeOutputWidthTile0,
 
-//                    outputHeight,
-//                    numOutputHeightTile,
-//                    sizeOutputHeightTile,
-//                    sizeOutputHeightTile0,
+        outputHeight,
+        sizeOutputHeightTile,
+        sizeOutputHeightTile0,
 
-//                    numGroups,
-//                    numFiltersInGroup,
-//                    numFoldsInGroup,
+        numFiltersInGroup,
+        numPeRows,
 
-//                    numPeRows,
-//                    numPeCols,
-//                    targetOutputP,
-//                    targetOutputQ,
-//                    targetFilter
-//                );
+        targetCoordinates.targetFilterRow,
+        targetFilter,
+        targetCoordinates.sequenceId
+       );
 
-//    //launch
-//    std::cout <<"Launching the kernels"<<std::endl;
-//    t_aligned_transfer_block_vector outputVector;
-//    launch (
-//        compTensor,
-//        outputVector,
+    //Check the results
+    std::cout <<"Checking results"<<std::endl;
+    checkTensor(compTensor, outputVector, targetFilter);
 
-//        outputWidth,
-//        sizeOutputWidthTile,
-//        sizeOutputWidthTile0,
-
-//        outputHeight,
-//        sizeOutputHeightTile,
-//        sizeOutputHeightTile0,
-
-//        numFiltersInGroup,
-//        numPeRows,
-
-//        targetCoordinates.targetFilterRow,
-//        targetFilter,
-//        targetCoordinates.sequenceId
-//       );
-
-//    //Check the results
-//    std::cout <<"Checking results"<<std::endl;
-//    checkTensor(compTensor, outputVector, targetFilter);
-
-//}
-
-//TEST_F (testFixture, convSmall3by3) {
-//    //Fixed point convertion arguments and sparsity control
-//    char fracWidth = 4, intWidth = 3;
-//    float bernProb = 0.2;
-//    int seed = 1256;
-//    float min = -2.0;
-//    float max = 2.0;
-
-//    //Kernel arugments
-//    int numFilters = 4;
-//    int kernelHeight = 3;
-//    int kernelWidth = 3;
-//    unsigned short tileSizeKernelWidth = 32; //not needed, to be removed after refactoring the compression code
-//    int inputFeaturMapChannels = 4;
-//    int numElements = numFilters * kernelHeight * kernelWidth * inputFeaturMapChannels;
-
-//    unsigned short maxScalarIndexInChannelGroup = inputFeaturMapChannels - 1;
-//    unsigned  char maxClusterIndexInCompressionBlock = COMPRESSION_WINDOW_SIZE - 1;
-//    unsigned char maxClusterIndexInTransferBlock = TRANSFER_SIZE - 1;
-//    unsigned char maxScalarIndexInCluster = CLUSTER_SIZE - 1;
-
-//    //Output tensor arguments
-//    unsigned short outputWidth = 48;
-//    unsigned char sizeOutputWidthTile = 11;
-//    unsigned char sizeOutputWidthTile0 = 5;
-//    unsigned char numOutputWidthTile = (outputWidth < ((unsigned short) sizeOutputWidthTile0)) ?
-//                1 : (unsigned char) (std::ceil( ((float) (outputWidth - sizeOutputWidthTile0)) / (float) (sizeOutputWidthTile) )) + 1;
-//    unsigned short outputHeight = 48;
-//    unsigned char sizeOutputHeightTile = 11;
-//    unsigned char sizeOutputHeightTile0 = 5;
-//    unsigned char numOutputHeightTile = (outputHeight < ((unsigned short) sizeOutputHeightTile0)) ?
-//                1 : (unsigned char) (std::ceil( ((float) (outputHeight - sizeOutputHeightTile0)) / (float) (sizeOutputHeightTile) )) + 1;
-
-//    unsigned short numFiltersInGroup = numFilters;
-//    unsigned char numPeRows = PE_ROWS;
-//    unsigned char numPeCols = PE_COLS;
-
-//    //Target arguments
-//#ifdef C5SOC
-//    unsigned short targetOutputP = outputHeight - 1;
-//    unsigned short targetOutputQ = outputWidth - 1 ;
-//    unsigned short targetFilter = numFilters - 1;
-//#else
-//    unsigned short targetOutputP = 11;
-//    unsigned short targetOutputQ = 7;
-//    unsigned short targetFilter = 3;
-//#endif
-
-//    t_aligned_float_vector floatVector = initialize_vector(
-//                seed,
-//                bernProb,
-//                numFilters,
-//                kernelHeight,
-//                kernelWidth,
-//                inputFeaturMapChannels,
-//                min,
-//                max
-//                );
-
-//    std::vector<fixedPointNumber> fpVector;
-//    fpVector.resize(numElements);
-
-//    for (int i=0; i<numElements; i++) {
-//        fixedPointNumber fpValue(floatVector.at(i), fracWidth, intWidth);
-//        fpVector.at(i) = fpValue;
-//    }
-
-//    std::cout <<"Start to compress the kernel tensor"<<std::endl;
-//    flexibleDirectCompressedTensor compTensor(
-//                fpVector,
-//                numFilters,
-//                inputFeaturMapChannels,
-//                kernelWidth,
-//                kernelHeight,
-//                tileSizeKernelWidth, //not needed
-//                maxScalarIndexInChannelGroup,
-//                maxClusterIndexInCompressionBlock,
-//                maxClusterIndexInTransferBlock,
-//                maxScalarIndexInCluster,
-//                true //isKernel
-//                );
-
-//    std::cout <<"Calculate the filter row and sequence id to intercept"<<std::endl;
-//    unsigned short numGroups = numFilters / ((unsigned int) numFiltersInGroup);
-//    unsigned short numFoldsInGroup = (unsigned short) std::ceil( ((float) (numFiltersInGroup)) / ((float) (numPeRows)) );
-
-//    t_filter_coordinates targetCoordinates =
-//            calculateFilterCoordinates(
-//                    outputWidth,
-//                    numOutputWidthTile,
-//                    sizeOutputWidthTile,
-//                    sizeOutputWidthTile0,
-
-//                    outputHeight,
-//                    numOutputHeightTile,
-//                    sizeOutputHeightTile,
-//                    sizeOutputHeightTile0,
-
-//                    numGroups,
-//                    numFiltersInGroup,
-//                    numFoldsInGroup,
-
-//                    numPeRows,
-//                    numPeCols,
-//                    targetOutputP,
-//                    targetOutputQ,
-//                    targetFilter
-//                );
-
-//    //launch
-//    std::cout <<"Launching the kernels"<<std::endl;
-//    t_aligned_transfer_block_vector outputVector;
-//    launch (
-//        compTensor,
-//        outputVector,
-
-//        outputWidth,
-//        sizeOutputWidthTile,
-//        sizeOutputWidthTile0,
-
-//        outputHeight,
-//        sizeOutputHeightTile,
-//        sizeOutputHeightTile0,
-
-//        numFiltersInGroup,
-//        numPeRows,
-
-//        targetCoordinates.targetFilterRow,
-//        targetFilter,
-//        targetCoordinates.sequenceId
-//       );
-
-//    //Check the results
-//    std::cout <<"Checking results"<<std::endl;
-//    checkTensor(compTensor, outputVector, targetFilter);
-
-//}
+}
 
 //Delay the large tests on FPGA
 #ifdef C5SOC
-TEST_F (testFixture, fullyConnectedLarge) {
+TEST_F (testFixture, fullyConnectedLargeSparse) {
     //Fixed point convertion arguments and sparsity control
     char fracWidth = 4, intWidth = 3;
     float bernProb = 0.01;
@@ -919,13 +970,277 @@ TEST_F (testFixture, fullyConnectedLarge) {
 
 }
 
-TEST_F (testFixture, convLarge3by3) {
+TEST_F (testFixture, fullyConnectedLargeDense) {
+    //Fixed point convertion arguments and sparsity control
+    char fracWidth = 4, intWidth = 3;
+    float bernProb = 1.0;
+    int seed = 1256;
+    float min = -3.0;
+    float max = 3.0;
+
+    //Kernel arugments
+    int numFilters = 1024;
+    int kernelHeight = 1;
+    int kernelWidth = 1;
+    unsigned short tileSizeKernelWidth = 32; //not needed, to be removed after refactoring the compression code
+    int inputFeaturMapChannels = 4096;
+    int numElements = numFilters * kernelHeight * kernelWidth * inputFeaturMapChannels;
+
+    unsigned short maxScalarIndexInChannelGroup = inputFeaturMapChannels - 1;
+    unsigned  char maxClusterIndexInCompressionBlock = COMPRESSION_WINDOW_SIZE - 1;
+    unsigned char maxClusterIndexInTransferBlock = TRANSFER_SIZE - 1;
+    unsigned char maxScalarIndexInCluster = CLUSTER_SIZE - 1;
+
+    //Output tensor arguments
+    unsigned short outputWidth = 1;
+    unsigned char sizeOutputWidthTile = 32;
+    unsigned char sizeOutputWidthTile0 = 31;
+    unsigned char numOutputWidthTile = (outputWidth < ((unsigned short) sizeOutputWidthTile0)) ?
+                1 : (unsigned char) (std::ceil( ((float) (outputWidth - sizeOutputWidthTile0)) / (float) (sizeOutputWidthTile) )) + 1;
+    unsigned short outputHeight = 1;
+    unsigned char sizeOutputHeightTile = 32;
+    unsigned char sizeOutputHeightTile0 = 31;
+    unsigned char numOutputHeightTile = (outputHeight < ((unsigned short) sizeOutputHeightTile0)) ?
+                1 : (unsigned char) (std::ceil( ((float) (outputHeight - sizeOutputHeightTile0)) / (float) (sizeOutputHeightTile) )) + 1;
+
+    unsigned short numFiltersInGroup = numFilters;
+    unsigned char numPeRows = PE_ROWS;
+    unsigned char numPeCols = PE_COLS;
+
+    //Target arguments
+    unsigned short targetOutputP = 0;
+    unsigned short targetOutputQ = 0;
+    unsigned short targetFilter = 1023;
+
+    t_aligned_float_vector floatVector = initialize_vector(
+                seed,
+                bernProb,
+                numFilters,
+                kernelHeight,
+                kernelWidth,
+                inputFeaturMapChannels,
+                min,
+                max
+                );
+
+    std::vector<fixedPointNumber> fpVector;
+    fpVector.resize(numElements);
+
+    for (int i=0; i<numElements; i++) {
+        fixedPointNumber fpValue(floatVector.at(i), fracWidth, intWidth);
+        fpVector.at(i) = fpValue;
+    }
+
+    std::cout <<"Start to compress the kernel tensor"<<std::endl;
+    flexibleDirectCompressedTensor compTensor(
+                fpVector,
+                numFilters,
+                inputFeaturMapChannels,
+                kernelWidth,
+                kernelHeight,
+                tileSizeKernelWidth, //not needed
+                maxScalarIndexInChannelGroup,
+                maxClusterIndexInCompressionBlock,
+                maxClusterIndexInTransferBlock,
+                maxScalarIndexInCluster,
+                true //isKernel
+                );
+
+    std::cout <<"Calculate the filter row and sequence id to intercept"<<std::endl;
+    unsigned short numGroups = numFilters / ((unsigned int) numFiltersInGroup);
+    unsigned short numFoldsInGroup = (unsigned short) std::ceil( ((float) (numFiltersInGroup)) / ((float) (numPeRows)) );
+
+    t_filter_coordinates targetCoordinates =
+            calculateFilterCoordinates(
+                    outputWidth,
+                    numOutputWidthTile,
+                    sizeOutputWidthTile,
+                    sizeOutputWidthTile0,
+
+                    outputHeight,
+                    numOutputHeightTile,
+                    sizeOutputHeightTile,
+                    sizeOutputHeightTile0,
+
+                    numGroups,
+                    numFiltersInGroup,
+                    numFoldsInGroup,
+
+                    numPeRows,
+                    numPeCols,
+                    targetOutputP,
+                    targetOutputQ,
+                    targetFilter
+                );
+
+    //launch
+    std::cout <<"Launching the kernels"<<std::endl;
+    t_aligned_transfer_block_vector outputVector;
+    launch (
+        compTensor,
+        outputVector,
+
+        outputWidth,
+        sizeOutputWidthTile,
+        sizeOutputWidthTile0,
+
+        outputHeight,
+        sizeOutputHeightTile,
+        sizeOutputHeightTile0,
+
+        numFiltersInGroup,
+        numPeRows,
+
+        targetCoordinates.targetFilterRow,
+        targetFilter,
+        targetCoordinates.sequenceId
+       );
+
+    //Check the results
+    std::cout <<"Checking results"<<std::endl;
+    checkTensor(compTensor, outputVector, targetFilter);
+
+}
+
+TEST_F (testFixture, convLarge3by3Sparse) {
+    //Fixed point convertion arguments and sparsity control
+    char fracWidth = 4, intWidth = 3;
+    float bernProb = 0.1;
+    int seed = 1999;
+    float min = -3.0;
+    float max = 3.0;
+
+    //Kernel arugments
+    int numFilters = 512;
+    int kernelHeight = 3;
+    int kernelWidth = 3;
+    unsigned short tileSizeKernelWidth = 32; //not needed, to be removed after refactoring the compression code
+    int inputFeaturMapChannels = 512;
+    int numElements = numFilters * kernelHeight * kernelWidth * inputFeaturMapChannels;
+
+    unsigned short maxScalarIndexInChannelGroup = inputFeaturMapChannels - 1;
+    unsigned  char maxClusterIndexInCompressionBlock = COMPRESSION_WINDOW_SIZE - 1;
+    unsigned char maxClusterIndexInTransferBlock = TRANSFER_SIZE - 1;
+    unsigned char maxScalarIndexInCluster = CLUSTER_SIZE - 1;
+
+    //Output tensor arguments
+    unsigned short outputWidth = 227;
+    unsigned char sizeOutputWidthTile = 32;
+    unsigned char sizeOutputWidthTile0 = 31;
+    unsigned char numOutputWidthTile = (outputWidth < ((unsigned short) sizeOutputWidthTile0)) ?
+                1 : (unsigned char) (std::ceil( ((float) (outputWidth - sizeOutputWidthTile0)) / (float) (sizeOutputWidthTile) )) + 1;
+    unsigned short outputHeight = 227;
+    unsigned char sizeOutputHeightTile = 32;
+    unsigned char sizeOutputHeightTile0 = 31;
+    unsigned char numOutputHeightTile = (outputHeight < ((unsigned short) sizeOutputHeightTile0)) ?
+                1 : (unsigned char) (std::ceil( ((float) (outputHeight - sizeOutputHeightTile0)) / (float) (sizeOutputHeightTile) )) + 1;
+
+    unsigned short numFiltersInGroup = numFilters;
+    unsigned char numPeRows = PE_ROWS;
+    unsigned char numPeCols = PE_COLS;
+
+    //Target arguments
+    unsigned short targetOutputP = 226;
+    unsigned short targetOutputQ = 226;
+    unsigned short targetFilter = 511;
+
+    t_aligned_float_vector floatVector = initialize_vector(
+                seed,
+                bernProb,
+                numFilters,
+                kernelHeight,
+                kernelWidth,
+                inputFeaturMapChannels,
+                min,
+                max
+                );
+
+    std::vector<fixedPointNumber> fpVector;
+    fpVector.resize(numElements);
+
+    for (int i=0; i<numElements; i++) {
+        fixedPointNumber fpValue(floatVector.at(i), fracWidth, intWidth);
+        fpVector.at(i) = fpValue;
+    }
+
+    std::cout <<"Start to compress the kernel tensor"<<std::endl;
+    flexibleDirectCompressedTensor compTensor(
+                fpVector,
+                numFilters,
+                inputFeaturMapChannels,
+                kernelWidth,
+                kernelHeight,
+                tileSizeKernelWidth, //not needed
+                maxScalarIndexInChannelGroup,
+                maxClusterIndexInCompressionBlock,
+                maxClusterIndexInTransferBlock,
+                maxScalarIndexInCluster,
+                true //isKernel
+                );
+
+    std::cout <<"Calculate the filter row and sequence id to intercept"<<std::endl;
+    unsigned short numGroups = numFilters / ((unsigned int) numFiltersInGroup);
+    unsigned short numFoldsInGroup = (unsigned short) std::ceil( ((float) (numFiltersInGroup)) / ((float) (numPeRows)) );
+
+    t_filter_coordinates targetCoordinates =
+            calculateFilterCoordinates(
+                    outputWidth,
+                    numOutputWidthTile,
+                    sizeOutputWidthTile,
+                    sizeOutputWidthTile0,
+
+                    outputHeight,
+                    numOutputHeightTile,
+                    sizeOutputHeightTile,
+                    sizeOutputHeightTile0,
+
+                    numGroups,
+                    numFiltersInGroup,
+                    numFoldsInGroup,
+
+                    numPeRows,
+                    numPeCols,
+                    targetOutputP,
+                    targetOutputQ,
+                    targetFilter
+                );
+
+    //launch
+    std::cout <<"Launching the kernels"<<std::endl;
+    t_aligned_transfer_block_vector outputVector;
+    launch (
+        compTensor,
+        outputVector,
+
+        outputWidth,
+        sizeOutputWidthTile,
+        sizeOutputWidthTile0,
+
+        outputHeight,
+        sizeOutputHeightTile,
+        sizeOutputHeightTile0,
+
+        numFiltersInGroup,
+        numPeRows,
+
+        targetCoordinates.targetFilterRow,
+        targetFilter,
+        targetCoordinates.sequenceId
+       );
+
+    //Check the results
+    std::cout <<"Checking results"<<std::endl;
+    checkTensor(compTensor, outputVector, targetFilter);
+
+}
+
+TEST_F (testFixture, convLarge3by3Dense) {
     //Fixed point convertion arguments and sparsity control
     char fracWidth = 4, intWidth = 3;
     float bernProb = 1.0;
     int seed = 1999;
     float min = 1.0;
-    float max = 1.01;
+    float max = 4.0;
 
     //Kernel arugments
     int numFilters = 512;
