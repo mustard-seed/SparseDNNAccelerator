@@ -167,6 +167,7 @@ protected:
             unsigned char sizeOutputWidthTile, //TQ
             //unsigned short numOutputWidthTile, // ceil (Q / TQ)
             unsigned char sizeOutputWidthTile0, //Special case: TQ for the tiles on the left boundary
+            unsigned char maxPeCols0,
 
             unsigned short outputHeight, //P
             unsigned char sizeOutputHeightTile, //TP
@@ -225,20 +226,21 @@ protected:
                     1 : (unsigned char) (std::ceil( ((float) (outputWidth - sizeOutputWidthTile0)) / (float) (sizeOutputWidthTile) )) + 1;
         kernelFilterWriter.setArg(5 , (cl_uchar) numOutputWidthTile); //ceil (Q/TQ)
         kernelFilterWriter.setArg(6 , (cl_uchar) sizeOutputWidthTile0); //TQ0;
+        kernelFilterWriter.setArg(7, (cl_uchar) maxPeCols0); //A0
 
-        kernelFilterWriter.setArg(7, (cl_ushort) outputHeight); //outputHeight
-        kernelFilterWriter.setArg(8, (cl_uchar) sizeOutputHeightTile ); //TP
+        kernelFilterWriter.setArg(8, (cl_ushort) outputHeight); //outputHeight
+        kernelFilterWriter.setArg(9, (cl_uchar) sizeOutputHeightTile ); //TP
         unsigned char numOutputHeightTile = (outputHeight < ((unsigned short) sizeOutputHeightTile0)) ?
                     1 : (unsigned char) (std::ceil( ((float) (outputHeight - sizeOutputHeightTile0)) / (float) (sizeOutputHeightTile) )) + 1;
-        kernelFilterWriter.setArg(9, (cl_uchar) numOutputHeightTile ); // ceil (P/TP)
-        kernelFilterWriter.setArg(10, (cl_uchar) sizeOutputHeightTile0); //TP0
+        kernelFilterWriter.setArg(10, (cl_uchar) numOutputHeightTile ); // ceil (P/TP)
+        kernelFilterWriter.setArg(11, (cl_uchar) sizeOutputHeightTile0); //TP0
 
         unsigned int L = (unsigned int) compressedFilters.num3DTensors;
-        kernelFilterWriter.setArg(11, (cl_uint) L); //L
+        kernelFilterWriter.setArg(12, (cl_uint) L); //L
 
-        kernelFilterWriter.setArg(12, (cl_ushort) (L / ((unsigned int) numFiltersInGroup)) ); // L / G
-        kernelFilterWriter.setArg(13, (cl_ushort) numFiltersInGroup); //G
-        kernelFilterWriter.setArg(14, (cl_ushort) std::ceil( ((float) (numFiltersInGroup)) / ((float) (numPeRows)) ) ); //ceil (G/F)
+        kernelFilterWriter.setArg(13, (cl_ushort) (L / ((unsigned int) numFiltersInGroup)) ); // L / G
+        kernelFilterWriter.setArg(14, (cl_ushort) numFiltersInGroup); //G
+        kernelFilterWriter.setArg(15, (cl_ushort) std::ceil( ((float) (numFiltersInGroup)) / ((float) (numPeRows)) ) ); //ceil (G/F)
 
         kernelTensorChecker.setArg(0, bufferWeightNarrowOutput);
         kernelTensorChecker.setArg(1, (cl_uchar) targetPeRow);
@@ -349,6 +351,7 @@ t_filter_coordinates calculateFilterCoordinates(unsigned short outputWidth, //ce
         unsigned char numOutputWidthTile, //Q
         unsigned char sizeOutputWidthTile, // TQ
         unsigned char sizeOutputWidthTile0, //Special case: TQ for the tiles on the left boundary
+        unsigned char maxPeCols0,
 
         unsigned short outputHeight, //P
         unsigned char numOutputHeightTile, //ceil (P / TP)
@@ -514,6 +517,7 @@ TEST_F (testFixture, play) {
                     numOutputWidthTile,
                     sizeOutputWidthTile,
                     sizeOutputWidthTile0,
+                    numPeCols,
 
                     outputHeight,
                     numOutputHeightTile,
@@ -541,6 +545,7 @@ TEST_F (testFixture, play) {
         outputWidth,
         sizeOutputWidthTile,
         sizeOutputWidthTile0,
+        numPeCols,
 
         outputHeight,
         sizeOutputHeightTile,
@@ -652,6 +657,7 @@ TEST_F (testFixture, fullyConnectedSmall) {
                     numOutputWidthTile,
                     sizeOutputWidthTile,
                     sizeOutputWidthTile0,
+                    numPeCols,
 
                     outputHeight,
                     numOutputHeightTile,
@@ -679,6 +685,7 @@ TEST_F (testFixture, fullyConnectedSmall) {
         outputWidth,
         sizeOutputWidthTile,
         sizeOutputWidthTile0,
+        numPeCols,
 
         outputHeight,
         sizeOutputHeightTile,
@@ -790,6 +797,7 @@ TEST_F (testFixture, convSmall3by3) {
                     numOutputWidthTile,
                     sizeOutputWidthTile,
                     sizeOutputWidthTile0,
+                    numPeCols,
 
                     outputHeight,
                     numOutputHeightTile,
@@ -817,6 +825,7 @@ TEST_F (testFixture, convSmall3by3) {
         outputWidth,
         sizeOutputWidthTile,
         sizeOutputWidthTile0,
+        numPeCols,
 
         outputHeight,
         sizeOutputHeightTile,
@@ -924,6 +933,7 @@ TEST_F (testFixture, fullyConnectedLargeSparse) {
                     numOutputWidthTile,
                     sizeOutputWidthTile,
                     sizeOutputWidthTile0,
+                    numPeCols,
 
                     outputHeight,
                     numOutputHeightTile,
@@ -951,6 +961,7 @@ TEST_F (testFixture, fullyConnectedLargeSparse) {
         outputWidth,
         sizeOutputWidthTile,
         sizeOutputWidthTile0,
+        numPeCols,
 
         outputHeight,
         sizeOutputHeightTile,
@@ -1056,6 +1067,7 @@ TEST_F (testFixture, fullyConnectedLargeDense) {
                     numOutputWidthTile,
                     sizeOutputWidthTile,
                     sizeOutputWidthTile0,
+                    numPeCols,
 
                     outputHeight,
                     numOutputHeightTile,
@@ -1083,6 +1095,7 @@ TEST_F (testFixture, fullyConnectedLargeDense) {
         outputWidth,
         sizeOutputWidthTile,
         sizeOutputWidthTile0,
+        numPeCols,
 
         outputHeight,
         sizeOutputHeightTile,
@@ -1188,6 +1201,7 @@ TEST_F (testFixture, convLarge3by3Sparse) {
                     numOutputWidthTile,
                     sizeOutputWidthTile,
                     sizeOutputWidthTile0,
+                    numPeCols,
 
                     outputHeight,
                     numOutputHeightTile,
@@ -1215,6 +1229,7 @@ TEST_F (testFixture, convLarge3by3Sparse) {
         outputWidth,
         sizeOutputWidthTile,
         sizeOutputWidthTile0,
+        numPeCols,
 
         outputHeight,
         sizeOutputHeightTile,
@@ -1320,6 +1335,7 @@ TEST_F (testFixture, convLarge3by3Dense) {
                     numOutputWidthTile,
                     sizeOutputWidthTile,
                     sizeOutputWidthTile0,
+                    numPeCols,
 
                     outputHeight,
                     numOutputHeightTile,
@@ -1347,6 +1363,7 @@ TEST_F (testFixture, convLarge3by3Dense) {
         outputWidth,
         sizeOutputWidthTile,
         sizeOutputWidthTile0,
+        numPeCols,
 
         outputHeight,
         sizeOutputHeightTile,
@@ -1384,6 +1401,7 @@ t_filter_coordinates calculateFilterCoordinates(
         unsigned char numOutputWidthTile, //ceil (Q / TQ)
         unsigned char sizeOutputWidthTile, //TQ
         unsigned char sizeOutputWidthTile0, //Special case: TQ for the tiles on the left boundary
+        unsigned char maxPeCols0, //maximum number of PE cols for the first tile along width
 
         unsigned short outputHeight, //P
         unsigned char numOutputHeightTile, //ceil (P / TP)
@@ -1420,6 +1438,7 @@ t_filter_coordinates calculateFilterCoordinates(
             unsigned short sizeOutputWidthTileTemp = (countQCoveredByTQ==0) ? sizeOutputWidthTile0 : sizeOutputWidthTile;
             unsigned short maxSizeOutputWidthTile = (sizeOutputWidthTileTemp < (outputWidth - countQCoveredByTQ))
                     ? sizeOutputWidthTileTemp : (outputWidth - countQCoveredByTQ);
+            unsigned char maxPeCols = (countQCoveredByTQ == 0) ? maxPeCols0 : numPeCols;
 
             unsigned short filterCountCoveredAcrossGroup = 0;
             for (unsigned short gl=0; gl<numGroups; gl++)
@@ -1436,8 +1455,8 @@ t_filter_coordinates calculateFilterCoordinates(
                         unsigned short pqxA = 0;
                         while (pqxA < maxSizeOutputWidthTile)
                         {
-                            unsigned short maxA = numPeCols < (maxSizeOutputWidthTile - pqxA)
-                                ? numPeCols : (maxSizeOutputWidthTile - pqxA);
+                            unsigned short maxA = maxPeCols < (maxSizeOutputWidthTile - pqxA)
+                                ? maxPeCols : (maxSizeOutputWidthTile - pqxA);
                             unsigned short filterCount = filterCountCoveredInGroup;
                             for (unsigned char f=0; f<maxF; f++)
                             {

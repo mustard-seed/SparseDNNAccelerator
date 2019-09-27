@@ -134,6 +134,7 @@ typedef struct {
     unsigned char maxOutputHeightTileSize; //maxTP
     unsigned char maxOutputWidthTileSize; //maxTQ
     //nsigned char destinationRow; //f
+    unsigned char maxPeCols;
     unsigned short numTransferBlocks;
 
 } t_filter_streamer_control;
@@ -163,6 +164,20 @@ t_dram_block filterStreamerControl2dramBlock (t_filter_streamer_control control)
     block.transferBlocks[0].values[1].cluster_values[0] = control.numTransferBlocks & 0xFF;
     block.transferBlocks[0].values[1].cluster_values[1] = ((control.numTransferBlocks >> 8) & 0xFF);
 
+    return block;
+}
+
+unsigned char dramBlock2FilterStreamerMaxPeCol (t_dram_block block) 
+{
+    unsigned char maxPeCol = block.transferBlocks[0].values[0].cluster_values[0] & 0xFF;
+    return maxPeCol;
+
+}
+
+t_dram_block filterStreamerMaxPeCol2DramBlock (unsigned char maxPeCol)
+{
+    t_dram_block block;
+    block.transferBlocks[0].values[0].cluster_values[0] = maxPeCol & 0xFF;
     return block;
 }
 

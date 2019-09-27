@@ -50,6 +50,9 @@ __kernel void kernelFilterWriter (
 	unsigned char sizeOutputWidthTile, //TQ
 	unsigned char numOutputWidthTile, // ceil (Q / TQ)
 	unsigned char sizeOutputWidthTile0, //Special case: TQ for the tiles on the left boundary
+	unsigned char maxPeCols0, //maximum number of PE cols in use for tile 0 in width.
+
+	//TODO: Make the number of PE columns for the first tile variable
 
 	unsigned short outputHeight, //P
 	unsigned char sizeOutputHeightTile, //TP
@@ -132,6 +135,7 @@ __kernel void kernelFilterWriter (
 		for (unsigned char iOutputWidthTile=0; iOutputWidthTile<numOutputWidthTile; iOutputWidthTile++) //tq
 		{
 			unsigned char maxTQ_ = (iOutputWidthTile == 0) ? sizeOutputWidthTile0 : sizeOutputWidthTile;
+			unsigned char maxPeCols = (iOutputWidthTile == 0) ? maxPeCols0 : PE_COLS;
 			unsigned char  maxOutputWidthTileSize = ( ((unsigned short) maxTQ_) < ((unsigned short) (outputWidth - iWidthGlobal)) ) ?
 				maxTQ_ :  (outputWidth - iWidthGlobal);
 
@@ -151,14 +155,17 @@ __kernel void kernelFilterWriter (
 						unsigned short maxTransferBlockInFilter = cacheStreamingBlockAddress[iFilterGlobal];
 						unsigned short maxDramBlockInFilter = ((maxTransferBlockInFilter & WIDE_SIZE_REMAINDER_MASK) > 0x0) ?
 							(maxTransferBlockInFilter >> WIDE_SIZE_OFFSET) + 1 : maxTransferBlockInFilter >> WIDE_SIZE_OFFSET;
-						unsigned short maxTransmitCount = maxDramBlockInFilter+1;
+						unsigned short maxTransmitCount = maxDramBlockInFilter+2; //one extra for filter stream control, another for max pe cols
 						
 						t_filter_streamer_control control;
 						control.maxOutputHeightTileSize = maxOutputHeightTileSize;
 						control.maxOutputWidthTileSize = maxOutputWidthTileSize;
 						//control.destinationRow = iPeRow;
 						control.numTransferBlocks = maxTransferBlockInFilter;
+						control.maxPeCols = maxPeCols;
 						t_dram_block dramControl = filterStreamerControl2dramBlock(control);
+
+						t_dram_block dramMaxPeCol = filterStreamerMaxPeCol2DramBlock(maxPeCols);
 
 						unsigned int iTransferBlockDDR = iTransferBlockFilterBaseDDR;
 
@@ -166,12 +173,25 @@ __kernel void kernelFilterWriter (
 							iFilterGlobal, iPeRow, iHeightGlobal, iWidthGlobal, maxTransferBlockInFilter));
 						for (unsigned short iTransmitCount=0; iTransmitCount<maxTransmitCount; iTransmitCount++)
 						{
-							t_dram_block block = (iTransmitCount == 0) ? dramControl : pDramWeights[iTransferBlockDDR >> WIDE_SIZE_OFFSET];
+							t_dram_block block;
+							if (iTransmitCount == 0) 
+							{
+								block = dramControl;
+							}
+							else if (iTransmitCount == 1)
+							{
+								block = dramMaxPeCol;
+							}
+							else
+							{
+								block = pDramWeights[iTransferBlockDDR >> WIDE_SIZE_OFFSET];
+							}
+
 							t_dram_block_tagged taggedBlock;
 							taggedBlock.dramBlock = block;
 							taggedBlock.destinationRow = iPeRow;
 							write_channel_intel(channel_filter_transport[0], taggedBlock);
-							if (iTransmitCount!=0)
+							if (iTransmitCount>1)
 							{
 								iTransferBlockDDR += WIDE_SIZE;
 							}
@@ -274,9 +294,10 @@ __kernel void kernelFilterTee ()
 	//}
 }
 
-#define STATE_FILTER_STREAMER_WRITE_CACHE_SETUP 0X0
-#define STATE_FILTER_STREAMER_WRITE_CACHE_WRITE 0X1
-#define STATE_FILTER_STREAMER_WRITE_CACHE_WAIT 0X2
+#define STATE_FILTER_STREAMER_WRITE_CACHE_SETUP_CONTROL 0X0
+#define STATE_FILTER_STREAMER_WRITE_CACHE_SETUP_MAX_PE_COL 0x1
+#define STATE_FILTER_STREAMER_WRITE_CACHE_WRITE 0X2
+#define STATE_FILTER_STREAMER_WRITE_CACHE_WAIT 0X3
 
 #define STATE_FILTER_STREAMER_READ_CACHE_SETUP0 0X0
 #define STATE_FILTER_STREAMER_READ_CACHE_SETUP1 0x1
@@ -301,9 +322,10 @@ __kernel void kernelFilterStreamer ()
 	unsigned char maxOutputHeightTileSize[2]; //maxTP
 	unsigned char maxOutputWidthTileSize[2]; //maxTQ 
 	unsigned short maxTransferBlockInFilter[2]; //maxCg
+	unsigned char maxPeCols[2];
 
 	//=================Write into cache variables=================
-	t_state stateWriteCache = STATE_FILTER_STREAMER_WRITE_CACHE_SETUP;
+	t_state stateWriteCache = STATE_FILTER_STREAMER_WRITE_CACHE_SETUP_CONTROL;
 	unsigned short iTransferBlockInFilterWrite; //iCg
 
 	//=================Read from cache variables=================
@@ -321,13 +343,14 @@ __kernel void kernelFilterStreamer ()
 		{
 			bool success = false;
 			t_dram_block writeBlock;
-			if ( (stateWriteCache == STATE_FILTER_STREAMER_WRITE_CACHE_SETUP)
+			if ( (stateWriteCache == STATE_FILTER_STREAMER_WRITE_CACHE_SETUP_CONTROL)
+				|| (stateWriteCache == STATE_FILTER_STREAMER_WRITE_CACHE_SETUP_MAX_PE_COL)
 				|| (stateWriteCache == STATE_FILTER_STREAMER_WRITE_CACHE_WRITE) )
 			{
 				writeBlock = read_channel_nb_intel(channel_filter_local[rowID], &success);
 			}
 			
-			if (stateWriteCache == STATE_FILTER_STREAMER_WRITE_CACHE_SETUP)
+			if (stateWriteCache == STATE_FILTER_STREAMER_WRITE_CACHE_SETUP_CONTROL)
 			{
 				if (success)
 				{
@@ -340,9 +363,20 @@ __kernel void kernelFilterStreamer ()
 
 					EMULATOR_PRINT(("[kernelFilterStreamer %d] Received setup packet for a new filter. Number of transfer blocks to follow: %d\n", rowID, control.numTransferBlocks));
 
+					nextStateWriteCache = STATE_FILTER_STREAMER_WRITE_CACHE_SETUP_MAX_PE_COL;
+				}
+			} // STATE_FILTER_STREAMER_WRITE_CACHE_SETUP_CONTROL
+			else if (stateWriteCache == STATE_FILTER_STREAMER_WRITE_CACHE_SETUP_MAX_PE_COL)
+			{
+				if (success)
+				{
+					unsigned char maxPeColsLocal = dramBlock2FilterStreamerMaxPeCol(writeBlock);
+					EMULATOR_PRINT(("[kernelFilterStreamer %d] Received setup packet for the maximum number of PE cols to activate: %d\n", rowID, maxPeColsLocal));
+					maxPeCols[regWriteSide] = maxPeColsLocal;
+
 					nextStateWriteCache = STATE_FILTER_STREAMER_WRITE_CACHE_WRITE;
 				}
-			} // STATE_FILTER_STREAMER_WRITE_CACHE_SETUP
+			} //STATE_FILTER_STREAMER_READ_CACHE_MAX_COL_SETUP
 			else if (stateWriteCache == STATE_FILTER_STREAMER_WRITE_CACHE_WRITE)
 			{
 				if (success)
@@ -393,8 +427,8 @@ __kernel void kernelFilterStreamer ()
 		} // STATE_FILTER_STREAMER_READ_CACHE_SETUP1
 		else if (stateReadCache == STATE_FILTER_STREAMER_READ_CACHE_MAX_COL_SETUP)
 		{
-			maxColUsedRead = (maxOutputWidthTileSize[(~regWriteSide) & 0x1] - iWidthInOutputTileRead) < PE_COLS ?
-				(maxOutputWidthTileSize[(~regWriteSide) & 0x1] - iWidthInOutputTileRead) : PE_COLS;
+			maxColUsedRead = (maxOutputWidthTileSize[(~regWriteSide) & 0x1] - iWidthInOutputTileRead) < maxPeCols[(~regWriteSide) & 0x1] ?
+				(maxOutputWidthTileSize[(~regWriteSide) & 0x1] - iWidthInOutputTileRead) : maxPeCols[(~regWriteSide) & 0x1];
 
 			nextStateReadCache = STATE_FILTER_STREAMER_READ_CACHE_READ;
 		} //STATE_FILTER_STREAMER_READ_CACHE_MAX_COL_SETUP
@@ -437,7 +471,7 @@ __kernel void kernelFilterStreamer ()
 			&& (stateReadCache == STATE_FILTER_STREAMER_READ_CACHE_WAIT) )
 		{
 			nextStateReadCache = STATE_FILTER_STREAMER_READ_CACHE_SETUP0;
-			nextStateWriteCache = STATE_FILTER_STREAMER_WRITE_CACHE_SETUP;
+			nextStateWriteCache = STATE_FILTER_STREAMER_WRITE_CACHE_SETUP_CONTROL;
 			regWriteSide = (~regWriteSide) & 0x1; 
 			EMULATOR_PRINT(("[kernelFilterStreamer %d] Swap\n", rowID));
 
