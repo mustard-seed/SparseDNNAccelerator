@@ -28,6 +28,12 @@ typedef struct __attribute__((aligned(8))) __attribute__((packed)) {
   unsigned char fracDin;
   unsigned char fracDout;
 } t_pe_prototype_instruction_host;
+
+typedef struct __attribute__((aligned(8))) __attribute__((packed)) {
+  unsigned char numPSumToProcess;
+  unsigned char numBitsToRightShift;
+  bool enableRelu;
+} t_output_instruction_host;
 #else
 typedef struct __attribute__((aligned(8))) __attribute__((packed)) {
 
@@ -41,6 +47,12 @@ typedef struct __attribute__((aligned(8))) __attribute__((packed)) {
   cl_uchar fracDin;
   cl_uchar fracDout;
 } t_pe_prototype_instruction_host;
+
+typedef struct __attribute__((aligned(8))) __attribute__((packed)) {
+  cl_uchar numPSumToProcess;
+  cl_uchar numBitsToRightShift;
+  cl_bool enableRelu;
+} t_output_instruction_host;
 #endif
 
 #endif

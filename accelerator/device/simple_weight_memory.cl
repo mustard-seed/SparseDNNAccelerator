@@ -33,9 +33,6 @@ __kernel void nop () {}
 #define WEIGHT_READ_CACHE_FINISH 0x7
 */
 
-#define TRUE 0X1
-#define FALSE 0X0
-
 /*! kernelSimpleWeightStreamer
 Important assumption: The address cache only stores the BRAM address of the first streaming block in each strip.
 */

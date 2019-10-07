@@ -48,6 +48,16 @@ std::vector<cl_short, boost::alignment::aligned_allocator<cl_short, aocl_utils_c
 aligned_short_vector;
 
 typedef
+std::vector<cl_int, boost::alignment::aligned_allocator<cl_int, aocl_utils_cpp::AOCL_ALIGNMENT>>
+//std::vector<cl_short>
+aligned_int_vector;
+
+typedef
+std::vector<cl_char, boost::alignment::aligned_allocator<cl_char, aocl_utils_cpp::AOCL_ALIGNMENT>>
+//std::vector<cl_short>
+aligned_char_vector;
+
+typedef
 std::vector<t_vecSpValueAndZCount, boost::alignment::aligned_allocator<t_vecSpValueAndZCount, aocl_utils_cpp::AOCL_ALIGNMENT>>
 //std::vector<cl_short>
 t_aligned_compression_vector;
@@ -62,6 +72,12 @@ std::vector<t_pe_prototype_instruction_host,
 boost::alignment::aligned_allocator<t_pe_prototype_instruction_host, aocl_utils_cpp::AOCL_ALIGNMENT>>
 //std::vector<cl_short>
 t_aligned_instruction_vector;
+
+typedef
+std::vector<t_output_instruction_host,
+boost::alignment::aligned_allocator<t_output_instruction_host, aocl_utils_cpp::AOCL_ALIGNMENT>>
+//std::vector<cl_short>
+t_aligned_output_instruction_vector;
 
 #ifdef DIRECT_COMPRESSION_SIMD
 typedef
@@ -96,17 +112,13 @@ protected:
 
     cl::Kernel kernelPE;
 
-    cl::Buffer bufferInstructionInput;
-    cl::Buffer bufferInstructionOutputH;
-    cl::Buffer bufferInstructionOutputV;
     cl::Buffer bufferActivationInput;
     cl::Buffer bufferActivationOutput;
     cl::Buffer bufferWeightInput;
     cl::Buffer bufferWeightOutput;
-    cl::Buffer bufferBiasInput;
-    cl::Buffer bufferBiasOutput;
     cl::Buffer bufferDrainInput;
     cl::Buffer bufferDrainOutput;
+    cl::Buffer bufferOutputInstruction;
 
 #ifdef DIRECT_COMPRESSION_SIMD
     t_aligned_compression_simd_vector inputActivationVector;
@@ -120,13 +132,8 @@ protected:
     t_aligned_transfer_block_vector inputWeightVector;
     t_aligned_transfer_block_vector outputWeightVector;
 #endif
-    aligned_short_vector inputBiasVector;
-    aligned_short_vector outputBiasVector;
-    aligned_short_vector inputDrainVector;
-    aligned_short_vector outputDrainVector;
-    t_aligned_instruction_vector inputInstructionVector;
-    t_aligned_instruction_vector outputInstructionHVector;
-    t_aligned_instruction_vector outputInstructionVVector;
+    aligned_int_vector inputDrainVector;
+    aligned_char_vector outputDrainVector;
 
     //Profile function
     cl_int (*get_profile_fn)(cl_device_id, cl_program, cl_bool,cl_bool,cl_bool,size_t, void *,size_t *,cl_int *);
@@ -179,41 +186,6 @@ protected:
                     );
         aocl_utils_cpp::checkError(status, "Failed to setup the test interface command queue!");
 
-//        clCQPE = cl::CommandQueue(
-//                    clContext,
-//                    clDevice,
-//                    CL_QUEUE_PROFILING_ENABLE,
-//                    &status
-//                    );
-        aocl_utils_cpp::checkError(status, "Failed to setup the PE command queue!");
-
-        bufferInstructionInput = cl::Buffer (
-                        clContext,
-                        CL_MEM_READ_ONLY,
-                        MAX_DATA_LENGTH * sizeof(typeof(inputInstructionVector.at(0))),
-                        NULL,
-                        &status
-                    );
-        aocl_utils_cpp::checkError(status, "Failed to setup the instruction input buffer!");
-
-        bufferInstructionOutputH = cl::Buffer (
-                        clContext,
-                        CL_MEM_WRITE_ONLY,
-                        MAX_DATA_LENGTH * sizeof(typeof(outputInstructionHVector.at(0))),
-                        NULL,
-                        &status
-                    );
-        aocl_utils_cpp::checkError(status, "Failed to setup the instruction output horizontal buffer!");
-
-        bufferInstructionOutputV = cl::Buffer (
-                        clContext,
-                        CL_MEM_WRITE_ONLY,
-                        MAX_DATA_LENGTH * sizeof(typeof(outputInstructionVVector.at(0))),
-                        NULL,
-                        &status
-                    );
-        aocl_utils_cpp::checkError(status, "Failed to setup the instruction output vertical buffer!");
-
 
         bufferActivationInput = cl::Buffer (
                         clContext,
@@ -251,24 +223,6 @@ protected:
                     );
         aocl_utils_cpp::checkError(status, "Failed to setup the output weight buffer!");
 
-        bufferBiasInput = cl::Buffer (
-                        clContext,
-                        CL_MEM_READ_ONLY,
-                        MAX_DATA_LENGTH * sizeof(typeof(inputBiasVector.at(0))),
-                        NULL,
-                        &status
-                    );
-        aocl_utils_cpp::checkError(status, "Failed to setup the input bias buffer!");
-
-        bufferBiasOutput = cl::Buffer (
-                        clContext,
-                        CL_MEM_WRITE_ONLY,
-                        MAX_DATA_LENGTH * sizeof(typeof(outputBiasVector.at(0))),
-                        NULL,
-                        &status
-                    );
-        aocl_utils_cpp::checkError(status, "Failed to setup the output bias buffer!");
-
         bufferDrainInput = cl::Buffer (
                         clContext,
                         CL_MEM_READ_ONLY,
@@ -287,6 +241,15 @@ protected:
                     );
         aocl_utils_cpp::checkError(status, "Failed to setup the output drain buffer!");
 
+        bufferOutputInstruction = cl::Buffer (
+                        clContext,
+                        CL_MEM_WRITE_ONLY,
+                        1 * sizeof(t_output_instruction_host),
+                        NULL,
+                        &status
+                    );
+        aocl_utils_cpp::checkError(status, "Failed to setup the output instruction buffer!");
+
         get_profile_fn = (cl_int (*) (cl_device_id, cl_program, cl_bool,cl_bool,cl_bool,size_t, void *,size_t *,cl_int *))clGetExtensionFunctionAddress("clGetProfileDataDeviceIntelFPGA");
 
         //reset_fn = (cl_int (*) (cl_context, cl_uint, const cl_device_id*))clGetExtensionFunctionAddress("clResetKernelsIntelFPGA");
@@ -295,21 +258,10 @@ protected:
         //Need to setup numInstructions, idx, and idy separately
     }
 
-    void launch (int idx, int idy, unsigned short startIndexActivationBlocks, unsigned short startIndexWeightBlocks, bool drainResult=true) {
+    void launch (int idx, int idy, int maxIdx, int maxIdy, int bias, t_output_instruction_host outputInstruction, bool drainResult=true) {
         cl_int status;
 
         //Fill the buffers
-        //Transfer the instruction
-        if (inputInstructionVector.size() > 0) {
-            status = clCQTestInterface.enqueueWriteBuffer(bufferInstructionInput,
-                                                 CL_TRUE,
-                                                 0,
-                                                 sizeof(typeof(inputInstructionVector.at(0))) * inputInstructionVector.size(),
-                                                 inputInstructionVector.data(),
-                                                 NULL);
-            aocl_utils_cpp::checkError(status, "Failed to write bufferInstructionInput");
-        }
-
         //Transfer the input activation
         if (inputActivationVector.size() > 0) {
             status = clCQTestInterface.enqueueWriteBuffer(bufferActivationInput,
@@ -332,17 +284,6 @@ protected:
             aocl_utils_cpp::checkError(status, "Failed to write bufferWeightInput");
         }
 
-        //Transfer the input bias
-        if (inputBiasVector.size() > 0) {
-            status = clCQTestInterface.enqueueWriteBuffer(bufferBiasInput,
-                                                 CL_TRUE,
-                                                 0,
-                                                 sizeof(typeof(inputBiasVector.at(0))) * inputBiasVector.size(),
-                                                 inputBiasVector.data(),
-                                                 NULL);
-            aocl_utils_cpp::checkError(status, "Failed to write bufferDrainInput");
-        }
-
         //Transfer the drain intput
         cl_ushort numInputDrain = drainResult ? PE_ROWS  - idy - 1 : 0;
         for (int i=0; i<numInputDrain; i++) {
@@ -360,81 +301,59 @@ protected:
             EXPECT_TRUE (status == CL_SUCCESS);
         }
 
+        status = clCQTestInterface.enqueueWriteBuffer(bufferOutputInstruction,
+                                             CL_TRUE,
+                                             0,
+                                             sizeof(t_output_instruction_host),
+                                             &outputInstruction,
+                                             NULL);
+        aocl_utils_cpp::checkError(status, "Failed to write bufferOutputInstruction");
+        EXPECT_TRUE (status == CL_SUCCESS);
+
 
         //Setup the buffer arguments and number of transfer for the test interface
         kernelTestInterface.setArg(0, bufferActivationInput);
         kernelTestInterface.setArg(1, bufferActivationOutput);
         kernelTestInterface.setArg(2, bufferWeightInput);
         kernelTestInterface.setArg(3, bufferWeightOutput);
-        kernelTestInterface.setArg(4, bufferBiasInput);
-        kernelTestInterface.setArg(5, bufferBiasOutput);
-        kernelTestInterface.setArg(6, bufferDrainInput);
-        kernelTestInterface.setArg(7, bufferDrainOutput);
-        kernelTestInterface.setArg(8, bufferInstructionInput);
-        kernelTestInterface.setArg(9, bufferInstructionOutputH);
-        kernelTestInterface.setArg(10, bufferInstructionOutputV);
+        kernelTestInterface.setArg(4, bufferDrainInput);
+        kernelTestInterface.setArg(5, bufferDrainOutput);
+        kernelTestInterface.setArg(6, (cl_int) bias);
+        //kernelTestInterface.setArg(7, outputInstruction);
+        kernelTestInterface.setArg(7, bufferOutputInstruction);
 
-        kernelTestInterface.setArg(11, (cl_ushort) inputActivationVector.size()); //numInputActivationBlocks
+        kernelTestInterface.setArg(8, (cl_ushort) inputActivationVector.size()); //numInputActivationBlocks
        // kernelTestInterface.setArg(12, (cl_ushort) startIndexActivationBlocks); //startIndexActivationBlocks,
         cl_ushort numOutputActivationBlocks =
-                idy < (PE_ROWS - 1) ? inputActivationVector.size() : 0;
-        kernelTestInterface.setArg(12, numOutputActivationBlocks); //numOutputActivationBlocks
+                idy < (maxIdy) ? inputActivationVector.size() : 0;
+        kernelTestInterface.setArg(9, numOutputActivationBlocks); //numOutputActivationBlocks
         //Allocate space for the output activation vector
         outputActivationVector.resize(numOutputActivationBlocks);
 
-        kernelTestInterface.setArg(13, (cl_ushort) inputWeightVector.size()); //numInputWeightBlocks
+        kernelTestInterface.setArg(10, (cl_ushort) inputWeightVector.size()); //numInputWeightBlocks
         //kernelTestInterface.setArg(15, (cl_ushort) startIndexWeightBlocks); //startIndexWeightBlocks,
         cl_ushort numOutputWeightBlocks =
-                idy < (PE_COLS - 1) ? inputWeightVector.size() : 0;
-        kernelTestInterface.setArg(14, numOutputWeightBlocks); //numOutputWeightBlocks
+                idx < (maxIdx) ? inputWeightVector.size() : 0;
+        kernelTestInterface.setArg(11, numOutputWeightBlocks); //numOutputWeightBlocks
         //Allocate space for the output activation vector
         outputWeightVector.resize(numOutputWeightBlocks);
 
-        kernelTestInterface.setArg(15, (cl_ushort) inputBiasVector.size()); //numInputBias
-        cl_ushort numOutputBias =
-                idx < (PE_COLS - 1) ? inputBiasVector.size() : 0;
-        kernelTestInterface.setArg(16, numOutputBias); //numOutputBias
-        for (int i=0; i<numOutputBias; i++) {
-            short val;
-            outputBiasVector.push_back(val);
-        }
 
-        kernelTestInterface.setArg(17, (cl_ushort) numInputDrain); //numInputDrain
+        kernelTestInterface.setArg(12, (cl_ushort) numInputDrain); //numInputDrain
         cl_ushort numOutputDrain = drainResult ? PE_ROWS  - idy : 0;
-        kernelTestInterface.setArg(18, numOutputDrain); //numOutputDrain
+        kernelTestInterface.setArg(13, numOutputDrain); //numOutputDrain
         for (int i=0; i<numOutputDrain; i++) {
             short val;
             outputDrainVector.push_back(val);
         }
 
-        kernelTestInterface.setArg(19, (cl_ushort) inputInstructionVector.size()); //numInputInstruction
-        cl_ushort numOutputInstructionH =
-                  ((idy == 0) && (idx < (PE_COLS - 1) )) ? inputInstructionVector.size() : 0;
-        kernelTestInterface.setArg(20, (cl_ushort) numOutputInstructionH); //numOutputInsructionHorizontal,
-        for (int i=0; i<numOutputInstructionH; i++) {
-            t_pe_prototype_instruction_host val;
-            outputInstructionHVector.push_back(val);
-        }
-
-        cl_ushort numOutputInstructionV =
-                  idy < (PE_ROWS - 1) ? inputInstructionVector.size() : 0;
-        kernelTestInterface.setArg(21, numOutputInstructionV); //numOutputInstructionVertical
-        for (int i=0; i<numOutputInstructionV; i++) {
-            t_pe_prototype_instruction_host val;
-            outputInstructionVVector.push_back(val);
-        }
-
-        kernelTestInterface.setArg(22, (cl_uchar)MAX_IDX);
-        kernelTestInterface.setArg(23, (cl_uchar)MAX_IDY);
-
-
-        //(*reset_fn)(this->clContext(), 1, (this->clDevice()));
-
-        //kernelPE.setArg(0, (cl_ushort)0x7FF);
+        kernelTestInterface.setArg(14, (cl_uchar)maxIdx);
+        kernelTestInterface.setArg(15, (cl_uchar)maxIdy);
 
         cl::Event event;
         //Launch kernels
-        //clCQPE.enqueueTask(kernelPE);
+
+        std::cout <<"Launching"<<std::endl;
         clCQTestInterface.enqueueTask(kernelTestInterface, NULL, &event);
         //Retrieve data
         clCQTestInterface.finish();
@@ -461,16 +380,6 @@ protected:
                         );
         }
 
-        if (outputBiasVector.size() > 0) {
-            clCQTestInterface.enqueueReadBuffer(
-                        bufferBiasOutput,
-                        CL_TRUE,
-                        0,
-                        sizeof(typeof(outputBiasVector.at(0))) * outputBiasVector.size(),
-                        outputBiasVector.data()
-                        );
-        }
-
         if (outputDrainVector.size() > 0) {
             clCQTestInterface.enqueueReadBuffer(
                         bufferDrainOutput,
@@ -478,26 +387,6 @@ protected:
                         0,
                         sizeof(typeof(outputDrainVector.at(0))) * outputDrainVector.size(),
                         outputDrainVector.data()
-                        );
-        }
-
-        if (outputInstructionHVector.size() > 0) {
-            clCQTestInterface.enqueueReadBuffer(
-                        bufferInstructionOutputH,
-                        CL_TRUE,
-                        0,
-                        sizeof(typeof(outputInstructionHVector.at(0))) * outputInstructionHVector.size(),
-                        outputInstructionHVector.data()
-                        );
-        }
-
-        if (outputInstructionVVector.size() > 0) {
-            clCQTestInterface.enqueueReadBuffer(
-                        bufferInstructionOutputV,
-                        CL_TRUE,
-                        0,
-                        sizeof(typeof(outputInstructionVVector.at(0))) * outputInstructionVVector.size(),
-                        outputInstructionVVector.data()
                         );
         }
 
@@ -536,7 +425,7 @@ float dot_product_regular_vectors (
         );
 
 
-//TEST_F (peTestFixture, testFixture)
+//TEST_F (peTestFixture, testFixture) 0, //tilingSizeWidth
 //{
 //    launch(IDX,IDY,0,0, false);
 //    EXPECT_TRUE (COMPRESSION_VEC_SIZE == 4);
@@ -554,9 +443,11 @@ TEST_F (peTestFixture, testPlayfield) {
 
     //This test won't pass if fracIn > fractOut
     char fracIn = 2, fracOut = 3, fracW = 2;
+    unsigned char numBitsToRightShift = fracIn+fracW-fracOut;
     char intWidthIn = WEIGHT_BITWIDTH - fracIn - 1;
     char intWidthWeight = WEIGHT_BITWIDTH - fracW - 1;
     int targetIDX = IDX, targetIDY = IDY;
+    int maxIdx = PE_COLS, maxIdy = PE_ROWS;
     float probOne = 1.0;
 
     unsigned int numElements = 16;
@@ -572,7 +463,7 @@ TEST_F (peTestFixture, testPlayfield) {
     float biasFloat = 0.0;
 
     //Then convert the bias into a fixed point number;
-    fixedPointNumber biasFPInput (biasFloat, fracW, intWidthWeight);
+    int biasFPInt = ((int) std::round(biasFloat * (1 << (fracIn + fracW))));
 
     // Generate a block of activations
 //    std::vector<float> activationRealInput = initialize_vector(
@@ -614,8 +505,6 @@ TEST_F (peTestFixture, testPlayfield) {
     float expectedResultReal = dot_product_regular_vectors(activationRealInput, weightRealInput) + biasFloat;
     fixedPointNumber expectedOutputFP (expectedResultReal, fracOut, WEIGHT_BITWIDTH - fracOut - 1);
 
-    //Prepare the input buffers
-    inputBiasVector.push_back((short) biasFPInput.getBits());
     // Compress the activaion block
     std::vector<fixedPointNumber> fpActivationVector;
     std::vector<fixedPointNumber> fpWeightVector;
@@ -638,6 +527,7 @@ TEST_F (peTestFixture, testPlayfield) {
                 numElements, //channel
                 1, //width
                 1, //height
+                 0, //tilingSizeWidth
                 numElements - 1, //_maxScalarIndexInChannelGroup
                 7, //_maxClusterIndexInCompressionBlock
                 1, //_maxClusterIndexInTransferBlock
@@ -651,7 +541,8 @@ TEST_F (peTestFixture, testPlayfield) {
                 1, //numTensors
                 numElements, //channel
                 1, //width
-                1, //height
+                1, //height,
+                0, //tilingSizeWidth
                 numElements - 1, //_maxScalarIndexInChannelGroup
                 7, //_maxClusterIndexInCompressionBlock
                 1, //_maxClusterIndexInTransferBlock
@@ -674,16 +565,15 @@ TEST_F (peTestFixture, testPlayfield) {
 
     //Prepare the instruction
 
-     t_pe_prototype_instruction_host dotProductInstruction =
+     t_output_instruction_host outputInstruction =
      {
-      .maxIDX = PE_COLS - 1,
-      .maxIDY = PE_ROWS - 1,
-      .fracW = fracW,
-      .fracDin = fracIn,
-      .fracDout = fracOut};
-      inputInstructionVector.push_back(dotProductInstruction);
+        .numPSumToProcess = maxIdy - targetIDY,
+        .numBitsToRightShift = numBitsToRightShift,
+        .enableRelu = false
+     };
 
-    launch(targetIDX, targetIDY, transmissionStartIndex, 0);
+
+    launch(targetIDX, targetIDY, maxIdx, maxIdy, biasFPInt, outputInstruction);
 
     //Compare the result
     char actualOutputFP = outputDrainVector.at(0);
@@ -712,9 +602,11 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageZero) {
 
     //This test won't pass if fracIn > fractOut
     char fracIn = 2, fracOut = 3, fracW = 2;
+    unsigned char numBitsToRightShift = fracIn+fracW-fracOut;
     char intWidthIn = WEIGHT_BITWIDTH - fracIn - 1;
     char intWidthWeight = WEIGHT_BITWIDTH - fracW - 1;
     int targetIDX = IDX, targetIDY = IDY;
+    int maxIdx = PE_COLS, maxIdy = PE_ROWS;
     float probOne = 0.0;
 
     unsigned int numElements = 8196*4+3;
@@ -730,7 +622,10 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageZero) {
     float biasFloat = 1.0;
 
     //Then convert the bias into a fixed point number;
-    fixedPointNumber biasFPInput (biasFloat, fracW, intWidthWeight);
+    //fixedPointNumber biasFPInput (biasFloat, fracW, intWidthWeight);
+    //int biasFPInt = ((int) biasFPInput.getBits()) << numBitsToRightShift;
+    int biasFPInt = ((int) std::round(biasFloat * (1 << (fracIn + fracW))));
+
 
     // Generate a block of activations
     std::vector<float> activationRealInput = initialize_vector(
@@ -757,7 +652,6 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageZero) {
     fixedPointNumber expectedOutputFP (expectedResultReal, fracOut, WEIGHT_BITWIDTH - fracOut - 1);
 
     //Prepare the input buffers
-    inputBiasVector.push_back((short) biasFPInput.getBits());
     // Compress the activaion block
     std::vector<fixedPointNumber> fpActivationVector;
     std::vector<fixedPointNumber> fpWeightVector;
@@ -805,6 +699,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageZero) {
                 numElements, //channel
                 1, //width
                 1, //height
+                0,
                 numElements - 1, //_maxScalarIndexInChannelGroup
                 7, //_maxClusterIndexInCompressionBlock
                 1, //_maxClusterIndexInTransferBlock
@@ -819,6 +714,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageZero) {
                 numElements, //channel
                 1, //width
                 1, //height
+                0,
                 numElements - 1, //_maxScalarIndexInChannelGroup
                 7, //_maxClusterIndexInCompressionBlock
                 1, //_maxClusterIndexInTransferBlock
@@ -841,16 +737,15 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageZero) {
 
     //Prepare the instruction
 
-     t_pe_prototype_instruction_host dotProductInstruction =
-     {
-      .maxIDX = PE_COLS - 1,
-      .maxIDY = PE_ROWS - 1,
-      .fracW = fracW,
-      .fracDin = fracIn,
-      .fracDout = fracOut};
-      inputInstructionVector.push_back(dotProductInstruction);
+    t_output_instruction_host outputInstruction =
+    {
+       .numPSumToProcess = maxIdy - targetIDY,
+       .numBitsToRightShift = numBitsToRightShift,
+       .enableRelu = false
+    };
 
-    launch(targetIDX, targetIDY, transmissionStartIndex, 0);
+
+   launch(targetIDX, targetIDY, maxIdx, maxIdy, biasFPInt, outputInstruction);
 
     //Compare the result
     char actualOutputFP = outputDrainVector.at(0);
@@ -877,9 +772,11 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageHalfLong) {
 
     //This test won't pass if fracIn > fractOut
     char fracIn = 2, fracOut = 3, fracW = 2;
+    unsigned char numBitsToRightShift = fracIn+fracW-fracOut;
     char intWidthIn = WEIGHT_BITWIDTH - fracIn - 1;
     char intWidthWeight = WEIGHT_BITWIDTH - fracW - 1;
     int targetIDX = IDX, targetIDY = IDY;
+    int maxIdx = PE_COLS, maxIdy = PE_ROWS;
     float probOne = 0.5;
 
     unsigned int numElements = 8196*4+3;
@@ -895,7 +792,8 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageHalfLong) {
     float biasFloat = 1.0;
 
     //Then convert the bias into a fixed point number;
-    fixedPointNumber biasFPInput (biasFloat, fracW, intWidthWeight);
+    int biasFPInt = ((int) std::round(biasFloat * (1 << (fracIn + fracW))));
+
 
     // Generate a block of activations
     std::vector<float> activationRealInput = initialize_vector(
@@ -922,7 +820,6 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageHalfLong) {
     fixedPointNumber expectedOutputFP (expectedResultReal, fracOut, WEIGHT_BITWIDTH - fracOut - 1);
 
     //Prepare the input buffers
-    inputBiasVector.push_back((short) biasFPInput.getBits());
     // Compress the activaion block
     std::vector<fixedPointNumber> fpActivationVector;
     std::vector<fixedPointNumber> fpWeightVector;
@@ -970,6 +867,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageHalfLong) {
                 numElements, //channel
                 1, //width
                 1, //height
+                0,
                 numElements - 1, //_maxScalarIndexInChannelGroup
                 7, //_maxClusterIndexInCompressionBlock
                 1, //_maxClusterIndexInTransferBlock
@@ -984,6 +882,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageHalfLong) {
                 numElements, //channel
                 1, //width
                 1, //height
+                0,
                 numElements - 1, //_maxScalarIndexInChannelGroup
                 7, //_maxClusterIndexInCompressionBlock
                 1, //_maxClusterIndexInTransferBlock
@@ -1006,16 +905,15 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageHalfLong) {
 
     //Prepare the instruction
 
-     t_pe_prototype_instruction_host dotProductInstruction =
-     {
-      .maxIDX = PE_COLS - 1,
-      .maxIDY = PE_ROWS - 1,
-      .fracW = fracW,
-      .fracDin = fracIn,
-      .fracDout = fracOut};
-      inputInstructionVector.push_back(dotProductInstruction);
+    t_output_instruction_host outputInstruction =
+    {
+       .numPSumToProcess = maxIdy - targetIDY,
+       .numBitsToRightShift = numBitsToRightShift,
+       .enableRelu = false
+    };
 
-    launch(targetIDX, targetIDY, transmissionStartIndex, 0);
+
+   launch(targetIDX, targetIDY, maxIdx, maxIdy, biasFPInt, outputInstruction);
 
     //Compare the result
     char actualOutputFP = outputDrainVector.at(0);
@@ -1042,9 +940,11 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainage025Long) {
 
     //This test won't pass if fracIn > fractOut
     char fracIn = 2, fracOut = 3, fracW = 2;
+    unsigned char numBitsToRightShift = fracIn+fracW-fracOut;
     char intWidthIn = WEIGHT_BITWIDTH - fracIn - 1;
     char intWidthWeight = WEIGHT_BITWIDTH - fracW - 1;
     int targetIDX = IDX, targetIDY = IDY;
+    int maxIdx = PE_COLS, maxIdy = PE_ROWS;
     float probOne = 0.25;
 
     unsigned int numElements = 8196*4+3;
@@ -1060,7 +960,8 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainage025Long) {
     float biasFloat = 1.0;
 
     //Then convert the bias into a fixed point number;
-    fixedPointNumber biasFPInput (biasFloat, fracW, intWidthWeight);
+    int biasFPInt = ((int) std::round(biasFloat * (1 << (fracIn + fracW))));
+
 
     // Generate a block of activations
     std::vector<float> activationRealInput = initialize_vector(
@@ -1087,7 +988,6 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainage025Long) {
     fixedPointNumber expectedOutputFP (expectedResultReal, fracOut, WEIGHT_BITWIDTH - fracOut - 1);
 
     //Prepare the input buffers
-    inputBiasVector.push_back((short) biasFPInput.getBits());
     // Compress the activaion block
     std::vector<fixedPointNumber> fpActivationVector;
     std::vector<fixedPointNumber> fpWeightVector;
@@ -1135,6 +1035,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainage025Long) {
                 numElements, //channel
                 1, //width
                 1, //height
+                0,
                 numElements - 1, //_maxScalarIndexInChannelGroup
                 7, //_maxClusterIndexInCompressionBlock
                 1, //_maxClusterIndexInTransferBlock
@@ -1149,6 +1050,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainage025Long) {
                 numElements, //channel
                 1, //width
                 1, //height
+                0,
                 numElements - 1, //_maxScalarIndexInChannelGroup
                 7, //_maxClusterIndexInCompressionBlock
                 1, //_maxClusterIndexInTransferBlock
@@ -1171,16 +1073,15 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainage025Long) {
 
     //Prepare the instruction
 
-     t_pe_prototype_instruction_host dotProductInstruction =
-     {
-      .maxIDX = PE_COLS - 1,
-      .maxIDY = PE_ROWS - 1,
-      .fracW = fracW,
-      .fracDin = fracIn,
-      .fracDout = fracOut};
-      inputInstructionVector.push_back(dotProductInstruction);
+    t_output_instruction_host outputInstruction =
+    {
+       .numPSumToProcess = maxIdy - targetIDY,
+       .numBitsToRightShift = numBitsToRightShift,
+       .enableRelu = false
+    };
 
-    launch(targetIDX, targetIDY, transmissionStartIndex, 0);
+
+   launch(targetIDX, targetIDY, maxIdx, maxIdy, biasFPInt, outputInstruction);
 
     //Compare the result
     char actualOutputFP = outputDrainVector.at(0);
@@ -1207,9 +1108,11 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageOneLong) {
 
     //This test won't pass if fracIn > fractOut
     char fracIn = 2, fracOut = 3, fracW = 2;
+    unsigned char numBitsToRightShift = fracIn+fracW-fracOut;
     char intWidthIn = WEIGHT_BITWIDTH - fracIn - 1;
     char intWidthWeight = WEIGHT_BITWIDTH - fracW - 1;
     int targetIDX = IDX, targetIDY = IDY;
+    int maxIdx = PE_COLS, maxIdy = PE_ROWS;
     float probOne = 1.0;
 
     unsigned int numElements = 8196*4+3;
@@ -1225,7 +1128,8 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageOneLong) {
     float biasFloat = 1.0;
 
     //Then convert the bias into a fixed point number;
-    fixedPointNumber biasFPInput (biasFloat, fracW, intWidthWeight);
+    int biasFPInt = ((int) std::round(biasFloat * (1 << (fracIn + fracW))));
+
 
     // Generate a block of activations
     std::vector<float> activationRealInput = initialize_vector(
@@ -1252,7 +1156,6 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageOneLong) {
     fixedPointNumber expectedOutputFP (expectedResultReal, fracOut, WEIGHT_BITWIDTH - fracOut - 1);
 
     //Prepare the input buffers
-    inputBiasVector.push_back((short) biasFPInput.getBits());
     // Compress the activaion block
     std::vector<fixedPointNumber> fpActivationVector;
     std::vector<fixedPointNumber> fpWeightVector;
@@ -1300,6 +1203,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageOneLong) {
                 numElements, //channel
                 1, //width
                 1, //height
+                0,
                 numElements - 1, //_maxScalarIndexInChannelGroup
                 7, //_maxClusterIndexInCompressionBlock
                 1, //_maxClusterIndexInTransferBlock
@@ -1314,6 +1218,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageOneLong) {
                 numElements, //channel
                 1, //width
                 1, //height
+                0,
                 numElements - 1, //_maxScalarIndexInChannelGroup
                 7, //_maxClusterIndexInCompressionBlock
                 1, //_maxClusterIndexInTransferBlock
@@ -1336,16 +1241,15 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageOneLong) {
 
     //Prepare the instruction
 
-     t_pe_prototype_instruction_host dotProductInstruction =
-     {
-      .maxIDX = PE_COLS - 1,
-      .maxIDY = PE_ROWS - 1,
-      .fracW = fracW,
-      .fracDin = fracIn,
-      .fracDout = fracOut};
-      inputInstructionVector.push_back(dotProductInstruction);
+    t_output_instruction_host outputInstruction =
+    {
+       .numPSumToProcess = maxIdy - targetIDY,
+       .numBitsToRightShift = numBitsToRightShift,
+       .enableRelu = false
+    };
 
-    launch(targetIDX, targetIDY, transmissionStartIndex, 0);
+
+   launch(targetIDX, targetIDY, maxIdx, maxIdy, biasFPInt, outputInstruction);
 
     //Compare the result
     char actualOutputFP = outputDrainVector.at(0);
@@ -1372,9 +1276,11 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageOneShort) {
 
     //This test won't pass if fracIn > fractOut
     char fracIn = 2, fracOut = 3, fracW = 2;
+    unsigned char numBitsToRightShift = fracIn+fracW-fracOut;
     char intWidthIn = WEIGHT_BITWIDTH - fracIn - 1;
     char intWidthWeight = WEIGHT_BITWIDTH - fracW - 1;
     int targetIDX = IDX, targetIDY = IDY;
+    int maxIdx = PE_COLS, maxIdy = PE_ROWS;
     float probOne = 1.0;
 
     unsigned int numElements = 32;
@@ -1390,7 +1296,8 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageOneShort) {
     float biasFloat = 0.0;
 
     //Then convert the bias into a fixed point number;
-    fixedPointNumber biasFPInput (biasFloat, fracW, intWidthWeight);
+    int biasFPInt = ((int) std::round(biasFloat * (1 << (fracIn + fracW))));
+
 
     // Generate a block of activations
     std::vector<float> activationRealInput = initialize_vector(
@@ -1417,7 +1324,6 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageOneShort) {
     fixedPointNumber expectedOutputFP (expectedResultReal, fracOut, WEIGHT_BITWIDTH - fracOut - 1);
 
     //Prepare the input buffers
-    inputBiasVector.push_back((short) biasFPInput.getBits());
     // Compress the activaion block
     std::vector<fixedPointNumber> fpActivationVector;
     std::vector<fixedPointNumber> fpWeightVector;
@@ -1449,7 +1355,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageOneShort) {
     directCompressedTensor compATensor(
                 fpActivationVector,
                 1, //numTensors
-                numElements, //channel
+                numElements, //channel    inputBiasVector.push_back((short) biasFPInput.getBits());
                 1, //width
                 1, //height
                 7, //maxSimdBlockIndexInStreamBlock
@@ -1465,6 +1371,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageOneShort) {
                 numElements, //channel
                 1, //width
                 1, //height
+                0,
                 numElements - 1, //_maxScalarIndexInChannelGroup
                 7, //_maxClusterIndexInCompressionBlock
                 1, //_maxClusterIndexInTransferBlock
@@ -1479,6 +1386,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageOneShort) {
                 numElements, //channel
                 1, //width
                 1, //height
+                0,
                 numElements - 1, //_maxScalarIndexInChannelGroup
                 7, //_maxClusterIndexInCompressionBlock
                 1, //_maxClusterIndexInTransferBlock
@@ -1501,16 +1409,15 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageOneShort) {
 
     //Prepare the instruction
 
-     t_pe_prototype_instruction_host dotProductInstruction =
-     {
-      .maxIDX = PE_COLS - 1,
-      .maxIDY = PE_ROWS - 1,
-      .fracW = fracW,
-      .fracDin = fracIn,
-      .fracDout = fracOut};
-      inputInstructionVector.push_back(dotProductInstruction);
+    t_output_instruction_host outputInstruction =
+    {
+       .numPSumToProcess = maxIdy - targetIDY,
+       .numBitsToRightShift = numBitsToRightShift,
+       .enableRelu = false
+    };
 
-    launch(targetIDX, targetIDY, transmissionStartIndex, 0);
+
+   launch(targetIDX, targetIDY, maxIdx, maxIdy, biasFPInt, outputInstruction);
 
     //Compare the result
     char actualOutputFP = outputDrainVector.at(0);
@@ -1537,9 +1444,11 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainage025Short) {
 
     //This test won't pass if fracIn > fractOut
     char fracIn = 2, fracOut = 3, fracW = 2;
+    unsigned char numBitsToRightShift = fracIn+fracW-fracOut;
     char intWidthIn = WEIGHT_BITWIDTH - fracIn - 1;
     char intWidthWeight = WEIGHT_BITWIDTH - fracW - 1;
     int targetIDX = IDX, targetIDY = IDY;
+    int maxIdx = PE_COLS, maxIdy = PE_ROWS;
     float probOne = 0.25;
 
     unsigned int numElements = 32;
@@ -1555,7 +1464,8 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainage025Short) {
     float biasFloat = 0.0;
 
     //Then convert the bias into a fixed point number;
-    fixedPointNumber biasFPInput (biasFloat, fracW, intWidthWeight);
+    int biasFPInt = ((int) std::round(biasFloat * (1 << (fracIn + fracW))));
+
 
     // Generate a block of activations
     std::vector<float> activationRealInput = initialize_vector(
@@ -1582,7 +1492,6 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainage025Short) {
     fixedPointNumber expectedOutputFP (expectedResultReal, fracOut, WEIGHT_BITWIDTH - fracOut - 1);
 
     //Prepare the input buffers
-    inputBiasVector.push_back((short) biasFPInput.getBits());
     // Compress the activaion block
     std::vector<fixedPointNumber> fpActivationVector;
     std::vector<fixedPointNumber> fpWeightVector;
@@ -1630,6 +1539,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainage025Short) {
                 numElements, //channel
                 1, //width
                 1, //height
+                0,
                 numElements - 1, //_maxScalarIndexInChannelGroup
                 7, //_maxClusterIndexInCompressionBlock
                 1, //_maxClusterIndexInTransferBlock
@@ -1644,6 +1554,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainage025Short) {
                 numElements, //channel
                 1, //width
                 1, //height
+                0,
                 numElements - 1, //_maxScalarIndexInChannelGroup
                 7, //_maxClusterIndexInCompressionBlock
                 1, //_maxClusterIndexInTransferBlock
@@ -1666,16 +1577,15 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainage025Short) {
 
     //Prepare the instruction
 
-     t_pe_prototype_instruction_host dotProductInstruction =
-     {
-      .maxIDX = PE_COLS - 1,
-      .maxIDY = PE_ROWS - 1,
-      .fracW = fracW,
-      .fracDin = fracIn,
-      .fracDout = fracOut};
-      inputInstructionVector.push_back(dotProductInstruction);
+    t_output_instruction_host outputInstruction =
+    {
+       .numPSumToProcess = maxIdy - targetIDY,
+       .numBitsToRightShift = numBitsToRightShift,
+       .enableRelu = false
+    };
 
-    launch(targetIDX, targetIDY, transmissionStartIndex, 0);
+
+   launch(targetIDX, targetIDY, maxIdx, maxIdy, biasFPInt, outputInstruction);
 
     //Compare the result
     char actualOutputFP = outputDrainVector.at(0);

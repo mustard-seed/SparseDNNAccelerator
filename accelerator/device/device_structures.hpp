@@ -10,6 +10,9 @@
 #include "ihc_apint.h"
 #endif
 
+#define TRUE 0x1
+#define FALSE 0X0
+
 /*! t_instruction
  * \brief VLIW instructions for controlling the accelerator
  */
@@ -130,6 +133,8 @@ typedef struct {
 } t_dram_block_tagged;
 
 #ifdef INTELFPGA_CL
+typedef int t_accumulator;
+
 typedef struct {
     unsigned char maxOutputHeightTileSize; //maxTP
     unsigned char maxOutputWidthTileSize; //maxTQ
@@ -191,6 +196,28 @@ typedef struct __attribute__((packed)){
     t_transfer_block values;
     uint1_t isLast;
 } t_transferblock_local;
+
+t_transfer_block bias2TransferBlcok (t_accumulator bias)
+{
+    t_transfer_block transferBlock;
+    transferBlock.values[0].cluster_values[0] = bias & 0xFF;
+    transferBlock.values[0].cluster_values[1] = (bias >> 8) & 0xFF;
+    transferBlock.values[1].cluster_values[0] = (bias >> 16) & 0xFF;
+    transferBlock.values[1].cluster_values[1] = (bias >> 24) & 0xFF;
+    return transferBlock;
+
+}
+
+t_accumulator transferBlock2Bias (t_transfer_block block)
+{
+    t_accumulator bias =
+        ( ((t_accumulator) block.values[0].cluster_values[0]) & 0xFF )
+        | (( ((t_accumulator) block.values[0].cluster_values[1]) & 0xFF ) << 8)
+        | (( ((t_accumulator) block.values[1].cluster_values[0]) & 0xFF ) << 16)
+        | (( ((t_accumulator) block.values[1].cluster_values[1]) & 0xFF ) << 24);
+
+    return bias;
+}
 #endif
 //#endif
 
@@ -204,7 +231,6 @@ typedef uint12_t t_weight;
 
 //Needs to be signed!!!!
 typedef char t_operand;
-typedef int t_accumulator;
 
 #ifdef DIRECT_COMPRESSION_SIMD
 //With the max transport length and last bit annotation

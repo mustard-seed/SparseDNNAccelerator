@@ -10,10 +10,6 @@
 #define PE_NUM_X PE_COLS
 #define PE_NUM_Y PE_ROWS
 
-#define TRUE 0X1
-#define FALSE 0x0
-
-
 /*
 Used to control whether the weight/activation transport should forward the block received
 */
@@ -30,6 +26,13 @@ typedef struct __attribute__((packed)) {
 	unsigned char biasFracWidth;
 	unsigned char outputFracWidth;
 } t_drainTransportInstruction;
+
+
+typedef struct __attribute__((packed)) {
+	unsigned char numPSumToProcess;
+	unsigned char numBitsToRightShift;
+	uint1_t enableRelu;
+} t_outputInstruction;
 
 
 #ifdef DIRECT_COMPRESSION_SIMD
@@ -156,16 +159,14 @@ channel t_transferblock_tagged channel_activationOutput __attribute__((depth(1))
 channel t_transferblock_tagged channel_weightInput __attribute__((depth(1)));
 channel t_transferblock_tagged channel_weightOutput __attribute__((depth(1)));
 #endif
-channel t_operand channel_biasInput __attribute__((depth(1)));
-channel t_operand channel_biasOutput __attribute__((depth(1)));
+//channel t_operand channel_biasInput __attribute__((depth(1)));
+//channel t_operand channel_biasOutput __attribute__((depth(1)));
 channel t_accumulator channel_drainInput __attribute__((depth(1)));
-channel t_operand channel_drainOutput __attribute__((depth(1)));
-channel t_pe_prototype_instruction channel_instructionInput __attribute__((depth(1)));
-channel t_pe_prototype_instruction channel_instructionOutputVertical __attribute__((depth(1)));
-channel t_pe_prototype_instruction channel_instructionOutputHorizontal __attribute__((depth(1)));
+channel t_accumulator channel_drainOutput __attribute__((depth(1)));
+channel t_operand channel_processedDrain __attribute__((depth(0)));
 
-channel t_operand channel_peBiasInput __attribute__((depth(0)));
-channel t_drainTransportInstruction channel_drainTransportInstruction __attribute__((depth(0)));
+
+channel t_outputInstruction channel_outputInstruction __attribute__((depth(0)));
 
 #ifdef DIRECT_COMPRESSION_SIMD
 channel t_simdblock_bitmask channel_dpWeightInput __attribute__((depth(PE_VEC_FIFO_SIZE)));
@@ -180,164 +181,38 @@ channel t_alignment_input channel_alignmentInput __attribute__((depth(0)));
 channel t_alignment_output channel_alignmentOutput __attribute__((depth(0)));
 
 #endif
-//channel t_operand channel_pSumManagerActivationInput __attribute__((depth(0)));
-channel t_mac_operands channel_macOperandsInput __attribute__((depth(0)));
-//channel t_accumulator channel_pSumManagerMacInput __attribute__((depth(0)));
 
 channel t_accumulator channel_peDrainOutput __attribute__((depth(0)));
 
 
 
-
-
 __attribute__((task))
 __attribute__((max_global_work_dim(0)))
 __attribute__ ((autorun))
-__kernel void kernelInstructionTransport (
-		//int idx,
-		//int idy
-	)
+__kernel void kernelOutputModifier (
+	) 
 {
-	int idx = IDX;
-	int idy = IDY;
-		t_pe_prototype_instruction instruction = read_channel_intel(channel_instructionInput);
 
-		//Forward the instruction to other the activaion transport
-		//t_convBlockTransportInstruction activationInstruction, weightInstruction;
-		//activationInstruction.forwardEnable = (idy < instruction.maxIDY) ? 
-		//	0x1 : 0x0;
-		//weightInstruction.forwardEnable = (idx < instruction.maxIDX) ? 
-		//	0x1 : 0x0;
+	while (true)
+	{
+		//Decode the instruction
+		t_outputInstruction instruction = read_channel_intel(channel_outputInstruction);
+		unsigned char numPSum = instruction.numPSumToProcess;
+		unsigned char rndRightShift = instruction.numBitsToRightShift - 1;
+		uint1_t enableRelu = instruction.enableRelu;
 
-		t_drainTransportInstruction drainInstruction;
-		drainInstruction.biasForwardEnable = (idx < instruction.maxIDX) ? 
-			0x1 : 0x0;
-		drainInstruction.numPSumToSend = (unsigned char) (instruction.maxIDY - idy + 1);
-		drainInstruction.accumulatorFracWidth = instruction.fracW + instruction.fracDin;
-		drainInstruction.biasFracWidth = instruction.fracW;
-		drainInstruction.outputFracWidth = instruction.fracDout;
-
-		//write_channel_intel(channel_activationTransportInstructionInput, activationInstruction);
-		//write_channel_intel(channel_weightTransportInstructionInput, weightInstruction);
-		write_channel_intel(channel_drainTransportInstruction, drainInstruction);
-
-		if ( ( (0x1FF & idy) == 0 ) && ( (0x1FF & idx) < (instruction.maxIDX) ) ) {
-			//pass right
-			write_channel_intel(channel_instructionOutputHorizontal, instruction);
+		unsigned char countPSum = 0;
+		while (countPSum < numPSum)
+		{
+			t_accumulator accumulator = read_channel_intel(channel_drainOutput);
+			
+			t_operand result = modifyOutput(accumulator, rndRightShift, enableRelu);
+			
+			write_channel_intel(channel_processedDrain, result);
+			
+			countPSum++;		
 		}
-		if ( (0x1FF & idy) < (instruction.maxIDY)) {
-			//pass down
-			write_channel_intel(channel_instructionOutputVertical, instruction);
-		}	
-}
-
-__attribute__((task))
-__attribute__((max_global_work_dim(0)))
-__attribute__ ((autorun))
-__kernel void kernelDrainTransport (
-		//int idx,
-		//int idy
-	)
-{
-	int idx = IDX;
-	int idy = IDY;
-
-	uint1_t biasState = 0x0,
-		    drainState = 0x0;
-
-	t_accumulator bias;
-	unsigned char drainCount = 0;
-	unsigned char biasLeftShift;
-	unsigned char accumulatorRightShift;
-	unsigned char numPSumToSend;
-	uint2_t biasForwardEnable;
-
-	while (true) {
-		if ( (drainState == 0x0) 
-			&& (biasState == 0x0)) {
-			bool success;
-			t_drainTransportInstruction instruction = read_channel_nb_intel(channel_drainTransportInstruction, &success);
-			if (success){
-				biasState = 0x1;
-				drainState = 0x1;
-				accumulatorRightShift= (unsigned char) (instruction.accumulatorFracWidth - instruction.outputFracWidth - 1);
-				biasLeftShift = instruction.accumulatorFracWidth - instruction.biasFracWidth;
-				biasForwardEnable = instruction.biasForwardEnable;
-				numPSumToSend = instruction.numPSumToSend;
-			}
-		}
-		else {
-			if (biasState == 0x1) {
-				bool readSuccess;
-				t_operand tempBias = read_channel_nb_intel(channel_biasInput, &readSuccess);
-				if (readSuccess) {
-					bias = ((t_accumulator) tempBias) 
-					<< biasLeftShift;
-					biasState = 0x0;
-				}
-				if (idx < (PE_COLS - 1)) {
-					if (readSuccess & (biasForwardEnable == 0x1)) {
-						write_channel_intel(channel_biasOutput, tempBias);
-					}
-				}
-			} // biasState
-
-			if (drainCount < numPSumToSend) {
-				t_accumulator accumulator;
-				bool success;
-				if (drainCount == 0) {
-					accumulator =
-						read_channel_nb_intel(channel_peDrainOutput, &success);
-				}
-				else {
-					accumulator =  read_channel_nb_intel(channel_drainInput, &success);
-				}
-					//Add bias, shift, and saturate
-				if (success) {
-					if (drainCount == 0) {
-						accumulator += bias;
-					}
-
-					t_operand result;
-					
-					t_accumulator signExtensionMask;
-					if(accumulator>=0)
-						signExtensionMask = 0x00;
-					else
-						signExtensionMask = ~(0xFFFFFFFF>> accumulatorRightShift); // ">>" is logic shift, then perform sign extension manually
-
-					t_accumulator accumulatorWithRndBit = 
-						(signExtensionMask 
-						| (accumulator >> 
-							( accumulatorRightShift )));
-
-
-					t_accumulator accumulatorBiased;
-					if(accumulatorWithRndBit >= ((t_accumulator) 256))
-						accumulatorBiased = 0x0FF; //=255
-					else if(accumulatorWithRndBit <((t_accumulator) -256))
-						accumulatorBiased = 0x0100; //=-256
-					else
-						accumulatorBiased = (t_accumulator) ((0x1FF & accumulatorWithRndBit)+ (t_accumulator) 0x01);
-
-					// final truncation
-					result = 0xFF & (accumulatorBiased>>0x01);  // remove the last rounding bit
-					
-					//EMULATOR_PRINT ( ("[kernelDrainTransport]: Waiting to write pSum %d \n", drainCount) );
-					//write_channel_intel(channel_drainOutput, result);
-					write_channel_intel(channel_drainOutput, result);
-					drainCount++;
-				}
-
-				if (drainCount == numPSumToSend) {
-					//EMULATOR_PRINT ( ("[kernelDrainTransport]: Committed the pSum\n") );
-					drainCount = 0;
-					drainState = 0x0;
-				}
-
-			} // drainState
-		}// else
-	}	
+	}
 }
 
 
@@ -377,8 +252,8 @@ __kernel void kernelWeightTransport (
 	//peBlock.streamingBlockIndex = block.streamingBlockIndex;
 	peBlock.isLast = block.isLast;
 
-	if (idy < (PE_ROWS - 1)){
-		if ( idy < block.maxTransportID ) {
+	if (idx < (PE_COLS - 1)){
+		if ( idx < block.maxTransportID ) {
 			//EMULATOR_PRINT ( ("[kernelWeightTransport]: Waiting to pass a weight block to the output\n") );
 			write_channel_intel(channel_weightOutput, block);
 		}
@@ -387,48 +262,105 @@ __kernel void kernelWeightTransport (
 	write_channel_intel(channel_dpWeightInput, peBlock); 
 }
 
+#define STATE_ACTIVATION_TRANSPORT_READ 0X0
+#define STATE_ACTIVATION_TRANSPORT_DRAIN_SELF 0x1
+#define STATE_ACTIVATION_TRANSPORT_DRAIN_OTHERS 0x2
+
 __attribute__((task))
 __attribute__((max_global_work_dim(0)))
 __attribute__ ((autorun))
 __kernel void kernelActivationTransport (
 	)
 {
-	
+	typedef uint2_t t_state;
 
 	int idx = IDX;
 	int idy = IDY;
 
-	#ifdef DIRECT_COMPRESSION_SIMD
-	t_simdblock_bitmask_tagged block;
-	t_simdblock_bitmask peBlock;
-	#endif
+	t_state state = STATE_ACTIVATION_TRANSPORT_READ;
+	unsigned char numOtherPSumToDrain;
+	unsigned char countOtherPSum;
 
-	#ifdef FLEXIBLE_BITMASK_COMPRESSION
-	t_transferblock_tagged block;
-	t_transferblock_local peBlock;
-	#endif
+	while (true)
+	{
+		t_state nextState = state;
+		t_accumulator pSum;
+		if (state == STATE_ACTIVATION_TRANSPORT_READ)
+		{
+			#ifdef DIRECT_COMPRESSION_SIMD
+			t_simdblock_bitmask_tagged block;
+			t_simdblock_bitmask peBlock;
+			#endif
 
-	block = read_channel_intel(channel_activationInput);
-	#pragma unroll
-	for (unsigned char i=0; i<SIMD_SIZE; i++) {
-		#ifdef DIRECT_COMPRESSION_SIMD
-			peBlock.values.values[i] = block.values[i];
-		#endif
-		#ifdef FLEXIBLE_BITMASK_COMPRESSION
-			peBlock.values.values[i] = block.values.values[i];
-		#endif
-	}
-	//peBlock.streamingBlockIndex = block.streamingBlockIndex;
-	peBlock.isLast = block.isLast;
+			#ifdef FLEXIBLE_BITMASK_COMPRESSION
+			t_transferblock_tagged block;
+			t_transferblock_local peBlock;
+			#endif
 
-	if (idx < (PE_COLS - 1)){
-		if ( idx < block.maxTransportID ) {
-			//EMULATOR_PRINT ( ("[kernelWeightTransport]: Waiting to pass an activation block to the output\n") );
-			write_channel_intel(channel_activationOutput, block);
+			block = read_channel_intel(channel_activationInput);
+			#pragma unroll
+			for (unsigned char i=0; i<SIMD_SIZE; i++) {
+				#ifdef DIRECT_COMPRESSION_SIMD
+					peBlock.values.values[i] = block.values[i];
+				#endif
+				#ifdef FLEXIBLE_BITMASK_COMPRESSION
+					peBlock.values.values[i] = block.values.values[i];
+				#endif
+			}
+			//peBlock.streamingBlockIndex = block.streamingBlockIndex;
+			peBlock.isLast = block.isLast;
+
+			if (idy < (PE_ROWS - 1)){
+				if ( idy < block.maxTransportID ) {
+					//EMULATOR_PRINT ( ("[kernelWeightTransport]: Waiting to pass an activation block to the output\n") );
+					write_channel_intel(channel_activationOutput, block);
+				}
+			}
+
+			if (block.isLast == TRUE)
+			{
+				nextState = STATE_ACTIVATION_TRANSPORT_DRAIN_SELF;	
+				numOtherPSumToDrain = block.maxTransportID - idy;
+				countOtherPSum = 0;
+			}
+
+			write_channel_intel(channel_dpActivationInput, peBlock); 
+
+		} //STATE_ACTIVATION_TRANSPORT_READ
+		else if (state == STATE_ACTIVATION_TRANSPORT_DRAIN_SELF)
+		{
+			pSum = read_channel_intel(channel_peDrainOutput);
+			EMULATOR_PRINT(("[ACTIVATION TRANSPORT] Drain from PE\n"));
+			if (countOtherPSum == numOtherPSumToDrain)
+			{
+				nextState = STATE_ACTIVATION_TRANSPORT_READ;
+			}
+			else
+			{
+				nextState = STATE_ACTIVATION_TRANSPORT_DRAIN_OTHERS;
+			}
+		} //STATE_ACTIVATION_TRANSPORT_DRAIN_SELF
+		else if (state == STATE_ACTIVATION_TRANSPORT_DRAIN_OTHERS)
+		{
+			//TODO: change the following in deply
+			pSum = read_channel_intel(channel_drainInput);
+			EMULATOR_PRINT(("[ACTIVATION TRANSPORT] Drain from Others\n"));
+			countOtherPSum++;
+			if (countOtherPSum == numOtherPSumToDrain)
+			{
+				nextState = STATE_ACTIVATION_TRANSPORT_READ;
+			} 
+		} //STATE_ACTIVATION_TRANSPORT_DRAIN_OTHERS
+
+		if ((state == STATE_ACTIVATION_TRANSPORT_DRAIN_OTHERS) 
+			|| 
+			(state == STATE_ACTIVATION_TRANSPORT_DRAIN_SELF))
+		{
+			write_channel_intel(channel_drainOutput, pSum);
 		}
-	}
 
-	write_channel_intel(channel_dpActivationInput, peBlock); 
+		state = nextState;
+	}
 }
 
 
@@ -437,35 +369,28 @@ __attribute__((task))
 __attribute__((max_global_work_dim(0)))
 __kernel void kernelTestInterface (
 		#ifdef DIRECT_COMPRESSION_SIMD
-			__global t_simdblock_host* restrict pActivationInput,
-			__global t_simdblock_host* restrict pActivationOutput,
-			__global t_simdblock_host* restrict pWeightInput,
-			__global t_simdblock_host* restrict pWeightOutput,
+			volatile __global t_simdblock_host* restrict pActivationInput,
+			volatile __global t_simdblock_host* restrict pActivationOutput,
+			volatile __global t_simdblock_host* restrict pWeightInput,
+			volatile __global t_simdblock_host* restrict pWeightOutput,
 		#endif
 		#ifdef FLEXIBLE_BITMASK_COMPRESSION
-			__global t_transfer_block* restrict pActivationInput,
-			__global t_transfer_block* restrict pActivationOutput,
-			__global t_transfer_block* restrict pWeightInput,
-			__global t_transfer_block* restrict pWeightOutput,
+			volatile __global t_transfer_block* restrict pActivationInput,
+			volatile __global t_transfer_block* restrict pActivationOutput,
+			volatile __global t_transfer_block* restrict pWeightInput,
+			volatile __global t_transfer_block* restrict pWeightOutput,
 		#endif
-		__global short * restrict pBiasIn,
-		__global short * restrict pBiasOut,
-		__global short * restrict pDrainIn, 
-		__global short * restrict pDrainOut,
-		__global t_pe_prototype_instruction_host* restrict pInstructionInput,
-		__global t_pe_prototype_instruction_host* restrict pInsructionOutputHorizontal,
-		__global t_pe_prototype_instruction_host* restrict pInstructionOutputVeritcal,
+		volatile __global int * restrict pDrainIn, 
+		volatile __global char * restrict pDrainOut,
+		int bias,
+		volatile __global t_output_instruction_host* restrict pOutputInstruction,
 		unsigned short numInputActivationBlocks,
 		unsigned short numOutputActivationBlocks,
 		unsigned short numInputWeightBlocks,
 		unsigned short numOutputWeightBlocks,
-		unsigned short numInputBias,
-		unsigned short numOutputBias,
 		unsigned short numInputDrain,
 		unsigned short numOutputDrain,
-		unsigned short numInputInstruction,
-		unsigned short numOutputInsructionHorizontal,
-		unsigned short numOutputInstructionVertical,
+
 		unsigned char maxIDX,
 		unsigned char maxIDY
 	)
@@ -474,13 +399,9 @@ __kernel void kernelTestInterface (
 				   countOutputActivationBlocks = 0,
 				   countInputWeightBlocks = 0,
 				   countOutputWeightBlocks = 0,
-				   countInputBias = 0,
-				   countOutputBias = 0,
 				   countInputDrain = 0,
 				   countOutputDrain = 0,
-				   countInputInstruction = 0,
-				   countOutputInstructionVertical = 0,
-				   countOutputInstructionHorizontal = 0;
+				   countOutputInstruction = 0;
 
 	//uint5_t		   indexActivationTracker = 0;
 	//uint5_t		   indexWeightTracker = 0;
@@ -492,13 +413,7 @@ __kernel void kernelTestInterface (
 			||
 			(countOutputWeightBlocks < numOutputWeightBlocks)
 			||
-			(countOutputBias < numOutputBias)
-			||
 			(countOutputDrain < numOutputDrain)
-			||
-			(countOutputInstructionVertical < numOutputInstructionVertical)
-			||
-			(countOutputInstructionHorizontal < numOutputInsructionHorizontal)
 		) {
 
 		if (countInputActivationBlocks < numInputActivationBlocks) {
@@ -555,13 +470,14 @@ __kernel void kernelTestInterface (
 					//hostBlock.runLength = block.streamingBlockIndex;
 					//pActivationOutput[countOutputActivationBlocks++] = block;
 					countOutputActivationBlocks++;
-					//EMULATOR_PRINT ( ("[kernelTestInferace]: Collected %d out of %d activation blocks\n", countOutputActivationBlocks, numOutputActivationBlocks) );
+					EMULATOR_PRINT ( ("[kernelTestInferace]: Collected %d out of %d activation blocks\n", countOutputActivationBlocks, numOutputActivationBlocks) );
 					//DEBUG_PRINT ( ("[kernelTestInferace]: Collected %d out of %d activation blocks\n", countOutputActivationBlocks, numOutputActivationBlocks) );
 				}
 			}
 		}
 
-		if (countInputWeightBlocks < numInputWeightBlocks) {
+		//Need an extra one for bias
+		if (countInputWeightBlocks < (numInputWeightBlocks+1)) {
 			bool valid;
 
 			#ifdef DIRECT_COMPRESSION_SIMD
@@ -573,15 +489,17 @@ __kernel void kernelTestInterface (
 				t_transferblock_tagged taggedBlock;
 			#endif
 
-			block = pWeightInput[countInputWeightBlocks];
+			block = (countInputWeightBlocks == 0) ?
+				bias2TransferBlcok( (t_accumulator) bias)
+				: pWeightInput[countInputWeightBlocks-1];
 
 			#pragma unroll
 			for (unsigned char i=0; i<SIMD_SIZE; i++) {
 				taggedBlock.values.values[i] = block.values[i];
 			}
 
-			//uint6_t indexInStreamingBlock = indexWeightTracker + (uint6_t) block.runLength; 
-			uint1_t isLast = (countInputWeightBlocks == (numInputWeightBlocks - 1)) ? 
+			//Need an extra one for bias
+			uint1_t isLast = (countInputWeightBlocks == (numInputWeightBlocks)) ? 
 				TRUE : FALSE;
             //taggedBlock.streamingBlockIndex = indexInStreamingBlock;
             taggedBlock.isLast = isLast;;
@@ -595,8 +513,9 @@ __kernel void kernelTestInterface (
 			}
 		}
 
+		//Need an extra one for bias
 		if ( (0x1FF & idx) < (PE_NUM_X - 1) ) {
-			if (countOutputWeightBlocks < numOutputWeightBlocks) {
+			if (countOutputWeightBlocks < numOutputWeightBlocks+1) {
 				bool valid;
 				#ifdef DIRECT_COMPRESSION_SIMD
 					t_simdblock_host block;
@@ -618,93 +537,42 @@ __kernel void kernelTestInterface (
 					//hostBlock.runLength = block.streamingBlockIndex;
 					//pWeightOutput[countOutputWeightBlocks++] = block;
 					countOutputWeightBlocks++;
-					//EMULATOR_PRINT ( ("[kernelTestInferace]: Collected %d out of %d weight blocks\n", countOutputWeightBlocks, numOutputWeightBlocks) );
+					EMULATOR_PRINT ( ("[kernelTestInferace]: Collected %d out of %d weight blocks\n", countOutputWeightBlocks, numOutputWeightBlocks) );
 					//DEBUG_PRINT ( ("[kernelTestInferace]: Collected %d out of %d weight blocks\n", countOutputWeightBlocks, numOutputWeightBlocks) );
-				}
-			}
-		}
-
-		if (countInputBias < numInputBias) {
-			bool valid;
-			t_operand value = pBiasIn[countInputBias];
-			valid = write_channel_nb_intel (channel_biasInput, value);
-			if (valid) {
-				countInputBias++;
-			}
-		}
-
-		if ( (0x1FF & idx) < (PE_NUM_X - 1) ) {
-
-			if (countOutputBias < numOutputBias) {
-				bool valid;
-				short value = read_channel_nb_intel(channel_biasOutput, &valid);
-				if (valid) {
-					pBiasOut[countOutputBias++] = value;
 				}
 			}
 		}
 
 		if (countInputDrain < numInputDrain) {
 			bool valid;
-			short value = pDrainIn [countInputDrain];
+			int value = pDrainIn [countInputDrain];
 			valid = write_channel_nb_intel (channel_drainInput, value);
 			if (valid) {
 				countInputDrain++;
+				EMULATOR_PRINT ( ("[kernelTestInferace]: Sent %d out of %d pSums\n", countInputDrain, numInputDrain) );
 			}
 		}
 
-		if (countOutputBias < numOutputDrain) {
+		if (countOutputDrain < numOutputDrain) {
 			bool valid;
-			short value = read_channel_nb_intel(channel_drainOutput, &valid);
+			char value = read_channel_nb_intel(channel_processedDrain, &valid);
 			if (valid) {
-				pDrainOut [countOutputDrain++] = (short) value;
+				pDrainOut [countOutputDrain] = (char) value;
+				countOutputDrain++;
 			}
 		}
 
-		if (countInputInstruction < numInputInstruction) {
-			bool valid;
-			t_pe_prototype_instruction_host valueHost = pInstructionInput [countInputInstruction];
-			t_pe_prototype_instruction value;
-			value.maxIDX = valueHost.maxIDX;
-			value.maxIDY = valueHost.maxIDY;
-			value.fracW = valueHost.fracW;
-			value.fracDin = valueHost.fracDin;
-			value.fracDout = valueHost.fracDout;
-			valid = write_channel_nb_intel (channel_instructionInput, value);
-			if (valid) {
-				countInputInstruction++;
-			}
-		}
-
-		if ( ( (0x1FF & idy) == 0 ) && ( (0x1FF & idx) < (PE_NUM_X - 1) ) ) {
-			if (countOutputInstructionHorizontal < numOutputInsructionHorizontal) {
-				bool valid;
-				t_pe_prototype_instruction value = read_channel_nb_intel(channel_instructionOutputHorizontal, &valid);
-				t_pe_prototype_instruction_host valueHost;
-				valueHost.maxIDX = value.maxIDX;
-				valueHost.maxIDY = value.maxIDY;
-				valueHost.fracW = value.fracW;
-				valueHost.fracDin = value.fracDin;
-				valueHost.fracDout = value.fracDout;
-				if (valid) {
-					pInsructionOutputHorizontal [countOutputInstructionHorizontal++] = valueHost;
-				}
-			}
-		}
-
-		if ( (0x1FF & idy) < (PE_NUM_Y - 1)) {
-			if (countOutputInstructionVertical < numOutputInstructionVertical) {
-				bool valid;
-				t_pe_prototype_instruction value = read_channel_nb_intel(channel_instructionOutputVertical, &valid);
-				t_pe_prototype_instruction_host valueHost;
-				valueHost.maxIDX = value.maxIDX;
-				valueHost.maxIDY = value.maxIDY;
-				valueHost.fracW = value.fracW;
-				valueHost.fracDin = value.fracDin;
-				valueHost.fracDout = value.fracDout;
-				if (valid) {
-					pInstructionOutputVeritcal [countOutputInstructionVertical++] = valueHost;
-				}
+		if (countOutputInstruction < 1)
+		{
+			t_outputInstruction instruction;
+			t_output_instruction_host hostOutputInstruction = pOutputInstruction[0];
+			instruction.numPSumToProcess = hostOutputInstruction.numPSumToProcess;
+			instruction.numBitsToRightShift = hostOutputInstruction.numBitsToRightShift;
+			instruction.enableRelu = hostOutputInstruction.enableRelu ? TRUE : FALSE;
+			bool valid = write_channel_nb_intel(channel_outputInstruction, instruction);
+			if (valid)
+			{
+				countOutputInstruction++;
 			}
 		}
 		
@@ -716,6 +584,7 @@ __kernel void kernelTestInterface (
 #define ASSEMBLER_STATE_LOAD_VALUE 0X1
 //#define ASSEMBLER_STATE_ALIGN 0x2
 #define ASSEMBLER_STATE_WAIT 0x2
+#define ASSEMBLER_STATE_LOAD_BIAS 0x3
 
 #define BITWIDTH_COMPRESSION_WINDOW_INDEX 3
 #define MASK_COMPRESSION_WINDOW_INDEX 0x7
@@ -724,6 +593,7 @@ __kernel void kernelTestInterface (
 #define MAC_STATE_ALIGN 0x1
 #define MAC_STATE_PROCESS_WINDOW 0x2
 #define MAC_STATE_WRITE_PSUM 0x3
+#define MAC_STATE_LOAD_BIAS 0x4
 
 __attribute__((task))
 __attribute__((max_global_work_dim(0)))
@@ -736,9 +606,10 @@ __kernel void kernelPE ()
 	t_cluster weightWindow[COMPRESSION_WINDOW_SIZE+1][2]; 
 
 	//Flags that indicates whether we are at the last window
-	uint1_t isLast[2];
+	uint1_t isLast[2] = {FALSE, TRUE};
 	unsigned char bitmaskA[2];
 	unsigned char bitmaskW[2];
+	t_accumulator bias[2];
 
 	uint1_t regLoadSide = 0x0;
 
@@ -747,13 +618,13 @@ __kernel void kernelPE ()
 	unsigned char countWeight;
 	unsigned char numActivation;
 	unsigned char numWeight;
-	uint2_t stateActivation = ASSEMBLER_STATE_LOAD_BITMASK;
-	uint2_t stateWeight = ASSEMBLER_STATE_LOAD_BITMASK;
+	uint2_t stateActivation = ASSEMBLER_STATE_LOAD_BIAS;
+	uint2_t stateWeight = ASSEMBLER_STATE_LOAD_BIAS;
 	//unsigned long alignmentData;
 
 
 	//=========MAC side logic========================
-	uint2_t stateMac = MAC_STATE_WAIT;
+	uint3_t stateMac = MAC_STATE_WAIT;
 	t_accumulator pSum = 0;
 	unsigned char countOperands;
 	unsigned char numOperands;
@@ -773,148 +644,173 @@ __kernel void kernelPE ()
 		//================ACTIVATION========================
 		
 		uint2_t nextStateActivation = stateActivation;
-		if (stateActivation == ASSEMBLER_STATE_LOAD_BITMASK
-			|| stateActivation == ASSEMBLER_STATE_LOAD_VALUE)
-		{
-			t_transferblock_local activationTransferBlock;
-			bool activationReadSuccess;
-
-			activationTransferBlock = read_channel_nb_intel (
-						channel_dpActivationInput,
-						&activationReadSuccess
-					);
-
-			if (activationReadSuccess)
+		{ 
+			if (stateActivation == ASSEMBLER_STATE_LOAD_BITMASK
+				|| stateActivation == ASSEMBLER_STATE_LOAD_VALUE)
 			{
-				//isLastActivation = activationTransferBlock.isLast;
-				//DEBUG_PRINT(("[Assembler] Activation read!\n"));
+				t_transferblock_local activationTransferBlock;
+				bool activationReadSuccess;
 
-				if (stateActivation == ASSEMBLER_STATE_LOAD_BITMASK)
+				activationTransferBlock = read_channel_nb_intel (
+							channel_dpActivationInput,
+							&activationReadSuccess
+						);
+
+				if (activationReadSuccess)
 				{
-					unsigned char bitmask = activationTransferBlock.values.values[0].cluster_values[0];
-					bitmaskA[regLoadSide & 0x01] = bitmask;
-					numActivation = popCounter(bitmask);
-					countActivation = 0;
-					//EMULATOR_PRINT(("[assembler] bitmaskA: %#04x \n", bitmask));
-				}
-				//else
-				//{
+					//isLastActivation = activationTransferBlock.isLast;
+					//DEBUG_PRINT(("[Assembler] Activation read!\n"));
 
-					//uint3_t offset = (stateActivation == ASSEMBLER_STATE_LOAD_BITMASK) ?
-					//	0X1 : 0X0; 
-
-					#pragma unroll
-					for (uint3_t i=0; i<TRANSFER_SIZE; i++)
+					if (stateActivation == ASSEMBLER_STATE_LOAD_BITMASK)
 					{
-						//if (i >= offset)
-						//{
-							activationWindow[countActivation+i][regLoadSide & 0x01]
-								= activationTransferBlock.values.values[i];
-							//EMULATOR_PRINT(("[assembler] activation value: %#04x %#04x \n"
-							//	, activationTransferBlock.values.values[i].cluster_values[0] & 0xFF
-							//	, activationTransferBlock.values.values[i].cluster_values[1] & 0xFF));
-							//EMULATOR_PRINT(("[assembler] activation offset, countActivation: %#04x %#04x\n"
-							//	, offset, countActivation));
-						//}
-					} // for. Transfer the values in the transfer block to the compression window
-
-					//if (debugCount < maxDebugCount)
+						unsigned char bitmask = activationTransferBlock.values.values[0].cluster_values[0];
+						bitmaskA[regLoadSide & 0x01] = bitmask;
+						numActivation = popCounter(bitmask);
+						countActivation = 0;
+						EMULATOR_PRINT(("[assembler] bitmaskA: %#04x \n", bitmask));
+					}
+					//else
 					//{
-					//	DEBUG_PRINT(("[PE] ActivationTransferBlock [0-4]: %#04x %#04x %#04x %#04x\n",
-					//		activationTransferBlock.values.values[0].cluster_values[0] & 0xFF, 
-					//		activationTransferBlock.values.values[0].cluster_values[1] & 0xFF,
-					//		activationTransferBlock.values.values[1].cluster_values[0] & 0xFF,
-					//		activationTransferBlock.values.values[1].cluster_values[1] & 0xFF));
+
+						//uint3_t offset = (stateActivation == ASSEMBLER_STATE_LOAD_BITMASK) ?
+						//	0X1 : 0X0; 
+
+						#pragma unroll
+						for (uint3_t i=0; i<TRANSFER_SIZE; i++)
+						{
+							//if (i >= offset)
+							//{
+								activationWindow[countActivation+i][regLoadSide & 0x01]
+									= activationTransferBlock.values.values[i];
+								//EMULATOR_PRINT(("[assembler] activation value: %#04x %#04x \n"
+								//	, activationTransferBlock.values.values[i].cluster_values[0] & 0xFF
+								//	, activationTransferBlock.values.values[i].cluster_values[1] & 0xFF));
+								//EMULATOR_PRINT(("[assembler] activation offset, countActivation: %#04x %#04x\n"
+								//	, offset, countActivation));
+							//}
+						} // for. Transfer the values in the transfer block to the compression window
+
+						//if (debugCount < maxDebugCount)
+						//{
+							DEBUG_PRINT(("[PE] ActivationTransferBlock [0-4]: %#04x %#04x %#04x %#04x\n",
+								activationTransferBlock.values.values[0].cluster_values[0] & 0xFF, 
+								activationTransferBlock.values.values[0].cluster_values[1] & 0xFF,
+								activationTransferBlock.values.values[1].cluster_values[0] & 0xFF,
+								activationTransferBlock.values.values[1].cluster_values[1] & 0xFF));
+						//}
+
+						countActivation += (unsigned char)(TRANSFER_SIZE);
 					//}
 
-					countActivation += (unsigned char)(TRANSFER_SIZE);
-				//}
+					//State update
+					if (countActivation > numActivation) //countActivation needs to be strictly larger than numActivation
+					{
+						nextStateActivation = ASSEMBLER_STATE_WAIT;
+					}
+					else {
+						nextStateActivation = ASSEMBLER_STATE_LOAD_VALUE;
+					}
 
-				//State update
-				if (countActivation > numActivation) //countActivation needs to be strictly larger than numActivation
-				{
-					nextStateActivation = ASSEMBLER_STATE_WAIT;
-				}
-				else {
-					nextStateActivation = ASSEMBLER_STATE_LOAD_VALUE;
-				}
-
-			} // if activationReadSuccess
+				} // if activationReadSuccess
+			} // ASSEMBLER_STATE_LOAD_BITMASK || ASSEMBLER_STATE_LOAD_VALUE 
+			else if (stateActivation == ASSEMBLER_STATE_LOAD_BIAS)
+			{
+				EMULATOR_PRINT(("[ACTIVATION ASSEMBLER] Wait for bias\n"));
+				nextStateActivation = ASSEMBLER_STATE_WAIT;
+			}
 		}
 		//===================================================
 
 		//================WEIGHT========================
+		
 		uint2_t nextStateWeight = stateWeight;
-		if (stateWeight == ASSEMBLER_STATE_LOAD_BITMASK
-			|| stateWeight == ASSEMBLER_STATE_LOAD_VALUE)
 		{
-			t_transferblock_local weightTransferBlock;
 			bool weightReadSuccess;
-			weightTransferBlock = read_channel_nb_intel (
-						channel_dpWeightInput,
-						&weightReadSuccess
-					);
+			t_transferblock_local weightTransferBlock;
 
-			if (weightReadSuccess)
+			if (stateWeight == ASSEMBLER_STATE_LOAD_BITMASK
+				|| stateWeight == ASSEMBLER_STATE_LOAD_VALUE
+				|| stateWeight == ASSEMBLER_STATE_LOAD_BIAS) 
 			{
-				isLast[regLoadSide & 0x01] = weightTransferBlock.isLast;
-				//DEBUG_PRINT(("[Assembler] Weight read!\n"));
+				weightTransferBlock = read_channel_nb_intel (
+							channel_dpWeightInput,
+							&weightReadSuccess
+						);
+			}
 
-				if (stateWeight == ASSEMBLER_STATE_LOAD_BITMASK)
+			if (stateWeight == ASSEMBLER_STATE_LOAD_BITMASK
+				|| stateWeight == ASSEMBLER_STATE_LOAD_VALUE)
+			{
+				if (weightReadSuccess)
 				{
-					unsigned char bitmask =  weightTransferBlock.values.values[0].cluster_values[0];
-					bitmaskW[regLoadSide & 0x01] = bitmask; 
-					numWeight = popCounter(bitmask);
-					countWeight = 0;
-					//EMULATOR_PRINT(("[assembler] bitmaskW: %#04x \n", bitmask));
-				}
-				//else
-				//{
+					isLast[regLoadSide & 0x01] = weightTransferBlock.isLast;
+					//DEBUG_PRINT(("[Assembler] Weight read!\n"));
 
-					//uint3_t offset = (stateWeight == ASSEMBLER_STATE_LOAD_BITMASK) ?
-					//	0X1 : 0X0; 
-
-					#pragma unroll
-					for (uint3_t i=0; i<TRANSFER_SIZE; i++)
+					if (stateWeight == ASSEMBLER_STATE_LOAD_BITMASK)
 					{
-						//if (i >= offset)
-						//{
-							weightWindow[countWeight+i][regLoadSide & 0x01]
-								= weightTransferBlock.values.values[i];
-							//EMULATOR_PRINT(("[assembler] weight value: %#04x %#04x \n"
-							//	, weightTransferBlock.values.values[i].cluster_values[0] & 0xFF
-							//	, weightTransferBlock.values.values[i].cluster_values[1] & 0xFF));
-						//}
-					} // for. Transfer the values in the transfer block to the compression window
-
-					//if (debugCount < maxDebugCount)
+						unsigned char bitmask =  weightTransferBlock.values.values[0].cluster_values[0];
+						bitmaskW[regLoadSide & 0x01] = bitmask; 
+						numWeight = popCounter(bitmask);
+						countWeight = 0;
+						EMULATOR_PRINT(("[assembler] bitmaskW: %#04x \n", bitmask));
+					}
+					//else
 					//{
-					//	DEBUG_PRINT(("[PE] weightTransferBlock [0-4]: %#04x %#04x %#04x %#04x\n",
-					//		weightTransferBlock.values.values[0].cluster_values[0] & 0xFF, 
-					//		weightTransferBlock.values.values[0].cluster_values[1] & 0xFF,
-					//		weightTransferBlock.values.values[1].cluster_values[0] & 0xFF,
-					//		weightTransferBlock.values.values[1].cluster_values[1] & 0xFF));
+
+						//uint3_t offset = (stateWeight == ASSEMBLER_STATE_LOAD_BITMASK) ?
+						//	0X1 : 0X0; 
+
+						#pragma unroll
+						for (uint3_t i=0; i<TRANSFER_SIZE; i++)
+						{
+							//if (i >= offset)
+							//{
+								weightWindow[countWeight+i][regLoadSide & 0x01]
+									= weightTransferBlock.values.values[i];
+								//EMULATOR_PRINT(("[assembler] weight value: %#04x %#04x \n"
+								//	, weightTransferBlock.values.values[i].cluster_values[0] & 0xFF
+								//	, weightTransferBlock.values.values[i].cluster_values[1] & 0xFF));
+							//}
+						} // for. Transfer the values in the transfer block to the compression window
+
+						//if (debugCount < maxDebugCount)
+						//{
+							DEBUG_PRINT(("[PE] weightTransferBlock [0-4]: %#04x %#04x %#04x %#04x\n",
+								weightTransferBlock.values.values[0].cluster_values[0] & 0xFF, 
+								weightTransferBlock.values.values[0].cluster_values[1] & 0xFF,
+								weightTransferBlock.values.values[1].cluster_values[0] & 0xFF,
+								weightTransferBlock.values.values[1].cluster_values[1] & 0xFF));
+						//}
+
+						countWeight += (unsigned char)(TRANSFER_SIZE);
 					//}
 
-					countWeight += (unsigned char)(TRANSFER_SIZE);
-				//}
+					//State update
+					if (countWeight > numWeight) //countWeight needs to be strictly larger than numWeight
+					{
+						nextStateWeight = ASSEMBLER_STATE_WAIT;
+					}
+					else 
+					{
+						nextStateWeight = ASSEMBLER_STATE_LOAD_VALUE;
+					}
 
-				//State update
-				if (countWeight > numWeight) //countWeight needs to be strictly larger than numWeight
+				} // if weightReadSuccess
+			} //ASSEMBLER_STATE_LOAD_BITMASK || ASSEMBLER_STATE_LOAD_VALUE
+			else if (stateWeight == ASSEMBLER_STATE_LOAD_BIAS)
+			{
+				if (weightReadSuccess)
 				{
+					EMULATOR_PRINT(("[WEIGHT ASSEMBLER] Wait for bias\n"));
+					bias[regLoadSide & 0x01] = transferBlock2Bias(weightTransferBlock.values);
 					nextStateWeight = ASSEMBLER_STATE_WAIT;
 				}
-				else 
-				{
-					nextStateWeight = ASSEMBLER_STATE_LOAD_VALUE;
-				}
-
-			} // if weightReadSuccess
+			}
 		}
 		//===================================================
 
 		//==================MAC states===================
-		uint2_t nextStateMac = stateMac;
+		uint3_t nextStateMac = stateMac;
 
 		if (stateMac == MAC_STATE_ALIGN)
 		{
@@ -1038,10 +934,16 @@ __kernel void kernelPE ()
 				//DEBUG_PRINT(("[MAC] Sending!\n"));
 				EMULATOR_PRINT(("[MAC] Commit. pSum value: %#04x \n", pSum));
 				//DEBUG_PRINT(("[PE Psum] Commit. %#04x\n", pSum));
-				pSum = 0;
+				//pSum = 0;
 				nextStateMac = MAC_STATE_WAIT;
 				//pSum = 0;
 			}
+		}
+		else if (stateMac == MAC_STATE_LOAD_BIAS)
+		{
+			EMULATOR_PRINT(("[MAC] Load Bias\n"));
+			pSum = bias[(~regLoadSide) & 0x1];
+			nextStateMac = MAC_STATE_WAIT;
 		}
 
 
@@ -1051,9 +953,12 @@ __kernel void kernelPE ()
 			&& (stateWeight == ASSEMBLER_STATE_WAIT)
 			&& (stateMac == MAC_STATE_WAIT) )
 		{
-			nextStateWeight = ASSEMBLER_STATE_LOAD_BITMASK;
-			nextStateActivation = ASSEMBLER_STATE_LOAD_BITMASK;
-			nextStateMac = MAC_STATE_ALIGN;
+			nextStateWeight = (isLast[(regLoadSide) & 0x1] == TRUE) ? 
+				ASSEMBLER_STATE_LOAD_BIAS : ASSEMBLER_STATE_LOAD_BITMASK;
+			nextStateActivation = (isLast[(regLoadSide) & 0x1] == TRUE) ? 
+				ASSEMBLER_STATE_LOAD_BIAS : ASSEMBLER_STATE_LOAD_BITMASK;
+			nextStateMac = (isLast[(~regLoadSide) & 0x1] == TRUE) ?
+				MAC_STATE_LOAD_BIAS: MAC_STATE_ALIGN;
 
 			regLoadSide = ~regLoadSide;
 			//countActivation = 0;
