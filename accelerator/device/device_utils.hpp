@@ -37,7 +37,7 @@ t_operand modifyOutput (
 	}
 
 	t_accumulator signExtensionMask = (comparedAccumulator>=0) ?
-		0x00 : ~(0xFFFFFFFF >> rndRightShift);
+		0x00 : ~(0xFFFF >> rndRightShift);
 
 	t_accumulator shiftedAccumulator = comparedAccumulator >> rndRightShift;
 

@@ -79,6 +79,8 @@ boost::alignment::aligned_allocator<t_output_instruction_host, aocl_utils_cpp::A
 //std::vector<cl_short>
 t_aligned_output_instruction_vector;
 
+typedef short t_bias;
+
 #ifdef DIRECT_COMPRESSION_SIMD
 typedef
 std::vector<t_simdblock_host, boost::alignment::aligned_allocator<t_simdblock_host, aocl_utils_cpp::AOCL_ALIGNMENT>>
@@ -132,7 +134,7 @@ protected:
     t_aligned_transfer_block_vector inputWeightVector;
     t_aligned_transfer_block_vector outputWeightVector;
 #endif
-    aligned_int_vector inputDrainVector;
+    aligned_short_vector inputDrainVector;
     aligned_char_vector outputDrainVector;
 
     //Profile function
@@ -258,7 +260,7 @@ protected:
         //Need to setup numInstructions, idx, and idy separately
     }
 
-    void launch (int idx, int idy, int maxIdx, int maxIdy, int bias, t_output_instruction_host outputInstruction, bool drainResult=true) {
+    void launch (int idx, int idy, int maxIdx, int maxIdy, t_bias bias, t_output_instruction_host outputInstruction, bool drainResult=true) {
         cl_int status;
 
         //Fill the buffers
@@ -318,7 +320,7 @@ protected:
         kernelTestInterface.setArg(3, bufferWeightOutput);
         kernelTestInterface.setArg(4, bufferDrainInput);
         kernelTestInterface.setArg(5, bufferDrainOutput);
-        kernelTestInterface.setArg(6, (cl_int) bias);
+        kernelTestInterface.setArg(6, (cl_short) bias);
         //kernelTestInterface.setArg(7, outputInstruction);
         kernelTestInterface.setArg(7, bufferOutputInstruction);
 
@@ -463,7 +465,7 @@ TEST_F (peTestFixture, testPlayfield) {
     float biasFloat = 0.0;
 
     //Then convert the bias into a fixed point number;
-    int biasFPInt = ((int) std::round(biasFloat * (1 << (fracIn + fracW))));
+    t_bias biasFP = ((t_bias) std::round(biasFloat * (1 << (fracIn + fracW))));
 
     // Generate a block of activations
 //    std::vector<float> activationRealInput = initialize_vector(
@@ -573,7 +575,7 @@ TEST_F (peTestFixture, testPlayfield) {
      };
 
 
-    launch(targetIDX, targetIDY, maxIdx, maxIdy, biasFPInt, outputInstruction);
+    launch(targetIDX, targetIDY, maxIdx, maxIdy, biasFP, outputInstruction);
 
     //Compare the result
     char actualOutputFP = outputDrainVector.at(0);
@@ -624,7 +626,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageZero) {
     //Then convert the bias into a fixed point number;
     //fixedPointNumber biasFPInput (biasFloat, fracW, intWidthWeight);
     //int biasFPInt = ((int) biasFPInput.getBits()) << numBitsToRightShift;
-    int biasFPInt = ((int) std::round(biasFloat * (1 << (fracIn + fracW))));
+    t_bias biasFP = ((t_bias) std::round(biasFloat * (1 << (fracIn + fracW))));
 
 
     // Generate a block of activations
@@ -745,7 +747,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageZero) {
     };
 
 
-   launch(targetIDX, targetIDY, maxIdx, maxIdy, biasFPInt, outputInstruction);
+   launch(targetIDX, targetIDY, maxIdx, maxIdy, biasFP, outputInstruction);
 
     //Compare the result
     char actualOutputFP = outputDrainVector.at(0);
@@ -792,7 +794,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageHalfLong) {
     float biasFloat = 1.0;
 
     //Then convert the bias into a fixed point number;
-    int biasFPInt = ((int) std::round(biasFloat * (1 << (fracIn + fracW))));
+    t_bias biasFP = ((t_bias) std::round(biasFloat * (1 << (fracIn + fracW))));
 
 
     // Generate a block of activations
@@ -913,7 +915,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageHalfLong) {
     };
 
 
-   launch(targetIDX, targetIDY, maxIdx, maxIdy, biasFPInt, outputInstruction);
+   launch(targetIDX, targetIDY, maxIdx, maxIdy, biasFP, outputInstruction);
 
     //Compare the result
     char actualOutputFP = outputDrainVector.at(0);
@@ -960,8 +962,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainage025Long) {
     float biasFloat = 1.0;
 
     //Then convert the bias into a fixed point number;
-    int biasFPInt = ((int) std::round(biasFloat * (1 << (fracIn + fracW))));
-
+    t_bias biasFP = ((t_bias) std::round(biasFloat * (1 << (fracIn + fracW))));
 
     // Generate a block of activations
     std::vector<float> activationRealInput = initialize_vector(
@@ -1081,7 +1082,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainage025Long) {
     };
 
 
-   launch(targetIDX, targetIDY, maxIdx, maxIdy, biasFPInt, outputInstruction);
+   launch(targetIDX, targetIDY, maxIdx, maxIdy, biasFP, outputInstruction);
 
     //Compare the result
     char actualOutputFP = outputDrainVector.at(0);
@@ -1128,7 +1129,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageOneLong) {
     float biasFloat = 1.0;
 
     //Then convert the bias into a fixed point number;
-    int biasFPInt = ((int) std::round(biasFloat * (1 << (fracIn + fracW))));
+    t_bias biasFP = ((t_bias) std::round(biasFloat * (1 << (fracIn + fracW))));
 
 
     // Generate a block of activations
@@ -1249,7 +1250,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageOneLong) {
     };
 
 
-   launch(targetIDX, targetIDY, maxIdx, maxIdy, biasFPInt, outputInstruction);
+   launch(targetIDX, targetIDY, maxIdx, maxIdy, biasFP, outputInstruction);
 
     //Compare the result
     char actualOutputFP = outputDrainVector.at(0);
@@ -1296,7 +1297,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageOneShort) {
     float biasFloat = 0.0;
 
     //Then convert the bias into a fixed point number;
-    int biasFPInt = ((int) std::round(biasFloat * (1 << (fracIn + fracW))));
+    t_bias biasFP = ((t_bias) std::round(biasFloat * (1 << (fracIn + fracW))));
 
 
     // Generate a block of activations
@@ -1417,7 +1418,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageOneShort) {
     };
 
 
-   launch(targetIDX, targetIDY, maxIdx, maxIdy, biasFPInt, outputInstruction);
+   launch(targetIDX, targetIDY, maxIdx, maxIdy, biasFP, outputInstruction);
 
     //Compare the result
     char actualOutputFP = outputDrainVector.at(0);
@@ -1464,8 +1465,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainage025Short) {
     float biasFloat = 0.0;
 
     //Then convert the bias into a fixed point number;
-    int biasFPInt = ((int) std::round(biasFloat * (1 << (fracIn + fracW))));
-
+    t_bias biasFP = ((t_bias) std::round(biasFloat * (1 << (fracIn + fracW))));
 
     // Generate a block of activations
     std::vector<float> activationRealInput = initialize_vector(
@@ -1585,7 +1585,7 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainage025Short) {
     };
 
 
-   launch(targetIDX, targetIDY, maxIdx, maxIdy, biasFPInt, outputInstruction);
+   launch(targetIDX, targetIDY, maxIdx, maxIdy, biasFP, outputInstruction);
 
     //Compare the result
     char actualOutputFP = outputDrainVector.at(0);

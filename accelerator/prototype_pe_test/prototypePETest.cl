@@ -90,7 +90,7 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 			//output += input.data[i]*weights.data[i];
 			// use packed DSP blocks to improve efficiency
 			#if defined (ARRIA10)
-				output += a10_mac_8bitx4(
+				output += (t_accumulator) a10_mac_8bitx4(
 					activations.values[i*4],
 					weights.values[i*4],
 					activations.values[i*4+1],
@@ -101,7 +101,7 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 					weights.values[i*4+3]
 					);
 			#elif defined (C5SOC)
-				output += c5_mac_8bitx4(
+				output += (t_accumulator) c5_mac_8bitx4(
 						activations.values[i*4],
 						weights.values[i*4],
 						activations.values[i*4+1],
@@ -380,9 +380,9 @@ __kernel void kernelTestInterface (
 			volatile __global t_transfer_block* restrict pWeightInput,
 			volatile __global t_transfer_block* restrict pWeightOutput,
 		#endif
-		volatile __global int * restrict pDrainIn, 
+		volatile __global short * restrict pDrainIn, 
 		volatile __global char * restrict pDrainOut,
-		int bias,
+		short bias,
 		volatile __global t_output_instruction_host* restrict pOutputInstruction,
 		unsigned short numInputActivationBlocks,
 		unsigned short numOutputActivationBlocks,
@@ -545,7 +545,7 @@ __kernel void kernelTestInterface (
 
 		if (countInputDrain < numInputDrain) {
 			bool valid;
-			int value = pDrainIn [countInputDrain];
+			short value = pDrainIn [countInputDrain];
 			valid = write_channel_nb_intel (channel_drainInput, value);
 			if (valid) {
 				countInputDrain++;
