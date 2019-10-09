@@ -58,16 +58,6 @@ std::vector<cl_char, boost::alignment::aligned_allocator<cl_char, aocl_utils_cpp
 aligned_char_vector;
 
 typedef
-std::vector<t_vecSpValueAndZCount, boost::alignment::aligned_allocator<t_vecSpValueAndZCount, aocl_utils_cpp::AOCL_ALIGNMENT>>
-//std::vector<cl_short>
-t_aligned_compression_vector;
-
-typedef
-std::vector<t_spValueAndZCount, boost::alignment::aligned_allocator<t_spValueAndZCount, aocl_utils_cpp::AOCL_ALIGNMENT>>
-//std::vector<cl_short>
-t_aligned_compression_scalar_vector;
-
-typedef
 std::vector<t_pe_prototype_instruction_host,
 boost::alignment::aligned_allocator<t_pe_prototype_instruction_host, aocl_utils_cpp::AOCL_ALIGNMENT>>
 //std::vector<cl_short>
@@ -81,22 +71,6 @@ t_aligned_output_instruction_vector;
 
 typedef short t_bias;
 
-#ifdef DIRECT_COMPRESSION_SIMD
-typedef
-std::vector<t_simdblock_host, boost::alignment::aligned_allocator<t_simdblock_host, aocl_utils_cpp::AOCL_ALIGNMENT>>
-//std::vector<cl_short>
-t_aligned_compression_simd_vector;
-
-typedef
-std::vector<t_vecUnpackedHost, boost::alignment::aligned_allocator<t_vecUnpackedHost, aocl_utils_cpp::AOCL_ALIGNMENT>>
-//std::vector<cl_short>
-t_aligned_compression_host_vector;
-
-typedef
-std::vector<t_spValueAndZCountUnpackedHost, boost::alignment::aligned_allocator<t_spValueAndZCountUnpackedHost, aocl_utils_cpp::AOCL_ALIGNMENT>>
-//std::vector<cl_short>
-t_aligned_compression_scalar_host_vector;
-#endif
 class peTestFixture : public ::testing::Test
 {
 protected:

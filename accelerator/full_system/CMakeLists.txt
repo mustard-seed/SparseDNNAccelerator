@@ -1,20 +1,22 @@
 include (${PROJECT_SOURCE_DIR}/config.cmake)
 
-set (TEST_NAME "simpleWeightMemory")
+set (TEST_NAME "fullSystem")
 
 set (PREPROCESSOR_DEFS
 #        -DWEIGHT_MEMORY_TEST
 #        -DHW_DEBUG
-        -DSIMPLE_WEIGHT_MEMORY_TEST
-        -DSIMPLE_WEIGHT_STREAMER
         -DFLEXIBLE_BITMASK_COMPRESSION
         -DMEMORY_READER
+        -DPE_SYSTEM
+        -DFULL_SYSTEM
         )
 
 add_definitions(
 #   -DDIRECT_COMPRESSION_SIMD
     -DFLEXIBLE_BITMASK_COMPRESSION
     -DMEMORY_READER
+    -DPE_SYSTEM
+    -DFULL_SYSTEM
     )
 
 ############################################
@@ -158,7 +160,7 @@ include (${PROJECT_SOURCE_DIR}/aoc.cmake)
 
 # Find the kernel source files. Note, GLOB isn't the recommended way. One needs to touch the CMakesList.txt to effect changes
 file(GLOB_RECURSE kernel_files
-     ${PROJECT_SOURCE_DIR}/device/simple_weight_memory_test.cl
+#     ${PROJECT_SOURCE_DIR}/device/simple_weight_memory_test.cl
      ${PROJECT_SOURCE_DIR}/device/sparse_pe_system.cl
      ${PROJECT_SOURCE_DIR}/device/channels.cl
 )

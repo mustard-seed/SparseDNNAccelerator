@@ -7,10 +7,14 @@ set (PREPROCESSOR_DEFS
         -DHW_DEBUG
 #        -DDIRECT_COMPRESSION_SIMD
          -DFLEXIBLE_BITMASK_COMPRESSION
+         -DPE_SYSTEM
+         -DPE_PROTOTYPE_TEST
         )
 add_definitions(
 #   -DDIRECT_COMPRESSION_SIMD
     -DFLEXIBLE_BITMASK_COMPRESSION
+    -DPE_SYSTEM
+    -DPE_PROTOTYPE_TEST
     )
 
 ############################################
@@ -156,7 +160,8 @@ include (${PROJECT_SOURCE_DIR}/aoc.cmake)
 
 # Find the kernel source files. Note, GLOB isn't the recommended way. One needs to touch the CMakesList.txt to effect changes
 file(GLOB_RECURSE kernel_files
-     ${PROJECT_SOURCE_DIR}/device/peComponents.cl
+#     ${PROJECT_SOURCE_DIR}/device/peComponents.cl
+     ${PROJECT_SOURCE_DIR}/device/sparse_pe_system.cl
      ${CMAKE_CURRENT_SOURCE_DIR}/prototypePETest.cl
 )
 

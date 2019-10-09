@@ -39,4 +39,6 @@ unsigned long operandMatcher8 (
 	);
 
 unsigned char leadingZeroCounter (unsigned char bitmask);
+
+
 #endif  

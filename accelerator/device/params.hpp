@@ -60,11 +60,7 @@
 #define PACKET_SIZE 1
 
 #define PE_ROWS 8
-#ifdef SIMPLE_WEIGHT_STREAMER
-#define PE_COLS 4
-#else
 #define PE_COLS 2
-#endif
 
 //Encoding weight length
 #define ENCODING_LENGTH 64
