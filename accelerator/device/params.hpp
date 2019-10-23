@@ -71,9 +71,11 @@
 #define SYNC_SIZE 8
 #define MAX_SIMD_BLOCK_INDEX 0x0FF
 
-#define COMPRESSION_WINDOW_SIZE 8
-#define TRANSFER_SIZE 2
-#define CLUSTER_SIZE 2
+#define COMPRESSION_WINDOW_SIZE 8 //compression window size in terms of clusters
+#define TRANSFER_SIZE 2 //transfer block size in terms of clusters
+#define CLUSTER_SIZE 2 //cluster size in terms of values
+#define VALUE_TO_CLUSTER_SHIFT 1 //amount of right shift required to convert a value index into cluster index
+#define VALUE_DIVIDED_BY_CLUSTER_SIZE_REMAINDER_MASK 0x1;
 
 #define BURST_SIZE_BYTE 32
 
@@ -83,9 +85,19 @@
 #define KERNEL_CACHE_DEPTH KERNEL_CACHE_SIZE_BYTE/BURST_SIZE_BYTE
 #define KERNEL_CACHE_DEPTH_MASK 0x03FF
 
-#define WIDE_SIZE BURST_SIZE_BYTE/CLUSTER_SIZE/TRANSFER_SIZE  //Each cluster takes 4 bytes, so need 8 cluster size to populate 256 bits
+#define IA_CACHE_SIZE_BYTE 32768
+#define IA_CACHE_DEPTH IA_CACHE_SIZE_BYTE/BURST_SIZE_BYTE
+
+#define OA_CACHE_SIZE_BYTE 32768
+#define OA_CACHE_SIZE OA_CACHE_SIZE_BYTE
+
+#define WIDE_SIZE BURST_SIZE_BYTE/CLUSTER_SIZE/TRANSFER_SIZE  //Each transfer block takes 4 bytes, so need 8 transfer blocks to populate 256 bits
 #define WIDE_SIZE_OFFSET 0x3 //Numnber of bits to shift the transfer block index to the right in order to recover the wide offset
 #define WIDE_SIZE_REMAINDER_MASK 0x7
+
+#define NUM_CLUSTER_IN_DRAM_SIZE BURST_SIZE_BYTE/CLUSTER_SIZE
+#define CLUSTER_TO_TRANSFER_BLOCK_SIZE_RIGHT_SHIFT 0x1
+#define CLUSTER_TO_TRANSFER_BLOCK_SIZE_REMAINDER_MASK 0X1;
 
 #define KERNEL_INDEX_CACHE_DEPTH 512
 #define KERNEL_INDEX_CACHE_DEPTH_MASK 0x1FF

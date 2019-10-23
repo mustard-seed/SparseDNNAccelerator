@@ -5,8 +5,841 @@
 #include "ihc_apint.h"
 #include "rtl_lib.hpp"
 
-#if defined(MEMORY_READER)
+#ifdef MEMORY_READER
+/*! kernelSimpleWeightStreamer
+Important assumption: The address cache only stores the BRAM address of the first streaming block in each strip.
+*/
+__attribute__((max_global_work_dim(0)))
+__kernel void kernelMemoryReader (
+	/*
+	Pointers to external memory regions
+	*/
 
+	//Pointer to the filter weights in external memory
+	 volatile __global t_dram_block* restrict pDramWeights,
+	 //Pointer to filter transfer block count
+	 volatile __global t_streamblock_address* restrict pWeightStreamBlockAddress,
+	 //Pointer to input activations
+	 volatile __global t_dram_block* restrict pInputActivation,
+	 //Pointer to input activation transfer block count
+	 volatile __global t_streamblock_address* restrict pIAStreamBlockAddress,
+	 //Pointer to bias
+	 volatile __global t_accumulator* restrict pBias,
+
+	 /*
+	 //Distance between the start of successive X-Y strip/filters in DRAM in terms of transfer blocks
+	 */
+	unsigned int strideExternalMemoryWeights,
+	unsigned int strideExternalMemoryIA,
+
+
+	/*
+	Output width tiling parameters
+	*/
+	unsigned short outputWidth, //Q
+	unsigned char sizeOutputTilePerColumnWidth, //TQ_A
+	unsigned char sizeOutputTileWidthPerColumnPartial, //Output tile width per column for the final few columns
+	//Ad-hoc parameters
+	//They are employed to deal with the irregularities in output width tiling caused by 
+	//imperfect division between number of PE columns and the overall activation width
+	//if 0 <= iterQ < maxRegularQ, then all the PE columns receive tile of width TQ_A
+	//else, PE columns 0 to APartial-1 each receives a tile of width TQ_APartial, the other columns are idle.
+	unsigned short maxRegularQ, 
+	unsigned char sizePartialColumns, //APartial 
+
+	/*
+	Output height tiling parameters
+	*/
+	unsigned short outputHeight, //P
+	unsigned char sizeOutputHeightTile, //TP
+
+	/*
+	Input X-Y dimensions
+	*/
+	unsigned short inputWidth,
+	unsigned short inputHeight,
+
+	/*
+	Paddings. Assume padding is symmetrical
+	*/
+	unsigned char horizontalPadding,
+	unsigned char verticalPadding,
+
+	/*
+	Stride and kernel sizes
+	*/
+	unsigned char kernelSize,
+	unsigned char stride,
+
+	/*
+	Input and output channels
+	*/
+	unsigned int numFiltersInKernel, //L
+
+	unsigned char numGroups, // L / G
+	unsigned short numFiltersInGroup, // G
+	//unsigned short numFoldInGroup, // ceil (G / F)
+	unsigned short numInputChannelCompressionWindows,
+
+
+	//TODO: Move the following to the memory writer controller.
+	unsigned short numChannelsInInputGroupNextLayer,
+
+	/*
+	Output modification
+	*/
+	unsigned char numAccumulatorBitsToRightShift,
+	bool enableOutputRelu,
+	bool enableSparsification
+
+	) {
+	//typedef uint3_t t_state;
+	//Cache: NzBlocks blocks
+	//t_dram_block cacheNzBlocks [2][KERNEL_CACHE_DEPTH][PE_ROWS] __attribute__ ((numbanks(PE_ROWS), bankwidth(CLUSTER_SIZE*TRANSFER_SIZE*WIDE_SIZE)));
+	//t_transfer_block cacheNzBlocks [2][PE_ROWS][KERNEL_CACHE_DEPTH] __attribute__ ((numbanks(BURST_SIZE_TRANSFER_BLOCK * PE_ROWS), bankwidth(CLUSTER_SIZE*TRANSFER_SIZE)));
+
+	//Cache: Cache address of the streaming blocks
+	t_streamblock_address cacheFilterStreamingBlockAddress [4096] __attribute__((numbanks(1)));
+	t_streamblock_address cacheIAStreamingBlockAddress [4096] __attribute__((numbanks(1)));
+	t_accumulator cacheBias [4096] __attribute__((numbanks(1)));
+
+	//=============================================================
+	//Read all the streaming block address in to BRAM as soon as possible
+	//==============================================================
+	EMULATOR_PRINT(("[kernelMemoryReader] Reading the filter biases and stream block addresses\n"));
+	{
+		for (unsigned int countFilters=0; countFilters < numFiltersInKernel; countFilters++) {
+			cacheStreamingBlockAddress[countFilters] = pStreamBlockAddress[countFilters];
+		}
+
+		for (unsigned int countFilters=0; countFilters < numFiltersInKernel; countFilters++) {
+			cacheBias[countFilters] = pBias[countFilters];
+		}
+	}
+
+
+	unsigned short iterP = 0; // iterP	
+
+	//Loops
+	while (iterP < outputHeight)
+	{
+		//Calculate the effectual output tile height
+		unsigned char maxTP = (((unsigned short) sizeOutputHeightTile) < (outputHeight - iterP) ) ?
+			sizeOutputHeightTile :  (unsigned char) (outputHeight - iterP);
+
+
+		//Calculate the vertical input paddings
+		unsigned char tileTopPadding = (iterP==0) ? verticalPadding : 0;
+		unsigned char tileBottomPadding = ( (outputHeight - iterP) <= (unsigned short) (sizeOutputHeightTile) )
+			? verticalPadding : 0;
+
+		//Input activation height index that corresponds to iterP
+		unsigned short startM = iterP*(unsigned short) stride < (unsigned short) verticalPadding ?
+				0 : iterP*(unsigned short) stride - (unsigned short) verticalPadding;
+
+		unsigned short iterQ = 0; //countQCovertedByTQ
+
+		while (iterQ < outputWidth) //tq
+		{
+			/*
+			Input activation tile parameters
+			*/
+			unsigned char maxTQ_A = (iterQ < maxRegularQ) 
+				? sizeOutputTilePerColumnWidth : sizeOutputTileWidthPerColumnPartial;
+
+			unsigned char maxPeCols =  (iterQ < maxRegularQ)
+				? PE_COLS : sizePartialColumns;
+
+			unsigned short maxTQ = (unsigned short) maxTQ_A * (unsigned short) maxPeCols;
+
+			unsigned char tileLeftPadding = (iterQ == 0) ? horizontalPadding : 0;
+			unsigned char tileRightPadding = (maxTQ >= (outputWidth - iterQ)) ? horizontalPadding : 0;
+
+			//Input activation width index that corresponds to iterQ
+			unsigned short startN = iterQ*(unsigned short) stride < (unsigned short) horizontalPadding
+				0 : iterQ*(unsigned short) stride - (unsigned short) horizontalPadding;
+
+
+			unsigned char strideAcrossCol = maxTQ_A * stride;
+
+			//TODO: Move the output control into the memory writer kernel
+			/*
+			Sending the output control signal
+			*/
+			{
+				t_output_buffer_control outputControl;
+				outputControl.outputTileWidth = maxTQ_A;
+				outputControl.outputTileHeight = maxTP;
+				outputControl.numOutputGroupsCurrentLayer = numGroups;
+				outputControl.numChannelsInOutputGroupCurrentLayer = numFiltersInGroup;
+				outputControl.numChannelsInInputGroupNextLayer = numChannelsInInputGroupNextLayer;
+				outputControl.outputModifierBits = 
+					((numAccumulatorBitsToRightShift & 0xF) << 0x2)
+					| ((enableRelu & 0x1) << 0x1)
+					| ((enableSparsification & 0x1));
+
+				t_output_buffer_control_tagged outputControlTagged;
+				outputControlTagged.control = outputControl;
+				outputControlTagged.maxColID = (maxPeCols - 1);
+
+				write_channel_intel(channel_output_buffer_control, outputControlTagged);
+			}
+
+			//Range of input height that are loaded
+			unsigned short maxTM = (maxTP - 1) * (unsigned short) stride + (unsigned short) kernelSize - (unsigned short)(tileBottomPadding + tileTopPadding);
+				//Range of input width to be loaded
+			unsigned short maxTN = (maxTQ - 1) * (unsigned short) stride + (unsigned short) kernelSize - (unsigned short)(tileLeftPadding + tileRightPadding); 
+
+
+			/*
+			Load the streaming block addresses for all the INPUT activation strips in the X-Y region
+			Assume the addresses are stored in Group-H-W-C layout.
+			*/
+			{
+				
+				//SB addresses will be stored in NWC format in the cache
+				int cacheAddress = 0;
+
+				unsigned char iGroup = 0;
+				unsigned short iMGlobal = startM;
+				unsigned short iNGlobal = startN;
+				unsigned int dramAddress = (unsigned int) startM * (unsigned int) inputWidth + (unsigned int) startN; //Start from depth 0
+				while (iGroup < numGroups)
+				{
+
+					while (iNGlobal < (startN + maxTN))
+					{
+						cacheIAStreamingBlockAddress[cacheAddress] = pStreamBlockAddress[dramAddress];
+						cacheAddress++;
+						iNGlobal++;
+						dramAddress++;
+					}
+					//Update variables
+					iNGlobal = startN;
+					if (iMGlobal == (startM + maxTM - 1))
+					{
+						iMGlobal = startM;
+						iGroup++;
+					}
+					else
+					{
+						iMGlobal++;
+					} //iM
+					dramAddress = ((unsigned int) iGroup* (unsigned int) inputHeight + (unsigned int) iMGlobal)*inputWidth + (unsigned int) startN;
+				} //iGroup
+			} //SB address cache
+
+			/*
+			Filter parameters
+			*/
+			unsigned short iFilterGlobal = 0; //iL
+			unsigned int iTransferBlockFilterBaseDDR = 0;
+
+
+			for (unsigned short iGroup=0; iGroup<numGroups; iGroup++) //gl
+			{
+				/*
+					Streaming input activations to the IA buffers
+				*/
+				{
+					unsigned char iterNInTile = 0;
+					for (unsigned char iterA=0; iterA < maxPeCols; iterA++)
+					{
+						//Prepare control signals for one input buffer
+						unsigned char localLeftPadding = (iterA==0) ? tileLeftPadding : 0;
+						unsigned char localRightPadding = (iterA==maxPeCols) ? tileRightPadding : 0;
+						unsigned char inputTileWidthCol = (maxTQ_A-1) * stride + kernelSize - localLeftPadding - localRightPadding;
+						unsigned char inputTileHeightCol = (maxTP-1) * stride + kernelSize - tileTopPadding - tileBottomPadding;
+						t_input_buffer_control control;
+						control.topPadding = localTopPadding;
+						control.bottomPadding = localBottomPadding;
+						control.leftPadding = localLeftPadding;
+						control.rightPadding = localRightPadding;
+						control.inputTileWidth = inputTileWidthCol;
+						control.inputTileHeight = inputTileHeightCol;
+						control.stride = stride;
+						control.kernelSize = kernelSize;
+						control.numOutputChannelsInGroup = numFiltersInGroup;
+						control.numInputChannelCompressionWindows = numInputChannelCompressionWindows;
+
+						//Iterators that keep track of the input domain mapped to the pe column
+						unsigned short iterMGlobal = startM;
+						unsigned short iterNGlobal = startN + iterNInTile;
+
+						unsigned char maxTransferCountAlongHeight = inputTileHeightCol+1; //Need one extra iteration to transmit the control block
+
+						/*
+						Send the transfer blocks in the inputTileHeight * inputTileWidth region to the select buffer
+						Before sending each strip of transfer blocks, we need to send the number of transfer blocks in the strip.
+						Before sending the transfer block counts and the strips, we need to send the control information
+						*/
+						for (unsigned char iterMInCol=0; iterMInCol <= maxTransferCountAlongHeight; iterMInCol++) //Need one extra iteration to transmit the control block
+						{
+							unsigned short indexIAAddressCache = (iterMInCol > 0) ?
+								(iGroup * maxTM + (unsigned short) (iterMInCol-1))*(unsigned short) maxTN + (unsigned short) iterNInTile
+								: 0;
+
+							unsigned int iterTransferBlockIADramBase = (iterMInCol > 0) ?
+								((unsigned int)(iGroup * inputHeight + iterMGlobal+iterMInCol-1) * inputWidth + inputNGlobal) * strideExternalMemoryIA
+								: 0;
+
+							unsigned char maxTransferCountAlongWidth = (iterMInCol==0) ? 1 : inputTileWidthCol;
+
+							for (unsigned char iterNInCol=0; iterNInCol < maxTransferCountAlongWidth; iterNInCol++)
+							{
+								t_streamblock_address transferBlockCount = cacheIAStreamingBlockAddress[indexIAAddressCache];
+
+								unsigned short dramBlockCount = (transferBlockCount & WIDE_SIZE_REMAINDER_MASK > 0) ?
+									(transferBlockCount >> WIDE_SIZE_OFFSET) + 1 : (transferBlockCount >> WIDE_SIZE_OFFSET);
+
+								/*
+								If iterMInCol and iterNInCol are both 0, then we transfer the control blog
+								Otherwise, we first transfer the control count, then transfer the 
+								*/
+								unsigned short maxTranferCountAlongChannel = ((iterMInCol==0) && (iterNInCol==0)) ? 1 : (dramBlockCount + 1);
+								unsigned int iterTransferBlockIADram = iterTransferBlockIADramBase;
+
+								for (unsigned short iterC=0; iterC<maxTranferCountAlongChannel; iterC++)
+								{
+									t_dram_block dramBlock;
+
+									if (iterMInCol==0)
+									{
+										dramBlock = inputBufferControl2DramBlock(control);
+									}
+									else 
+									{
+										if (iterC==0)
+										{
+											dramBlock = transferBlockCount2DramBlock(transferBlockCount);
+										}
+										else 
+										{
+											dramBlock = pInputActivation[iterTransferBlockIADram >> WIDE_SIZE_OFFSET];
+											iterTransferBlockIADram += WIDE_SIZE_OFFSET;
+										}
+									}
+
+									t_dram_block_ia_tagged iaBlock;
+									iaBlock.dramBlock = dramBlock;
+									iaBlock.destinationCol = iterA;
+
+									write_channel_intel(channel_ia_wide[0], iaBlock);
+								} //for-loop iterC
+
+								indexIAAddressCache++;
+								iterTransferBlockIADramBase += strideExternalMemoryIA;							}
+							} //for-loop iterNIncol
+						} //for-loop iterMInCol
+						iterNInTile += strideAcrossCol;
+					}//iterA
+
+				} // ia buffer scope
+
+				unsigned short iFilterInGroup = 0; //gf * F
+				while (iFilterInGroup < numFiltersInGroup) //gf
+				{
+					unsigned char maxRowUsed = PE_ROWS < (numFiltersInGroup - iFilterInGroup) ?
+						PE_ROWS : (numFiltersInGroup - iFilterInGroup); //maxF
+
+					for (unsigned char iPeRow=0; iPeRow<maxRowUsed; iPeRow++)
+					{
+						unsigned short maxTransferBlockInFilter = cacheStreamingBlockAddress[iFilterGlobal];
+						t_accumulator bias = cacheBias[iFilterGlobal];
+
+						unsigned short maxDramBlockInFilter = ((maxTransferBlockInFilter & WIDE_SIZE_REMAINDER_MASK) > 0x0) ?
+							(maxTransferBlockInFilter >> WIDE_SIZE_OFFSET) + 1 : maxTransferBlockInFilter >> WIDE_SIZE_OFFSET;
+						unsigned short maxTransmitCount = maxDramBlockInFilter+1; //one extra for filter stream control;
+						
+						t_filter_streamer_control control;
+						control.numOutputs = (unsigned short) maxTP * (unsigned short) maxTQ_A;
+						control.bias = bias;
+						control.numTransferBlocks = maxTransferBlockInFilter;
+						control.maxPeCols = maxPeCols;
+
+						t_dram_block dramControl = filterStreamerControl2dramBlock(control);
+
+						unsigned int iTransferBlockDDR = iTransferBlockFilterBaseDDR;
+
+						EMULATOR_PRINT(("[kernelFilterWriter] Sending filter %d to row %d. (iHeightGlobal, iterQ): (%d, %d). Number of transfer blocks: %d\n",
+							iFilterGlobal, iPeRow, iHeightGlobal, iterQ, maxTransferBlockInFilter));
+						for (unsigned short iTransmitCount=0; iTransmitCount<maxTransmitCount; iTransmitCount++)
+						{
+							t_dram_block block;
+							if (iTransmitCount == 0) 
+							{
+								block = dramControl;
+							}
+							else
+							{
+								block = pDramWeights[iTransferBlockDDR >> WIDE_SIZE_OFFSET];
+								iTransferBlockDDR += WIDE_SIZE;
+							}
+
+							t_dram_block_tagged taggedBlock;
+							taggedBlock.dramBlock = block;
+							taggedBlock.destinationRow = iPeRow;
+
+							write_channel_intel(channel_filter_transport[0], taggedBlock);
+						} // iTransmitCount
+
+						iTransferBlockFilterBaseDDR += strideExternalMemory;
+						iFilterGlobal++;
+
+					} // iPeRow
+
+					iFilterInGroup += maxRowUsed;	
+				} // iFilterInGroup
+			} //iGroup
+			iterQ += maxTQ;
+		} // iterQ
+	iterP += maxTP;
+	}	// iterP
+}
+
+#endif //MEMORY_READER
+
+#ifdef IA_MEMORY
+#define STATE_IA_BUFFER_WRITE_CACHE_DONE 0x0
+#define STATE_IA_BUFFER_WRITE_CACHE_LOAD_TRANSFER_COUNT 0x1
+#define STATE_IA_BUFFER_WRITE_CACHE_WRITE 0x2
+__attribute__((max_global_work_dim(0)))
+__attribute__((autorun))
+__attribute__((num_compute_units(PE_COLS)))
+__kernel void kernelIABuffer ()
+{
+	int colID = get_compute_id(0);
+
+	t_dram_block cacheIABlocks [IA_CACHE_DEPTH] __attribute__((bankwidth(BURST_SIZE_BYTE)));
+	t_streamblock_address cacheIAStreamingBlockAddress [256];
+
+
+	while (true)
+	{
+		t_dram_block tileDramBlock = read_channel_intel(channel_ia_wide_local[colID]);
+		t_input_buffer_control tileControl = dramBlock2InputBufferControl(tileDramBlock);
+
+		unsigned short wNumInputWidthxHeight = (unsigned short) controlBlock.inputTileWidth * (unsigned short) controlBlock.inputTileHeight;
+		//Starting position multipliles of each x-y strip in terms od DRAM block
+		unsigned short stripStrideInCache = (controlBlock.numInputChannelCompressionWindows*(COMPRESSION_WINDOW_SIZE+1) & WIDE_SIZE_REMAINDER_MASK) > 0 ?
+			controlBlock.numInputChannelCompressionWindows*(COMPRESSION_WINDOW_SIZE+1) >> WIDE_SIZE_OFFSET + 1 
+			: controlBlock.numInputChannelCompressionWindows*(COMPRESSION_WINDOW_SIZE+1) >> WIDE_SIZE_OFFSET;
+		//Address of the iaCache, in terms of dram blocks
+		unsigned short iaCacheWideAddressBase = 0; 
+		
+		//Import the NZ block count and the IA for one tile.
+		for (unsigned short wCountInputWidthxHeight = 0; wCountInputWidthxHeight < wNumInputWidthxHeight; wCountInputWidthxHeight++)
+		{
+			t_state state = STATE_IA_BUFFER_WRITE_CACHE_LOAD_TRANSFER_COUNT;
+			t_streamblock_address wNumInputTransferBlock;
+			t_streamblock_address wCountInputTransferBlock; //Counter. Number of input transfer blocks that have been transmitted
+			unsigned short iaCacheWideAddress = iaCacheWideAddressBase;
+
+			//Load one strip
+			while ( 
+				(state == STATE_IA_BUFFER_WRITE_CACHE_LOAD_TRANSFER_COUNT)
+				|| (state == STATE_IA_BUFFER_WRITE_CACHE_WRITE)
+			)
+			{
+				t_dram_block dramBlock = read_channel_intel(channel_ia_wide_local[colID]);
+				if (state == STATE_IA_BUFFER_WRITE_CACHE_LOAD_TRANSFER_COUNT)
+				{
+					state = STATE_IA_BUFFER_WRITE_CACHE_WRITE;
+
+					wNumInputTransferBlock = dramBlock2TransferBlockCount(dramBlock);
+					cacheIAStreamingBlockAddress[wCountInputWidthxHeight] = wNumInputTransferBlock;
+					wCountInputTransferBlock = 0;
+				}
+				else
+				{
+					cacheIABlocks[iaCacheAddress++] = dramBlock;
+					wCountInputTransferBlock += WIDE_SIZE_OFFSET;
+					if (wCountInputTransferBlock >= wNumInputTransferBlock)
+					{
+						state = STATE_IA_BUFFER_WRITE_CACHE_DONE;
+					}
+				}
+			} //Load one strip
+			iaCacheWideAddressBase += stripStrideInCache;
+		} //Import the NZ block count and the IA for one tile.
+
+		// Stream the input activation blocks
+		unsigned short iFilterGlobal = 0;
+		while (iFilterGlobal < tileControl.numOutputChannelsInGroup)
+		{
+			unsigned char numPeRows = (PE_ROWS < (tileControl.numOutputChannelsInGroup - iFilterGlobal)) ?
+				PE_ROWS : (unsigned char) (tileControl.numOutputChannelsInGroup - iFilterGlobal);
+
+			//Stream the activations
+			unsigned char iPaddedTileHeight = 0;
+			unsigned char iPaddedTileWidth = 0;
+			while ( (iPaddedTileHeight+tileControl.kernelSize) <= (tileControl.inputTileHeight + tileControl.bottomPadding + tileControl.topPadding) )
+			{
+				unsigned char iPaddedHeightLocal = iPaddedTileHeight;
+				unsigned char iPaddedWidthLocal = iPaddedTileWidth;
+				unsigned char iNeuWidthLocal = 0;
+				unsigned char iNeuHeightLocal = 0;
+
+				while (iNeuHeightLocal < tileControl.kernelSize)
+				{
+					bool sendPadding = 
+						(iPaddedHeightLocal < tileControl.topPadding)
+						|| (iPaddedHeightLocal >= tileControl.inputTileHeight + tileControl.topPadding)
+						|| (iPaddedWidthtLocal < tileControl.leftPadding)
+						|| (iPaddedWidthLocal >= tileControl.inputTileWidth + tileControl.leftPadding);
+
+					unsigned char iTileHeightLocalTemp = (iPaddedHeightLocal > tileControl.topPadding) ? iPaddedHeightLocal - tileControl.topPadding : 0;
+					unsigned char iTileHeightLocal = iTileHeightLocalTemp > tileControl.inputTileHeight ? 0 : iTileHeightLocalTemp;
+					unsigned char iTileWidthLocalTemp = (iPaddedWidthLocal > tileControl.leftPadding( ? iPaddedWidthLocal - tileControl.leftPadding : 0;
+					unsigned char iTileWidthLocal = iTileWidthLocalTemp > tileControl.inputTileWidth ? 0 : iTileWidthLocalTemp;
+					
+					unsigned short flatIndex = (unsigned short) iTileHeightLocal*(unsigned char) tileControl.inputTileWidth + (unsigned short) iTileWidthLocal;
+					unsigned short iTransferBlockAddress = flatIndex;
+					unsigned short iActivationBlockAddress = flatIndex * stripStrideInCache;
+
+					t_streamblock_address numTransferBlocks = sendPadding ? tileControl.numInputChannelCompressionWindows : cacheIAStreamingBlockAddress[iTransferBlockAddress];
+					unsigned short iTransferBlock = 0;
+
+					//Setting up the bitmasks in the padded transfer blocks
+					t_transfer_block dummyBlock;
+					dummyBlock.values[0].clusters_values[0] = 0x0;
+
+					bool isLastNeuron = (iNeuWidthLocal == (tileControl.kernelSize - 1)) && (iNeuHeightLocal == (tileControl.kernelSize - 1));
+
+					while (iTransferBlock < numTransferBlocks)
+					{
+						//bool success = false;
+						t_transferblock_tagged taggedBlock;
+						taggedBlock.isLast = (((iTransferBlock + 1) == numTransferBlocks) && isLastNeuron)
+							? TRUE : FALSE;
+						taggedBlock.maxTransportID = (numPeRows - 1);
+
+						if (sendPadding)
+						{
+							taggedBlock.values = dummyBlock;
+						}
+						else
+						{
+							 t_dram_block dramBlock = cacheIABlocks[iActivationBlockAddress+(iTransferBlock >> WIDE_SIZE_OFFSET)];
+							 taggedBlock.values = dramBlock.transferBlocks[iTransferBlock & WIDE_SIZE_REMAINDER_MASK];
+						}
+
+						write_channel_intel(channel_activation[0][colID], taggedBlock);
+
+						iTransferBlock++;
+
+						//if (success)
+						//{
+						//	iTransferBlock++;
+						//}
+					} //iTransferBlock
+
+					if (iNeuWidthLocal >= (tileControl.kernelSize - 1) 
+					{
+						iNeuWidthLocal = 0;
+						iPaddedWidthLocal = iPaddedTileWidth;
+						iNeuHeightLocal++;
+						iPaddedHeightLocal++;
+					}
+					else
+					{
+						iPaddedWidthLocal++;
+						iNeuWidthLocal++;
+					}
+				} //iNeuHeightLocal
+
+
+				if ( (iPaddedTileWidth + tileControl.stride + tileControl.kernelSize) > (tileControl.inputTileWidth + tileControl.leftPadding + tileControl.rightPadding) )
+				{
+					iPaddedTileWidth = 0;
+					iPaddedTileHeight += tileControl.stride;
+				}
+				else
+				{
+					iPaddedTileWidth += tileControl.stride;
+				}
+			
+			} //Loop over input tile
+
+			//Update iFilterGloba
+			iFilterGlobal += numPeRows;
+		} //while. iFilterGlobal
+	
+	} //while
+} //Input buffer kernel
+#endif //IA_MEMORY
+
+#ifdef OA_MEMORY
+#define STATE_OA_BUFFER_SEND_CLUSTER 0x0
+#define STATE_OA_BUFFER_SEND_MASK 0x1
+__attribute__((max_global_work_dim(0)))
+__attribute__((autorun))
+__attribute__((num_compute_units(PE_COLS)))
+__kernel void kernelOABuffer ()
+{
+	int colID = get_compute_id(0);
+
+	private char cacheOutputActivations[OA_CACHE_SIZE];
+
+	typedef uint1_t t_send_state; 
+
+	while (true)
+	{
+		//Read the output tile control. Stall until read.
+		t_output_buffer_control outputControl = read_channel_intel(channel_output_buffer_local[colID]);
+		
+		//Unpack the output modifiers.
+		unsigned char numAccumulatorBitsToRightShift = outputModifier2RightShiftAmount(outputControl.outputModifierBits);
+		uint1_t enableRelu = (uint1_t) outputModifier2EnableSparsification(outputControl.outputModifierBits);
+		uint1_t enableSparsification = (uint1_t) outputModifier2EnableSparsification(outputControl.outputModifierBits);
+		unsigned short numOutputChannels = (unsigned short) outputControl.numOutputGroupsCurrentLayer * (unsigned short) numChannelsInOutputGroupCurrentLayer;
+
+		//Draining the ouput values from the PE columns, perform modification, and cache them
+		{
+			unsigned short iterOutChannelGlobal = 0;
+
+			for (unsigned char iterGroup=0; iterGroup < outputControl.numOutputGroupsCurrentLayer; iterGroup++)
+			{
+				unsigned short iterOutChannelInGroup = 0;
+				while (iterOutChannelInGroup < outputControl.numChannelsInOutputGroupCurrentLayer)
+				{
+					unsigned char maxPeRows = ((outputControl.numChannelsInOutputGroupCurrentLayer - iterOutChannelInGroup) > PE_ROWS)
+					? (unsigned char) PE_ROWS : (unsigned char) (outputControl.numChannelsInOutputGroupCurrentLayer - iterOutChannelInGroup);
+
+					unsigned short outputIndexBase = iterOutChannelGlobal;
+
+					for (unsigned char iterOutHxW=0; iterOutHxW<outputControl.numOutputTileHeightxWidth; iterOutHxW++)
+					{
+						unsigned short outputIndex = outputIndexBase;
+
+						for (unsigned char iRow=0; iRow<maxPeRows; iRow++)
+						{
+							t_accumulator wideOutput = read_channel_intel(channel_drain[0][colID]);
+							t_operand shortOutput = modifyOutput(wideOutput, numAccumulatorBitsToRightShift, enableRelu);
+							cacheOutputActivations[outputIndex++] = shortOutput;
+						}
+
+						outputIndexBase += numOutputChannels;
+					} //iterOutHxW
+
+					iterOutChannelInGroup += (unsigned short) maxPeRows;
+					iterOutChannelGlobal += (unsigned short) maxPeRows;
+
+				} //while iterOutChannelInGroup
+				
+			} //for-loop iterGroup 
+		} //Draining the PEs	
+
+		//Group the output activations into clusters, and send them to compression engine
+		{
+			unsigned short iterOutChannelGlobalBase = 0;
+			unsigned short numClustersInNextInputGroup = ((outputControl.numChannelsInInputGroupNextLayer & VALUE_DIVIDED_BY_CLUSTER_SIZE_REMAINDER_MASK) > 0) ?
+				(outputControl.numChannelsInInputGroupNextLayer >> VALUE_TO_CLUSTER_SHIFT + 1) : outputControl.numChannelsInInputGroupNextLayer >> VALUE_TO_CLUSTER_SHIFT;
+			//unsigned short numSendOperations = numClustersInNextInputGroup + 1; //Extra one for sending instructions
+
+			//Control cluster for the compressor
+			//t_cluster controlCluster;
+			//controlCluster.cluster_values[1] = ((unsigned char)(enableSparsification) << 7) | (unsigned char) ((numClustersInNextInputGroup >> 8) & 0x3F);
+			//controlCluster.cluster_values[0] = (unsigned char) (numClustersInNextInputGroup & 0xFF);
+
+			while (iterOutChannelGlobalBase < numOutputChannels)
+			{
+				unsigned short outputIndexBase = iterOutChannelGlobalBase;
+				for (unsigned char iterOutHxW=0; iterOutHxW<outputControl.numOutputTileHeightxWidth; iterOutHxW++)
+				{
+					unsigned short outputIndex = outputIndexBase;
+					unsigned short iOCInGroup=0;
+
+					//send clusters in a strip
+					t_send_state sendState = STATE_OA_BUFFER_SEND_CLUSTER;
+					unsigned short iCluster = 0;
+					unsigned char iClusterInWindow = 0;
+					char mask = 0;
+
+					while (iCluster < numClustersInNextInputGroup)
+					{
+						t_output_cluster_tagged taggedCluster;
+						bool sendFlag;
+						if (sendState == STATE_OA_BUFFER_SEND_CLUSTER)
+						{
+							bool keep = false;
+							#pragma unroll
+							for (unsigned char i=0; i<CLUSTER_SIZE; i++)
+							{
+								unsigned short tempOC = iOCInGroup + i;
+								char tempValue = (tempOC >= outputControl.numChannelsInInputGroupNextLayer) ?
+									0x0 : cacheOutputActivations[outputIndex+i];
+								taggedCluster.cluster.cluster_values[i] = tempValue;
+								keep ||= (tempValue != 0x0);
+							}
+							taggedCluster.isLastInStrip = false;
+							taggedCluster.isLastInWindow = false;
+
+							sendFlag = keep || (enableSparsification == FALSE);
+
+							if (sendFlag)
+							{
+								mask |= ((char) 1) << iClusterInWindow;
+							}
+
+							iOCInGroup += CLUSTER_SIZE;
+							outputIndex += CLUSTER_SIZE;
+							iClusterInWindow++;
+
+							if ( (iCluster+1 >= numClustersInNextInputGroup) || (iClusterInWindow == COMPRESSION_WINDOW_SIZE) )
+							{
+								sendState == STATE_OA_BUFFER_SEND_MASK;
+							}
+							else
+							{
+								iCluster++;
+							}
+						} //STATE_OA_BUFFER_SEND_CLUSTER
+						else if (sendState == STATE_OA_BUFFER_SEND_MASK)
+						{
+							taggedCluster.isLastInStrip = (iCluster+1 >= numClustersInNextInputGroup);
+							taggedCluster.isLastInWindow = true;
+							taggedCluster.cluster.cluster_values[0] = mask;
+
+							sendFlag = true;
+
+							iClusterInWindow=0;
+							mask = 0;
+
+							sendState = STATE_OA_BUFFER_SEND_CLUSTER;
+
+						} //STATE_OA_BUFFER_SEND_MASK
+
+						if (sendFlag)
+						{
+							write_channel_intel(channel_output_buffer_to_tee[colID], taggedCluster);
+						}
+
+					} //Sending the clusters in a strip
+
+					outputIndexBase += numOutputChannels;
+				} //iterOutHxW
+
+				//Shift to a different group
+				iterOutChannelGlobalBase += outputControl.numChannelsInInputGroupNextLayer;
+			} //iterOutChannelGlobalBase
+		} //Streaming the output to the compressor
+
+	} // while
+}
+
+/*
+Uses ping-pong buffer
+*/
+#define STATE_OA_COMPRESSOR_WRITE_SETUP_STRIP 0x0
+#define STATE_OA_COMPRESSOR_WRITE_LOAD_CLUSTER 0x1
+#define STATE_OA_COMPRESSOR_WRITE_WAIT 0x2
+__attribute__((max_global_work_dim(0)))
+__attribute__((autorun))
+__attribute__((num_compute_units(PE_COLS)))
+__kernel void kernelOACompressor ()
+{
+	int colID = get_compute_id(0);
+	typedef uint2_t t_state;
+
+	/*
+	==============================
+	Common parameters
+	================================
+	*/
+	private t_cluster bufferCompression[2][16]; 
+	uint1_t regWriteSide = 0x0;
+	uint1_t regIsLast[2];
+	unsigned short regNumClusterInBuffer[2];
+	char regMask[2];
+
+	/*
+	==============================
+	Write parameter
+	================================
+	*/
+	t_state writeState = STATE_OA_COMPRESSOR_WRITE_SETUP_STRIP;
+	unsigned short writeNumClusterInStrip;
+	unsigned short writeIterClusterInStrip;
+	unsigned char writeIterClusterInWindow;
+	unsigned char writeIterClusterInBuffer;
+
+	uint1_t writeSparsifyOA;
+
+	/*
+	==============================
+	Read parameter
+	================================
+	*/
+
+	while (true)
+	{	
+		t_state nextWriteState = writeState;
+		//Write side of the compressor
+		{
+			bool loadSuccess;
+			t_cluster cluster;
+			if ( (writeState == STATE_OA_COMPRESSOR_WRITE_SETUP_STRIP)
+				 || (writeState == STATE_OA_COMPRESSOR_WRITE_LOAD_CLUSTER))
+			{
+				cluster = read_channel_nb_intel(output_buffer_to_compressor[colID], &loadSuccess);
+			}
+
+			if (writeState == STATE_OA_COMPRESSOR_WRITE_SETUP_STRIP)
+			{
+				if (loadSuccess)
+				{
+					writeNumClusterInStrip = 
+						(((unsigned short) (cluster.cluster_values[1] & 0x3F)) << 8)
+						| ((unsigned short) cluster.cluster_values[0]);
+					writeSparsifyOA = (cluster.cluster_values[1] & 0x80) >> 7;
+					writeIterClusterInStrip = 0;
+					writeIterClusterInWindow = 0;
+					writeIterClusterInBuffer = 0;
+					regMask[regWriteSide] = 0;
+					regIsLast[regWriteSide] == FALSE;
+
+					nextWriteState = STATE_OA_COMPRESSOR_WRITE_LOAD_CLUSTER;
+				}
+			} //STATE_OA_COMPRESSOR_WRITE_SETUP_STRIP
+			else if (writeState == STATE_OA_COMPRESSOR_WRITE_LOAD_CLUSTER)
+			{
+				if (loadSuccess)
+				{
+					bool keep = false;
+					#pragma unroll
+					for (unsigned char i=0; i<CLUSTER_SIZE; i++)
+					{
+					 	keep ||= (cluster.cluster_values[i] != 0);
+					}
+
+					if (keep || (writeSparsifyOA==FALSE)) 
+					{
+						regMask[regWriteSide] |= (((char) 1) << writeIterClusterInWindow);
+						bufferCompression[regWriteSide][writeIterClusterInBuffer++] = cluster;
+					}
+
+					writeIterClusterInWindow++;
+					writeIterClusterInStrip++;
+
+					if (writeIterClusterInStrip == writeNumClusterInStrip) 
+						|| (writeIterClusterInWindow == COMPRESSION_WINDOW_SIZE)
+					{	
+						nextWriteState = STATE_OA_COMPRESSOR_WRITE_WAIT;
+					}
+				}
+			} //STATE_OA_COMPRESSOR_WRITE_LOAD_CLUSTER
+		}
+
+
+		writeState = nextWriteState;
+	}
+
+}
+#endif  //OA_MEMORY
+
+
+#ifdef WEIGHT_MEMROY
 
 #define STATE_FILTER_TEE_HEADER 0X0
 #define STATE_FILTER_TEE_PAYLOAD 0X1
@@ -47,15 +880,12 @@ __kernel void kernelFilterTee ()
 }
 
 #define STATE_FILTER_STREAMER_WRITE_CACHE_SETUP_CONTROL 0X0
-#define STATE_FILTER_STREAMER_WRITE_CACHE_SETUP_MAX_PE_COL 0x1
-#define STATE_FILTER_STREAMER_WRITE_CACHE_WRITE 0X2
-#define STATE_FILTER_STREAMER_WRITE_CACHE_WAIT 0X3
+#define STATE_FILTER_STREAMER_WRITE_CACHE_WRITE 0X1
+#define STATE_FILTER_STREAMER_WRITE_CACHE_WAIT 0X2
 
-#define STATE_FILTER_STREAMER_READ_CACHE_SETUP0 0X0
-#define STATE_FILTER_STREAMER_READ_CACHE_SETUP1 0x1
-#define STATE_FILTER_STREAMER_READ_CACHE_MAX_COL_SETUP 0x2
-#define STATE_FILTER_STREAMER_READ_CACHE_READ 0X3
-#define STATE_FILTER_STREAMER_READ_CACHE_WAIT 0X4
+#define STATE_FILTER_STREAMER_READ_CACHE_SETUP 0X0
+#define STATE_FILTER_STREAMER_READ_CACHE_READ 0X1
+#define STATE_FILTER_STREAMER_READ_CACHE_WAIT 0X2
 
 /*! kernelFilterStreamer
 	\brief Stream filter values to the PE array
@@ -63,18 +893,20 @@ __kernel void kernelFilterTee ()
 __attribute__((max_global_work_dim(0)))
 __attribute__((autorun))
 __attribute__((num_compute_units(PE_ROWS)))
-__kernel void kernelFilterStreamer ()
+__kernel void kernelFilterBuffer ()
 {
 	int rowID = get_compute_id(0);
 
-	typedef uint3_t t_state;
+	typedef uint2_t t_state;
 	//important to size the bankwidth, otherwise the default 32 bit will be used, resulting in complex store logic
 	t_dram_block cacheNzBlocks [2][KERNEL_CACHE_DEPTH] __attribute__((bankwidth(BURST_SIZE_BYTE))); 
 	uint1_t regWriteSide = 0x0;
-	unsigned char maxOutputHeightTileSize[2]; //maxTP
-	unsigned char maxOutputWidthTileSize[2]; //maxTQ 
+	unsigned short maxOutputCount[2];
+	//unsigned char maxOutputHeightTileSize[2]; //maxTP
+	//unsigned char maxOutputWidthTileSize[2]; //maxTQ 
 	unsigned short maxTransferBlockInFilter[2]; //maxCg
 	unsigned char maxPeCols[2];
+	t_accumulator cacheBias[2];
 
 	//=================Write into cache variables=================
 	t_state stateWriteCache = STATE_FILTER_STREAMER_WRITE_CACHE_SETUP_CONTROL;
@@ -82,10 +914,10 @@ __kernel void kernelFilterStreamer ()
 
 	//=================Read from cache variables=================
 	t_state stateReadCache = STATE_FILTER_STREAMER_READ_CACHE_WAIT;
-	unsigned short iTransferBlockInFilterRead; //iCg
-	unsigned char iWidthInOutputTileRead; //pq*A
-	unsigned char iHeightInOutputTileRead; //p
-	unsigned char maxColUsedRead; //maxA
+	unsigned short iTransferBlockInFilterRead = 0; //iCg
+	//unsigned char iWidthInOutputTileRead; //pq*A
+	//unsigned char iHeightInOutputTileRead; //p
+	unsigned short iOutputRead = 0;
 
 	#pragma ivdep array(cacheNzBlocks)
 	while (true)
@@ -96,7 +928,6 @@ __kernel void kernelFilterStreamer ()
 			bool success = false;
 			t_dram_block writeBlock;
 			if ( (stateWriteCache == STATE_FILTER_STREAMER_WRITE_CACHE_SETUP_CONTROL)
-				|| (stateWriteCache == STATE_FILTER_STREAMER_WRITE_CACHE_SETUP_MAX_PE_COL)
 				|| (stateWriteCache == STATE_FILTER_STREAMER_WRITE_CACHE_WRITE) )
 			{
 				writeBlock = read_channel_nb_intel(channel_filter_local[rowID], &success);
@@ -108,27 +939,19 @@ __kernel void kernelFilterStreamer ()
 				{
 					t_filter_streamer_control control = 
 						dramBlock2FilterStreamerControl(writeBlock);
-					maxOutputHeightTileSize[regWriteSide] = control.maxOutputHeightTileSize;
-					maxOutputWidthTileSize[regWriteSide] = control.maxOutputWidthTileSize;
+
+					//maxOutputHeightTileSize[regWriteSide] = control.maxOutputHeightTileSize;
+					//maxOutputWidthTileSize[regWriteSide] = control.maxOutputWidthTileSize;
+					maxOutputCount[regWriteSide] = control.numOutputs;
+					maxPeCols[regWriteSide] = control.maxPeCols;
 					maxTransferBlockInFilter[regWriteSide] = control.numTransferBlocks;
-					iTransferBlockInFilterWrite = 0;
+					cacheBias[regWriteSide] = control.bias;
 
 					EMULATOR_PRINT(("[kernelFilterStreamer %d] Received setup packet for a new filter. Number of transfer blocks to follow: %d\n", rowID, control.numTransferBlocks));
 
-					nextStateWriteCache = STATE_FILTER_STREAMER_WRITE_CACHE_SETUP_MAX_PE_COL;
-				}
-			} // STATE_FILTER_STREAMER_WRITE_CACHE_SETUP_CONTROL
-			else if (stateWriteCache == STATE_FILTER_STREAMER_WRITE_CACHE_SETUP_MAX_PE_COL)
-			{
-				if (success)
-				{
-					unsigned char maxPeColsLocal = dramBlock2FilterStreamerMaxPeCol(writeBlock);
-					EMULATOR_PRINT(("[kernelFilterStreamer %d] Received setup packet for the maximum number of PE cols to activate: %d\n", rowID, maxPeColsLocal));
-					maxPeCols[regWriteSide] = maxPeColsLocal;
-
 					nextStateWriteCache = STATE_FILTER_STREAMER_WRITE_CACHE_WRITE;
 				}
-			} //STATE_FILTER_STREAMER_READ_CACHE_MAX_COL_SETUP
+			} // STATE_FILTER_STREAMER_WRITE_CACHE_SETUP_CONTROL
 			else if (stateWriteCache == STATE_FILTER_STREAMER_WRITE_CACHE_WRITE)
 			{
 				if (success)
@@ -145,56 +968,48 @@ __kernel void kernelFilterStreamer ()
 		} // WRITE
 
 		t_state nextStateReadCache = stateReadCache;
+		t_transferblock_tagged weightBlockTagged;
 		
-		if (stateReadCache == STATE_FILTER_STREAMER_READ_CACHE_SETUP0)
+		if (stateReadCache == STATE_FILTER_STREAMER_READ_CACHE_SETUP)
 		{
-			iWidthInOutputTileRead = 0;
-			iHeightInOutputTileRead = 0;
-			//maxColUsedRead = (maxOutputWidthTileSize[(~regWriteSide) & 0x1] - iWidthInOutputTileRead) < PE_COLS ?
-			//	(maxOutputWidthTileSize[(~regWriteSide) & 0x1] - iWidthInOutputTileRead) : PE_COLS;
 			iTransferBlockInFilterRead = 0;
-			nextStateReadCache = STATE_FILTER_STREAMER_READ_CACHE_MAX_COL_SETUP;
-		} // STATE_FILTER_STREAMER_READ_CACHE_SETUP0
-		else if (stateReadCache == STATE_FILTER_STREAMER_READ_CACHE_SETUP1)
-		{
-			nextStateReadCache = STATE_FILTER_STREAMER_READ_CACHE_MAX_COL_SETUP;
-
-			iTransferBlockInFilterRead = 0;
-			iWidthInOutputTileRead += maxColUsedRead;
-			
-			if (iWidthInOutputTileRead >= maxOutputWidthTileSize[(~regWriteSide) & 0x1])
+			if (iOutputRead == maxOutputCount[(~regWriteSide) & 0x1])
 			{
-				iWidthInOutputTileRead = 0;
-				iHeightInOutputTileRead++;
-
-				if (iHeightInOutputTileRead >= maxOutputHeightTileSize[(~regWriteSide) & 0x1])
-				{
-					nextStateReadCache = STATE_FILTER_STREAMER_READ_CACHE_WAIT;
-				}
+				nextStateReadCache = STATE_FILTER_STREAMER_READ_CACHE_WAIT;
+				iOutputRead = 0;
 			}
-
-			//maxColUsedRead = (maxOutputWidthTileSize[(~regWriteSide) & 0x1] - iWidthInOutputTileRead) < PE_COLS ?
-			//	(maxOutputWidthTileSize[(~regWriteSide) & 0x1] - iWidthInOutputTileRead) : PE_COLS;
-
-		} // STATE_FILTER_STREAMER_READ_CACHE_SETUP1
-		else if (stateReadCache == STATE_FILTER_STREAMER_READ_CACHE_MAX_COL_SETUP)
+			else
+			{
+				nextStateReadCache = STATE_FILTER_STREAMER_READ_CACHE_READ;
+				//iOutputRead++;
+			}
+		} // STATE_FILTER_STREAMER_READ_CACHE_SETUP
+		// Send bias, then followed by the clusters
+		else if ( stateReadCache == STATE_FILTER_STREAMER_READ_CACHE_READ)
 		{
-			maxColUsedRead = (maxOutputWidthTileSize[(~regWriteSide) & 0x1] - iWidthInOutputTileRead) < maxPeCols[(~regWriteSide) & 0x1] ?
-				(maxOutputWidthTileSize[(~regWriteSide) & 0x1] - iWidthInOutputTileRead) : maxPeCols[(~regWriteSide) & 0x1];
+			t_transferblock_tagged weightBlockTagged;
 
-			nextStateReadCache = STATE_FILTER_STREAMER_READ_CACHE_READ;
-		} //STATE_FILTER_STREAMER_READ_CACHE_MAX_COL_SETUP
-		else if (stateReadCache == STATE_FILTER_STREAMER_READ_CACHE_READ)
-		{
-			unsigned short dramIndex = iTransferBlockInFilterRead >> WIDE_SIZE_OFFSET;
-			unsigned short indexInDramBlock = iTransferBlockInFilterRead & WIDE_SIZE_REMAINDER_MASK;
-			t_dram_block dramBlock = cacheNzBlocks[(~regWriteSide) & 0x1][dramIndex];
-			t_transfer_block tblock = dramBlock.transferBlocks[indexInDramBlock];
-			t_transferblock_tagged taggedBlock;
-			taggedBlock.values = tblock;
-			taggedBlock.maxTransportID = (maxColUsedRead - 1);
-			taggedBlock.isLast = ((iTransferBlockInFilterRead + 1) >= maxTransferBlockInFilter[(~regWriteSide) & 0x1]) ?
-				TRUE : FALSE;
+			if (iTransferBlockInFilterRead > 0)
+			{
+				unsigned short dramIndex = (iTransferBlockInFilterRead - 1) >> WIDE_SIZE_OFFSET;
+				unsigned short indexInDramBlock = (iTransferBlockInFilterRead - 1) & WIDE_SIZE_REMAINDER_MASK;
+				t_dram_block dramBlock = cacheNzBlocks[(~regWriteSide) & 0x1][dramIndex];
+				t_transfer_block tblock = dramBlock.transferBlocks[indexInDramBlock];
+				t_transferblock_tagged taggedBlock;
+				weightBlockTagged.values = tblock;
+				weightBlockTagged.isLast = ((iTransferBlockInFilterRead) >= maxTransferBlockInFilter[(~regWriteSide) & 0x1]) ?
+					TRUE : FALSE;
+			}
+			else
+			{
+				t_accumulator bias = cacheBias[(~regWriteSide) & 0x1];
+				t_transfer_block tblock = bias2TransferBlock(bias);
+				weightBlockTagged.values = tblock;
+				weightBlockTagged.isLast = false;
+			}
+			
+			weightBlockTagged.maxTransportID = maxPeCols[(~regWriteSide) & 0x1];
+
 			bool success = false;
 			success = write_channel_nb_intel(channel_weight[rowID][0], taggedBlock);
 			if (success)
@@ -208,9 +1023,11 @@ __kernel void kernelFilterStreamer ()
 					tblock.values[1].cluster_values[0],
 					tblock.values[1].cluster_values[1]));
 				*/
-				if ((iTransferBlockInFilterRead + 1) >= maxTransferBlockInFilter[(~regWriteSide) & 0x1])
+				//Omit plus 1 to send the bias
+				if ((iTransferBlockInFilterRead) >= maxTransferBlockInFilter[(~regWriteSide) & 0x1])
 				{
-					nextStateReadCache = STATE_FILTER_STREAMER_READ_CACHE_SETUP1;
+					nextStateReadCache = STATE_FILTER_STREAMER_READ_CACHE_SETUP;
+					iOutputRead++;
 				}
 				else
 				{
@@ -222,7 +1039,7 @@ __kernel void kernelFilterStreamer ()
 		if ( (stateWriteCache == STATE_FILTER_STREAMER_WRITE_CACHE_WAIT) 
 			&& (stateReadCache == STATE_FILTER_STREAMER_READ_CACHE_WAIT) )
 		{
-			nextStateReadCache = STATE_FILTER_STREAMER_READ_CACHE_SETUP0;
+			nextStateReadCache = STATE_FILTER_STREAMER_READ_CACHE_READ;
 			nextStateWriteCache = STATE_FILTER_STREAMER_WRITE_CACHE_SETUP_CONTROL;
 			regWriteSide = (~regWriteSide) & 0x1; 
 			EMULATOR_PRINT(("[kernelFilterStreamer %d] Swap\n", rowID));
@@ -234,7 +1051,7 @@ __kernel void kernelFilterStreamer ()
 
 	} // while
 }
-#endif
+#endif //WEIGHT_MEMORY
 
 #if defined(PE_SYSTEM)
 
