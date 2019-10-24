@@ -374,7 +374,6 @@ Data structures that travel on the output activation bus system
 typedef struct __attribute__((packed)) {
     t_cluster cluster;
     bool isLastInStrip;
-    bool isLastInWindow;
 } t_output_cluster_tagged;
 
 typedef struct {

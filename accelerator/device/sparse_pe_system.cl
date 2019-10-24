@@ -570,8 +570,12 @@ __kernel void kernelIABuffer ()
 #endif //IA_MEMORY
 
 #ifdef OA_MEMORY
-#define STATE_OA_BUFFER_SEND_CLUSTER 0x0
-#define STATE_OA_BUFFER_SEND_MASK 0x1
+#define STATE_OA_BUFFER_FETCH_CLUSTER 0x0
+#define STATE_OA_BUFFER_FETCH_WAIT 0x1
+#define STATE_OA_BUFFER_SEND_CLUSTER 0X0
+#define STATE_OA_BUFFER_SEND_MASK 0X1
+#define STATE_OA_BUFFER_SEND_PADDING 0X2
+#define STATE_OA_BUFFER_SEND_WAIT 0x3
 __attribute__((max_global_work_dim(0)))
 __attribute__((autorun))
 __attribute__((num_compute_units(PE_COLS)))
@@ -580,8 +584,9 @@ __kernel void kernelOABuffer ()
 	int colID = get_compute_id(0);
 
 	private char cacheOutputActivations[OA_CACHE_SIZE];
+	private t_cluster bufferCompression[2][16]; 
 
-	typedef uint1_t t_send_state; 
+	typedef uint2_t t_state; 
 
 	while (true)
 	{
@@ -632,15 +637,9 @@ __kernel void kernelOABuffer ()
 
 		//Group the output activations into clusters, and send them to compression engine
 		{
-			unsigned short iterOutChannelGlobalBase = 0;
-			unsigned short numClustersInNextInputGroup = ((outputControl.numChannelsInInputGroupNextLayer & VALUE_DIVIDED_BY_CLUSTER_SIZE_REMAINDER_MASK) > 0) ?
-				(outputControl.numChannelsInInputGroupNextLayer >> VALUE_TO_CLUSTER_SHIFT + 1) : outputControl.numChannelsInInputGroupNextLayer >> VALUE_TO_CLUSTER_SHIFT;
-			//unsigned short numSendOperations = numClustersInNextInputGroup + 1; //Extra one for sending instructions
-
-			//Control cluster for the compressor
-			//t_cluster controlCluster;
-			//controlCluster.cluster_values[1] = ((unsigned char)(enableSparsification) << 7) | (unsigned char) ((numClustersInNextInputGroup >> 8) & 0x3F);
-			//controlCluster.cluster_values[0] = (unsigned char) (numClustersInNextInputGroup & 0xFF);
+			unsigned short iterOutChannelGlobalBase = 0;;
+			unsigned short numClustersInNextInputGroup = 1 + ((outputControl.numChannelsInInputGroupNextLayer - 1) >> VALUE_TO_CLUSTER_SHIFT);
+			unsigned short numWindowsInNextInputGroup = 1 + ((numClustersInNextInputGroup - 1) / COMPRESSION_WINDOW_SIZE);
 
 			while (iterOutChannelGlobalBase < numOutputChannels)
 			{
@@ -651,72 +650,161 @@ __kernel void kernelOABuffer ()
 					unsigned short iOCInGroup=0;
 
 					//send clusters in a strip
-					t_send_state sendState = STATE_OA_BUFFER_SEND_CLUSTER;
-					unsigned short iCluster = 0;
-					unsigned char iClusterInWindow = 0;
-					char mask = 0;
-
-					while (iCluster < numClustersInNextInputGroup)
+					char regMask[2];
+					unsigned char regSurvivingClusters[2];
+					uint1_1 regFetchSide = 0x0;
+					#pragma unroll
+					for (unsigned char i=0; i<2; i++)
 					{
-						t_output_cluster_tagged taggedCluster;
-						bool sendFlag;
-						if (sendState == STATE_OA_BUFFER_SEND_CLUSTER)
+						regMask[i] = 0;
+						regSurvivingClusters[i] = 0;
+					}
+
+
+					t_state fetchState = STATE_OA_BUFFER_FETCH_CLUSTER;
+					unsigned char iClusterInWindowFetch = 0;
+					unsigned char iClusterFetch = 0;
+
+					t_state sendState;
+					unsigned char iClusterInWindowSend = 0;
+					unsigned char iWindowSend = 0;
+					unsigned char iClusterInTransferBlockSend = 0;
+
+
+					//Send and compress the clusters in a strip
+					while (iWindowSend < numWindowsInGNextInputGroup)
+					{
+						//Fetch
+						t_state nextFetchState = fetchState;
+						if (fetchState == STATE_OA_BUFFER_FETCH_CLUSTER)
 						{
-							bool keep = false;
+							bool keep = (enableSparsification == FALSE);
+							t_cluster cluster;
 							#pragma unroll
 							for (unsigned char i=0; i<CLUSTER_SIZE; i++)
 							{
 								unsigned short tempOC = iOCInGroup + i;
 								char tempValue = (tempOC >= outputControl.numChannelsInInputGroupNextLayer) ?
 									0x0 : cacheOutputActivations[outputIndex+i];
-								taggedCluster.cluster.cluster_values[i] = tempValue;
+								cluster.cluster_values[i] = tempValue;
 								keep ||= (tempValue != 0x0);
 							}
-							taggedCluster.isLastInStrip = false;
-							taggedCluster.isLastInWindow = false;
 
-							sendFlag = keep || (enableSparsification == FALSE);
-
-							if (sendFlag)
+							if (keep)
 							{
-								mask |= ((char) 1) << iClusterInWindow;
+								mask[regFetchSide] |= ((char) 1) << iClusterInWindowFetch;
+								regSurvivingClusters[regFetchSide]++;
 							}
 
-							iOCInGroup += CLUSTER_SIZE;
-							outputIndex += CLUSTER_SIZE;
-							iClusterInWindow++;
+							bufferCompression[regFetchSide][iClusterInWindowFetch++] = cluster;
+							iClusterFetch++;
 
-							if ( (iCluster+1 >= numClustersInNextInputGroup) || (iClusterInWindow == COMPRESSION_WINDOW_SIZE) )
+
+							if ( (iClusterInWindowFetch == COMPRESSION_WINDOW_SIZE) || (iClusterFetch == numClustersInNextInputGroup) )
 							{
-								sendState == STATE_OA_BUFFER_SEND_MASK;
+								nextFetchState = STATE_OA_BUFFER_FETCH_WAIT; 
+							}
+
+						} //STATE_OA_BUFFER_FETCH_CLUSTER)
+
+						//Send
+						t_state nextSendState = sendState;
+						t_cluster clusterSend;
+						if (sendState == STATE_OA_BUFFER_SEND_MASK)
+						{
+							clusterSend.cluster_values[0] = regMask[(~regFetchSide) & 0x1];
+
+							iClusterInTransferBlockSend++;
+
+							if (0 == regSurvivingClusters[(~regFetchSide) & 0x1])
+							{
+								if (iClusterInTransferBlockSend < TRANSFER_SIZE)
+								{
+									nextSendState == STATE_OA_BUFFER_SEND_PADDING;
+								}
+								else
+								{
+									nextSendState = STATE_OA_BUFFER_SEND_WAIT;
+									iWindowSend++;
+								}
 							}
 							else
 							{
-								iCluster++;
+								nextSendState = STATE_OA_BUFFER_SEND_CLUSTER;
+							}
+						} //STATE_OA_BUFFER_SEND_MASK
+						else if (sendState == STATE_OA_BUFFER_SEND_CLUSTER)
+						{
+							clusterSend = bufferCompression[(~regFetchSide) & 0x1][iClusterInWindowSend++];
+
+							iClusterInTransferBlockSend = (iClusterInTransferBlockSend == TRANSFER_SIZE) ? 1 : (iClusterInTransferBlockSend + 1);
+
+							if (iClusterInWindowSend == regSurvivingClusters[(~regFetchSide) & 0x1])
+							{
+								if (iClusterInTransferBlockSend < TRANSFER_SIZE)
+								{
+									nextSendState == STATE_OA_BUFFER_SEND_PADDING;
+								}
+								else
+								{
+									nextSendState = STATE_OA_BUFFER_SEND_WAIT;
+									iWindowSend++;
+								}
 							}
 						} //STATE_OA_BUFFER_SEND_CLUSTER
-						else if (sendState == STATE_OA_BUFFER_SEND_MASK)
+						else if (sendState == STATE_OA_BUFFER_SEND_PADDING)
 						{
-							taggedCluster.isLastInStrip = (iCluster+1 >= numClustersInNextInputGroup);
-							taggedCluster.isLastInWindow = true;
-							taggedCluster.cluster.cluster_values[0] = mask;
+							#pragma unroll
+							for (unsigned int i=0; i<CLUSTER_SIZE; i++)
+							{
+								clusterSend.controlCluster.cluster_values[i] = 0;
+							}
 
-							sendFlag = true;
+							iClusterInTransferBlockSend++;
 
-							iClusterInWindow=0;
-							mask = 0;
+							if (iClusterInTransferBlockSend == TRANSFER_SIZE)
+							{
+								nextSendState = STATE_OA_BUFFER_SEND_WAIT;
+								iWindowSend++;
+							}
+						} //STATE_OA_BUFFER_SEND_PADDING
 
-							sendState = STATE_OA_BUFFER_SEND_CLUSTER;
-
-						} //STATE_OA_BUFFER_SEND_MASK
-
-						if (sendFlag)
+						//Actual channel action
+						if ( (sendState == STATE_OA_BUFFER_SEND_MASK) 
+							|| (sendState == STATE_OA_BUFFER_SEND_CLUSTER) 
+							|| (sendState == STATE_OA_BUFFER_SEND_PADDING) )
 						{
+							t_output_cluster_tagged taggedCluster;
+							taggedCluster.isLastInStrip = ( ( iWindowSend == numWindowsInNextInputGroup) && (iClusterInTransferBlockSend == TRANSFER_SIZE) );
+							taggedCluster.cluster = clusterSend;
+
 							write_channel_intel(channel_output_buffer_to_tee[colID], taggedCluster);
-						}
+						} //Channel write action
 
-					} //Sending the clusters in a strip
+						if ((sendState == STATE_OA_BUFFER_SEND_WAIT) && (fetchState == STATE_OA_BUFFER_FETCH_WAIT))
+						{
+							regFetchSide = ~regFetchSide;
 
+							iClusterInWindowFetch = 0;
+							
+							iClusterInTransferBlockSend = 0;
+							iClusterInWindowSend = 0;
+
+							if (iClusterFetch < numClustersInNextInputGroup)
+							{
+								fetchState = STATE_OA_BUFFER_FETCH_CLUSTER;
+							}
+
+							if (enableSparsification == TRUE)
+							{
+								sendState = STATE_OA_BUFFER_SEND_MASK;
+							}
+							else
+							{
+								sendState = STATE_OA_BUFFER_SEND_CLUSTER;
+							}
+						} //SWAP
+					} //Send ping-pong
 					outputIndexBase += numOutputChannels;
 				} //iterOutHxW
 
@@ -726,115 +814,6 @@ __kernel void kernelOABuffer ()
 		} //Streaming the output to the compressor
 
 	} // while
-}
-
-/*
-Uses ping-pong buffer
-*/
-#define STATE_OA_COMPRESSOR_WRITE_SETUP_STRIP 0x0
-#define STATE_OA_COMPRESSOR_WRITE_LOAD_CLUSTER 0x1
-#define STATE_OA_COMPRESSOR_WRITE_WAIT 0x2
-__attribute__((max_global_work_dim(0)))
-__attribute__((autorun))
-__attribute__((num_compute_units(PE_COLS)))
-__kernel void kernelOACompressor ()
-{
-	int colID = get_compute_id(0);
-	typedef uint2_t t_state;
-
-	/*
-	==============================
-	Common parameters
-	================================
-	*/
-	private t_cluster bufferCompression[2][16]; 
-	uint1_t regWriteSide = 0x0;
-	uint1_t regIsLast[2];
-	unsigned short regNumClusterInBuffer[2];
-	char regMask[2];
-
-	/*
-	==============================
-	Write parameter
-	================================
-	*/
-	t_state writeState = STATE_OA_COMPRESSOR_WRITE_SETUP_STRIP;
-	unsigned short writeNumClusterInStrip;
-	unsigned short writeIterClusterInStrip;
-	unsigned char writeIterClusterInWindow;
-	unsigned char writeIterClusterInBuffer;
-
-	uint1_t writeSparsifyOA;
-
-	/*
-	==============================
-	Read parameter
-	================================
-	*/
-
-	while (true)
-	{	
-		t_state nextWriteState = writeState;
-		//Write side of the compressor
-		{
-			bool loadSuccess;
-			t_cluster cluster;
-			if ( (writeState == STATE_OA_COMPRESSOR_WRITE_SETUP_STRIP)
-				 || (writeState == STATE_OA_COMPRESSOR_WRITE_LOAD_CLUSTER))
-			{
-				cluster = read_channel_nb_intel(output_buffer_to_compressor[colID], &loadSuccess);
-			}
-
-			if (writeState == STATE_OA_COMPRESSOR_WRITE_SETUP_STRIP)
-			{
-				if (loadSuccess)
-				{
-					writeNumClusterInStrip = 
-						(((unsigned short) (cluster.cluster_values[1] & 0x3F)) << 8)
-						| ((unsigned short) cluster.cluster_values[0]);
-					writeSparsifyOA = (cluster.cluster_values[1] & 0x80) >> 7;
-					writeIterClusterInStrip = 0;
-					writeIterClusterInWindow = 0;
-					writeIterClusterInBuffer = 0;
-					regMask[regWriteSide] = 0;
-					regIsLast[regWriteSide] == FALSE;
-
-					nextWriteState = STATE_OA_COMPRESSOR_WRITE_LOAD_CLUSTER;
-				}
-			} //STATE_OA_COMPRESSOR_WRITE_SETUP_STRIP
-			else if (writeState == STATE_OA_COMPRESSOR_WRITE_LOAD_CLUSTER)
-			{
-				if (loadSuccess)
-				{
-					bool keep = false;
-					#pragma unroll
-					for (unsigned char i=0; i<CLUSTER_SIZE; i++)
-					{
-					 	keep ||= (cluster.cluster_values[i] != 0);
-					}
-
-					if (keep || (writeSparsifyOA==FALSE)) 
-					{
-						regMask[regWriteSide] |= (((char) 1) << writeIterClusterInWindow);
-						bufferCompression[regWriteSide][writeIterClusterInBuffer++] = cluster;
-					}
-
-					writeIterClusterInWindow++;
-					writeIterClusterInStrip++;
-
-					if (writeIterClusterInStrip == writeNumClusterInStrip) 
-						|| (writeIterClusterInWindow == COMPRESSION_WINDOW_SIZE)
-					{	
-						nextWriteState = STATE_OA_COMPRESSOR_WRITE_WAIT;
-					}
-				}
-			} //STATE_OA_COMPRESSOR_WRITE_LOAD_CLUSTER
-		}
-
-
-		writeState = nextWriteState;
-	}
-
 }
 #endif  //OA_MEMORY
 
