@@ -66,7 +66,6 @@ flexibleDirectCompressedTensor::flexibleDirectCompressedTensor (
     width = _width;
     height = _height;
     tilingSizeWidth = _tilingSizeWidth;
-    maxScalarIndexInChannelGroup = _maxScalarIndexInChannelGroup;
     maxClusterIndexInCompressionBlock = _maxClusterIndexInCompressionBlock;
     maxClusterIndexInTransferBlock = _maxClusterIndexInTransferBlock;
     maxScalarIndexInCluster = _maxScalarIndexInCluster;
@@ -83,27 +82,28 @@ flexibleDirectCompressedTensor::flexibleDirectCompressedTensor (
     //Compute the memory stride and allocate space in the vectors
     if (isKernel) {
         unsigned int numCompressionBlocksInChannel =
-                (unsigned int) std::ceil ( (float) channel /
-                                             (float) ((_maxClusterIndexInCompressionBlock + 1) * (_maxScalarIndexInCluster + 1)) );
-
+                1 + (channel - 1) / ((_maxClusterIndexInCompressionBlock + 1) * (_maxScalarIndexInCluster + 1));
         unsigned int tempStride = width*height*((unsigned int) numTransferBlocksPerCompressionBlock* (unsigned int) numCompressionBlocksInChannel);
         //externalMemoryAddressStride = lcm(tempStride, (unsigned int) WIDE_SIZE); //DRAM stride needs to be a multiple of DRAM width and the storage requirement per filter
         externalMemoryAddressStride = (unsigned int) std::ceil( ((float) (tempStride) ) / ((float) (WIDE_SIZE)) ) * WIDE_SIZE;
         valueVector.resize(externalMemoryAddressStride*num3DTensors);
         streamBlockAddressVector.resize(num3DTensors);
+        numChannelGroups = 1;
+        maxScalarIndexInChannelGroup = _channel - 1;
      }
     else {
         //Channel group size should divide channel size
+        maxScalarIndexInChannelGroup = _maxScalarIndexInChannelGroup;
         assert( channel % (maxScalarIndexInChannelGroup + 1) == 0 );
         assert (num3DTensors == 1);
-        unsigned int numChannelGroups = channel / (maxScalarIndexInChannelGroup + 1);
+        numChannelGroups = channel / (maxScalarIndexInChannelGroup + 1);
         unsigned int numCompressionBlocksInChannelGroup =
                 (unsigned int) std::ceil ( (float) (maxScalarIndexInChannelGroup + 1)
                                / (float) ((maxScalarIndexInCluster + 1) * (maxClusterIndexInCompressionBlock + 1)) );
-        unsigned int tempStride = (numCompressionBlocksInChannelGroup * numChannelGroups * numTransferBlocksPerCompressionBlock);
+        unsigned int tempStride = (numCompressionBlocksInChannelGroup * numTransferBlocksPerCompressionBlock);
         externalMemoryAddressStride = (unsigned int) std::ceil( ((float) (tempStride) ) / ((float) (WIDE_SIZE)) ) * WIDE_SIZE;
-        valueVector.resize( width * height * externalMemoryAddressStride);
-        streamBlockAddressVector.resize(num3DTensors * width * height * numChannelGroups );
+        valueVector.resize( width * height * numChannelGroups * externalMemoryAddressStride);
+        streamBlockAddressVector.resize(width * height * numChannelGroups );
     }
     //============================================================
 
@@ -113,17 +113,14 @@ flexibleDirectCompressedTensor::flexibleDirectCompressedTensor (
 
     //Keep track of the address of each stream block along the channels
     cl_ushort streamBlockAddress = 0;
-    int iFullVector = 0;
     for (int iTensor=0; iTensor < num3DTensors; iTensor++){
-        for (int iHeight=0; iHeight < height; iHeight++) {
-            for (int iWidth=0; iWidth<width; iWidth++)
-            {
-            //for (int iTileWidth=0; iTileWidth < (int) (std::ceil( (float) width / (float) tilingSizeWidth)); iTileWidth++) {
-            //    int maxLocalWidth = (tilingSizeWidth <= (width - iTileWidth*tilingSizeWidth)) ?
-            //                tilingSizeWidth : (width - iTileWidth*tilingSizeWidth);
-                //Set the pointer of the compression bector
-                int iCompressVector = iCompressVectorBase;
-                //for (int iLocalWidth=0; iLocalWidth<maxLocalWidth; iLocalWidth++) {
+        for (unsigned char iGroup=0; iGroup<numChannelGroups; iGroup++)
+        {
+            for (int iHeight=0; iHeight < height; iHeight++) {
+                for (int iWidth=0; iWidth<width; iWidth++)
+                {
+                    //Set the pointer of the compression bector
+                    int iCompressVector = iCompressVectorBase;
 
                    //Buffer for the current compression window. Default values are zero
                    std::vector<cl_char> compressionBlock(maxScalarIndexInCompressionBlock+1, 0);
@@ -131,29 +128,27 @@ flexibleDirectCompressedTensor::flexibleDirectCompressedTensor (
                    //Tracker of the scalar in the compression window
                    int iScalarInCompressionBlock = 0;
 
-                    //Stream block address is reset to zero at the beginning of every strip
-                    //If the tensor is an I/O
-                    if (!isKernel) {
-                        streamBlockAddress = 0;
-                    }
+                    int iFullVector = iTensor * channel * width * height
+                          + ((iGroup  * height + iHeight) * width + iWidth)
+                            * (maxScalarIndexInChannelGroup+1);
 
-                    for (int iChannel=0, iChannelInGroup=0;
-                         iChannel < channel;
-                         iChannel++, iFullVector++) {
+                    for (int iChannelInGroup=0;
+                         iChannelInGroup <= maxScalarIndexInChannelGroup;
+                         iChannelInGroup++) {
                         //Float to fixed point conversion
                         fixedPointNumber fpNumber = fixedPointVector.at(iFullVector);
                         char fpValue = ( (fpNumber.getBits()) & (fpNumber.getMask()) );
 
                         //std::cout <<"iFullVector is "<<iFullVector<<std::endl;
                         //std::cout <<"iScalarInCompressionBlock is "<<iScalarInCompressionBlock<<std::endl;
+                        iFullVector++;
 
                         compressionBlock.at(iScalarInCompressionBlock++) = fpValue;
 
                         //Indicator of whether a compression block has been formed.
                         bool compressionBlockFormed =
                                 (iScalarInCompressionBlock > maxScalarIndexInCompressionBlock)
-                                || (iChannel == (channel - 1))
-                                || ((iChannelInGroup == maxScalarIndexInChannelGroup) && (!isKernel));
+                                || (iChannelInGroup == maxScalarIndexInChannelGroup);
 
 
                         if ( compressionBlockFormed ) {
@@ -219,41 +214,24 @@ flexibleDirectCompressedTensor::flexibleDirectCompressedTensor (
                                     iTransferBlock = 0;
                                }
                            } // for element in compression block
-
-
-
-                           //If we are compressing an activtion tensor and we are at its end
-                           //or at the end of one of its channel groups
-                           //Then we need to store the number of transfer blocks that the
-                           //Compressed channel group takes
-                           if ((!isKernel)
-                                   && (iChannelInGroup == maxScalarIndexInChannelGroup)
-                                   ) {
-                               //std::cout <<"Updating streamBlockAddressVector. Activation. iChannelInGroup = "
-                               //         <<iChannelInGroup<<std::endl;
-                               streamBlockAddressVector.at(iStreamBlockAddressVector++)
-                                       = streamBlockAddress;
-                           }
                         } // if compression block is formed
 
-                        //Some indices updates
-                        iChannelInGroup++;
-                        if (iChannelInGroup > maxScalarIndexInChannelGroup) {
-                            iChannelInGroup = 0;
-                        }
-                    } // for channel
-                //} //for iLocalWidth
-                if (!isKernel) {
-                    iCompressVectorBase += externalMemoryAddressStride;
-                 }
-                else {
-                    iCompressVectorBase = iCompressVector;
-                }
-            //} // for iTileWidth
-            }//iWidth
-            //Need to stride the value vector here if we are compressing an activation
+                    } // for channel in a channel group
 
-        } // for height
+                    if (!isKernel) {
+                        iCompressVectorBase += externalMemoryAddressStride;
+                        streamBlockAddressVector.at(iStreamBlockAddressVector++)
+                                                        = streamBlockAddress;
+                        streamBlockAddress = 0;
+                     }
+                    else {
+                        iCompressVectorBase = iCompressVector;
+                    }
+                }//iWidth
+            //Need to stride the value vector here if we are compressing an activation
+            } // for height
+        } //for Groups
+
         //Need to stride the value vector here if we are compressing a filters
         if (isKernel) {
             //If we are compressing a filter and we are at its end
@@ -262,8 +240,6 @@ flexibleDirectCompressedTensor::flexibleDirectCompressedTensor (
             //std::cout <<"Updating streamBlockAddressVector. Filter"<<std::endl;
             streamBlockAddressVector.at(iStreamBlockAddressVector++)
                     = streamBlockAddress;
-
-
             iCompressVectorBase = (iTensor+1)*externalMemoryAddressStride;
             streamBlockAddress = 0x0;
         }
@@ -297,6 +273,7 @@ int decodeFlexibleDirectCompressedTensor(
         = compTensor.maxClusterIndexInTransferBlock;
     unsigned char maxScalarIndexInCluster =
             compTensor.maxScalarIndexInCluster;
+    unsigned short numChannelGroups = compTensor.numChannelGroups;
 
     //Word stride between the start of adjacent rows in the external memory
     unsigned int externalMemoryAddressStride
@@ -309,18 +286,16 @@ int decodeFlexibleDirectCompressedTensor(
     unsigned int numStreamBlocksInTensor =
             isKernel ?
             num3DTensors
-            : height * width * channel / (maxScalarIndexInChannelGroup + 1);
+            : height * width * numChannelGroups;
 
     //Initilize some counters
     int iCompressVectorBase = 0;
     int iCompressVector = 0;
-    //int iLocalWidth = 0;
-    //int iTileWidth = 0;
     int iWidth = 0;
-    int numTileWidth = (int) std::ceil( (float) width / (float) tileSizeWidth);
     int iHeight = 0;
     int iTensor = 0;
-    int iChannelBase = 0;
+    int iChannelInGroupBase = 0;
+    int iGroup = 0;
 
     int countTransferBlocks = 0;
 
@@ -332,27 +307,7 @@ int decodeFlexibleDirectCompressedTensor(
         //std::cout <<"flexibleDirectDecompression. iStreamBlock="<<iStreamBlock<<std::endl;
         //Need to know how many transfer blocks are there in the stream block that we
         //are about to read
-        int numTransferBlockInStreamBlock;
-        if (isKernel)
-        {
-           numTransferBlockInStreamBlock =
-            compTensor.streamBlockAddressVector.at(iStreamBlock);
-        }
-        else
-        {
-            if (iChannelBase==0)
-            {
-                numTransferBlockInStreamBlock =
-                    compTensor.streamBlockAddressVector.at(iStreamBlock);
-            }
-            else
-            {
-                 numTransferBlockInStreamBlock =
-                    compTensor.streamBlockAddressVector.at(iStreamBlock)
-                    - compTensor.streamBlockAddressVector.at(iStreamBlock - 1);
-            }
-
-        } // if/else blocks that assign to numTransferBlockInStreamBlock
+        int numTransferBlockInStreamBlock = compTensor.streamBlockAddressVector.at(iStreamBlock);
 
         //============Expands a compression block============
         // A assemble vector for the decompression
@@ -415,9 +370,9 @@ int decodeFlexibleDirectCompressedTensor(
                     positionInCompressionBlock = indexInCompressionBlock + 1;
 
                     for (int i=0; i<=maxScalarIndexInCluster; i++) {
-                        int iChannel = iChannelBase + (int) indexInCompressionBlock*(maxScalarIndexInCluster+1) + i;
+                        int iChannelInGroup = iChannelInGroupBase + (int) indexInCompressionBlock*(maxScalarIndexInCluster+1) + i;
 
-                        if (iChannel < channel) {
+                        if (iChannelInGroup <= maxScalarIndexInChannelGroup) {
                             fixedPointNumber fpValue (
                                 (char) (vectorCompressionBlock.at(iVectorCompressionBlock++)), fracWidth, intWidth );
 //                            int iDenseVector =
@@ -428,22 +383,24 @@ int decodeFlexibleDirectCompressedTensor(
 //                                + iChannel;
                             int iDenseVector =
                                 iTensor * height * width * channel
-                                + iHeight * width * channel
-                                + iWidth * channel
-                                + iChannel;
-                            //std::cout <<"Bitmask, iTensor, iHeight, iTileWidth, iLocalWidth, iChannel: "
-                            //   <<(unsigned int) bitmask<<" "<<iTensor<<" "<<iHeight<<" "<<iTileWidth<<" "<<iLocalWidth<<" "<<iChannel<<std::endl;
+                                + iGroup * height * width * (maxScalarIndexInChannelGroup + 1)
+                                + iHeight * width * (maxScalarIndexInChannelGroup + 1)
+                                + iWidth * (maxScalarIndexInChannelGroup + 1)
+                                + iChannelInGroup;
+//                            std::cout <<"Bitmask, iTensor, iGroup, iHeight, iWidth, iChannelInGroup: "
+//                               <<(unsigned int) bitmask<<" "<<iTensor<<" "<<iGroup<<" "<<iHeight<<" "<<iWidth<<" "<<iChannelInGroup<<std::endl;
 
                             denseTensor.at(iDenseVector) = fpValue.convert2Float();
-                        }
-                    }
-                }
+                        } //if iChannelInGroup <= maxScalarIndexInChannelGroup
+                    } // for from 0 to maxScalarIndexInCluster
+                } // while. decode a compression block;
 
                 //Update the trackers
                 int numScalarsRemainInChannelGroup =
-                    (maxScalarIndexInChannelGroup + 1)
-                    - (iChannelBase % (maxScalarIndexInChannelGroup + 1));
-                int numScalarsAdded;
+                    (maxScalarIndexInChannelGroup + 1) - iChannelInGroupBase;
+                int numScalarsAdded =
+                    numScalarsRemainInChannelGroup < (maxScalarIndexInCompressionBlock + 1) ?
+                    numScalarsRemainInChannelGroup : (maxScalarIndexInCompressionBlock + 1);
                 if (!isKernel)
                 {
                     numScalarsAdded =
@@ -455,45 +412,40 @@ int decodeFlexibleDirectCompressedTensor(
                     numScalarsAdded = maxScalarIndexInCompressionBlock + 1;
                 }
 
-                iChannelBase += numScalarsAdded;
+                iChannelInGroupBase += numScalarsAdded;
                 //std::cout <<"iChannelBase "<<iChannelBase<<std::endl;
-                if (iChannelBase >= channel)
+                if (iChannelInGroupBase > maxScalarIndexInChannelGroup)
                 {
-                    //std::cout <<"Resetting iChannelBase"<<std::endl;
-                    iChannelBase = 0;
-//                    int maxLocalWidth = (tileSizeWidth < width - iTileWidth*tileSizeWidth) ?
-//                                tileSizeWidth : width - iTileWidth*tileSizeWidth;
-//                    iLocalWidth =  (iLocalWidth == (maxLocalWidth-1)) ? 0 : iLocalWidth + 1;
-                      iWidth = (iWidth == (width - 1)) ? 0 : iWidth + 1;
-                        //if (iLocalWidth == 0)
-                        //{
-                        //    iTileWidth = (iTileWidth == (numTileWidth - 1)) ? 0 : iTileWidth + 1;
-                        //    if (iTileWidth == 0)
-                        //    {
-                            if (iWidth == 0)
+                    //std::cout <<"Resetting iChannelGroupBase"<<std::endl;
+                    iChannelInGroupBase = 0;
+                    iWidth = (iWidth == (width - 1)) ? 0 : iWidth + 1;
+                    if (iWidth == 0)
+                    {
+                        iHeight = (iHeight == (height - 1)) ? 0: iHeight + 1;
+                        if (iHeight == 0)
+                        {
+                            iGroup = (iGroup == (numChannelGroups-1)) ? 0 : iGroup + 1;
+                            if (iGroup == 0)
                             {
-                                iHeight = (iHeight == (height - 1)) ? 0: iHeight + 1;
-                                if (iHeight == 0)
+                                iTensor++;
+                                if (isKernel)
                                 {
-                                    iTensor++;
                                     iCompressVectorBase += externalMemoryAddressStride;
                                     iCompressVector = iCompressVectorBase;
-
                                 }
-                            } // height update
-                            if (!isKernel)
-                            {
-                                iCompressVectorBase += externalMemoryAddressStride;
-                                iCompressVector = iCompressVectorBase;
                             }
-                   } // iChannelBase >= channel
-                        //} // iTileWidth update
-                //} // iLocalWidth update
+                        }
+                    } // height update
+                    if (!isKernel)
+                    {
+                        iCompressVectorBase += externalMemoryAddressStride;
+                        iCompressVector = iCompressVectorBase;
+                    }
+                } // iChannelBase >= channel
             } // if a compression block has been formed
         }  //for-loop. Expands atream block
         //=====================================================
     }
-
     return countTransferBlocks;
 
 }

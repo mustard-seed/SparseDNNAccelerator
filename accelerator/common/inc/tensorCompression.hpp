@@ -28,8 +28,11 @@ public:
     bool isKernel;
 
     //The max index (starts from 0) of a scalar inside a channel group
-    //Not important for kernel filters
+    //For filter, this will be set to the number of channels minus 1
     unsigned short maxScalarIndexInChannelGroup;
+
+    //Number of groups in a channel
+    unsigned char numChannelGroups;
 
 
     //The maximum index (starts from 0) of a cluster found inside a compression blcok

@@ -37,7 +37,7 @@ typedef unsigned char t_simdblock_channel_offset; //Relative channel of a simdbl
 typedef unsigned short t_streamblock_address; //Address of a streaming block in BRAM
 
 #else
-typedef t_simdblock_host t_simdblock_value;
+//typedef t_simdblock_host t_simdblock_value;
 
 typedef cl_uchar t_simdblock_channel_offset;
 
@@ -77,15 +77,24 @@ typedef struct {
 
 typedef struct __attribute__((packed)){
     t_transfer_block values;
+#ifdef INTELFPGA_CL
     uint1_t isLast;
+#else
+    bool isLast;
+#endif
     char maxTransportID;
 } t_transferblock_tagged;
 
 typedef struct __attribute__((packed)){
     t_transfer_block values;
+#ifdef INTELFPGA_CL
     uint1_t isLast;
+#else
+    bool isLast;
+#endif
 } t_transferblock_local;
 
+#ifdef INTELFPGA_CL
 t_transfer_block bias2TransferBlcok (t_accumulator bias)
 {
     t_transfer_block transferBlock;
@@ -107,6 +116,7 @@ t_accumulator transferBlock2Bias (t_transfer_block block)
 
     return bias;
 }
+#endif
 
 #ifdef INTELFPGA_CL
 /*
