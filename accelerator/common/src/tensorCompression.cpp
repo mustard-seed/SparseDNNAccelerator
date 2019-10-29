@@ -129,8 +129,8 @@ flexibleDirectCompressedTensor::flexibleDirectCompressedTensor (
                    int iScalarInCompressionBlock = 0;
 
                     int iFullVector = iTensor * channel * width * height
-                          + ((iGroup  * height + iHeight) * width + iWidth)
-                            * (maxScalarIndexInChannelGroup+1);
+                            + (iHeight * width + iWidth) * channel
+                            + iGroup*(maxScalarIndexInChannelGroup + 1);
 
                     for (int iChannelInGroup=0;
                          iChannelInGroup <= maxScalarIndexInChannelGroup;
@@ -383,9 +383,9 @@ int decodeFlexibleDirectCompressedTensor(
 //                                + iChannel;
                             int iDenseVector =
                                 iTensor * height * width * channel
-                                + iGroup * height * width * (maxScalarIndexInChannelGroup + 1)
-                                + iHeight * width * (maxScalarIndexInChannelGroup + 1)
-                                + iWidth * (maxScalarIndexInChannelGroup + 1)
+                                + iHeight * width * channel
+                                + iWidth * channel
+                                + iGroup * (maxScalarIndexInChannelGroup + 1)
                                 + iChannelInGroup;
 //                            std::cout <<"Bitmask, iTensor, iGroup, iHeight, iWidth, iChannelInGroup: "
 //                               <<(unsigned int) bitmask<<" "<<iTensor<<" "<<iGroup<<" "<<iHeight<<" "<<iWidth<<" "<<iChannelInGroup<<std::endl;
