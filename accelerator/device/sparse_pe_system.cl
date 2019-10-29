@@ -79,18 +79,8 @@ __kernel void kernelMemoryReader (
 	unsigned char numGroups, // L / G
 	unsigned short numFiltersInGroup, // G
 	//unsigned short numFoldInGroup, // ceil (G / F)
-	unsigned short numInputChannelCompressionWindows,
+	unsigned short numInputChannelCompressionWindows
 
-
-	//TODO: Move the following to the memory writer controller.
-	unsigned short numChannelsInInputGroupNextLayer,
-
-	/*
-	Output modification
-	*/
-	unsigned char numAccumulatorBitsToRightShift,
-	bool enableOutputRelu,
-	bool enableSparsification
 
 	) {
 	//typedef uint3_t t_state;
@@ -162,28 +152,6 @@ __kernel void kernelMemoryReader (
 
 			unsigned char strideAcrossCol = maxTQ_A * stride;
 
-			//TODO: Move the output control into the memory writer kernel
-			/*
-			Sending the output control signal
-			*/
-			{
-				t_output_buffer_control outputControl;
-				outputControl.outputTileWidth = maxTQ_A;
-				outputControl.outputTileHeight = maxTP;
-				outputControl.numOutputGroupsCurrentLayer = numGroups;
-				outputControl.numChannelsInOutputGroupCurrentLayer = numFiltersInGroup;
-				outputControl.numChannelsInInputGroupNextLayer = numChannelsInInputGroupNextLayer;
-				outputControl.outputModifierBits = 
-					((numAccumulatorBitsToRightShift & 0xF) << 0x2)
-					| ((enableRelu & 0x1) << 0x1)
-					| ((enableSparsification & 0x1));
-
-				t_output_buffer_control_tagged outputControlTagged;
-				outputControlTagged.control = outputControl;
-				outputControlTagged.maxColID = (maxPeCols - 1);
-
-				write_channel_intel(channel_output_buffer_control, outputControlTagged);
-			}
 
 			//Range of input height that are loaded
 			unsigned short maxTM = (maxTP - 1) * (unsigned short) stride + (unsigned short) kernelSize - (unsigned short)(tileBottomPadding + tileTopPadding);
@@ -569,6 +537,181 @@ __kernel void kernelIABuffer ()
 } //Input buffer kernel
 #endif //IA_MEMORY
 
+#ifdef MEMORY_WRITER
+__kernel void kenrelOutputWriter (
+	//Pointer to the output activation
+	volatile __global t_output_dram_block* restrict pOutputActivation,
+	//Pointer to the output activation transfer block count
+	volatile __global t_streamblock_address* restrict pOAStreamBlockAddress,
+
+	unsigned int strideExterrnalMemoryOA, //In terms of output dram block
+
+	/*
+	Output width tiling parameters
+	*/
+	unsigned short outputWidth, //Q
+	unsigned char sizeOutputTilePerColumnWidth, //TQ_A
+	unsigned char sizeOutputTileWidthPerColumnPartial, //Output tile width per column for the final few columns
+	//Ad-hoc parameters
+	//They are employed to deal with the irregularities in output width tiling caused by 
+	//imperfect division between number of PE columns and the overall activation width
+	//if 0 <= iterQ < maxRegularQ, then all the PE columns receive tile of width TQ_A
+	//else, PE columns 0 to APartial-1 each receives a tile of width TQ_APartial, the other columns are idle.
+	unsigned short maxRegularQ, 
+	unsigned char sizePartialColumns, //APartial 
+
+	/*
+	Output height tiling parameters
+	*/
+	unsigned short outputHeight, //P
+	unsigned char sizeOutputHeightTile, //TP
+
+	/*
+	Auxillary
+	*/
+	unsigned short outputWidthxOutputHeight,
+
+	//Number of groups in the output activations
+	unsigned short numOutputChannels,
+	unsigned short numChannelsInOutputGroupCurrentLayer,
+	unsigned short numChannelsInInputGroupNextLayer,
+
+	/*
+	Output modification
+	*/
+	unsigned char numAccumulatorBitsToRightShift,
+	bool enableOutputRelu,
+	bool enableSparsification
+	)
+{
+	//Cache of output activation stream block address
+	t_streamblock_address cacheOAStreamBlockAddress [4096] __attribute__((numbanks(1)));
+
+	unsigned short numGroup = 1 + (numOutputChannels-1) / numChannelsInInputGroupNextLayer;
+
+	//Loops
+	while (iterP < outputHeight)
+	{
+		//Calculate the effectual output tile height
+		unsigned char maxTP = (((unsigned short) sizeOutputHeightTile) < (outputHeight - iterP) ) ?
+			sizeOutputHeightTile :  (unsigned char) (outputHeight - iterP);
+
+
+		unsigned short iterQ = 0; //countQCovertedByTQ
+
+		while (iterQ < outputWidth) //tq
+		{
+			/*
+			Input activation tile parameters
+			*/
+			unsigned char maxTQ_A = (iterQ < maxRegularQ) 
+				? sizeOutputTilePerColumnWidth : sizeOutputTileWidthPerColumnPartial;
+
+			unsigned char maxPeCols =  (iterQ < maxRegularQ)
+				? PE_COLS : sizePartialColumns;
+
+			unsigned short maxTQ = (unsigned short) maxTQ_A * (unsigned short) maxPeCols;
+
+			//Send the output control
+			{
+				t_output_buffer_control outputControl;
+				outputControl.numOutputTileHeightxWidth = maxTP*maxTQ_A;
+				outputControl.outputModifierBits = generateOutputModifier(numAccumulatorBitsToRightShift, enableOutputRelu, enableSparsification);
+				outputControl.numOutputChannels = numOutputChannels;
+				outputControl.numChannelsInGroupCurrentLayer = numChannelsInGroupCurrentLayer;
+				outputControl.numChannelsInInputGroupNextLayer = numChannelsInInputGroupNextLayer;
+
+				t_output_buffer_control_tagged controlTagged;
+				controlTagged.control = outputControl;
+				controltagged.maxColID = (maxPeCols - 1);
+
+				write_channel_intel(channel_output_buffer_control[0], controlTagged);
+			}	
+
+			for (unsigned short iGroup=0; iGroup < numGroups; iGroup++)
+			{
+				for (unsigned char iHeightInTile=0; iHeightInTile < maxTP; iHeightInTile++)
+				{
+					unsigned short iHeightGlobal = iterP + iHeightInTile;
+					for (unsigned char iWidthInTile=0; iWidthInTile < maxTQ_A; iWidthInTile++)
+					{
+						unsigned short iWidthGlobal = iterQ + iWidthInTile;
+						//Index of the x-y strip
+						unsigned short indexStrip = 
+								iGroup*outputWidthxOutputHeight
+								+ iHeightGlobal*outputWidth + iWidthGlobal; //iCol*maxTQ_A is zero
+
+						for (unsigned char iCol=0; iCol<maxPeCols; iCol++)
+						{
+							unsigned int addressOADramBlockInDram = (unsigned int) indexStrip * (unsigned int) strideExterrnalMemoryOA; //In terms of output dram block
+							unsigned short addressTBCountInCache = indexStrip;
+							unsigned short clusterCount;
+
+							bool proceed = true;
+							while (proceed)
+							{
+								t_output_cluster_tagged receivedBlock = read_channel_intel(channel_output_wide[0]);
+								if (receivedBlock.isLast)
+								{
+									proceed = false;
+									clusterCount = outputDramBlock2ClusterCount(receivedBlock.block);
+								}
+								else 
+								{
+									//Store the dram count
+									pOutputActivation[addressOADramBlockInDram++] = receivedBlock.block;
+								}
+							} //while
+
+							t_streamblock_address tbBlockCount = clusterCount >> CLUSTER_TO_TRANSFER_BLOCK_SHIFT;
+							//Store the cluster count
+							cacheOAStreamBlockAddress[addressTBCountInCache] = tbBlockCount;
+
+							indexStrip += maxTQ_A;
+						} // for. iCol
+					} //for. iWidthInTile
+				} //for. iHeightInTile
+			} //for. iGroup
+
+			//Transfer the TB block counts from the cache to the DRAM
+			{
+				unsigned int dramAddressRowStride = (unsigned int) outputWidth;
+				unsigned int dramAddressGroupStride = (unsigned int) outputHeight * (unsigned int) outputWidth;
+				unsigned int dramAddressGroupBase = (unsigned int) iterP * dramAddressRowStride + iterQ;
+
+				unsigned short cacheAddressRowStride = (unsigned short) maxTQ;
+				unsigned short cacheAddressGroupStride = (unsigned short) maxTQ * (unsigned short) maxTP;
+				unsigned short cacheAddressGroupBase = 0;
+
+				for (unsigned char iGroup=0; iGroup<numGroups; iGroup++)
+				{
+					unsigned int dramAddressRowBase = dramAddressGroupBase;
+					unsigned short cacheAddressRowBase = cacheAddressGroupBase;
+					for (unsigned char iHeightInTile=0; iHeightInTile<maxTP; iHeightInTile++)
+					{
+						unsigned int dramAddress = dramAddressRowBase;
+						unsigned int cacheAddress = cacheAddressRowBase;
+						for (unsigned char iWidthInTile=0; iWidthInTile<maxTQ; iWidthInTile++)
+						{
+							pOAStreamBlockAddress[dramAddress++] = cacheStreamingBlockAddress[cacheAddress++];
+						} //iWidthInTile
+						dramAddressRowBase += dramAddressRowStride;
+						cacheAddressRowBase += cacheAddressRowStride;
+					} //iHeightInTile
+					dramAddressGroupBase += dramAddressGroupStride;
+					cacheAddressGroupBase += cacheAddressGroupStride;
+				} //iGroup
+			} //Transfer the TB block counts from the cache to the DRAM
+
+			iterQ += maxTQ;
+		} //iterQ
+
+		iterP += maxTP;
+	} //iterP
+
+}
+#endif //MEMORY_WRITER 
+
 #ifdef OA_MEMORY
 #define STATE_OA_BUFFER_FETCH_CLUSTER 0x0
 #define STATE_OA_BUFFER_FETCH_WAIT 0x1
@@ -597,19 +740,19 @@ __kernel void kernelOABuffer ()
 		unsigned char numAccumulatorBitsToRightShift = outputModifier2RightShiftAmount(outputControl.outputModifierBits);
 		uint1_t enableRelu = (uint1_t) outputModifier2EnableSparsification(outputControl.outputModifierBits);
 		uint1_t enableSparsification = (uint1_t) outputModifier2EnableSparsification(outputControl.outputModifierBits);
-		unsigned short numOutputChannels = (unsigned short) outputControl.numOutputGroupsCurrentLayer * (unsigned short) numChannelsInOutputGroupCurrentLayer;
 
+		unsigned char numOutputGroupsCurrentLayer = 1 + (outputControl.numOutputChannels-1) / outputControl.numChannelsInGroupCurrentLayer;
 		//Draining the ouput values from the PE columns, perform modification, and cache them
 		{
 			unsigned short iterOutChannelGlobal = 0;
 
-			for (unsigned char iterGroup=0; iterGroup < outputControl.numOutputGroupsCurrentLayer; iterGroup++)
+			for (unsigned char iterGroup=0; iterGroup < numOutputGroupsCurrentLayer; iterGroup++)
 			{
 				unsigned short iterOutChannelInGroup = 0;
-				while (iterOutChannelInGroup < outputControl.numChannelsInOutputGroupCurrentLayer)
+				while (iterOutChannelInGroup < outputControl.numChannelsInGroupCurrentLayer)
 				{
-					unsigned char maxPeRows = ((outputControl.numChannelsInOutputGroupCurrentLayer - iterOutChannelInGroup) > PE_ROWS)
-					? (unsigned char) PE_ROWS : (unsigned char) (outputControl.numChannelsInOutputGroupCurrentLayer - iterOutChannelInGroup);
+					unsigned char maxPeRows = ((outputControl.numChannelsInGroupCurrentLayer - iterOutChannelInGroup) > PE_ROWS)
+					? (unsigned char) PE_ROWS : (unsigned char) (outputControl.numChannelsInGroupCurrentLayer - iterOutChannelInGroup);
 
 					unsigned short outputIndexBase = iterOutChannelGlobal;
 
@@ -624,7 +767,7 @@ __kernel void kernelOABuffer ()
 							cacheOutputActivations[outputIndex++] = shortOutput;
 						}
 
-						outputIndexBase += numOutputChannels;
+						outputIndexBase += outputControl.numOutputChannels;
 					} //iterOutHxW
 
 					iterOutChannelInGroup += (unsigned short) maxPeRows;
@@ -638,10 +781,10 @@ __kernel void kernelOABuffer ()
 		//Group the output activations into clusters, and send them to compression engine
 		{
 			unsigned short iterOutChannelGlobalBase = 0;;
-			unsigned short numClustersInNextInputGroup = 1 + ((outputControl.numChannelsInInputGroupNextLayer - 1) >> VALUE_TO_CLUSTER_SHIFT);
+			unsigned short numClustersInNextInputGroup = 1 + ((outputControl.numChannelsInGroupNextLayer - 1) >> VALUE_TO_CLUSTER_SHIFT);
 			unsigned short numWindowsInNextInputGroup = 1 + ((numClustersInNextInputGroup - 1) / COMPRESSION_WINDOW_SIZE);
 
-			while (iterOutChannelGlobalBase < numOutputChannels)
+			while (iterOutChannelGlobalBase < outputControl.numOutputChannels)
 			{
 				unsigned short outputIndexBase = iterOutChannelGlobalBase;
 				for (unsigned char iterOutHxW=0; iterOutHxW<outputControl.numOutputTileHeightxWidth; iterOutHxW++)
@@ -665,14 +808,14 @@ __kernel void kernelOABuffer ()
 					unsigned char iClusterInWindowFetch = 0;
 					unsigned char iClusterFetch = 0;
 
-					t_state sendState;
+					t_state sendState = STATE_OA_BUFFER_SEND_WAIT;
 					unsigned char iClusterInWindowSend = 0;
 					unsigned char iWindowSend = 0;
 					unsigned char iClusterInTransferBlockSend = 0;
 
 
 					//Send and compress the clusters in a strip
-					while (iWindowSend < numWindowsInGNextInputGroup)
+					while (iWindowSend < numWindowsInNextInputGroup)
 					{
 						//Fetch
 						t_state nextFetchState = fetchState;
@@ -684,7 +827,7 @@ __kernel void kernelOABuffer ()
 							for (unsigned char i=0; i<CLUSTER_SIZE; i++)
 							{
 								unsigned short tempOC = iOCInGroup + i;
-								char tempValue = (tempOC >= outputControl.numChannelsInInputGroupNextLayer) ?
+								char tempValue = (tempOC >= outputControl.numChannelsInGroupNextLayer) ?
 									0x0 : cacheOutputActivations[outputIndex+i];
 								cluster.cluster_values[i] = tempValue;
 								keep ||= (tempValue != 0x0);
@@ -754,10 +897,11 @@ __kernel void kernelOABuffer ()
 						} //STATE_OA_BUFFER_SEND_CLUSTER
 						else if (sendState == STATE_OA_BUFFER_SEND_PADDING)
 						{
+							//Make sure the extra padding we send are 0
 							#pragma unroll
 							for (unsigned int i=0; i<CLUSTER_SIZE; i++)
 							{
-								clusterSend.controlCluster.cluster_values[i] = 0;
+								clusterSend.cluster_values[i] = 0;
 							}
 
 							iClusterInTransferBlockSend++;
@@ -805,15 +949,139 @@ __kernel void kernelOABuffer ()
 							}
 						} //SWAP
 					} //Send ping-pong
-					outputIndexBase += numOutputChannels;
+					outputIndexBase += outputControl.numOutputChannels;
 				} //iterOutHxW
 
 				//Shift to a different group
-				iterOutChannelGlobalBase += outputControl.numChannelsInInputGroupNextLayer;
+				iterOutChannelGlobalBase += outputControl.numChannelsInGroupNextLayer;
 			} //iterOutChannelGlobalBase
 		} //Streaming the output to the compressor
 
 	} // while
+}
+
+#define STATE_OA_TEE_DRAIN_SELF 0x0
+#define STATE_OA_TEE_DRAIN_SELF_SEND_COUNT 0X1
+#define STATE_OA_TEE_DRAIN_OTHERS 0x2
+__attribute__((max_global_work_dim(0)))
+__attribute__((autorun))
+__attribute__((num_compute_units(PE_COLS)))
+__kernel void kernelOATee ()
+{
+	typedef uint2_t t_state;
+	int colID = get_compute_id(0);
+
+	while (true)
+	{
+		/*
+		Read the control
+		*/
+		t_output_buffer_control_tagged taggedControl =
+			read_channel_intel(channel_output_buffer_control[colID]);
+
+
+		/*
+		Decode the control
+		*/
+		unsigned char numOutputTileHeightxWidth = taggedControl.control.numOutputTileHeightxWidth;
+		unsigned char numGroups = 1 + (taggedControl.control.numOutputChannels - 1) / (taggedControl.control.numChannelsInGroupNextLayer);
+		unsigned char maxColID = taggedControl.maxColID;
+		unsigned char numOtherColToCollect = maxColID - colID;
+
+		/*
+		Pass on the control to the local
+		*/
+		write_channel_intel(channel_output_buffer_local[colID], taggedControl.control);
+
+		/*
+		Pass on the control to the right if needed
+		*/
+		if (colID < (PE_COLS - 1))
+		{
+			if (colID < maxColID)
+			{
+				write_channel_intel(channel_output_buffer_control[colID+1], taggedControl);
+			}
+		}
+
+		/*
+		Drain the outputs
+		*/
+		for (unsigned char iterOutput=0; iterOutput<numOutputTileHeightxWidth; iterOutput++)
+		{
+			t_state state = STATE_OA_TEE_DRAIN_SELF;
+			unsigned short iClusters = 0;
+			unsigned short iClusterInDram = 0;
+			unsigned char iColDrained = 0;
+			unsigned char numColToDrain = numOtherColToCollect + 1;
+			t_output_dram_block dramBlock;
+
+			while (iColDrained < numColToDrain)
+			{
+				t_output_dram_block_tagged dramBlockTagged;
+				bool writeChannel = false;
+				t_state nextState = state;
+
+				if (state == STATE_OA_TEE_DRAIN_SELF)
+				{
+					t_output_cluster_tagged clusterTagged = read_channel_intel(channel_output_buffer_to_tee[colID]);
+					dramBlock.clusters[iClusterInDram] = clusterTagged.cluster;
+					iClusters++;
+
+					if ( ( (iClusterInDram + 1) == NUM_CLUSTER_IN_DRAM_SIZE) || (clusterTagged.isLast) )
+					{
+						writeChannel = true;
+
+						dramBlockTagged.block = dramBlock;
+						dramBlockTagged.isLast = false;
+
+						iClusterInDram = 0;
+					}
+					else
+					{
+						iClusterInDram++;
+					}
+					
+					if (clusterTagged.isLast)
+					{
+						nextState = STATE_OA_TEE_DRAIN_SELF_SEND_COUNT;
+					}
+				} //STATE_OA_TEE_DRAIN_SELF
+				else if (state == STATE_OA_TEE_DRAIN_SELF_SEND_COUNT)
+				{
+					writeChannel = true;
+
+					t_output_dram_block countDramBlock = clusterCount2OutputDramBlock(iClusters);
+
+					dramBlockTagged.block = countDramBlock;
+					dramBlockTagged.isLast = true;
+
+					nextState = STATE_OA_TEE_DRAIN_OTHERS;
+					iColDrained++;
+				} //STATE_OA_TEE_DRAIN_SELF_SEND_COUNT
+				else if (state == STATE_OA_TEE_DRAIN_OTHERS)
+				{
+					writeChannel = true;
+
+					t_output_cluster_tagged receivedBlock = read_channel_intel(channel_output_wide[colID+1]);
+					dramBlockTagged = receivedBlock;
+
+					if (receivedBlock.isLast)
+					{
+						iColDrained++;
+					}
+				} //STATE_OA_TEE_DRAIN_OTHERS
+
+				if (writeChannel)
+				{
+					write_channel_intel(channel_output_wide[colID], dramBlockTagged);
+				}
+			} //while
+
+		} //for
+
+	} //while
+
 }
 #endif  //OA_MEMORY
 

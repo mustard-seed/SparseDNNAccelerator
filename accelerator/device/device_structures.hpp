@@ -252,13 +252,13 @@ t_dram_block inputBufferControl2DramBlock(t_input_buffer_control controlBlock)
 typedef struct __attribute__((packed))
 {
     unsigned char numOutputTileHeightxWidth;
-    unsigned char numOutputGroupsCurrentLayer;
+    unsigned char outputModifierBits;
+    unsigned short numOutputChannels;
     unsigned short numChannelsInOutputGroupCurrentLayer;
     unsigned short numChannelsInInputGroupNextLayer;
     //5:2: number of accumulator bits to right shift
     //1: enableRelu
     //0: enable sparsification 
-    unsigned char outputModifierBits;
     //unsigned char numBitsToRightShift;
     //unsigned char enableRelu;
     //unsigned char enableSparsification;
@@ -374,6 +374,7 @@ Data structures that travel on the output activation bus system
 typedef struct __attribute__((packed)) {
     t_cluster cluster;
     bool isLastInStrip;
+
 } t_output_cluster_tagged;
 
 typedef struct {
@@ -385,15 +386,15 @@ typedef struct __attribute__((packed)) {
     bool isLast;
 } t_output_dram_block_tagged;
 
-t_output_dram_block transferBlockCount2OutputDramBlock (t_streamblock_address transferBlockCount)
+t_output_dram_block clusterCount2OutputDramBlock (unsigned short clusterCount)
 {
     t_output_dram_block outputDramBlock;
-    outputDramBlock.cluster[0].cluster_values[0] = (char) (transferBlockCount & 0xFF);
-    outputDramBlock.cluster[0].cluster_values[1] = (char) ((transferBlockCount >> 8) & 0xFF);
+    outputDramBlock.cluster[0].cluster_values[0] = (char) (clusterCount & 0xFF);
+    outputDramBlock.cluster[0].cluster_values[1] = (char) ((clusterCount >> 8) & 0xFF);
     return outputDramBlock;
 }
 
-t_streamblock_address outputDramBlock2TransferBlockCount (t_output_dram_block outputDramBlock)
+unsigned short outputDramBlock2ClusterCount (t_output_dram_block outputDramBlock)
 {
     char countLow = outputDramBlock.cluster[0].cluster_values[0];
     char countHigh = outputDramBlock.cluster[0].cluster_values[1];
