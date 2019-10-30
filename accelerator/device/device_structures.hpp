@@ -157,7 +157,7 @@ t_filter_streamer_control dramBlock2FilterStreamerControl (t_dram_block block)
         = ( ( ( (t_accumulator) (block.transferBlocks[1].values[0].cluster_values[0]) ) & 0xFF )
             | ( (((t_accumulator) (block.transferBlocks[1].values[0].cluster_values[1])) & 0xFF) << 8));
 
-    control.maxPeCols = (unsigned char) block.transferBlocks[1].transferBlocks[1].values[0];
+    control.maxPeCols = (unsigned char) block.transferBlocks[1].values[1].cluster_values[0];
     
     return control;
 }
@@ -174,7 +174,7 @@ t_dram_block filterStreamerControl2dramBlock (t_filter_streamer_control control)
     block.transferBlocks[1].values[0].cluster_values[0] = control.bias & 0xFF;
     block.transferBlocks[1].values[0].cluster_values[1] = ((control.bias >> 8) & 0xFF);
     //block.transferBlocks[2].values[0].cluster_values[0] = control.destinationRow;
-    block.transferBlocks[1].transferBlocks[1].values[0] = (char) control.maxPeCols;
+    block.transferBlocks[1].values[1].cluster_values[0] = (char) control.maxPeCols;
 
     return block;
 }
@@ -292,7 +292,7 @@ unsigned char outputModifier2EnableRelu (unsigned char outputModifier)
 
 unsigned char outputModifier2EnableSparsification (unsigned char enableSparsification)
 {
-    return (outputModifier >> 5) & 0x1;
+    return (enableSparsification >> 5) & 0x1;
 }
 
 unsigned char generateOutputModifier (unsigned char numBitsToRightShift, unsigned char enableRelu, unsigned char enableSparse)
@@ -399,15 +399,15 @@ typedef struct __attribute__((packed)) {
 t_output_dram_block clusterCount2OutputDramBlock (unsigned short clusterCount)
 {
     t_output_dram_block outputDramBlock;
-    outputDramBlock.cluster[0].cluster_values[0] = (char) (clusterCount & 0xFF);
-    outputDramBlock.cluster[0].cluster_values[1] = (char) ((clusterCount >> 8) & 0xFF);
+    outputDramBlock.clusters[0].cluster_values[0] = (char) (clusterCount & 0xFF);
+    outputDramBlock.clusters[0].cluster_values[1] = (char) ((clusterCount >> 8) & 0xFF);
     return outputDramBlock;
 }
 
 unsigned short outputDramBlock2ClusterCount (t_output_dram_block outputDramBlock)
 {
-    char countLow = outputDramBlock.cluster[0].cluster_values[0];
-    char countHigh = outputDramBlock.cluster[0].cluster_values[1];
+    char countLow = outputDramBlock.clusters[0].cluster_values[0];
+    char countHigh = outputDramBlock.clusters[0].cluster_values[1];
 
     unsigned short count = 
         ((((t_streamblock_address) countHigh) & 0xFF) << 8)

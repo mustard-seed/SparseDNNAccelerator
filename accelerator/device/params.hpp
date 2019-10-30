@@ -59,7 +59,7 @@
 
 #define PACKET_SIZE 1
 
-#define PE_ROWS 8
+#define PE_ROWS 2
 #define PE_COLS 2
 
 //Encoding weight length
@@ -76,6 +76,7 @@
 #define CLUSTER_SIZE 2 //cluster size in terms of values
 #define VALUE_TO_CLUSTER_SHIFT 1 //amount of right shift required to convert a value index into cluster index
 #define VALUE_DIVIDED_BY_CLUSTER_SIZE_REMAINDER_MASK 0x1;
+#define CLUSTER_TO_TRANSFER_BLOCK_SHIFT 1 //amount of right shift required to convert a cluster count into transfer block count
 
 #define BURST_SIZE_BYTE 32
 
