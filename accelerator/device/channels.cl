@@ -17,7 +17,7 @@ channel t_transferblock_tagged channel_weight[PE_ROWS][PE_COLS]  __attribute__((
 //channel t_accumulator channel_drainInput __attribute__((depth(1)));
 //channel t_accumulator channel_drainOutput __attribute__((depth(1)));
 
-channel t_accumulator channel_drain[PE_ROWS][PE_COLS] __attribute__((depth(0)));
+channel t_accumulator channel_drain[PE_ROWS][PE_COLS] __attribute__((depth(1)));
 
 channel t_operand channel_processedDrain __attribute__((depth(0)));
 //#endif

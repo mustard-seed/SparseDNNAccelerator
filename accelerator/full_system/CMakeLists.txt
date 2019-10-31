@@ -15,7 +15,6 @@ set (PREPROCESSOR_DEFS
         -DIA_MEMORY
         -DOA_MEMORY
         -DFULL_SYSTEM
-        -
         )
 
 add_definitions(
@@ -80,7 +79,8 @@ set (intel_fpga_libraries
 set (rtl_directory ${PROJECT_SOURCE_DIR}/device/RTL
 )
 
-#set (rtl_lib rtl_lib.aoclib)
+set (rtl_lib
+    -l rtl_lib.aoclib)
 INCLUDE_DIRECTORIES (${rtl_directory})
 ###########################################################
 #Intel FPGA OpenCL SDK Compile and linkage configurations

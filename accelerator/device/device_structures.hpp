@@ -95,7 +95,7 @@ typedef struct __attribute__((packed)){
 } t_transferblock_local;
 
 #ifdef INTELFPGA_CL
-t_transfer_block bias2TransferBlcok (t_accumulator bias)
+t_transfer_block bias2TransferBlock (t_accumulator bias)
 {
     t_transfer_block transferBlock;
     transferBlock.values[0].cluster_values[0] = bias & 0xFF;
@@ -264,8 +264,8 @@ typedef struct __attribute__((packed))
     unsigned char numOutputTileHeightxWidth;
     unsigned char outputModifierBits;
     unsigned short numOutputChannels;
-    unsigned short numChannelsInOutputGroupCurrentLayer;
-    unsigned short numChannelsInInputGroupNextLayer;
+    unsigned short numChannelsInGroupCurrentLayer;
+    unsigned short numChannelsInGroupNextLayer;
     //5:2: number of accumulator bits to right shift
     //1: enableRelu
     //0: enable sparsification 
@@ -280,7 +280,7 @@ typedef struct __attribute__((packed))
     unsigned char maxColID;
 } t_output_buffer_control_tagged;
 
-unsigned char outputModifer2RightShiftAmount (unsigned char outputModifier)
+unsigned char outputModifier2RightShiftAmount (unsigned char outputModifier)
 {
     return (outputModifier & 0xF);
 }
@@ -290,9 +290,9 @@ unsigned char outputModifier2EnableRelu (unsigned char outputModifier)
     return (outputModifier >> 4) & 0x1;
 }
 
-unsigned char outputModifier2EnableSparsification (unsigned char enableSparsification)
+unsigned char outputModifier2EnableSparsification (unsigned char outputModifier)
 {
-    return (enableSparsification >> 5) & 0x1;
+    return (outputModifier >> 5) & 0x1;
 }
 
 unsigned char generateOutputModifier (unsigned char numBitsToRightShift, unsigned char enableRelu, unsigned char enableSparse)
