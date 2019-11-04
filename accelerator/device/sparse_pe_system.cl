@@ -368,6 +368,7 @@ __kernel void kernelMemoryReader (
 #define STATE_IA_BUFFER_WRITE_CACHE_DONE 0x0
 #define STATE_IA_BUFFER_WRITE_CACHE_LOAD_TRANSFER_COUNT 0x1
 #define STATE_IA_BUFFER_WRITE_CACHE_WRITE 0x2
+#define IA_LOOP_LATENCY 7
 __attribute__((max_global_work_dim(0)))
 __attribute__((autorun))
 __attribute__((num_compute_units(PE_COLS)))
@@ -396,36 +397,69 @@ __kernel void kernelIABuffer ()
 		//Import the NZ block count and the IA for one tile.
 		for (unsigned short wCountInputWidthxHeight = 0; wCountInputWidthxHeight < wNumInputWidthxHeight; wCountInputWidthxHeight++)
 		{
-			t_state state = STATE_IA_BUFFER_WRITE_CACHE_LOAD_TRANSFER_COUNT;
-			t_streamblock_address wNumInputTransferBlock;
-			t_streamblock_address wCountInputTransferBlock; //Counter. Number of input transfer blocks that have been transmitted
+			//t_state state = STATE_IA_BUFFER_WRITE_CACHE_LOAD_TRANSFER_COUNT;
+			t_dram_block dramBlockCount = read_channel_intel(channel_ia_wide_local[colID]);
+
+			t_streamblock_address wNumInputTransferBlock = dramBlock2TransferBlockCount(dramBlockCount);
+			cacheIAStreamBlockAddress[wCountInputWidthxHeight] = wNumInputTransferBlock;
+
 			unsigned short iaCacheWideAddress = iaCacheWideAddressBase;
 
-			//Load one strip
-			while ( 
-				(state == STATE_IA_BUFFER_WRITE_CACHE_LOAD_TRANSFER_COUNT)
-				|| (state == STATE_IA_BUFFER_WRITE_CACHE_WRITE)
-			)
+			for (t_streamblock_address wCountInputTransferBlock=0; 
+				wCountInputTransferBlock < wNumInputTransferBlock;
+				wCountInputTransferBlock++)
 			{
 				t_dram_block dramBlock = read_channel_intel(channel_ia_wide_local[colID]);
-				if (state == STATE_IA_BUFFER_WRITE_CACHE_LOAD_TRANSFER_COUNT)
-				{
-					state = STATE_IA_BUFFER_WRITE_CACHE_WRITE;
+				cacheIABlocks[iaCacheWideAddress++] = dramBlock;
+				wCountInputTransferBlock += WIDE_SIZE_OFFSET;
+			}
 
-					wNumInputTransferBlock = dramBlock2TransferBlockCount(dramBlock);
-					cacheIAStreamBlockAddress[wCountInputWidthxHeight] = wNumInputTransferBlock;
-					wCountInputTransferBlock = 0;
-				}
-				else
+			//t_state delayState[IA_LOOP_LATENCY];
+
+			//#pragma unroll
+			//for (unsigned char i=0; i<IA_LOOP_LATENCY; i++)
+			//{
+			//	delayState[i] = STATE_IA_BUFFER_WRITE_CACHE_LOAD_TRANSFER_COUNT;
+			//}
+
+			//Load one strip
+			//TODO: This loop has large II
+			/*
+			while ( 
+				delayState[0] != STATE_IA_BUFFER_WRITE_CACHE_DONE
+			)
+			{
+				if (state != STATE_IA_BUFFER_WRITE_CACHE_DONE)
 				{
-					cacheIABlocks[iaCacheWideAddress++] = dramBlock;
-					wCountInputTransferBlock += WIDE_SIZE_OFFSET;
-					if (wCountInputTransferBlock >= wNumInputTransferBlock)
+					t_dram_block dramBlock = read_channel_intel(channel_ia_wide_local[colID]);
+
+					if (state == STATE_IA_BUFFER_WRITE_CACHE_LOAD_TRANSFER_COUNT)
 					{
-						state = STATE_IA_BUFFER_WRITE_CACHE_DONE;
+						state = STATE_IA_BUFFER_WRITE_CACHE_WRITE;
+
+						wNumInputTransferBlock = dramBlock2TransferBlockCount(dramBlock);
+						cacheIAStreamBlockAddress[wCountInputWidthxHeight] = wNumInputTransferBlock;
+						wCountInputTransferBlock = 0;
+					}
+					else
+					{
+						cacheIABlocks[iaCacheWideAddress++] = dramBlock;
+						wCountInputTransferBlock += WIDE_SIZE_OFFSET;
+						if (wCountInputTransferBlock >= wNumInputTransferBlock)
+						{
+							state = STATE_IA_BUFFER_WRITE_CACHE_DONE;
+						}
 					}
 				}
+
+				#pragma unroll
+				for (unsigned char i=0; i<(IA_LOOP_LATENCY-1); i++)
+				{
+					delayState[i] = delayState[i+1];
+				}
+				delayState[IA_LOOP_LATENCY-1] = state;
 			} //Load one strip
+			*/
 			iaCacheWideAddressBase += stripStrideInCache;
 		} //Import the NZ block count and the IA for one tile.
 
