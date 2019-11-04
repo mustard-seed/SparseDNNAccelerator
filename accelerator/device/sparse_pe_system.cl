@@ -747,6 +747,7 @@ __kernel void kenrelOutputWriter (
 #define STATE_OA_BUFFER_SEND_MASK 0X1
 #define STATE_OA_BUFFER_SEND_PADDING 0X2
 #define STATE_OA_BUFFER_SEND_WAIT 0x3
+#define STATE_OA_BUFFER_SEND_END 0x4
 __attribute__((max_global_work_dim(0)))
 __attribute__((autorun))
 __attribute__((num_compute_units(PE_COLS)))
@@ -755,9 +756,9 @@ __kernel void kernelOABuffer ()
 	int colID = get_compute_id(0);
 
 	private char cacheOutputActivations[OA_CACHE_SIZE];
-	private t_cluster bufferCompression[2][16]; 
+	t_cluster bufferCompression[16][2]; 
 
-	typedef uint2_t t_state; 
+	typedef uint3_t t_state; 
 
 	while (true)
 	{
@@ -855,7 +856,8 @@ __kernel void kernelOABuffer ()
 
 					//Send and compress the clusters in a strip
 					#pragma ivdep array(bufferCompression)
-					while (iWindowSend < numWindowsInNextInputGroup)
+					//while (iWindowSend < numWindowsInNextInputGroup)
+					while (sendState != STATE_OA_BUFFER_SEND_END)
 					{
 						//Fetch
 						t_state nextFetchState = fetchState;
@@ -879,7 +881,7 @@ __kernel void kernelOABuffer ()
 								regSurvivingClusters[regFetchSide]++;
 							}
 
-							bufferCompression[regFetchSide][iClusterInWindowFetch] = cluster;
+							bufferCompression[iClusterInWindowFetch][regFetchSide] = cluster;
 							iClusterFetch++;
 							iClusterInWindowFetch++;
 
@@ -923,7 +925,7 @@ __kernel void kernelOABuffer ()
 						} //STATE_OA_BUFFER_SEND_MASK
 						else if (sendState == STATE_OA_BUFFER_SEND_CLUSTER)
 						{
-							clusterSend = bufferCompression[(~regFetchSide) & 0x1][iClusterInWindowSend++];
+							clusterSend = bufferCompression[iClusterInWindowSend++][(~regFetchSide) & 0x1];
 
 							iClusterInTransferBlockSend = (iClusterInTransferBlockSend == TRANSFER_SIZE) ? 1 : (iClusterInTransferBlockSend + 1);
 
@@ -935,7 +937,7 @@ __kernel void kernelOABuffer ()
 								}
 								else
 								{
-									nextSendState = STATE_OA_BUFFER_SEND_WAIT;
+									nextSendState = STATE_OA_BUFFER_SEND_END;
 									iWindowSend++;
 								}
 							}
@@ -953,7 +955,7 @@ __kernel void kernelOABuffer ()
 
 							if (iClusterInTransferBlockSend == TRANSFER_SIZE)
 							{
-								nextSendState = STATE_OA_BUFFER_SEND_WAIT;
+								nextSendState = STATE_OA_BUFFER_SEND_END;
 								iWindowSend++;
 							}
 						} //STATE_OA_BUFFER_SEND_PADDING
@@ -1008,6 +1010,8 @@ __kernel void kernelOABuffer ()
 		} //Streaming the output to the compressor
 	} // while
 }
+
+
 
 #define STATE_OA_TEE_DRAIN_SELF 0x0
 #define STATE_OA_TEE_DRAIN_SELF_SEND_COUNT 0X1

@@ -74,6 +74,7 @@ Output activation channels coming out of the output buffers
 */
 //channel t_cluster channel_output_buffer_to_compressor[PE_COLS] __attribute__((depth(0)));
 channel t_output_cluster_tagged channel_output_buffer_to_tee[PE_COLS] __attribute__((depth(0)));
+//channel t_output_cluster_tagged channel_output_buffer_to_tee[PE_COLS] __attribute__((depth(0)));
 channel t_output_dram_block_tagged channel_output_wide[PE_COLS] __attribute__((depth(0)));
 #endif //ACTIVATION_MEMORY_INTERCONNECT
 
