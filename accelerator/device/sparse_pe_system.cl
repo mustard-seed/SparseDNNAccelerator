@@ -413,53 +413,6 @@ __kernel void kernelIABuffer ()
 				cacheIABlocks[iaCacheWideAddress++] = dramBlock;
 				wCountInputTransferBlock += WIDE_SIZE_OFFSET;
 			}
-
-			//t_state delayState[IA_LOOP_LATENCY];
-
-			//#pragma unroll
-			//for (unsigned char i=0; i<IA_LOOP_LATENCY; i++)
-			//{
-			//	delayState[i] = STATE_IA_BUFFER_WRITE_CACHE_LOAD_TRANSFER_COUNT;
-			//}
-
-			//Load one strip
-			//TODO: This loop has large II
-			/*
-			while ( 
-				delayState[0] != STATE_IA_BUFFER_WRITE_CACHE_DONE
-			)
-			{
-				if (state != STATE_IA_BUFFER_WRITE_CACHE_DONE)
-				{
-					t_dram_block dramBlock = read_channel_intel(channel_ia_wide_local[colID]);
-
-					if (state == STATE_IA_BUFFER_WRITE_CACHE_LOAD_TRANSFER_COUNT)
-					{
-						state = STATE_IA_BUFFER_WRITE_CACHE_WRITE;
-
-						wNumInputTransferBlock = dramBlock2TransferBlockCount(dramBlock);
-						cacheIAStreamBlockAddress[wCountInputWidthxHeight] = wNumInputTransferBlock;
-						wCountInputTransferBlock = 0;
-					}
-					else
-					{
-						cacheIABlocks[iaCacheWideAddress++] = dramBlock;
-						wCountInputTransferBlock += WIDE_SIZE_OFFSET;
-						if (wCountInputTransferBlock >= wNumInputTransferBlock)
-						{
-							state = STATE_IA_BUFFER_WRITE_CACHE_DONE;
-						}
-					}
-				}
-
-				#pragma unroll
-				for (unsigned char i=0; i<(IA_LOOP_LATENCY-1); i++)
-				{
-					delayState[i] = delayState[i+1];
-				}
-				delayState[IA_LOOP_LATENCY-1] = state;
-			} //Load one strip
-			*/
 			iaCacheWideAddressBase += stripStrideInCache;
 		} //Import the NZ block count and the IA for one tile.
 
@@ -473,15 +426,15 @@ __kernel void kernelIABuffer ()
 			//Stream the activations
 			unsigned char iPaddedTileHeight = 0;
 			unsigned char iPaddedTileWidth = 0;
-			while ( (iPaddedTileHeight+tileControl.kernelSize) <= (tileControl.inputTileHeight + tileControl.bottomPadding + tileControl.topPadding) )
-			{
+			//while ( (iPaddedTileHeight+tileControl.kernelSize) <= (tileControl.inputTileHeight + tileControl.bottomPadding + tileControl.topPadding) )
+			//{
 				unsigned char iPaddedHeightLocal = iPaddedTileHeight;
 				unsigned char iPaddedWidthLocal = iPaddedTileWidth;
 				unsigned char iNeuWidthLocal = 0;
 				unsigned char iNeuHeightLocal = 0;
 
-				while (iNeuHeightLocal < tileControl.kernelSize)
-				{
+				//while (iNeuHeightLocal < tileControl.kernelSize)
+				//{
 					bool sendPadding = 
 						(iPaddedHeightLocal < tileControl.topPadding)
 						|| (iPaddedHeightLocal >= tileControl.inputTileHeight + tileControl.topPadding)
@@ -540,15 +493,34 @@ __kernel void kernelIABuffer ()
 						iPaddedWidthLocal = iPaddedTileWidth;
 						iNeuHeightLocal++;
 						iPaddedHeightLocal++;
+						if (iNeuHeightLocal >= tileControl.kernelSize)
+						{
+							iNeuHeightLocal = 0;
+							if ( (iPaddedTileWidth + tileControl.stride + tileControl.kernelSize) > (tileControl.inputTileWidth + tileControl.leftPadding + tileControl.rightPadding) )
+							{
+								iPaddedTileWidth = 0;
+								iPaddedTileHeight += tileControl.stride;
+								if ((iPaddedTileHeight+tileControl.kernelSize) > (tileControl.inputTileHeight + tileControl.bottomPadding + tileControl.topPadding))
+								{
+									iPaddedTileHeight = 0;
+									iFilterGlobal += numPeRows;
+								}
+							}
+							else
+							{
+								iPaddedTileWidth += tileControl.stride;
+							}
+
+						}
 					}
 					else
 					{
 						iPaddedWidthLocal++;
 						iNeuWidthLocal++;
 					}
-				} //iNeuHeightLocal
+				//} //iNeuHeightLocal
 
-
+/*
 				if ( (iPaddedTileWidth + tileControl.stride + tileControl.kernelSize) > (tileControl.inputTileWidth + tileControl.leftPadding + tileControl.rightPadding) )
 				{
 					iPaddedTileWidth = 0;
@@ -558,8 +530,9 @@ __kernel void kernelIABuffer ()
 				{
 					iPaddedTileWidth += tileControl.stride;
 				}
+*/
 			
-			} //Loop over input tile
+			//} //Loop over input tile
 
 			//Update iFilterGloba
 			iFilterGlobal += numPeRows;
@@ -782,6 +755,7 @@ __kernel void kenrelOutputWriter (
 #define STATE_OA_BUFFER_SEND_PADDING 0X2
 #define STATE_OA_BUFFER_SEND_WAIT 0x3
 #define STATE_OA_BUFFER_SEND_END 0x4
+#define OA_BUFFER_LATENCY 7
 __attribute__((max_global_work_dim(0)))
 __attribute__((autorun))
 __attribute__((num_compute_units(PE_COLS)))
@@ -790,7 +764,7 @@ __kernel void kernelOABuffer ()
 	int colID = get_compute_id(0);
 
 	private char cacheOutputActivations[OA_CACHE_SIZE];
-	t_cluster bufferCompression[16][2]; 
+	//t_cluster bufferCompression[16][2]; 
 
 	typedef uint3_t t_state; 
 
@@ -866,36 +840,16 @@ __kernel void kernelOABuffer ()
 					unsigned short outputIndex = outputIndexBase;
 					unsigned short iOCInGroup=0;
 
-					//send clusters in a strip
-					char regMask[2];
-					unsigned char regSurvivingClusters[2];
-					uint1_t regFetchSide = 0x0;
-					#pragma unroll
-					for (unsigned char i=0; i<2; i++)
-					{
-						regMask[i] = 0;
-						regSurvivingClusters[i] = 0;
-					}
-
-
-					t_state fetchState = STATE_OA_BUFFER_FETCH_CLUSTER;
 					unsigned char iClusterInWindowFetch = 0;
 					unsigned char iClusterFetch = 0;
+					unsigned char mask = 0;
+					unsigned char numSurvivingClusters = 0;
+					unsigned short numLoopCount = numClustersInNextInputGroup + numWindowsInNextInputGroup; //Number of clusters + bitmasks
 
-					t_state sendState = STATE_OA_BUFFER_SEND_WAIT;
-					unsigned char iClusterInWindowSend = 0;
-					unsigned char iWindowSend = 0;
-					unsigned char iClusterInTransferBlockSend = 0;
-
-
-					//Send and compress the clusters in a strip
-					#pragma ivdep array(bufferCompression)
-					//while (iWindowSend < numWindowsInNextInputGroup)
-					while (sendState != STATE_OA_BUFFER_SEND_END)
+					for (unsigned short iLoop = 0; iLoop < numLoopCount; iLoop++)
 					{
-						//Fetch
-						t_state nextFetchState = fetchState;
-						if (fetchState == STATE_OA_BUFFER_FETCH_CLUSTER)
+						//Send data
+						if ((iClusterInWindowFetch < COMPRESSION_WINDOW_SIZE) && (iClusterFetch < numClustersInNextInputGroup))
 						{
 							bool keep = (enableSparsification == FALSE);
 							t_cluster cluster;
@@ -911,130 +865,33 @@ __kernel void kernelOABuffer ()
 
 							if (keep)
 							{
-								regMask[regFetchSide] |= ((char) 1) << iClusterInWindowFetch;
-								regSurvivingClusters[regFetchSide]++;
+								mask |= ((char) 1) << iClusterInWindowFetch;
+								numSurvivingClusters++;
+								write_channel_intel(channel_output_buffer_to_compressor_data[colID], cluster);
 							}
 
-							bufferCompression[iClusterInWindowFetch][regFetchSide] = cluster;
 							iClusterFetch++;
 							iClusterInWindowFetch++;
 
 							//Gotcha
 							iOCInGroup += CLUSTER_SIZE;
 							outputIndex += CLUSTER_SIZE;
-
-
-							if ( (iClusterInWindowFetch == COMPRESSION_WINDOW_SIZE) || (iClusterFetch == numClustersInNextInputGroup) )
-							{
-								nextFetchState = STATE_OA_BUFFER_FETCH_WAIT; 
-							}
-
-						} //STATE_OA_BUFFER_FETCH_CLUSTER)
-
-						//Send
-						t_state nextSendState = sendState;
-						t_cluster clusterSend;
-						if (sendState == STATE_OA_BUFFER_SEND_MASK)
+						}
+						else //Send mask along with other informatin
 						{
-							clusterSend.cluster_values[0] = regMask[(~regFetchSide) & 0x1];
+							t_output_cluster_info info;
+							info.bitmask = mask;
+							info.numSurvivingClusters = numSurvivingClusters;
+							info.isLastWindowInStrip = (iClusterFetch == numClustersInNextInputGroup);
 
-							iClusterInTransferBlockSend++;
+							write_channel_intel(channel_output_buffer_to_compressor_info[colID], info);
 
-							if (0 == regSurvivingClusters[(~regFetchSide) & 0x1])
-							{
-								if (iClusterInTransferBlockSend < TRANSFER_SIZE)
-								{
-									nextSendState = STATE_OA_BUFFER_SEND_PADDING;
-								}
-								else
-								{
-									nextSendState = STATE_OA_BUFFER_SEND_WAIT;
-									iWindowSend++;
-								}
-							}
-							else
-							{
-								nextSendState = STATE_OA_BUFFER_SEND_CLUSTER;
-							}
-						} //STATE_OA_BUFFER_SEND_MASK
-						else if (sendState == STATE_OA_BUFFER_SEND_CLUSTER)
-						{
-							clusterSend = bufferCompression[iClusterInWindowSend++][(~regFetchSide) & 0x1];
-
-							iClusterInTransferBlockSend = (iClusterInTransferBlockSend == TRANSFER_SIZE) ? 1 : (iClusterInTransferBlockSend + 1);
-
-							if (iClusterInWindowSend == regSurvivingClusters[(~regFetchSide) & 0x1])
-							{
-								if (iClusterInTransferBlockSend < TRANSFER_SIZE)
-								{
-									nextSendState = STATE_OA_BUFFER_SEND_PADDING;
-								}
-								else
-								{
-									nextSendState = STATE_OA_BUFFER_SEND_END;
-									iWindowSend++;
-								}
-							}
-						} //STATE_OA_BUFFER_SEND_CLUSTER
-						else if (sendState == STATE_OA_BUFFER_SEND_PADDING)
-						{
-							//Make sure the extra padding we send are 0
-							#pragma unroll
-							for (unsigned int i=0; i<CLUSTER_SIZE; i++)
-							{
-								clusterSend.cluster_values[i] = 0;
-							}
-
-							iClusterInTransferBlockSend++;
-
-							if (iClusterInTransferBlockSend == TRANSFER_SIZE)
-							{
-								nextSendState = STATE_OA_BUFFER_SEND_END;
-								iWindowSend++;
-							}
-						} //STATE_OA_BUFFER_SEND_PADDING
-
-						//Actual channel action
-						if ( (sendState == STATE_OA_BUFFER_SEND_MASK) 
-							|| (sendState == STATE_OA_BUFFER_SEND_CLUSTER) 
-							|| (sendState == STATE_OA_BUFFER_SEND_PADDING) )
-						{
-							t_output_cluster_tagged taggedCluster;
-							taggedCluster.isLastInStrip = ( ( iWindowSend == numWindowsInNextInputGroup) && (iClusterInTransferBlockSend == TRANSFER_SIZE) );
-							taggedCluster.cluster = clusterSend;
-
-							write_channel_intel(channel_output_buffer_to_tee[colID], taggedCluster);
-						} //Channel write action
-
-						if ((sendState == STATE_OA_BUFFER_SEND_WAIT) && (fetchState == STATE_OA_BUFFER_FETCH_WAIT))
-						{
-							regFetchSide = ~regFetchSide;
-
+							mask = 0;
+							numSurvivingClusters = 0;
 							iClusterInWindowFetch = 0;
-							
-							iClusterInTransferBlockSend = 0;
-							iClusterInWindowSend = 0;
-
-							if (iClusterFetch < numClustersInNextInputGroup)
-							{
-								//GOTCHA
-								//If we were to assign to fetchState, the compiler will CRASH!!!!
-								nextFetchState = STATE_OA_BUFFER_FETCH_CLUSTER;
-							}
-
-							if (enableSparsification == TRUE)
-							{
-								nextSendState = STATE_OA_BUFFER_SEND_MASK;
-							}
-							else
-							{
-								nextSendState = STATE_OA_BUFFER_SEND_CLUSTER;
-							}
-						} //SWAP
-
-						sendState = nextSendState;
-						fetchState = nextFetchState;
-					} //Send ping-pong
+						}
+					} //for-loop. Prune data
+					
 					outputIndexBase += outputControl.numOutputChannels;
 				} //iterOutHxW
 
@@ -1043,6 +900,50 @@ __kernel void kernelOABuffer ()
 			} //iterOutChannelGlobalBase
 		} //Streaming the output to the compressor
 	} // while
+}
+
+__attribute__((max_global_work_dim(0)))
+__attribute__((autorun))
+__attribute__((num_compute_units(PE_COLS)))
+__kernel void kernelCompressorOranizer()
+{
+	int colID = get_compute_id(0);
+	while (true)
+	{
+		//Read the information first
+		t_output_cluster_info info = read_channel_intel(channel_output_buffer_to_compressor_info[colID]);
+		unsigned char numLoop = 2 + (info.numSurvivingClusters - 1) / TRANSFER_SIZE; //This controls the amount of padding we have to do. Add extra one to send mask
+		unsigned char numClustersToSend = info.numSurvivingClusters + 1;
+		unsigned char iClustersSent = 0;
+		for (unsigned char iLoop=0; iLoop<numLoop; iLoop++)
+		{
+			t_output_cluster_tagged clusterTagged;
+			if (iClustersSent < numClustersToSend)
+			{
+				if (iClustersSent == 0)
+				{
+					clusterTagged.cluster.cluster_values[0] = info.bitmask;
+				}
+				else
+				{
+					clusterTagged.cluster = read_channel_intel(channel_output_buffer_to_compressor_data[colID]);
+				}
+				iClustersSent++;
+			}
+			else
+			{
+				#pragma unroll
+				for (unsigned char i=0; i<CLUSTER_SIZE; i++)
+				{
+					clusterTagged.cluster.cluster_values[i] = 0x0;
+				}
+			}
+
+			clusterTagged.isLastInStrip = (info.isLastWindowInStrip && (iLoop == (numLoop - 1))) ? true : false;
+
+			write_channel_intel(channel_compressor_to_tee[colID], clusterTagged);
+		}
+	}
 }
 
 
@@ -1111,7 +1012,7 @@ __kernel void kernelOATee ()
 
 				if (state == STATE_OA_TEE_DRAIN_SELF)
 				{
-					t_output_cluster_tagged clusterTagged = read_channel_intel(channel_output_buffer_to_tee[colID]);
+					t_output_cluster_tagged clusterTagged = read_channel_intel(channel_compressor_to_tee[colID]);
 					dramBlock.clusters[iClusterInDram] = clusterTagged.cluster;
 					iClusters++;
 

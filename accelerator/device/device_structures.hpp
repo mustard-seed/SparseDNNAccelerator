@@ -382,6 +382,12 @@ Data structures that travel on the output activation bus system
 ===================================================================
 */
 typedef struct __attribute__((packed)) {
+    unsigned char bitmask;
+    unsigned char numSurvivingClusters;  //Number of surviving data cluster (not including the bitmask) in the window
+    bool isLastWindowInStrip; //Whether this is the last window in a strip
+} t_output_cluster_info;
+//Used to send data to the tee
+typedef struct __attribute__((packed)) {
     t_cluster cluster;
     bool isLastInStrip;
 
