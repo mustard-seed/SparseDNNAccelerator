@@ -196,17 +196,24 @@ typedef struct __attribute__((packed)){
 //Input buffer control packet data structure
 typedef struct __attribute__((packed)) 
 {
-    unsigned char topPadding;
-    unsigned char bottomPadding;
-    unsigned char leftPadding;
-    unsigned char rightPadding;
     unsigned char inputTileWidth;
     unsigned char inputTileHeight;
     unsigned char stride;
     unsigned char kernelSize;
+    unsigned char numActivePeCols;
     unsigned short numOutputChannelsInGroup;
-    unsigned short numInputChannelCompressionWindows;
-} t_input_buffer_control;
+} t_input_buffer_tile_controller_packet;
+
+typedef struct __attribute__((packet))
+{
+    unsigned char stripX;
+    unsigned char stripY;
+
+    //Bit 0: Whether this is the last strip (1 / 0)
+    //Bit 1: Whether to update the buffer (0) or to stream from the buffer (1)
+    //Bit 7: Max PE Cols to send to; 
+    unsigned char controlBits; 
+} t_input_buffer_tile_buffer_packet;
 
 t_input_buffer_control dramBlock2InputBufferControl (t_dram_block dramBlock)
 {
@@ -230,7 +237,7 @@ t_input_buffer_control dramBlock2InputBufferControl (t_dram_block dramBlock)
 
     char numInputCompressionWindowsLow = dramBlock.transferBlocks[1].values[1].cluster_values[0];
     char numInputCompressionWindowsHigh = dramBlock.transferBlocks[1].values[1].cluster_values[1];
-    controlBlock.numInputChannelCompressionWindows = 
+    controlBlock.numCompressionWindowsInputGroup = 
         ( (((unsigned short) numInputCompressionWindowsHigh) & 0xFF) << 0x8)
         | ( (((unsigned short) numInputCompressionWindowsLow) & 0xFF) << 0x0);
 
@@ -252,8 +259,8 @@ t_dram_block inputBufferControl2DramBlock(t_input_buffer_control controlBlock)
 
     dramBlock.transferBlocks[1].values[0].cluster_values[0] = controlBlock.numOutputChannelsInGroup & 0xFF;
     dramBlock.transferBlocks[1].values[1].cluster_values[0] = (controlBlock.numOutputChannelsInGroup >> 0x8) & 0xFF;
-    dramBlock.transferBlocks[1].values[1].cluster_values[0] = controlBlock.numInputChannelCompressionWindows & 0xFF;
-    dramBlock.transferBlocks[1].values[1].cluster_values[1] = (controlBlock.numInputChannelCompressionWindows >> 0x8) & 0xFF;
+    dramBlock.transferBlocks[1].values[1].cluster_values[0] = controlBlock.numCompressionWindowsInputGroup & 0xFF;
+    dramBlock.transferBlocks[1].values[1].cluster_values[1] = (controlBlock.numCompressionWindowsInputGroup >> 0x8) & 0xFF;
 
 
     return dramBlock;
