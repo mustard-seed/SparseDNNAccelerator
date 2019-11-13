@@ -202,69 +202,71 @@ typedef struct __attribute__((packed))
     unsigned char kernelSize;
     unsigned char numActivePeCols;
     unsigned short numOutputChannelsInGroup;
+    unsigned short strideStripIACache; //Stride in terms of dram block
 } t_input_buffer_tile_controller_packet;
 
-typedef struct __attribute__((packet))
+typedef struct __attribute__((packed))
 {
-    unsigned char stripX;
-    unsigned char stripY;
+    unsigned short iActivationDramBlockAddressBase;
+    unsigned char iAddressCache;
+    unsigned char maxPeRowID; //Only relevant for sending
 
-    //Bit 0: Whether this is the last strip (1 / 0)
+    //Bit 0: Whether this is the last strip (1 / 0). Only relevant for sending IA from the buffer
     //Bit 1: Whether to update the buffer (0) or to stream from the buffer (1)
-    //Bit 7: Max PE Cols to send to; 
+    //Bit 7:2: Max PE Cols to send to; 
     unsigned char controlBits; 
 } t_input_buffer_tile_buffer_packet;
 
-t_input_buffer_control dramBlock2InputBufferControl (t_dram_block dramBlock)
-{
-    t_input_buffer_control controlBlock;
-    char paddings = dramBlock.transferBlocks[0].values[0].cluster_values[0];
-    controlBlock.topPadding = (unsigned char) ((paddings >> 0x0) & 0x3);
-    controlBlock.bottomPadding = (unsigned char) ((paddings >> 0x2) & 0x3);
-    controlBlock.leftPadding = (unsigned char) ((paddings >> 0x4) & 0x3);
-    controlBlock.rightPadding = (unsigned char) ((paddings >> 0x6) & 0x3);
+// t_input_buffer_control dramBlock2InputBufferControl (t_dram_block dramBlock)
+// {
+//     t_input_buffer_control controlBlock;
+//     char paddings = dramBlock.transferBlocks[0].values[0].cluster_values[0];
+//     controlBlock.topPadding = (unsigned char) ((paddings >> 0x0) & 0x3);
+//     controlBlock.bottomPadding = (unsigned char) ((paddings >> 0x2) & 0x3);
+//     controlBlock.leftPadding = (unsigned char) ((paddings >> 0x4) & 0x3);
+//     controlBlock.rightPadding = (unsigned char) ((paddings >> 0x6) & 0x3);
 
-    controlBlock.inputTileWidth = dramBlock.transferBlocks[0].values[0].cluster_values[1];
-    controlBlock.inputTileHeight = dramBlock.transferBlocks[0].values[1].cluster_values[0];
-    controlBlock.stride = dramBlock.transferBlocks[0].values[1].cluster_values[1] & 0x0F;
-    controlBlock.kernelSize = (dramBlock.transferBlocks[0].values[1].cluster_values[1] >> 0x4) & 0xF;
+//     controlBlock.inputTileWidth = dramBlock.transferBlocks[0].values[0].cluster_values[1];
+//     controlBlock.inputTileHeight = dramBlock.transferBlocks[0].values[1].cluster_values[0];
+//     controlBlock.stride = dramBlock.transferBlocks[0].values[1].cluster_values[1] & 0x0F;
+//     controlBlock.kernelSize = (dramBlock.transferBlocks[0].values[1].cluster_values[1] >> 0x4) & 0xF;
     
-    char numOutputChannelsLow = dramBlock.transferBlocks[1].values[0].cluster_values[0];
-    char numOutputChannelsHigh = dramBlock.transferBlocks[1].values[0].cluster_values[1];
-    controlBlock.numOutputChannelsInGroup = 
-        ( (((unsigned short) numOutputChannelsHigh) & 0xFF) << 0x8)
-        | ( (((unsigned short) numOutputChannelsLow) & 0xFF) << 0x0);
+//     char numOutputChannelsLow = dramBlock.transferBlocks[1].values[0].cluster_values[0];
+//     char numOutputChannelsHigh = dramBlock.transferBlocks[1].values[0].cluster_values[1];
+//     controlBlock.numOutputChannelsInGroup = 
+//         ( (((unsigned short) numOutputChannelsHigh) & 0xFF) << 0x8)
+//         | ( (((unsigned short) numOutputChannelsLow) & 0xFF) << 0x0);
 
-    char numInputCompressionWindowsLow = dramBlock.transferBlocks[1].values[1].cluster_values[0];
-    char numInputCompressionWindowsHigh = dramBlock.transferBlocks[1].values[1].cluster_values[1];
-    controlBlock.numCompressionWindowsInputGroup = 
-        ( (((unsigned short) numInputCompressionWindowsHigh) & 0xFF) << 0x8)
-        | ( (((unsigned short) numInputCompressionWindowsLow) & 0xFF) << 0x0);
+//     char numInputCompressionWindowsLow = dramBlock.transferBlocks[1].values[1].cluster_values[0];
+//     char numInputCompressionWindowsHigh = dramBlock.transferBlocks[1].values[1].cluster_values[1];
+//     controlBlock.numCompressionWindowsInputGroup = 
+//         ( (((unsigned short) numInputCompressionWindowsHigh) & 0xFF) << 0x8)
+//         | ( (((unsigned short) numInputCompressionWindowsLow) & 0xFF) << 0x0);
 
-    return controlBlock;
-}
+//     return controlBlock;
+// }
 
-t_dram_block inputBufferControl2DramBlock(t_input_buffer_control controlBlock)
-{
-    t_dram_block dramBlock;
-    char paddings = ((controlBlock.topPadding & 0x3) << 0x0)
-        | ((controlBlock.bottomPadding & 0x3) << 0x2)
-        | ((controlBlock.leftPadding & 0x3) << 0x4)
-        | ((controlBlock.rightPadding & 0x3) << 0x6);
-    dramBlock.transferBlocks[0].values[0].cluster_values[0] = paddings;
-    dramBlock.transferBlocks[0].values[0].cluster_values[1] = controlBlock.inputTileWidth;
-    dramBlock.transferBlocks[0].values[1].cluster_values[0] = controlBlock.inputTileHeight;
-    dramBlock.transferBlocks[0].values[1].cluster_values[1] = 
-        ((controlBlock.kernelSize & 0xF) << 0x4) | (controlBlock.stride & 0xF);
+// t_dram_block inputBufferControl2DramBlock(t_input_buffer_control controlBlock)
+// {
+//     t_dram_block dramBlock;
+//     char paddings = ((controlBlock.topPadding & 0x3) << 0x0)
+//         | ((controlBlock.bottomPadding & 0x3) << 0x2)
+//         | ((controlBlock.leftPadding & 0x3) << 0x4)
+//         | ((controlBlock.rightPadding & 0x3) << 0x6);
+//     dramBlock.transferBlocks[0].values[0].cluster_values[0] = paddings;
+//     dramBlock.transferBlocks[0].values[0].cluster_values[1] = controlBlock.inputTileWidth;
+//     dramBlock.transferBlocks[0].values[1].cluster_values[0] = controlBlock.inputTileHeight;
+//     dramBlock.transferBlocks[0].values[1].cluster_values[1] = 
+//         ((controlBlock.kernelSize & 0xF) << 0x4) | (controlBlock.stride & 0xF);
 
-    dramBlock.transferBlocks[1].values[0].cluster_values[0] = controlBlock.numOutputChannelsInGroup & 0xFF;
-    dramBlock.transferBlocks[1].values[1].cluster_values[0] = (controlBlock.numOutputChannelsInGroup >> 0x8) & 0xFF;
-    dramBlock.transferBlocks[1].values[1].cluster_values[0] = controlBlock.numCompressionWindowsInputGroup & 0xFF;
-    dramBlock.transferBlocks[1].values[1].cluster_values[1] = (controlBlock.numCompressionWindowsInputGroup >> 0x8) & 0xFF;
+//     dramBlock.transferBlocks[1].values[0].cluster_values[0] = controlBlock.numOutputChannelsInGroup & 0xFF;
+//     dramBlock.transferBlocks[1].values[1].cluster_values[0] = (controlBlock.numOutputChannelsInGroup >> 0x8) & 0xFF;
+//     dramBlock.transferBlocks[1].values[1].cluster_values[0] = controlBlock.numCompressionWindowsInputGroup & 0xFF;
+//     dramBlock.transferBlocks[1].values[1].cluster_values[1] = (controlBlock.numCompressionWindowsInputGroup >> 0x8) & 0xFF;
 
 
-    return dramBlock;
-}
+//     return dramBlock;
+// }
 
 typedef struct __attribute__((packed))
 {
