@@ -14,20 +14,21 @@ typedef struct __attribute__((packed)) {
 	/brief Converts an index in stretched-padded domain to the regular domain
 */
 t_conv_input_index sPIndex2RegularIndex (
-		unsigned char stridedPadding, //Number of padding between actual inputs
+		unsigned char stridedPaddingShift,
+		unsigned char stridedPaddingRemainderMask,
 		unsigned char borderPadding, //Number of paddings on the boarder
 		unsigned short numDenseInput,
 		unsigned short sPIndex //Index in the strided padded domain
 	)
 {
-	unsigned short unitSize = (stridedPadding + 1);
+	//unsigned short unitSize = (stridedPadding + 1);
 	unsigned short sPIndexZeroed = sPIndex - borderPadding;
-	unsigned short regularIndex = sPIndexZeroed / unitSize;
-	unsigned short mod = sPIndexZeroed - regularIndex * unitSize;
+	unsigned short regularIndex = sPIndexZeroed >> stridedPaddingShift;
+	unsigned short mod = sPIndexZeroed & stridedPaddingRemainderMask;
 	
 	t_conv_input_index result;
 	result.isPad = ((sPIndex < borderPadding)
-		|| (sPIndex >= (borderPadding + unitSize*numDenseInput - 1))
+		|| (sPIndex >= (borderPadding + ((numDenseInput-1) << stridedPaddingShift) + 1))
 		|| (mod != 1));
 	result.index = regularIndex;
 
@@ -107,8 +108,10 @@ __kernel void kernelMemoryReader (
 	*/
 	unsigned char horizontalBorderPadding,
 	unsigned char verticalBorderPadding,
-	unsigned char horizontalStridedPadding,
-	unsigned char verticalStridedPadding,
+	unsigned char horizontalStridedPaddingShift,
+	unsigned char horizontalStridedPaddingRemainderMask,
+	unsigned char verticalStridedPaddingShift,
+	unsigned char verticalStridedPaddingRemainderMask,
 
 	/*
 	Stride and kernel sizes.
@@ -207,14 +210,16 @@ __kernel void kernelMemoryReader (
 					Determine the indices of the said input element in the dense input domain
 				*/
 				t_conv_input_index idxMDense = sPIndex2RegularIndex(
-						verticalStridedPadding,
+						verticalStridedPaddingShift,
+						verticalStridedPaddingRemainderMask,
 						verticalBorderPadding,
 						inputHeight,
 						iterMAddressElement
 					);
 
 				t_conv_input_index idxNDense = sPIndex2RegularIndex(
-						horizontalStridedPadding,
+						horizontalStridedPaddingShift,
+						horizontalStridedPaddingRemainderMask,
 						horizontalBorderPadding,
 						inputWidth,
 						iterNAddressElement
@@ -299,14 +304,16 @@ __kernel void kernelMemoryReader (
 					unsigned short iterNStretchedPaddedGlobal = iterNInTile + iterNElementBase;
 
 					t_conv_input_index denseMIndex = sPIndex2RegularIndex (
-						verticalStridedPadding, //Number of padding between actual inputs
+						verticalStridedPaddingShift,
+						verticalStridedPaddingRemainderMask,
 						verticalBorderPadding, //Number of paddings on the boarder
 						inputHeight,
 						iterMStretchedPaddedGlobal //Index in the strided padded domain
 					);
 
 					t_conv_input_index denseNIndex = sPIndex2RegularIndex (
-						horizontalStridedPadding, //Number of padding between actual inputs
+						horizontalStridedPaddingShift,
+						horizontalStridedPaddingRemainderMask,
 						horizontalBorderPadding, //Number of paddings on the boarder
 						inputWidth,
 						iterNStretchedPaddedGlobal //Index in the strided padded domain
