@@ -933,6 +933,7 @@ __kernel void kenrelOutputWriter (
 }
 #endif //MEMORY_WRITER 
 
+#ifdef OA_MEMORY
 #define STATE_OA_BUFFER_FETCH_CLUSTER 0x0
 #define STATE_OA_BUFFER_FETCH_WAIT 0x1
 #define STATE_OA_BUFFER_SEND_CLUSTER 0X0
