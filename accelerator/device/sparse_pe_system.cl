@@ -74,6 +74,12 @@ __kernel void kernelMemoryReader (
 	unsigned char numPartialColumns, //APartial 
 	unsigned char numOutputWidthTile, //ceil (Q / (TQ_A * PE_COLS)) 
 	unsigned char numOutputWidthFullTile, // floor (Q / (TQ_A * PE_COLS)) 
+	unsigned short sizeInputTileWidthFull, // (sizeOutputTileWidthFull - 1)*stride + kernelSize
+	unsigned short sizeInputTileWidthPartial, // (sizeOutputTileWidthPartial - 1)*stride + kernelSize
+	unsigned char sizeInputTileWidthPerColumnFull, // (sizeOutputTileWidthPerColumnFull - 1)*stride + kernelSize
+	unsigned char sizeInputTileWidthPerColumnPartial, // (sizeOutputTileWidthPerColumnPartial - 1)*stride + kernelSize
+	unsigned short strideInputTileWidthFull, //sizeOutputTileWidthFull * stride
+	unsigned short strideInputTileWidthPartial, //sizeOutputTileWidthPartial * stride
 
 	//Ad-hoc parameters
 	//They are employed to deal with the irregularities in output width tiling caused by 
@@ -90,6 +96,10 @@ __kernel void kernelMemoryReader (
 	unsigned char sizeOutputHeightTilePartial, //P mod TP
 	unsigned char numOutputHightTile, //ceil (P / TP)
 	unsigned char numOutputHeightFullTile, // floor (P / TP)
+	unsigned short sizeInputTileHeightFull, // (sizeOutputTileHeightFull - 1)*stride + kernelSize
+	unsigned short sizeInputTileHeightPartial, // (sizeOutputTileHeightPartial - 1)*stride + kernelSize
+	unsigned short strideInputTileHeightFull, //sizeOutputHeightTileFull * stride
+	unsigned short strideInputTileHeightPartial, //sizeOutputHeightTilePartial * stride
 
 	unsigned short numOutputTiles, //numOutputHeightTile * numOutputWidthTile
 
@@ -127,6 +137,10 @@ __kernel void kernelMemoryReader (
 
 	unsigned char numGroups, // L / G
 	unsigned short numFiltersInGroup, // G
+	unsigned char numFilterFoldsInGroup, //ceil(numFiltersInGroup / PE_ROWS)
+	unsigned char numFullFilterFoldsInGroup, 
+	unsigned char numActiveRowsPartialFold,
+	int numFiltersInGroupxStrideExternalMemoryWeights,
 	//unsigned short numFoldInGroup, // ceil (G / F)
 	unsigned short numCompressionWindowsInputGroup
 
@@ -185,9 +199,12 @@ __kernel void kernelMemoryReader (
 		Size of the tiles in the padded stretched input domain
 		TODO: CHECK CAREFULLY
 		*/
-		unsigned short sizeInputHeightTileLocal = (sizeOutputHeightTileLocal - 1) * stride + kernelSize;
-		unsigned short sizeInputWidthTileLocal = (sizeOutputWidthTileLocal - 1) * stride + kernelSize;
-		unsigned char sizeInputWidthTilePerColLocal = (sizeOutputWidthTilePerColLocal - 1) * stride + kernelSize;
+		unsigned short sizeInputHeightTileLocal = (iterPTile < numOutputHeightFullTile) ? sizeInputTileHeightFull : sizeInputTileHeightPartial;
+		unsigned short sizeInputWidthTileLocal = (iterQTile < numOutputWidthFullTile) ? sizeInputTileHeightFull : sizeInputTileWidthPartial;
+		unsigned char sizeInputWidthTilePerColLocal = (iterQTile < numOutputWidthFullTile) ? sizeInputTileWidthPerColumnFull : sizeInputTileWidthPerColumnPartial;
+
+		unsigned short strideInputTileHeightLocal = (iterPTile < numOutputHeightFullTile) ? strideInputTileHeightFull : strideInputTileHeightPartial;
+		unsigned short strideInputTileWidthLocal = (iterQTile < numOutputWidthFullTile) ? strideInputTileWidthFull : strideInputTileWidthPartial;
 		
 		/*
 		Load the streaming block addresses for all the INPUT activation strips in the X-Y region
@@ -229,6 +246,7 @@ __kernel void kernelMemoryReader (
 				Get the input TB count;
 				*/
 				bool isPad = (idxMDense.isPad || idxNDense.isPad);
+
 				unsigned short iterAddressDDR = isPad ? 0 : (iAddressGroup*inputHeight + idxMDense.index) *inputWidth + idxNDense.index;
 				cacheIAStreamBlockAddress[iterAddressCache] = isPad ? 
 					numCompressionWindowsInputGroup :
@@ -294,6 +312,9 @@ __kernel void kernelMemoryReader (
 			unsigned short iterNInTile = 0;
 			unsigned char iterPeCol = 0;
 			unsigned char strideInputWidthTilePerColLocal = stride * sizeOutputWidthTilePerColLocal;
+
+			unsigned short iFilterGlobal = 0;
+			int iTransferBlockFilterBaseDDR = 0;
 
 			while (iIAGroup < numGroups)
 			{
@@ -395,66 +416,74 @@ __kernel void kernelMemoryReader (
 					else
 					{
 						iterPeCol++;
-						iterNInTile += strideInputWidthTilePerColLocal; //TODO: change this
+						iterNInTile += strideInputWidthTilePerColLocal;
 					}
 				} // while over input tiles
 
-				unsigned short iFilterInGroup = 0; //gf * F
-				unsigned short iFilterGlobal = iIAGroup * numFiltersInGroup;
-				int iTransferBlockFilterBaseDDR = iFilterGlobal * strideExternalMemoryWeights;
-				while (iFilterInGroup < numFiltersInGroup) //gf
+				//unsigned short iFilterInGroup = 0; //gf * F
+
+				unsigned char iFilterFold = 0;
+				unsigned char iFilterInFold = 0;
+				while (iFilterFold < numFilterFoldsInGroup)
 				{
-					unsigned char maxRowUsed = PE_ROWS < (numFiltersInGroup - iFilterInGroup) ?
-						PE_ROWS : (numFiltersInGroup - iFilterInGroup); //maxF
+					unsigned char numFiltersInFold = (iFilterFold < numFullFilterFoldsInGroup) ?
+						PE_ROWS : numActiveRowsPartialFold;
 
-					for (unsigned char iPeRow=0; iPeRow<maxRowUsed; iPeRow++)
+					unsigned short maxTransferBlockInFilter = cacheFilterStreamBlockAddress[iFilterGlobal];
+					t_accumulator bias = cacheBias[iFilterGlobal];
+
+					unsigned short maxDramBlockInFilter = ((maxTransferBlockInFilter & WIDE_SIZE_REMAINDER_MASK) > 0x0) ?
+						(maxTransferBlockInFilter >> WIDE_SIZE_OFFSET) + 1 : maxTransferBlockInFilter >> WIDE_SIZE_OFFSET;
+					unsigned short maxTransmitCount = maxDramBlockInFilter+1; //one extra for filter stream control;
+					
+					t_filter_streamer_control control;
+					control.numOutputs = (unsigned short) sizeOutputHeightTileLocal * (unsigned short) sizeOutputWidthTilePerColLocal;
+					control.bias = bias;
+					control.numTransferBlocks = maxTransferBlockInFilter;
+					control.maxPeCols = (numActivePeCols - 1);
+
+					t_dram_block dramControl = filterStreamerControl2dramBlock(control);
+
+					unsigned int iTransferBlockDDR = iTransferBlockFilterBaseDDR;
+
+					EMULATOR_PRINT(("[kernelFilterWriter] Sending filter %d to row %d. (iHeightGlobal, iterQ): (%d, %d). Number of transfer blocks: %d\n",
+						iFilterGlobal, iFilterInFold, iHeightGlobal, iterQ, maxTransferBlockInFilter));
+					for (unsigned short iTransmitCount=0; iTransmitCount<maxTransmitCount; iTransmitCount++)
 					{
-						unsigned short maxTransferBlockInFilter = cacheFilterStreamBlockAddress[iFilterGlobal];
-						t_accumulator bias = cacheBias[iFilterGlobal];
-
-						unsigned short maxDramBlockInFilter = ((maxTransferBlockInFilter & WIDE_SIZE_REMAINDER_MASK) > 0x0) ?
-							(maxTransferBlockInFilter >> WIDE_SIZE_OFFSET) + 1 : maxTransferBlockInFilter >> WIDE_SIZE_OFFSET;
-						unsigned short maxTransmitCount = maxDramBlockInFilter+1; //one extra for filter stream control;
-						
-						t_filter_streamer_control control;
-						control.numOutputs = (unsigned short) sizeOutputHeightTileLocal * (unsigned short) sizeOutputWidthTilePerColLocal;
-						control.bias = bias;
-						control.numTransferBlocks = maxTransferBlockInFilter;
-						control.maxPeCols = (numActivePeCols - 1);
-
-						t_dram_block dramControl = filterStreamerControl2dramBlock(control);
-
-						unsigned int iTransferBlockDDR = iTransferBlockFilterBaseDDR;
-
-						EMULATOR_PRINT(("[kernelFilterWriter] Sending filter %d to row %d. (iHeightGlobal, iterQ): (%d, %d). Number of transfer blocks: %d\n",
-							iFilterGlobal, iPeRow, iHeightGlobal, iterQ, maxTransferBlockInFilter));
-						for (unsigned short iTransmitCount=0; iTransmitCount<maxTransmitCount; iTransmitCount++)
+						t_dram_block block;
+						if (iTransmitCount == 0) 
 						{
-							t_dram_block block;
-							if (iTransmitCount == 0) 
-							{
-								block = dramControl;
-							}
-							else
-							{
-								block = pDramWeights[iTransferBlockDDR >> WIDE_SIZE_OFFSET];
-								iTransferBlockDDR += WIDE_SIZE;
-							}
+							block = dramControl;
+						}
+						else
+						{
+							block = pDramWeights[iTransferBlockDDR >> WIDE_SIZE_OFFSET];
+							iTransferBlockDDR += WIDE_SIZE;
+						}
 
-							t_dram_block_w_tagged taggedBlock;
-							taggedBlock.dramBlock = block;
-							taggedBlock.destinationRow = iPeRow;
+						t_dram_block_w_tagged taggedBlock;
+						taggedBlock.dramBlock = block;
+						taggedBlock.destinationRow = iFilterInFold;
 
-							write_channel_intel(channel_weight_wide[0], taggedBlock);
-						} // iTransmitCount
+						write_channel_intel(channel_weight_wide[0], taggedBlock);
+					} // iTransmitCount
 
-						iTransferBlockFilterBaseDDR += strideExternalMemoryWeights;
-						iFilterGlobal++;
+					iTransferBlockFilterBaseDDR += strideExternalMemoryWeights;
+					iFilterGlobal++;
 
-					} // iPeRow
-
-					iFilterInGroup += maxRowUsed;	
-				} // iFilterInGroup
+					/*
+					Parameter updates
+					*/
+					if ((iFilterInFold+1) == numFiltersInFold)
+					{
+						iFilterInFold = 0;
+						iFilterFold++;
+					}
+					else
+					{
+						iFilterInFold++;
+					}
+				} // while loop over the filter folds
 
 				iIAGroup++;
 				
@@ -471,13 +500,14 @@ __kernel void kernelMemoryReader (
 			iterPTile++;
 
 			iterNElementBase = 0;
-			iterMElementBase += (sizeOutputHeightTileLocal * stride);
+
+			iterMElementBase += strideInputTileHeightLocal;
 		}
 		else
 		{
 			iterQTile++;
 
-			iterNElementBase += (sizeOutputWidthTileLocal * stride);
+			iterNElementBase += strideInputTileWidthLocal;
 		}
 	} // end of the loop over the output width and height tiles
 }
@@ -550,7 +580,7 @@ __kernel void kernelIABuffer ()
 	}
 }
 
-//Can't use autorun, as it will crash
+//Can't use autorun, as the compiler withh crash crash
 __attribute__((max_global_work_dim(0)))
 //__attribute__((autorun))
 __kernel void kernelIATileController (unsigned short numGroupxTiles)
@@ -903,7 +933,6 @@ __kernel void kenrelOutputWriter (
 }
 #endif //MEMORY_WRITER 
 
-#ifdef OA_MEMORY
 #define STATE_OA_BUFFER_FETCH_CLUSTER 0x0
 #define STATE_OA_BUFFER_FETCH_WAIT 0x1
 #define STATE_OA_BUFFER_SEND_CLUSTER 0X0
