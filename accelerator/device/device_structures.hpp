@@ -271,23 +271,53 @@ typedef struct __attribute__((packed))
 typedef struct __attribute__((packed))
 {
     unsigned char numOutputTileHeightxWidth;
-    unsigned char outputModifierBits;
+    unsigned char numFoldsInGroupCurrentLayer;
+    unsigned char numFullFoldsInGroupCurrentLayer;
+    unsigned char numActiveRowsInPartialFolds;
+    unsigned char numActivePeCols;
+
     unsigned short numOutputChannels;
     unsigned short numChannelsInGroupCurrentLayer;
     unsigned short numChannelsInGroupNextLayer;
-    //5:2: number of accumulator bits to right shift
-    //1: enableRelu
-    //0: enable sparsification 
-    //unsigned char numBitsToRightShift;
-    //unsigned char enableRelu;
-    //unsigned char enableSparsification;
-} t_output_buffer_control;
+    //3:0: number of accumulator bits to right shift
+    //4: enableRelu
+    //5: enable sparsification 
+    unsigned char outputModifierBits;
+
+
+} t_output_tile_controller_packet;
 
 typedef struct __attribute__((packed))
 {
-    t_output_buffer_control control;
+    //Index of the output buffer at the start of the transaction
+    //Assume the layout of the output is HWC
+    unsigned short startOutputIndex; 
+
+    //Number of output values to load into or to stream from the cache during this instruction cycle.
+    unsigned short numOutputToAccess; 
+
+    /*
+        Control bits
+        Bit 3:0: Number of bits to right shift the accumulator value from the PE array. Only relevant for loading
+        Bit 4: Enable Relu. Only relevant for loading
+        Bit 5: Enable sparsification. Only relevant for sending
+        Bit 6: Load from array (0) or send to drainer
+    */
+    unsigned char controlBits;
+
+} t_output_tile_buffer_packet;
+
+typedef struct __attribute__((packed))
+{
+    t_output_tile_buffer_packet bufferPacket;
     unsigned char maxColID;
-} t_output_buffer_control_tagged;
+} t_output_tile_buffer_packet_tagged;
+
+typedef struct __attribute__((packed))
+{
+    unsigned short numOutputGroupxTileHeightxTileWidth;
+    unsigned char maxColID;
+} t_output_tile_tee_packet;
 
 unsigned char outputModifier2RightShiftAmount (unsigned char outputModifier)
 {
@@ -392,8 +422,14 @@ Data structures that travel on the output activation bus system
 */
 typedef struct __attribute__((packed)) {
     unsigned char bitmask;
-    unsigned char numSurvivingClusters;  //Number of surviving data cluster (not including the bitmask) in the window
-    bool isLastWindowInStrip; //Whether this is the last window in a strip
+    //unsigned char numSurvivingClusters;  //Number of surviving data cluster (not including the bitmask) in the window
+    //bool isLastWindowInStrip; //Whether this is the last window in a strip
+
+    //Status bits
+    //Bit 5:0: Number of surviving clusters
+    //Bit 6: isLastWindowInStrip
+    //Bit 7: enableSparsification
+    unsigned char statusBits;
 } t_output_cluster_info;
 //Used to send data to the tee
 typedef struct __attribute__((packed)) {

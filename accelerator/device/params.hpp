@@ -72,7 +72,11 @@
 #define MAX_SIMD_BLOCK_INDEX 0x0FF
 
 #define COMPRESSION_WINDOW_SIZE 8 //compression window size in terms of clusters
+#define CLUSTER_TO_WINDOW_SHIFT 0X3
+#define CLUSTER_TO_WINDOW_REMAINDER_MASK 0x7
 #define TRANSFER_SIZE 2 //transfer block size in terms of clusters
+#define CLUSTER_TO_TRANSFER_SIZE_SHIFT 0X1
+#define CLUSTER_TO_TRANSEFER_SIZE_REMAINDER 0X1
 #define CLUSTER_SIZE 2 //cluster size in terms of values
 #define VALUE_TO_CLUSTER_SHIFT 1 //amount of right shift required to convert a value index into cluster index
 #define VALUE_DIVIDED_BY_CLUSTER_SIZE_REMAINDER_MASK 0x1;
