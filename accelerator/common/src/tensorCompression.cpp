@@ -52,7 +52,7 @@ flexibleDirectCompressedTensor::flexibleDirectCompressedTensor (
                         unsigned short _channel,
                         unsigned short _width,
                         unsigned short _height,
-                        unsigned short _tilingSizeWidth,
+                       // unsigned short _tilingSizeWidth,
                         unsigned short _maxScalarIndexInChannelGroup,
                         unsigned char _maxClusterIndexInCompressionBlock,
                         unsigned char _maxClusterIndexInTransferBlock,
@@ -65,7 +65,7 @@ flexibleDirectCompressedTensor::flexibleDirectCompressedTensor (
     channel = _channel;
     width = _width;
     height = _height;
-    tilingSizeWidth = _tilingSizeWidth;
+    //tilingSizeWidth = _tilingSizeWidth;
     maxClusterIndexInCompressionBlock = _maxClusterIndexInCompressionBlock;
     maxClusterIndexInTransferBlock = _maxClusterIndexInTransferBlock;
     maxScalarIndexInCluster = _maxScalarIndexInCluster;
@@ -260,7 +260,7 @@ int decodeFlexibleDirectCompressedTensor(
     unsigned short channel = compTensor.channel;
     unsigned short width = compTensor.width;
     unsigned short height = compTensor.height;
-    unsigned short tileSizeWidth = compTensor.tilingSizeWidth;
+    //unsigned short tileSizeWidth = compTensor.tilingSizeWidth;
     bool isKernel = compTensor.isKernel;
 
     //Compression parameters

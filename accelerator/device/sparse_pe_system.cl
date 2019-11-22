@@ -757,6 +757,7 @@ __kernel void kernelIATee ()
 #endif //IA_MEMORY
 
 #ifdef MEMORY_WRITER
+__attribute__((max_global_work_dim(0)))
 __kernel void kernelOutputWriter (
 	//Pointer to the output activation
 	volatile __global t_output_dram_block* restrict pOutputActivation,
@@ -1697,8 +1698,7 @@ __attribute__((max_global_work_dim(0)))
 __attribute__((num_compute_units(PE_ROWS, PE_COLS)))
 #endif
 __attribute__ ((autorun))
-__kernel void kernelActivationTransport (
-	)
+__kernel void kernelActivationTransport ()
 {
 	typedef uint2_t t_state;
 
