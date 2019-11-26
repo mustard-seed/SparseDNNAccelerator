@@ -46,19 +46,19 @@ unsigned int lcm (unsigned int a, unsigned int b)
 
     return ((a*b) / gcd);
 }
+
+//Constructor for initialize a sparse vector
 flexibleDirectCompressedTensor::flexibleDirectCompressedTensor (
-                        std::vector<fixedPointNumber> & fixedPointVector,
-                        unsigned short _num3DTensors,
-                        unsigned short _channel,
-                        unsigned short _width,
-                        unsigned short _height,
-                       // unsigned short _tilingSizeWidth,
-                        unsigned short _maxScalarIndexInChannelGroup,
-                        unsigned char _maxClusterIndexInCompressionBlock,
-                        unsigned char _maxClusterIndexInTransferBlock,
-                        unsigned char _maxScalarIndexInCluster,
-                        bool _isKernel
-                        )
+        unsigned short _num3DTensors,
+        unsigned short _channel,
+        unsigned short _width,
+        unsigned short _height,
+        unsigned short _maxScalarIndexInChannelGroup,
+        unsigned char _maxClusterIndexInCompressionBlock,
+        unsigned char _maxClusterIndexInTransferBlock,
+        unsigned char _maxScalarIndexInCluster,
+        bool _isKernel
+        )
 {
     //Assign values to the member variables
     num3DTensors = _num3DTensors;
@@ -103,8 +103,35 @@ flexibleDirectCompressedTensor::flexibleDirectCompressedTensor (
         unsigned int tempStride = (numCompressionBlocksInChannelGroup * numTransferBlocksPerCompressionBlock);
         externalMemoryAddressStride = (unsigned int) std::ceil( ((float) (tempStride) ) / ((float) (WIDE_SIZE)) ) * WIDE_SIZE;
         valueVector.resize( width * height * numChannelGroups * externalMemoryAddressStride);
-        streamBlockAddressVector.resize(width * height * numChannelGroups );
+        streamBlockAddressVector.resize(width * height * numChannelGroups);
     }
+}
+
+flexibleDirectCompressedTensor::flexibleDirectCompressedTensor (
+                        std::vector<fixedPointNumber> & fixedPointVector,
+                        unsigned short _num3DTensors,
+                        unsigned short _channel,
+                        unsigned short _width,
+                        unsigned short _height,
+                       // unsigned short _tilingSizeWidth,
+                        unsigned short _maxScalarIndexInChannelGroup,
+                        unsigned char _maxClusterIndexInCompressionBlock,
+                        unsigned char _maxClusterIndexInTransferBlock,
+                        unsigned char _maxScalarIndexInCluster,
+                        bool _isKernel
+                        )
+{
+    this->flexibleDirectCompressedTensor(
+                _num3DTensors,
+                _channel,
+                _width,
+                _height,
+                _maxScalarIndexInChannelGroup,
+                _maxClusterIndexInCompressionBlock,
+                _maxClusterIndexInTransferBlock,
+                _maxScalarIndexInCluster,
+                _isKernel
+                );
     //============================================================
 
     //Trackers of the position in the compressed vector and the stream block address vector

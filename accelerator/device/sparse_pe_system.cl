@@ -29,7 +29,7 @@ t_conv_input_index sPIndex2RegularIndex (
 	t_conv_input_index result;
 	result.isPad = ((sPIndex < borderPadding)
 		|| (sPIndex >= (borderPadding + ((numDenseInput-1) << stridedPaddingShift) + 1))
-		|| (mod != 1));
+		|| (mod != 0x0)); //Need to becareful when the shift is 0;
 	result.index = regularIndex;
 
 	return result;
@@ -109,12 +109,16 @@ __kernel void kernelMemoryReader (
 	*/
 	unsigned short inputWidth,
 	unsigned short inputHeight,
+
+	//Stride between successive strips of IA in terms of dram block
 	unsigned short strideStripIACache, //Stride in terms of dram block
 
 	/*
 	Paddings. 
 	Assume border paddings are symmetrical
-	Stride paddign is for transpose convolution
+	Stride padding is for transpose convolution
+	index_in_zero_padded_tensor - padding >> stridePaddingShift = actual index
+	index_in_zero_padded_tensor - padding & stridePaddingRemainderMask == 0x0 => is actual index
 	*/
 	unsigned char horizontalBorderPadding,
 	unsigned char verticalBorderPadding,
@@ -133,14 +137,14 @@ __kernel void kernelMemoryReader (
 	/*
 	Input and output channels
 	*/
-	unsigned int numFiltersInKernel, //L
+	unsigned short numFiltersInKernel, //L
 
 	unsigned char numGroups, // L / G
 	unsigned short numFiltersInGroup, // G
-	unsigned char numFilterFoldsInGroup, //ceil(numFiltersInGroup / PE_ROWS)
-	unsigned char numFullFilterFoldsInGroup, 
+	unsigned short numFilterFoldsInGroup, //ceil(numFiltersInGroup / PE_ROWS)
+	unsigned short numFullFilterFoldsInGroup, 
 	unsigned char numActiveRowsPartialFold,
-	int numFiltersInGroupxStrideExternalMemoryWeights,
+	//int numFiltersInGroupxStrideExternalMemoryWeights,
 	//unsigned short numFoldInGroup, // ceil (G / F)
 	unsigned short numCompressionWindowsInputGroup
 
@@ -162,11 +166,11 @@ __kernel void kernelMemoryReader (
 	//==============================================================
 	EMULATOR_PRINT(("[kernelMemoryReader] Reading the filter biases and stream block addresses\n"));
 	{
-		for (unsigned int countFilters=0; countFilters < numFiltersInKernel; countFilters++) {
+		for (unsigned short countFilters=0; countFilters < numFiltersInKernel; countFilters++) {
 			cacheFilterStreamBlockAddress[countFilters] = pFilterStreamBlockAddress[countFilters];
 		}
 
-		for (unsigned int countFilters=0; countFilters < numFiltersInKernel; countFilters++) {
+		for (unsigned short countFilters=0; countFilters < numFiltersInKernel; countFilters++) {
 			cacheBias[countFilters] = pBias[countFilters];
 		}
 	}
@@ -422,7 +426,7 @@ __kernel void kernelMemoryReader (
 
 				//unsigned short iFilterInGroup = 0; //gf * F
 
-				unsigned char iFilterFold = 0;
+				unsigned short iFilterFold = 0;
 				unsigned char iFilterInFold = 0;
 				while (iFilterFold < numFilterFoldsInGroup)
 				{

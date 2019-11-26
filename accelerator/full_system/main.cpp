@@ -254,6 +254,7 @@ protected:
      * \param widthBlockSize
      * \return The tensor generated
      */
+    //TODO: think of better test case?
     std::vector<fixedPointNumber> generateInputTensor (
                 unsigned char inputWidth,
                 unsigned char inputHeight,
@@ -331,25 +332,30 @@ protected:
     }
 
     void launch (
-            unsigned char inputWidth,
-            unsigned char inputHeight,
-            unsigned char numInputChannel,
-            unsigned char widthBlockSize, //1 out of withBlockSize strips along the width are filled with ones, the rest a zeros
-            bool flagCompressOutput
+            unsigned char _inputWidth,
+            unsigned char _inputHeight,
+            unsigned char _numInputChannel,
+            unsigned char _widthBlockSize, //1 out of widthBlockSize strips along the width are filled with ones, the rest a zeros
+            bool _flagCompressionOutput,
+            bool _flagEnableRelu
             )
     {
-        unsigned char kernelSize = 3;
+        /* Fixed parameters
+         * */
+        cl_uchar kernelSize = 3;
+        cl_uchar stride = 1;
         /* First, generate the dense, fixed point tensors
          * */
-        std::cout <<"Preparing the test tensors."<<std::endl;
-        std::vector<fixedPointNumber> inputTensorDense = generateInputTensor(inputWidth, inputHeight, numInputChannel, widthBlockSize);
-        std::vector<fixedPointNumber> inputWeightDense = generateWeights(kernelSize, numInputChannel);
-        t_aligned_short_vector biasVector (2*numInputChannel, 0x0);
+        assert(_numInputChannel <= 127);
+        std::cout <<"1. Preparing the test tensors."<<std::endl;
+        std::vector<fixedPointNumber> inputTensorDense = generateInputTensor(_inputWidth, _inputHeight, _numInputChannel, _widthBlockSize);
+        std::vector<fixedPointNumber> inputWeightDense = generateWeights((unsigned char) kernelSize, _numInputChannel);
+        t_aligned_short_vector biasVector (2*_numInputChannel, 0x0);
 
         /* 2. Compress the test tensors
          * */
-        std::cout <<"Compressing the test tensors."<<std::endl;
-        unsigned short maxScalarIndexInChannelGroup = numInputChannel - 1;
+        std::cout <<"2. Compressing the test tensors."<<std::endl;
+        unsigned short maxScalarIndexInChannelGroup = _numInputChannel - 1;
         unsigned short maxClusterIndexInCompressionBlock = COMPRESSION_VEC_SIZE*TRANSFER_SIZE-1;
         unsigned short maxClusterIndexInTransferBlock = TRANSFER_SIZE-1;
         unsigned short maxScalarIndexInCluster = CLUSTER_SIZE-1;
@@ -357,9 +363,9 @@ protected:
         flexibleDirectCompressedTensor compressedInput (
                         inputTensorDense,
                         1, //_num3DTensors
-                        numInputChannel,
-                        inputWidth,
-                        inputHeight,
+                        _numInputChannel,
+                        _inputWidth,
+                        _inputHeight,
                         maxScalarIndexInChannelGroup,
                         maxClusterIndexInCompressionBlock,
                         maxClusterIndexInTransferBlock,
@@ -369,10 +375,10 @@ protected:
 
         flexibleDirectCompressedTensor compressedWeights (
                         inputWeightDense,
-                        2*numInputChannel, //_num3DTensors
-                        numInputChannel,
-                        kernelSize, //width
-                        kernelSize, //height
+                        2*_numInputChannel, //_num3DTensors
+                        _numInputChannel,
+                        (unsigned char) kernelSize, //width
+                        (unsigned char) kernelSize, //height
                         maxScalarIndexInChannelGroup,
                         maxClusterIndexInCompressionBlock,
                         maxClusterIndexInTransferBlock,
@@ -380,21 +386,359 @@ protected:
                         true //isKernel
                     );
 
-        /* 3. Transfer buffer content
+        //Initialize the compressed vector to receive the processed vector
+        flexibleDirectCompressedTensor compressedOutput (
+                    1, //_num3DTensors
+                    2*_numInputChannel, //_channel
+                    _inputWidth, //_width
+                    _inputHeight, //_height
+                    2*_numInputChannel-1, //_maxScalarIndexInChannelGroup
+                    maxClusterIndexInCompressionBlock,
+                    maxClusterIndexInTransferBlock,
+                    maxScalarIndexInCluster,
+                    false //isKernel
+                    );
+
+        std::cout <<"3. Compute the kernel arguments that can be computed from problem setup"<<std::endl;
+
+        /*
+         * 3. Calculate derived parameters
+         * */
+        cl_uint strideExternalMemoryWeights = compressedWeights.externalMemoryAddressStride;
+        cl_uint strideExternalMemoryIA = compressedWeights.externalMemoryAddressStride;
+        cl_ushort strideStripIACache = strideExternalMemoryIA * WIDE_SIZE;
+        cl_uint strideExternalMemoryOA =
+            (1 + ((1 + (2*_numInputChannel-1) / COMPRESSION_VEC_SIZE / CLUSTER_SIZE) * (COMPRESSION_VEC_SIZE / TRANSFER_SIZE) - 1) / WIDE_SIZE) * WIDE_SIZE;
+
+        cl_ushort outputWidth = (cl_uchar) _inputWidth;
+        cl_uchar sizeOutputTileWidthPerColumnFull = 16;
+        cl_ushort sizeOutputTileWidthFull = ((cl_uchar) sizeOutputTileWidthPerColumnFull) * PE_COLS;
+        cl_uchar sizeOutputTileWidthPerColumnPartial = outputWidth - (outputWidth / sizeOutputTileWidthFull) * sizeOutputTileWidthFull;
+        cl_short sizeOutputTileWidthPartial = sizeOutputTileWidthPerColumnPartial;
+        cl_uchar numPartialColumns = 1;
+        cl_uchar numOutputWidthTile = 1 + (outputWidth-1) / sizeOutputTileWidthFull;
+        cl_uchar numOutputWidthFullTile = outputWidth / sizeOutputTileWidthFull;
+        cl_ushort sizeInputTileWidthFull = sizeOutputTileWidthFull-1+kernelSize; //Stride is 1;
+        cl_ushort sizeInputTileWidthPartial = sizeOutputTileWidthPartial-1+kernelSize; //Stride is 1;
+        cl_uchar sizeInputTileWidthPerColumnFull = sizeOutputTileWidthPerColumnFull - 1 + kernelSize;
+        cl_uchar sizeInputTileWidthPerColumnPartial = sizeOutputTileWidthPerColumnPartial - 1 + kernelSize;
+        cl_ushort strideInputTileWidthFull = sizeOutputTileWidthFull;
+        cl_ushort strideInputTileWidthPartial = sizeOutputTileWidthPartial;
+
+        cl_ushort outputHeight = (cl_uchar) _inputHeight;
+        cl_uchar sizeOutputHeightTileFull = 16;
+        cl_uchar sizeOutputHeightTilePartial = outputHeight - (outputHeight / sizeOutputHeightTileFull) * sizeOutputHeightTileFull;
+        cl_uchar numOutputHeightTile = 1 + (outputHeight-1) / sizeOutputHeightTileFull;
+        cl_uchar numOutputHeightFullTile = outputHeight / sizeOutputHeightTileFull;
+        cl_ushort sizeInputTileHeightFull = sizeOutputHeightTileFull - 1 + kernelSize;
+        cl_ushort sizeInputTileHeightPartial = sizeOutputHeightTilePartial - 1 + kernelSize;
+        cl_ushort strideInputTileHeightFull = sizeOutputHeightTileFull;
+        cl_ushort strideInputTileHeightPartial = sizeOutputHeightTilePartial;
+
+        cl_ushort numOutputTiles = numOutputHeightTile * numOutputWidthTile;
+
+        cl_uchar horizontalBorderPadding = 1;
+        cl_uchar verticalBorderPadding = 1;
+        cl_uchar horizontalStridedPaddingShift = 0;
+        cl_uchar horizontalStridedPaddingRemainderMask = 0x0;
+        cl_uchar verticalStridedPaddingShift = 0;
+        cl_uchar verticalStridedPaddingRemainderMask = 0x0;
+
+        cl_ushort numFiltersInKernel = 2* _numInputChannel;
+        cl_char numGroups = 1; //Don't change, even though this is very inefficient and does not really change grouped convolution
+        cl_ushort numFiltersInGroup = numFiltersInKernel;
+        cl_ushort numFilterFoldsInGroup = 1 + (numFiltersInGroup-1) / PE_ROWS;
+        cl_ushort numFullFilterFoldsInGroup = numFiltersInGroup / PE_ROWS;
+        cl_uchar numActiveRowsPartialFold = numFiltersInGroup % PE_ROWS;
+        cl_ushort numCompressionWindowsInputGroup = 1 + (_numInputChannel-1) / COMPRESSION_WINDOW_SIZE / CLUSTER_SIZE;
+
+        cl_ushort numInputGroupxTiles = numOutputTiles;
+        cl_ushort numOutputGroupxTiles = numOutputTiles;
+
+        cl_uchar enableRelu = _flagEnableRelu ? 0X1 : 0X0;
+        cl_uchar enableSparsification = _flagCompressionOutput ? 0X1 : 0X0;
+
+        std::cout <<"4. Setting kernel arguments for the input reader."<<std::endl;
+        {
+            //volatile __global t_dram_block* restrict pDramWeights
+            kernelMemoryReader.setArg(0, bufferMemoryReaderWideWeights);
+
+            //Pointer to filter transfer block count
+            //volatile __global t_streamblock_address* restrict pFilterStreamBlockAddress,
+            kernelMemoryReader.setArg(1, bufferMemoryReaderWeightSBCount);
+
+            //Pointer to input activations
+            //volatile __global t_dram_block* restrict pInputActivation,
+            kernelMemoryReader.setArg(2, bufferMemoryReaderWideInput);
+
+            //Pointer to input activation transfer block count
+            //volatile __global t_streamblock_address* restrict pIAStreamBlockAddress,
+            kernelMemoryReader.setArg(3, bufferMemoryReaderInputSBCount);
+
+            //Pointer to bias
+            //volatile __global t_accumulator* restrict pBias,
+            kernelMemoryReader.setArg(4, bufferMemoryReaderBias);
+
+            //Distance between the start of successive X-Y strip/filters in DRAM in terms of transfer blocks
+            //unsigned int strideExternalMemoryWeights,
+            kernelMemoryReader.setArg(5, strideExternalMemoryWeights);
+
+            //unsigned int strideExternalMemoryIA,
+            kernelMemoryReader.setArg(6, strideExternalMemoryIA);
+
+            /*
+            Output width tiling parameters
+            */
+            // unsigned short outputWidth,
+            kernelMemoryReader.setArg(7, outputWidth);
+
+            //unsigned char sizeOutputTileWidthPerColumnFull, //TQ_A
+            kernelMemoryReader.setArg(8, sizeOutputTileWidthPerColumnFull);
+
+            //unsigned short sizeOutputTileWidthFull, //TQ_A * PE_COLS
+            kernelMemoryReader.setArg(9, sizeOutputTileWidthFull);
+
+            //unsigned char sizeOutputTileWidthPerColumnPartial, //Output tile width per column for the final few columns
+            kernelMemoryReader.setArg(10, sizeOutputTileWidthPerColumnPartial);
+
+            //unsigned short sizeOutputTileWidthPartial, //partialTQ_A * APartial
+            kernelMemoryReader.setArg(11, sizeOutputTileWidthPartial);
+
+            //unsigned char numPartialColumns, //APartial
+            kernelMemoryReader.setArg(12, numPartialColumns);
+
+            //unsigned char numOutputWidthTile, //ceil (Q / (TQ_A * PE_COLS))
+            kernelMemoryReader.setArg(13, numOutputWidthTile);
+
+            //unsigned char numOutputWidthFullTile, // floor (Q / (TQ_A * PE_COLS))
+            kernelMemoryReader.setArg(14, numOutputWidthFullTile);
+
+            //unsigned short sizeInputTileWidthFull, // (sizeOutputTileWidthFull - 1)*stride + kernelSize
+            kernelMemoryReader.setArg(15, sizeInputTileWidthFull);
+
+            //unsigned short sizeInputTileWidthPartial, // (sizeOutputTileWidthPartial - 1)*stride + kernelSize
+            kernelMemoryReader.setArg(16 , sizeInputTileWidthPartial);
+
+            //unsigned char sizeInputTileWidthPerColumnFull, // (sizeOutputTileWidthPerColumnFull - 1)*stride + kernelSize
+            kernelMemoryReader.setArg(17 , sizeInputTileWidthPerColumnFull);
+
+            //unsigned char sizeInputTileWidthPerColumnPartial, // (sizeOutputTileWidthPerColumnPartial - 1)*stride + kernelSize
+            kernelMemoryReader.setArg(18 , sizeInputTileWidthPerColumnPartial);
+
+            //unsigned short strideInputTileWidthFull, //sizeOutputTileWidthFull * stride
+            kernelMemoryReader.setArg(19 , strideInputTileWidthFull);
+
+            //unsigned short strideInputTileWidthPartial, //sizeOutputTileWidthPartial * stride
+            kernelMemoryReader.setArg(20 , strideInputTileWidthPartial);
+
+            /*
+            Output height tiling parameters
+            */
+            //unsigned short outputHeight, //P
+            kernelMemoryReader.setArg(21 , outputHeight);
+
+            //unsigned char sizeOutputHeightTileFull, //TP
+            kernelMemoryReader.setArg(22 , sizeOutputHeightTileFull);
+
+            //unsigned char sizeOutputHeightTilePartial, //P mod TP
+            kernelMemoryReader.setArg(23 , sizeOutputHeightTilePartial);
+
+            //unsigned char numOutputHightTile, //ceil (P / TP)
+            kernelMemoryReader.setArg(24 , numOutputHeightTile);
+
+            //unsigned char numOutputHeightFullTile, // floor (P / TP)
+            kernelMemoryReader.setArg(25 , numOutputHeightFullTile);
+
+            //unsigned short sizeInputTileHeightFull, // (sizeOutputTileHeightFull - 1)*stride + kernelSize
+            kernelMemoryReader.setArg(26 , sizeInputTileHeightFull);
+
+            //unsigned short sizeInputTileHeightPartial, // (sizeOutputTileHeightPartial - 1)*stride + kernelSize
+            kernelMemoryReader.setArg(27 , sizeInputTileHeightPartial);
+
+            //unsigned short strideInputTileHeightFull, //sizeOutputHeightTileFull * stride
+            kernelMemoryReader.setArg(28 , strideInputTileHeightFull);
+
+            //unsigned short strideInputTileHeightPartial, //sizeOutputHeightTilePartial * stride
+            kernelMemoryReader.setArg(29 , strideInputTileHeightPartial);
+
+            //unsigned short numOutputTiles, //numOutputHeightTile * numOutputWidthTile
+            kernelMemoryReader.setArg(30 , numOutputTiles);
+
+            /*
+            Input X-Y dimensions
+            Without padding around or between input elements
+            */
+            //unsigned short inputWidth,
+            kernelMemoryReader.setArg(31 , (cl_ushort) _inputWidth);
+
+            //unsigned short inputHeight,
+            kernelMemoryReader.setArg(32 , (cl_ushort) _inputHeight);
+
+            //Stride between successive strips of IA in terms of dram block
+            //unsigned short strideStripIACache, //Stride in terms of dram block
+            kernelMemoryReader.setArg(33 , (cl_ushort) strideStripIACache);
+
+            /*
+            Paddings.
+            Assume border paddings are symmetrical
+            Stride padding is for transpose convolution
+            index_in_zero_padded_tensor - padding >> stridePaddingShift = actual index
+            index_in_zero_padded_tensor - padding & stridePaddingRemainderMask == 0x0 => is actual index
+            */
+            //unsigned char horizontalBorderPadding,
+            kernelMemoryReader.setArg(34 , horizontalBorderPadding );
+
+            //unsigned char verticalBorderPadding,
+            kernelMemoryReader.setArg(35 , verticalBorderPadding );
+
+            //unsigned char horizontalStridedPaddingShift,
+            kernelMemoryReader.setArg(36 , horizontalStridedPaddingShift);
+
+            //unsigned char horizontalStridedPaddingRemainderMask,
+            kernelMemoryReader.setArg(37 , horizontalStridedPaddingRemainderMask);
+
+            //unsigned char verticalStridedPaddingShift,
+            kernelMemoryReader.setArg(38 , verticalStridedPaddingShift);
+
+            //unsigned char verticalStridedPaddingRemainderMask,
+            kernelMemoryReader.setArg(39 , verticalStridedPaddingRemainderMask);
+
+            /*
+            Stride and kernel sizes.
+            For transpose convolution, the stride is 1
+            */
+            //unsigned char kernelSize,
+            kernelMemoryReader.setArg(40 , kernelSize);
+
+            //unsigned char stride,
+            kernelMemoryReader.setArg(41 , kernelSize);
+
+            /*
+            Input and output channels
+            */
+            //unsigned short numFiltersInKernel, //L
+            kernelMemoryReader.setArg(42 , numFiltersInKernel);
+
+            //unsigned char numGroups, // L / G
+            kernelMemoryReader.setArg(43 , numGroups);
+
+            //unsigned short numFiltersInGroup, // G
+            kernelMemoryReader.setArg(44 , numFiltersInGroup);
+
+            //unsigned short numFilterFoldsInGroup, //ceil(numFiltersInGroup / PE_ROWS)
+            kernelMemoryReader.setArg(45 , numFilterFoldsInGroup);
+
+            //unsigned short numFullFilterFoldsInGroup,
+            kernelMemoryReader.setArg(46 , numFullFilterFoldsInGroup);
+
+            //unsigned char numActiveRowsPartialFold,
+            kernelMemoryReader.setArg(47 , numActiveRowsPartialFold);
+
+            //unsigned short numCompressionWindowsInputGroup
+            kernelMemoryReader.setArg(48 , numCompressionWindowsInputGroup);
+        }
+
+        std::cout <<"5. Setting kernel arguments for the output writer."<<std::endl;
+        {
+            //Pointer to the output activation
+            //volatile __global t_output_dram_block* restrict pOutputActivation,
+            kernelOutputWriter.setArg(0 , bufferMemoryWriterWideOutput);
+
+            //Pointer to the output activation transfer block count
+            //volatile __global t_streamblock_address* restrict pOAStreamBlockAddress,
+            kernelOutputWriter.setArg(1 , bufferMemoryWriterOutputSBCount);
+
+            //unsigned int strideExterrnalMemoryOA, //In terms of output dram block
+            kernelOutputWriter.setArg(2 , strideExternalMemoryOA);
+            /*
+            Output width tiling parameters
+            */
+            //unsigned short outputWidth, //Q
+            kernelOutputWriter.setArg(3 , outputWidth);
+            //unsigned char sizeOutputTileWidthPerColumnFull, //TQ_A
+            kernelOutputWriter.setArg(4 , sizeOutputTileWidthPerColumnFull);
+            //unsigned short sizeOutputTileWidthFull, //TQ_A * PE_COLS
+            kernelOutputWriter.setArg(5 , sizeOutputTileWidthFull);
+            //unsigned char sizeOutputTileWidthPerColumnPartial, //Output tile width per column for the final few columns
+            kernelOutputWriter.setArg(6 , sizeOutputTileWidthPerColumnPartial);
+            //unsigned short sizeOutputTileWidthPartial, //partialTQ_A * APartial
+            kernelOutputWriter.setArg(7 , sizeOutputTileWidthPartial);
+            //unsigned char numPartialColumns, //APartial
+            kernelOutputWriter.setArg(8 , numPartialColumns);
+            //unsigned char numOutputWidthTile, //ceil (Q / (TQ_A * PE_COLS))
+            kernelOutputWriter.setArg(9 , numOutputWidthTile);
+            //unsigned char numOutputWidthFullTile, // floor (Q / (TQ_A * PE_COLS))
+            kernelOutputWriter.setArg(10 , numOutputWidthFullTile);
+            /*
+            Output height tiling parameters
+            */
+            //unsigned short outputHeight, //P
+            kernelOutputWriter.setArg(11 , outputHeight);
+            //unsigned char sizeOutputHeightTileFull, //TP
+            kernelOutputWriter.setArg(12 , sizeOutputHeightTileFull);
+            //unsigned char sizeOutputHeightTilePartial, //P mod TP
+            kernelOutputWriter.setArg(13 , sizeOutputHeightTilePartial);
+            //unsigned char numOutputHightTile, //ceil (P / TP)
+            kernelOutputWriter.setArg(14 , numOutputHeightTile);
+            //unsigned char numOutputHeightFullTile, // floor (P / TP)
+            kernelOutputWriter.setArg(15 , numOutputHeightFullTile);
+            /*
+            Auxillary
+            */
+            //unsigned short numOutputHxWTiles, //numOutputHeightTile * numOutputWidthTile
+            kernelOutputWriter.setArg(16 , numOutputTiles);
+            //unsigned short numOutputHxW,
+            kernelOutputWriter.setArg(17 , outputWidth * outputHeight);
+            //Number of groups in the output activations
+            //unsigned short numOutputChannels,
+            kernelOutputWriter.setArg(18 , numFiltersInKernel);
+            //unsigned short numGroupsCurrentLayer,
+            kernelOutputWriter.setArg(19 , 1);
+            //unsigned short numChannelsPerGroupCurrentLayer,
+            kernelOutputWriter.setArg(20 , numFiltersInKernel);
+            //unsigned short numGroupsNextLayer,
+            kernelOutputWriter.setArg(21 , 1);
+            //unsigned short numChannelsPerGroupNextLayer,
+            kernelOutputWriter.setArg(22 , numFiltersInKernel);
+            //unsigned char numFoldsInGroupCurrentLayer,
+            kernelOutputWriter.setArg(23 , numFilterFoldsInGroup);
+            //unsigned char numFullFoldsInGroupCurrentLayer,
+            kernelOutputWriter.setArg(24 , numFullFilterFoldsInGroup);
+            //unsigned char numActiveRowsInPartialFolds,
+            kernelOutputWriter.setArg(25 , numActiveRowsPartialFold);
+            /*
+            Output modification
+            */
+            //unsigned char numAccumulatorBitsToRightShift,
+            kernelOutputWriter.setArg(26, 2*FRAC_WIDTH+2*(INT_WIDTH+1)-FRAC_WIDTH - INT_WIDTH - 1);
+            //unsigned char enableOutputRelu, //argument cannot be bool
+            kernelOutputWriter.setArg(27 , enableRelu);
+            //unsigned char enableSparsification //argument cannot be bool
+            kernelOutputWriter.setArg(28 , enableSparsification);
+        }
+
+        std::cout <<"6. Setting kernel arguments for the input and output controllers."<<std::endl;
+        {
+            //unsigned short numGroupxTiles
+            kernelIATileController.setArg(0, numInputGroupxTiles);
+
+            //unsigned short numGroupxTiles
+            KernelOATileController.setArg(0, numOutputGroupxTiles);
+        }
+
+        /* Transfer buffer content
         */
         cl_int status;
 
-        std::vector<cl::Event> launchDependencyList;
-
         //Transfer the input
-        std::cout <<"Transfer the input activations "<<std::endl;
+        std::cout <<"7. Transfer the input activations "<<std::endl;
         {
             cl::Event event;
             auto numTransferBlocks = compressedInput.valueVector.size();
             auto sizeTransferBlockElement = sizeof(typeof(compressedInput.valueVector.at(0)));
             auto valueVectorSizeBytes = sizeTransferBlockElement * numTransferBlocks;
 
-            std::cout <<"Transfering "<<valueVectorSizeBytes<<" bytes in to bufferMemoryReaderWideInput"<<std::endl;
+            std::cout <<"8. Transfering "<<valueVectorSizeBytes<<" bytes in to bufferMemoryReaderWideInput"<<std::endl;
 
             status = clCQMemoryReader.enqueueWriteBuffer(bufferMemoryReaderWideInput, //buffer
                                                  CL_TRUE, //blocking_write
@@ -405,11 +749,15 @@ protected:
                                                  &event //events generated
                                                 );
             aocl_utils_cpp::checkError(status, "Failed to write the input activation vector");
-            launchDependencyList.push_back(event);
+            clCQMemoryReader.finish();
+            cl_ulong startTime = event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+            cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
+            cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*1e3);
+            std::cout <<"Transfer the input actvation tensor took "<<elapsedTimeUs<<" us"<<std::endl;
         }
 
         //Transfer the input transfer block count
-        std::cout <<"Transfer the input transfer block count "<<std::endl;
+        std::cout <<"9. Transfer the input transfer block count "<<std::endl;
         {
             cl::Event event;
             auto numBlocks = compressedInput.streamBlockAddressVector.size();
@@ -427,11 +775,15 @@ protected:
                                                  &event //events generated
                                                 );
             aocl_utils_cpp::checkError(status, "Failed to write the input activation transfer block count vector");
-            launchDependencyList.push_back(event);
+            clCQMemoryReader.finish();
+            cl_ulong startTime = event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+            cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
+            cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*1e3);
+            std::cout <<"Transfer the input actvation count took "<<elapsedTimeUs<<" us"<<std::endl;
         }
 
         //Transfer the weight
-        std::cout <<"Transfer the weight "<<std::endl;
+        std::cout <<"10. Transfer the weight "<<std::endl;
         {
             cl::Event event;
             auto numBlocks = compressedWeights.valueVector.size();
@@ -449,11 +801,15 @@ protected:
                                                  &event //events generated
                                                 );
             aocl_utils_cpp::checkError(status, "Failed to write the weight buffer.");
-            launchDependencyList.push_back(event);
+            clCQMemoryReader.finish();
+            cl_ulong startTime = event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+            cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
+            cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*1e3);
+            std::cout <<"Transfer the weight tensor took "<<elapsedTimeUs<<" us"<<std::endl;
         }
 
         //Transfer the weight transfer block count
-        std::cout <<"Transfer the weight block count "<<std::endl;
+        std::cout <<"11. Transfer the weight block count "<<std::endl;
         {
             cl::Event event;
             auto numBlocks = compressedWeights.streamBlockAddressVector.size();
@@ -471,11 +827,15 @@ protected:
                                                  &event //events generated
                                                 );
             aocl_utils_cpp::checkError(status, "Failed to write the weight transfer block count vector");
-            launchDependencyList.push_back(event);
+            clCQMemoryReader.finish();
+            cl_ulong startTime = event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+            cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
+            cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*1e3);
+            std::cout <<"Transfer the weight count took "<<elapsedTimeUs<<" us"<<std::endl;
         }
 
         //Transfer the bias vector
-        std::cout <<"Transfer the bias vector"<<std::endl;
+        std::cout <<"12. Transfer the bias vector"<<std::endl;
         {
             cl::Event event;
             auto numBlocks = biasVector.size();
@@ -493,83 +853,105 @@ protected:
                                                  &event //events generated
                                                 );
             aocl_utils_cpp::checkError(status, "Failed to write the bias vector");
-            launchDependencyList.push_back(event);
+            clCQMemoryReader.finish();
+            cl_ulong startTime = event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+            cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
+            cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*1e3);
+            std::cout <<"Transfer the bias vector took "<<elapsedTimeUs<<" us"<<std::endl;
         }
 
-        std::cout <<"Compute the kernel arguments that can be computed from problem setup"<<std::endl;
-
-        /*
-         * Calculate derived parameters
-         * */
-        cl_ushort outputWidth = (cl_uchar) inputWidth;
-        cl_uchar sizeOutputTileWidthPerColumnFull = 16;
-        cl_ushort sizeOutputTileWidthFull = ((cl_uchar) sizeOutputTileWidthPerColumnFull) * PE_COLS;
-        cl_uchar sizeOutputTileWidthPerColumnPartial = outputWidth - (outputWidth / sizeOutputTileWidthFull) * sizeOutputTileWidthFull;
-        cl_short sizeOutputTileWidthPartial = sizeOutputTileWidthPerColumnPartial;
-        cl_uchar numPartialColumns = 1;
-        cl_uchar numOutputWidthTile = 1 + (outputWidth-1) / sizeOutputTileWidthFull;
-        cl_uchar numOutputWidthFullTile = outputWidth / sizeOutputTileWidthFull;
-        cl_ushort sizeInputTileWidthFull = sizeOutputTileWidthFull-1+kernelSize; //Stride is 1;
-        cl_ushort sizeInputTileWidthPartial = sizeOutputTileWidthPartial-1+kernelSize; //Stride is 1;
-        cl_uchar sizeInputTileWidthPerColumnFull = sizeOutputTileWidthPerColumnFull - 1 + kernelSize;
-        cl_uchar sizeInputTileWidthPerColumnPartial = sizeOutputTileWidthPerColumnPartial - 1 + kernelSize;
-        cl_ushort strideInputTileWidthFull = sizeOutputTileWidthFull;
-        cl_ushort strideInputTileWidthPartial = sizeOutputTileWidthPartial;
-
-        cl_ushort outputHeight = (cl_uchar) inputHeight;
-        cl_uchar sizeOutputHeightTileFull = 16;
-        cl_uchar sizeOutputHeightTilePartial = outputHeight - (outputHeight / sizeOutputHeightTileFull) * sizeOutputHeightTileFull;
-        cl_uchar numOutputHightTile = 1 + (outputHeight-1) / sizeOutputHeightTileFull;
-        cl_uchar numOutputHeightFullTile = outputHeight / sizeOutputHeightTileFull;
-        cl_ushort sizeInputTileHeightFull = sizeOutputHeightTileFull - 1 + kernelSize;
-        cl_ushort sizeInputTileHeightPartial = sizeOutputHeightTilePartial - 1 + kernelSize;
-        cl_ushort strideInputTileHeightFull = sizeOutputHeightTileFull;
-        cl_ushort strideInputTileHeightPartial = sizeOutputHeightTilePartial;
-
-        cl_ushort numOutputTiles = numOutputHightTile * numOutputWidthTile;
-
-
-        std::cout <<"Setting kernel arguments"<<std::endl;
-
-
-        clCQFilterWriter.finish();
+        //Launch the kernels
+        std::cout<<"13. Launch the kernels."<<std::endl;
         std::vector<cl::Event> elist;
-        elist.push_back(weightTransferEvent);
-        cl::Event kernelEvent;
-        status = clCQTensorChecker.enqueueTask(kernelTensorChecker, &elist, &kernelEvent);
-        aocl_utils_cpp::checkError(status, "Failed to launch the tensor checker kernel!");
 
-        std::cout <<"Launch!"<<std::endl;
-        status = clCQFilterWriter.enqueueTask(kernelFilterWriter, &elist);
-        aocl_utils_cpp::checkError(status, "Failed to launch the filter writer kernel!");
+        cl::Event eventMemoryReader, eventOutputWriter, eventIATileController, eventOATileController;
+        status = clCQOutputWriter.enqueueTask(kernelOutputWriter, NULL, &eventOutputWriter);
+        aocl_utils_cpp::checkError(status, "Failed to launch kernelOutputWriter!");
+        
+        status = clCQMemoryReader.enqueueTask(kernelMemoryReader, NULL, &eventMemoryReader);
+        aocl_utils_cpp::checkError(status, "Failed to launch kernelMemoryReader!");
+        
+        status = clCQIATileController.enqueueTask(kernelIATileController, NULL, &eventIATileController);
+        aocl_utils_cpp::checkError(status, "Failed to launch kernelIATileController!");
+        
+        status = clCQOATileController.enqueueTask(KernelOATileController, NULL, &eventOATileController);
+        aocl_utils_cpp::checkError(status, "Failed to launch KernelOATileController!");
 
+        
         //Retrieve data
-        clCQTensorChecker.finish();
-        //clCQFilterWriter.finish();
+        std::cout <<"14. Waiting for the outputs and retrieve it."<<std::endl;
+        clCQOutputWriter.finish();
 
-        auto size = compressedFilters.streamBlockAddressVector.at(targetFilter);
-        outputWeightVector.resize(size);
+        cl::Event eventReadOutput, eventReadOutputCount;
+        status = clCQOutputWriter.enqueueReadBuffer(
+            bufferMemoryWriterWideOutput,
+            CL_TRUE,
+            0,
+            sizeof(typeof(compressedOutput.valueVector.at(0))) * compressedOutput.valueVector.size(),
+            compressedOutput.valueVector.data(),
+            NULL,
+            &eventReadOutput
+        );
+        aocl_utils_cpp::checkError(status, "Failed to read compressed output values!");
 
-        status = clCQTensorChecker.enqueueReadBuffer(
-                    bufferWeightNarrowOutput,
-                    CL_TRUE,
-                    0,
-                    sizeof(typeof(outputWeightVector.at(0))) * size,
-                    outputWeightVector.data()
-                    );
+        status = clCQOutputWriter.enqueueReadBuffer(
+            bufferMemoryWriterOutputSBCount,
+            CL_TRUE,
+            0,
+            sizeof(typeof(compressedOutput.streamBlockAddressVector.at(0))) * compressedOutput.streamBlockAddressVector.size(),
+            compressedOutput.streamBlockAddressVector.data(),
+            NULL,
+            &eventReadOutputCount
+        );
+        aocl_utils_cpp::checkError(status, "Failed to read compressed output counts!");
 
-        aocl_utils_cpp::checkError(status, "Failed to read the tensor checker data back!");
+        cl_ulong processStart = eventOutputWriter.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+        cl_ulong processEnd = eventOutputWriter.getProfilingInfo<CL_PROFILING_COMMAND_END>();
+        cl_double processDuration = (cl_double)((processEnd - processStart) * (cl_double)(1e-3));
 
-        cl_ulong weightTransferStartTime = weightTransferEvent.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-        cl_ulong weightTransferEndTime = weightTransferEvent.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-        cl_double weightTransferRunTime = (cl_double)((weightTransferEndTime - weightTransferStartTime) * (cl_double)(1e-3));
+        cl_ulong outputValueTransferStart = eventReadOutput.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+        cl_ulong outputValueTransferEnd = eventReadOutput.getProfilingInfo<CL_PROFILING_COMMAND_END>();
+        cl_double outputValueTransferDuration = (cl_double)((outputValueTransferEnd - outputValueTransferStart) * (cl_double)(1e-3));
 
-        cl_ulong kernelStartTime = kernelEvent.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-        cl_ulong kernelEndTime = kernelEvent.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-        cl_double kernelRunTime = (cl_double)((kernelEndTime - kernelStartTime) * (cl_double)(1e-3));
+        cl_ulong outputCountTransferStart = eventReadOutputCount.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+        cl_ulong outputCountTransferEnd = eventReadOutputCount.getProfilingInfo<CL_PROFILING_COMMAND_END>();
+        cl_double outputCountTransferDuration = (cl_double)((outputCountTransferEnd - outputCountTransferStart) * (cl_double)(1e-3));
 
-        std::cout <<"Weight transfer time (us): "<<weightTransferRunTime<<std::endl;
-        std::cout <<"kernelTensorChecker run time (us): "<<kernelRunTime<<std::endl;
+        std::cout <<"Convolution time:  (us): "<<processDuration<<std::endl;
+        std::cout <<"Output transfer time (us): "<<outputValueTransferDuration<<std::endl;
+        std::cout <<"Output count transfer time (us): "<<outputCountTransferDuration<<std::endl;
+
+        //Decompress the output, and check against the input
+        std::cout <<"15. Checking the output"<<std::endl;
+        {
+            std::vector<float> outputFloatVector;
+
+            decodeFlexibleDirectCompressedTensor(
+                       compressedOutput,
+                       outputFloatVector,
+                       FRAC_WIDTH,
+                       INT_WIDTH
+            );
+
+            for (unsigned char iterHeight=0; iterHeight<outputHeight; iterHeight++)
+            {
+                for (unsigned char iterWidth=0; iterWidth<outputWidth; iterWidth++)
+                {
+                    for (unsigned char iterInputChannel=0; iterInputChannel<_numInputChannel; iterInputChannel++)
+                    {
+                        unsigned int outputIndex = (iterHeight*outputWidth + iterWidth)*numFiltersInKernel + _numInputChannel*2;
+                        unsigned int inputIndex = (iterHeight*outputWidth + iterWidth)*_numInputChannel + _numInputChannel;
+
+                        char expectedOutput = _flagEnableRelu ?
+
+                    }
+                }
+            }
+        }
+
+
+
+
     } //launch
 
     void checkTensor (
@@ -601,29 +983,6 @@ protected:
     } //checkTensor
 
 };
-
-t_aligned_float_vector initialize_vector(unsigned seed,
-                       float bernProb,
-                       int numTensors,
-                       int height,
-                       int width,
-                       int channel,
-                       float min,
-                       float max
-                                     ) {
-    std::mt19937 generator(seed);
-    std::bernoulli_distribution bernDistribution(bernProb);
-    std::uniform_real_distribution<float> uniDistribution(min, max);
-    int numElements = numTensors * height * width * channel;
-    t_aligned_float_vector vector(numElements, 0.0f);
-
-    for (unsigned i=0; i<numElements; i++) {
-        float val = bernDistribution(generator) ?
-                    uniDistribution(generator) : 0.0f;
-        vector.at(i) = val;
-    }
-    return vector;
-}
 
 //#define PLAY
 TEST_F (testFixture, play) {

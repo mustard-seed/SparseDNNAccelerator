@@ -57,7 +57,7 @@ public:
     //Allow the default constructor to stay
     flexibleDirectCompressedTensor() {}
 
-    //In practice, use the following constructor
+    //Constructor for converting a dense vector
     flexibleDirectCompressedTensor (std::vector<fixedPointNumber> & fixedPointVector,
             unsigned short _num3DTensors,
             unsigned short _channel,
@@ -70,6 +70,18 @@ public:
             bool _isKernel
             );
 
+    //Constructor for initialize a sparse vector
+    flexibleDirectCompressedTensor (
+            unsigned short _num3DTensors,
+            unsigned short _channel,
+            unsigned short _width,
+            unsigned short _height,
+            unsigned short _maxScalarIndexInChannelGroup,
+            unsigned char _maxClusterIndexInCompressionBlock,
+            unsigned char _maxClusterIndexInTransferBlock,
+            unsigned char _maxScalarIndexInCluster,
+            bool _isKernel
+            );
 
 
 };
