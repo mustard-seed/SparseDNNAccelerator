@@ -21,6 +21,35 @@
               ],
             "search_in": "$project_path"
           }
-        ]
+        ],
+      "linters":
+      {
+        "clang": {
+            "args": "-Wall -fsyntax-only -fno-caret-diagnostics -v",
+            "I": [
+                "${folder}/common/inc",
+                "${folder}/device",
+                "device"
+            ],
+            "include_dirs": [
+                "${folder}/common/inc",
+                "${folder}/device",
+                "device"
+                ]
+        },
+        "clang++": {
+            "args": "-Wall -fsyntax-only -fno-caret-diagnostics -v",
+            "I": [
+                "${folder}/common/inc",
+                "${folder}/device",
+                "device"
+            ],
+            "include_dirs": [
+                "${folder}/common/inc",
+                "${folder}/device",
+                "device"
+                ]
+        }
+      }
     },
 }

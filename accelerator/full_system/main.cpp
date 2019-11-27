@@ -946,8 +946,8 @@ protected:
                 {
                     for (unsigned char iterInputChannel=0; iterInputChannel<_numInputChannel; iterInputChannel++)
                     {
-                        unsigned int outputIndex = (iterHeight*outputWidth + iterWidth)*numFiltersInKernel + _numInputChannel*2;
-                        unsigned int inputIndex = (iterHeight*outputWidth + iterWidth)*_numInputChannel + _numInputChannel;
+                        unsigned int outputIndex = (iterHeight*outputWidth + iterWidth)*numFiltersInKernel + iterInputChannel*2;
+                        unsigned int inputIndex = (iterHeight*outputWidth + iterWidth)*_numInputChannel + iterInputChannel;
 
                         char expectedOutput = (_flagEnableRelu && (inputTensorDense.at(inputIndex).getBits() < 0x0)) ?
                                     0x0 : inputTensorDense.at(inputIndex).getBits();
@@ -956,8 +956,8 @@ protected:
 
                         EXPECT_TRUE(expectedOutput == actualOutput)
                             <<"Error: iY, iX, iIC, actualOutput, expectedOutput "
-                            <<iterHeight<<" "<<iterWidth<<" "<<iterInputChannel<<" "
-                            <<std::bitset<8> (actualOutput)<<" "
+                            <<(unsigned int)iterHeight<<" "<<(unsigned int)iterWidth<<" "<<(unsigned int)iterInputChannel<<" 0x"
+                            <<std::bitset<8> (actualOutput)<<" 0x"
                             <<std::bitset<8> (expectedOutput)<<std::endl;
 
                     } // for iterInputChannel
@@ -971,8 +971,8 @@ protected:
 //#define PLAY
 TEST_F (testFixture, play) {
 
-    unsigned char inputWidth = 4;
-    unsigned char inputHeight = 4;
+    unsigned char inputWidth = 1;
+    unsigned char inputHeight = 1;
     unsigned char numInputChannel = 4;
     unsigned char widthBlockSize = 2;
     bool flagEnableRelu = true;
