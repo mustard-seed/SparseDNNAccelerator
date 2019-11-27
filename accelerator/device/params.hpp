@@ -59,8 +59,8 @@
 
 #define PACKET_SIZE 1
 
-#define PE_ROWS 1
-#define PE_COLS 1
+#define PE_ROWS 2
+#define PE_COLS 2
 
 //Encoding weight length
 #define ENCODING_LENGTH 64
@@ -87,16 +87,16 @@
 #define KERNEL_CACHE_LANES PE_ROWS
 #define KERNEL_CACHE_LANE_MASK 0x7
 #define KERNEL_CACHE_SIZE_BYTE 8192
-#define KERNEL_CACHE_DEPTH KERNEL_CACHE_SIZE_BYTE/BURST_SIZE_BYTE
+#define KERNEL_CACHE_DEPTH (KERNEL_CACHE_SIZE_BYTE/BURST_SIZE_BYTE)
 #define KERNEL_CACHE_DEPTH_MASK 0x03FF
 
 #define IA_CACHE_SIZE_BYTE 32768
-#define IA_CACHE_DEPTH IA_CACHE_SIZE_BYTE/BURST_SIZE_BYTE
+#define IA_CACHE_DEPTH (IA_CACHE_SIZE_BYTE/BURST_SIZE_BYTE)
 
 #define OA_CACHE_SIZE_BYTE 32768
 #define OA_CACHE_SIZE OA_CACHE_SIZE_BYTE
 
-#define WIDE_SIZE BURST_SIZE_BYTE/CLUSTER_SIZE/TRANSFER_SIZE  //Each transfer block takes 4 bytes, so need 8 transfer blocks to populate 256 bits
+#define WIDE_SIZE (BURST_SIZE_BYTE/CLUSTER_SIZE/TRANSFER_SIZE)  //Each transfer block takes 4 bytes, so need 8 transfer blocks to populate 256 bits
 #define WIDE_SIZE_OFFSET 0x3 //Numnber of bits to shift the transfer block index to the right in order to recover the wide offset
 #define WIDE_SIZE_REMAINDER_MASK 0x7
 

@@ -119,21 +119,21 @@ flexibleDirectCompressedTensor::flexibleDirectCompressedTensor (
                         unsigned char _maxClusterIndexInTransferBlock,
                         unsigned char _maxScalarIndexInCluster,
                         bool _isKernel
-                        )
-{
-    this->flexibleDirectCompressedTensor(
-                _num3DTensors,
-                _channel,
-                _width,
-                _height,
-                _maxScalarIndexInChannelGroup,
-                _maxClusterIndexInCompressionBlock,
-                _maxClusterIndexInTransferBlock,
-                _maxScalarIndexInCluster,
-                _isKernel
-                );
-    //============================================================
 
+                    ):
+    //Constructor delegation
+    flexibleDirectCompressedTensor(
+                 _num3DTensors,
+                 _channel,
+                 _width,
+                 _height,
+                 _maxScalarIndexInChannelGroup,
+                 _maxClusterIndexInCompressionBlock,
+                 _maxClusterIndexInTransferBlock,
+                 _maxScalarIndexInCluster,
+                 _isKernel
+                 )
+{
     //Trackers of the position in the compressed vector and the stream block address vector
     int iCompressVectorBase = 0;
     int iStreamBlockAddressVector = 0;

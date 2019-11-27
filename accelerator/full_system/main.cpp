@@ -168,7 +168,7 @@ protected:
         std::cout <<"Setting the bufferMemoryReaderWideWeights buffer. Size: "<<inputWeightBufferSize<<" bytes."<<std::endl;
         bufferMemoryReaderWideWeights = cl::Buffer (
                         clContext,
-                        CL_MEM_HOST_WRITE_ONLY|CL_MEM_READ_ONLY,
+                        CL_MEM_READ_ONLY,
                         inputWeightBufferSize,
                         NULL,
                         &status
@@ -179,7 +179,7 @@ protected:
         std::cout <<"Setting the bufferMemoryReaderWeightSBCount buffer. Size: "<<inputWeightSBSize<<" bytes."<<std::endl;
         bufferMemoryReaderWeightSBCount = cl::Buffer (
                         clContext,
-                        CL_MEM_HOST_WRITE_ONLY|CL_MEM_READ_ONLY,
+                        CL_MEM_READ_ONLY,
                         inputWeightSBSize,
                         NULL,
                         &status
@@ -190,7 +190,7 @@ protected:
         std::cout <<"Setting the bufferMemoryReaderWideInput buffer. Size: "<<inputActivationSize<<" bytes."<<std::endl;
         bufferMemoryReaderWideInput = cl::Buffer (
                         clContext,
-                        CL_MEM_HOST_WRITE_ONLY|CL_MEM_READ_ONLY,
+                        CL_MEM_READ_ONLY,
                         inputActivationSize,
                         NULL,
                         &status
@@ -201,7 +201,7 @@ protected:
         std::cout <<"Setting the bufferMemoryReaderInputSBCount buffer. Size: "<<inputActivationSBSize<<" bytes."<<std::endl;
         bufferMemoryReaderInputSBCount = cl::Buffer (
                         clContext,
-                        CL_MEM_HOST_WRITE_ONLY|CL_MEM_READ_ONLY,
+                        CL_MEM_READ_ONLY,
                         inputActivationSBSize,
                         NULL,
                         &status
@@ -212,7 +212,7 @@ protected:
         std::cout <<"Setting the bufferMemoryReaderBias buffer. Size: "<<inputBiasSize<<" bytes."<<std::endl;
         bufferMemoryReaderBias = cl::Buffer (
                         clContext,
-                        CL_MEM_HOST_WRITE_ONLY|CL_MEM_READ_ONLY,
+                        CL_MEM_READ_ONLY,
                         inputBiasSize,
                         NULL,
                         &status
@@ -223,7 +223,7 @@ protected:
         std::cout <<"Setting the bufferMemoryWriterWideOutput buffer. Size: "<<outputActivationSize<<" bytes."<<std::endl;
         bufferMemoryWriterWideOutput = cl::Buffer (
                         clContext,
-                        CL_MEM_HOST_READ_ONLY|CL_MEM_WRITE_ONLY,
+                        CL_MEM_WRITE_ONLY,
                         outputActivationSize,
                         NULL,
                         &status
@@ -234,7 +234,7 @@ protected:
         std::cout <<"Setting the bufferMemoryWriterOutputSBCount buffer. Size: "<<outputActivtionSBSize<<" bytes."<<std::endl;
         bufferMemoryWriterOutputSBCount = cl::Buffer (
                         clContext,
-                        CL_MEM_HOST_READ_ONLY|CL_MEM_WRITE_ONLY,
+                        CL_MEM_WRITE_ONLY,
                         outputActivtionSBSize,
                         NULL,
                         &status
@@ -259,14 +259,19 @@ protected:
                 unsigned char inputWidth,
                 unsigned char inputHeight,
                 unsigned char numInputChannel,
-                unsigned char widthBlockSize //1 out of withBlockSize strips along the width are filled with 1.3, the rest a zeros
+                unsigned char widthBlockSize //1 out of withBlockSize strips along the width are filled with non-zero number
             )
     {
         unsigned int numElements = inputWidth*inputHeight*numInputChannel;
         fixedPointNumber fpZero(0.0f, FRAC_WIDTH, INT_WIDTH);
+        fixedPointNumber positiveNumber(1.5f, FRAC_WIDTH, INT_WIDTH);
+        fixedPointNumber negativeNumber(-1.5f, FRAC_WIDTH, INT_WIDTH);
 
         //Initialize the tensor and fill it with zero
         std::vector<fixedPointNumber> tensor (numElements, fpZero);
+
+        //Flag for writing positive or negative number
+        bool writePositive = true;
 
         //Set designated stripes to be filled with ones
         for (unsigned char iterHeight=0; iterHeight<inputHeight; iterHeight++)
@@ -276,8 +281,10 @@ protected:
                 unsigned int index = (iterHeight*inputWidth + iterWidth) * numInputChannel;
                 for (unsigned char iterChannel=0; iterChannel<numInputChannel; iterChannel++)
                 {
-                    tensor.at(index++) = fixedPointNumber(1.3f, FRAC_WIDTH, INT_WIDTH);
+                    tensor.at(index++) = writePositive ? positiveNumber : negativeNumber;
                 }
+                //Invert the flag
+                writePositive = !writePositive;
             }
         }
         return tensor;
@@ -336,12 +343,12 @@ protected:
             unsigned char _inputHeight,
             unsigned char _numInputChannel,
             unsigned char _widthBlockSize, //1 out of widthBlockSize strips along the width are filled with ones, the rest a zeros
-            bool _flagCompressionOutput,
             bool _flagEnableRelu
             )
     {
         /* Fixed parameters
          * */
+        bool _flagCompressionOutput = true;
         cl_uchar kernelSize = 3;
         cl_uchar stride = 1;
         /* First, generate the dense, fixed point tensors
@@ -405,8 +412,8 @@ protected:
          * 3. Calculate derived parameters
          * */
         cl_uint strideExternalMemoryWeights = compressedWeights.externalMemoryAddressStride;
-        cl_uint strideExternalMemoryIA = compressedWeights.externalMemoryAddressStride;
-        cl_ushort strideStripIACache = strideExternalMemoryIA * WIDE_SIZE;
+        cl_uint strideExternalMemoryIA = compressedInput.externalMemoryAddressStride;
+        cl_ushort strideStripIACache = strideExternalMemoryIA / WIDE_SIZE;
         cl_uint strideExternalMemoryOA =
             (1 + ((1 + (2*_numInputChannel-1) / COMPRESSION_VEC_SIZE / CLUSTER_SIZE) * (COMPRESSION_VEC_SIZE / TRANSFER_SIZE) - 1) / WIDE_SIZE) * WIDE_SIZE;
 
@@ -414,7 +421,7 @@ protected:
         cl_uchar sizeOutputTileWidthPerColumnFull = 16;
         cl_ushort sizeOutputTileWidthFull = ((cl_uchar) sizeOutputTileWidthPerColumnFull) * PE_COLS;
         cl_uchar sizeOutputTileWidthPerColumnPartial = outputWidth - (outputWidth / sizeOutputTileWidthFull) * sizeOutputTileWidthFull;
-        cl_short sizeOutputTileWidthPartial = sizeOutputTileWidthPerColumnPartial;
+        cl_short sizeOutputTileWidthPartial = sizeOutputTileWidthPerColumnPartial; //Lump all the remaining one to 1 column
         cl_uchar numPartialColumns = 1;
         cl_uchar numOutputWidthTile = 1 + (outputWidth-1) / sizeOutputTileWidthFull;
         cl_uchar numOutputWidthFullTile = outputWidth / sizeOutputTileWidthFull;
@@ -611,7 +618,7 @@ protected:
             kernelMemoryReader.setArg(40 , kernelSize);
 
             //unsigned char stride,
-            kernelMemoryReader.setArg(41 , kernelSize);
+            kernelMemoryReader.setArg(41 , (cl_uchar) 1);
 
             /*
             Input and output channels
@@ -688,16 +695,16 @@ protected:
             //unsigned short numOutputHxWTiles, //numOutputHeightTile * numOutputWidthTile
             kernelOutputWriter.setArg(16 , numOutputTiles);
             //unsigned short numOutputHxW,
-            kernelOutputWriter.setArg(17 , outputWidth * outputHeight);
+            kernelOutputWriter.setArg(17 , (cl_ushort) (outputWidth * outputHeight));
             //Number of groups in the output activations
             //unsigned short numOutputChannels,
             kernelOutputWriter.setArg(18 , numFiltersInKernel);
             //unsigned short numGroupsCurrentLayer,
-            kernelOutputWriter.setArg(19 , 1);
+            kernelOutputWriter.setArg(19 , (cl_ushort) 1);
             //unsigned short numChannelsPerGroupCurrentLayer,
             kernelOutputWriter.setArg(20 , numFiltersInKernel);
             //unsigned short numGroupsNextLayer,
-            kernelOutputWriter.setArg(21 , 1);
+            kernelOutputWriter.setArg(21 , (cl_ushort) 1);
             //unsigned short numChannelsPerGroupNextLayer,
             kernelOutputWriter.setArg(22 , numFiltersInKernel);
             //unsigned char numFoldsInGroupCurrentLayer,
@@ -710,7 +717,7 @@ protected:
             Output modification
             */
             //unsigned char numAccumulatorBitsToRightShift,
-            kernelOutputWriter.setArg(26, 2*FRAC_WIDTH+2*(INT_WIDTH+1)-FRAC_WIDTH - INT_WIDTH - 1);
+            kernelOutputWriter.setArg(26, (cl_uchar)( 2*FRAC_WIDTH+2*(INT_WIDTH+1)-FRAC_WIDTH - INT_WIDTH - 1) );
             //unsigned char enableOutputRelu, //argument cannot be bool
             kernelOutputWriter.setArg(27 , enableRelu);
             //unsigned char enableSparsification //argument cannot be bool
@@ -754,7 +761,7 @@ protected:
             cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
             cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*1e3);
             std::cout <<"Transfer the input actvation tensor took "<<elapsedTimeUs<<" us"<<std::endl;
-        }
+        } // Transfer the input
 
         //Transfer the input transfer block count
         std::cout <<"9. Transfer the input transfer block count "<<std::endl;
@@ -780,7 +787,7 @@ protected:
             cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
             cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*1e3);
             std::cout <<"Transfer the input actvation count took "<<elapsedTimeUs<<" us"<<std::endl;
-        }
+        } //Transfer the input block
 
         //Transfer the weight
         std::cout <<"10. Transfer the weight "<<std::endl;
@@ -806,7 +813,7 @@ protected:
             cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
             cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*1e3);
             std::cout <<"Transfer the weight tensor took "<<elapsedTimeUs<<" us"<<std::endl;
-        }
+        } // Transfer the weights
 
         //Transfer the weight transfer block count
         std::cout <<"11. Transfer the weight block count "<<std::endl;
@@ -858,7 +865,7 @@ protected:
             cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
             cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*1e3);
             std::cout <<"Transfer the bias vector took "<<elapsedTimeUs<<" us"<<std::endl;
-        }
+        } // bias transfer block
 
         //Launch the kernels
         std::cout<<"13. Launch the kernels."<<std::endl;
@@ -942,52 +949,40 @@ protected:
                         unsigned int outputIndex = (iterHeight*outputWidth + iterWidth)*numFiltersInKernel + _numInputChannel*2;
                         unsigned int inputIndex = (iterHeight*outputWidth + iterWidth)*_numInputChannel + _numInputChannel;
 
-                        char expectedOutput = _flagEnableRelu ?
+                        char expectedOutput = (_flagEnableRelu && (inputTensorDense.at(inputIndex).getBits() < 0x0)) ?
+                                    0x0 : inputTensorDense.at(inputIndex).getBits();
 
-                    }
-                }
-            }
-        }
+                        char actualOutput = (fixedPointNumber(outputFloatVector.at(outputIndex), FRAC_WIDTH, INT_WIDTH)).getBits();
 
+                        EXPECT_TRUE(expectedOutput == actualOutput)
+                            <<"Error: iY, iX, iIC, actualOutput, expectedOutput "
+                            <<iterHeight<<" "<<iterWidth<<" "<<iterInputChannel<<" "
+                            <<std::bitset<8> (actualOutput)<<" "
+                            <<std::bitset<8> (expectedOutput)<<std::endl;
 
-
-
+                    } // for iterInputChannel
+                } // for iterWidth
+            } // for iterHeight
+        } // input checking block
     } //launch
-
-    void checkTensor (
-            flexibleDirectCompressedTensor & compTensor,
-            t_aligned_transfer_block_vector & outputVector,
-            unsigned short targetFilter
-            )
-    {
-        int numTransferBlocksToCheck =
-                compTensor.streamBlockAddressVector.at(targetFilter);
-        int indexInCompTensor =
-                ((int) compTensor.externalMemoryAddressStride) * ((int) targetFilter);
-        for (int i=0; i<numTransferBlocksToCheck; i++, indexInCompTensor++)
-        {
-            t_transfer_block transmittedBlock = outputVector.at(i);
-            t_transfer_block goldenBlock = compTensor.valueVector.at(indexInCompTensor);
-            for (int j=0; j<TRANSFER_SIZE; j++)
-            {
-                for (int k=0; k<CLUSTER_SIZE; k++)
-                {
-                    char transmittedValue = transmittedBlock.values[j].cluster_values[k];
-                    char goldenValue = goldenBlock.values[j].cluster_values[k];
-                    EXPECT_TRUE(transmittedValue == goldenValue)
-                        <<"iTransferBlock, jCluster, kValue, transmittedValue, goldenValue "
-                        <<i<<" "<<j<<" "<<k<<" "<<(int) transmittedValue<<" "<<(int) goldenValue<<std::endl;
-                }
-            }
-        }
-    } //checkTensor
 
 };
 
 //#define PLAY
 TEST_F (testFixture, play) {
 
+    unsigned char inputWidth = 4;
+    unsigned char inputHeight = 4;
+    unsigned char numInputChannel = 4;
+    unsigned char widthBlockSize = 2;
+    bool flagEnableRelu = true;
 
+    launch(
+        inputWidth,
+        inputHeight,
+        numInputChannel,
+        widthBlockSize,
+        flagEnableRelu);
 }
 
 
