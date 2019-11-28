@@ -1619,6 +1619,7 @@ __kernel void kernelFilterBuffer ()
 			{
 				nextStateReadCache = STATE_FILTER_STREAMER_READ_CACHE_WAIT;
 				iOutputRead = 0;
+				EMULATOR_PRINT(("[kernelFilterBuffer %d] FINISHED stream all the weights in the buffer for the tile.\n\n", rowID));
 			}
 			else
 			{
@@ -1652,10 +1653,14 @@ __kernel void kernelFilterBuffer ()
 			
 			weightBlockTagged.maxTransportID = maxPeCols[(~regWriteSide) & 0x1];
 
+			// EMULATOR_PRINT(("[kernelFilterBuffer %d] Attempt to send transfer block %d / %d, in the %d / %d time.\n\n", 
+			// 		rowID, iTransferBlockInFilterRead, maxTransferBlockInFilter[(~regWriteSide) & 0x1], iOutputRead, maxOutputCount[(~regWriteSide) & 0x1]));
 			bool success = false;
 			success = write_channel_nb_intel(channel_weight[rowID][0], weightBlockTagged);
 			if (success)
 			{
+				EMULATOR_PRINT(("[kernelFilterBuffer %d] Sent transfer block %d / %d, in the %d / %d time.\n\n", 
+					rowID, iTransferBlockInFilterRead, maxTransferBlockInFilter[(~regWriteSide) & 0x1], iOutputRead, maxOutputCount[(~regWriteSide) & 0x1]));
 				/*
 				EMULATOR_PRINT(("[kernelFilterStreamer %d] Sent tb %d: %d % d %d %d\n", 
 					rowID, 
@@ -1721,50 +1726,76 @@ __kernel void kernelWeightTransport (
 	int idy = IDY;
 #endif
 
-	//t_simdblock_di_tagged block = read_channel_intel(channel_weightInput);
-	//t_simdblock_di peBlock;
-	#ifdef DIRECT_COMPRESSION_SIMD
-	t_simdblock_bitmask_tagged block;
-	t_simdblock_bitmask peBlock;
-	#endif
-
-	#ifdef FLEXIBLE_BITMASK_COMPRESSION
-	t_transferblock_tagged block;
-	t_transferblock_local peBlock;
-	#endif
-#ifdef FULL_SYSTEM
-	block = read_channel_intel(channel_weight[idy][idx]);
-#else
-	block = read_channel_intel(channel_weight[0][0]);
-#endif
-
-	#pragma unroll
-	for (unsigned char i=0; i<SIMD_SIZE; i++) {
+	while (true)
+	{
+		//t_simdblock_di_tagged block = read_channel_intel(channel_weightInput);
+		//t_simdblock_di peBlock;
 		#ifdef DIRECT_COMPRESSION_SIMD
-			peBlock.values.values[i] = block.values[i];
+		t_simdblock_bitmask_tagged block;
+		t_simdblock_bitmask peBlock;
 		#endif
-		#ifdef FLEXIBLE_BITMASK_COMPRESSION
-			peBlock.values.values[i] = block.values.values[i];
-		#endif
-	}
-	//peBlock.streamingBlockIndex = block.streamingBlockIndex;
-	peBlock.isLast = block.isLast;
 
-	if (idx < (PE_COLS - 1)){
-		if ( idx < block.maxTransportID ) {
-			//EMULATOR_PRINT ( ("[kernelWeightTransport]: Waiting to pass a weight block to the output\n") );
-#ifdef FULL_SYSTEM
-			write_channel_intel(channel_weight[idy][idx+1], block);
-#else
-			write_channel_intel(channel_weight[0][1], block);
-#endif
+		#ifdef FLEXIBLE_BITMASK_COMPRESSION
+		t_transferblock_tagged block;
+		t_transferblock_local peBlock;
+		#endif
+	// #ifdef FULL_SYSTEM
+	// 			EMULATOR_PRINT(("[WEIGHT TRANSPORT (%d, %d)] Waiting to read weight/bias transfer block.\n\n", idy, idx));
+	// #else
+	// 			EMULATOR_PRINT(("[WEIGHT TRANSPORT] Waiting to read weight/bias transfer block.\n\n"));
+	// #endif
+	#ifdef FULL_SYSTEM
+		block = read_channel_intel(channel_weight[idy][idx]);
+	#else
+		block = read_channel_intel(channel_weight[0][0]);
+	#endif
+
+	#ifdef FULL_SYSTEM
+				EMULATOR_PRINT(("[WEIGHT TRANSPORT (%d, %d)] Read weight/bias transfer block.\n\n", idy, idx));
+	#else
+				EMULATOR_PRINT(("[WEIGHT TRANSPORT] Read weight/bias transfer block.\n\n"));
+	#endif
+
+	// #ifdef FULL_SYSTEM
+	// 			EMULATOR_PRINT(("[WEIGHT TRANSPORT (%d, %d)] Waiting to pass on weight/bias transfer block.\n\n", idy, idx));
+	// #else
+	// 			EMULATOR_PRINT(("[WEIGHT TRANSPORT] Waiting to pass on weight/bias transfer block.\n\n"));
+	// #endif
+
+		#pragma unroll
+		for (unsigned char i=0; i<SIMD_SIZE; i++) {
+			#ifdef DIRECT_COMPRESSION_SIMD
+				peBlock.values.values[i] = block.values[i];
+			#endif
+			#ifdef FLEXIBLE_BITMASK_COMPRESSION
+				peBlock.values.values[i] = block.values.values[i];
+			#endif
 		}
-	}
-#ifdef FULL_SYSTEM
-	write_channel_intel(channel_dpWeightInput[idy][idx], peBlock); 
-#else
-	write_channel_intel(channel_dpWeightInput[0][0], peBlock); 
-#endif
+		//peBlock.streamingBlockIndex = block.streamingBlockIndex;
+		peBlock.isLast = block.isLast;
+
+		if (idx < (PE_COLS - 1)){
+			if ( idx < block.maxTransportID ) {
+				//EMULATOR_PRINT ( ("[kernelWeightTransport]: Waiting to pass a weight block to the output\n") );
+	#ifdef FULL_SYSTEM
+				write_channel_intel(channel_weight[idy][idx+1], block);
+	#else
+				write_channel_intel(channel_weight[0][1], block);
+	#endif
+			}
+		}
+	#ifdef FULL_SYSTEM
+		write_channel_intel(channel_dpWeightInput[idy][idx], peBlock); 
+	#else
+		write_channel_intel(channel_dpWeightInput[0][0], peBlock); 
+	#endif
+
+	#ifdef FULL_SYSTEM
+				EMULATOR_PRINT(("[WEIGHT TRANSPORT (%d, %d)] Passed on weight/bias transfer block.\n\n", idy, idx));
+	#else
+				EMULATOR_PRINT(("[WEIGHT TRANSPORT] Passed on weight/bias transfer block.\n\n"));
+	#endif
+		}
 }
 
 #define STATE_ACTIVATION_TRANSPORT_READ 0X0
@@ -1998,7 +2029,7 @@ __attribute__((autorun))
 __kernel void kernelPE ()
 {
 	
-#if FULL_SYSTEM
+#ifdef FULL_SYSTEM
 	int idx = get_compute_id(1);
 	int idy = get_compute_id(0);
 #endif
@@ -2106,14 +2137,14 @@ __kernel void kernelPE ()
 						//if (debugCount < maxDebugCount)
 						//{
 #ifdef FULL_SYSTEM
-							DEBUG_PRINT(("[PE (%d %d)] ActivationTransferBlock [0-4]: %#04x %#04x %#04x %#04x\n",
+							EMULATOR_PRINT(("[PE (%d %d)] ActivationTransferBlock [0-4]: %#04x %#04x %#04x %#04x\n",
 								idy, idx,
 								activationTransferBlock.values.values[0].cluster_values[0] & 0xFF, 
 								activationTransferBlock.values.values[0].cluster_values[1] & 0xFF,
 								activationTransferBlock.values.values[1].cluster_values[0] & 0xFF,
 								activationTransferBlock.values.values[1].cluster_values[1] & 0xFF));
 #else
-							DEBUG_PRINT(("[PE] ActivationTransferBlock [0-4]: %#04x %#04x %#04x %#04x\n",
+							EMULATOR_PRINT(("[PE] ActivationTransferBlock [0-4]: %#04x %#04x %#04x %#04x\n",
 								activationTransferBlock.values.values[0].cluster_values[0] & 0xFF, 
 								activationTransferBlock.values.values[0].cluster_values[1] & 0xFF,
 								activationTransferBlock.values.values[1].cluster_values[0] & 0xFF,
@@ -2214,14 +2245,14 @@ __kernel void kernelPE ()
 						//if (debugCount < maxDebugCount)
 						//{
 #ifdef FULL_SYSTEM
-						DEBUG_PRINT(("[PE (%d %d)] weightTransferBlock [0-4]: %#04x %#04x %#04x %#04x\n",
+						EMULATOR_PRINT(("[PE (%d %d)] weightTransferBlock [0-4]: %#04x %#04x %#04x %#04x\n",
 								idy, idx,
 								weightTransferBlock.values.values[0].cluster_values[0] & 0xFF, 
 								weightTransferBlock.values.values[0].cluster_values[1] & 0xFF,
 								weightTransferBlock.values.values[1].cluster_values[0] & 0xFF,
 								weightTransferBlock.values.values[1].cluster_values[1] & 0xFF));
 #else
-						DEBUG_PRINT(("[PE] weightTransferBlock [0-4]: %#04x %#04x %#04x %#04x\n",
+						EMULATOR_PRINT(("[PE] weightTransferBlock [0-4]: %#04x %#04x %#04x %#04x\n",
 								weightTransferBlock.values.values[0].cluster_values[0] & 0xFF, 
 								weightTransferBlock.values.values[0].cluster_values[1] & 0xFF,
 								weightTransferBlock.values.values[1].cluster_values[0] & 0xFF,
