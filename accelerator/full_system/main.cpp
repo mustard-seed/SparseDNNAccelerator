@@ -716,8 +716,8 @@ protected:
             /*
             Output modification
             */
-            //unsigned char numAccumulatorBitsToRightShift,
-            kernelOutputWriter.setArg(26, (cl_uchar)( 2*FRAC_WIDTH+2*(INT_WIDTH+1)-FRAC_WIDTH - INT_WIDTH - 1) );
+            //unsigned char numAccumulatorBitsToRightShift
+            kernelOutputWriter.setArg(26, (cl_uchar)( 2*FRAC_WIDTH-FRAC_WIDTH) );
             //unsigned char enableOutputRelu, //argument cannot be bool
             kernelOutputWriter.setArg(27 , enableRelu);
             //unsigned char enableSparsification //argument cannot be bool

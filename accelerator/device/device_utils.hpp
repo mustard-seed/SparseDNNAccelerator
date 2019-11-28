@@ -23,11 +23,12 @@ printf enabled on HW if -HW_DEBUG flag is set
 
 t_operand modifyOutput (
 		t_accumulator accumulator,
-		unsigned char rndRightShift,
+		unsigned char rightShift,
 		uint1_t enableRelu
 		)
 {
 	t_accumulator comparedAccumulator;
+	unsigned char rndRightShift = rightShift - 1;
 	if (enableRelu == TRUE)
 	{
 		comparedAccumulator = (accumulator > 0x0) ? accumulator : 0x0;

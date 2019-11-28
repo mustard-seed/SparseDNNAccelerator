@@ -1108,6 +1108,9 @@ __kernel void kernelOABuffer ()
 				//t_accumulator wideOutput = 0;
 				t_operand shortOutput = modifyOutput(wideOutput, numAccumulatorBitsToRightShift, enableRelu);
 				cacheOutputActivations[indexOutput] = shortOutput;
+
+				EMULATOR_PRINT(("[kernelOABuffer %d] Read and processed value from PE. Value: %#04x, %d out of %d values read.\n\n", 
+				colID, shortOutput, indexOutput, numOutputToAccess));
 				//Loop variable updates
 				indexOutput++;
 			} //Case: draining the array
@@ -1204,7 +1207,7 @@ __kernel void kernelOATileController (unsigned short numGroupxTiles)
 	    	t_output_tile_buffer_packet_tagged bufferPacketTagged;
 	    	bufferPacketTagged.bufferPacket.startOutputIndex = startOutputIndex;
 	    	bufferPacketTagged.bufferPacket.numOutputToAccess = numActivePeRows;
-	    	bufferPacketTagged.bufferPacket.controlBits = 0x0;
+	    	bufferPacketTagged.bufferPacket.controlBits = outputModifierBits & 0x3F;
 	    	bufferPacketTagged.maxColID = (numActivePeCols - 1);
 
 	    	write_channel_intel(channel_control_to_oa_buffer[0], bufferPacketTagged);
@@ -2136,20 +2139,20 @@ __kernel void kernelPE ()
 
 						//if (debugCount < maxDebugCount)
 						//{
-#ifdef FULL_SYSTEM
-							EMULATOR_PRINT(("[PE (%d %d)] ActivationTransferBlock [0-4]: %#04x %#04x %#04x %#04x\n",
-								idy, idx,
-								activationTransferBlock.values.values[0].cluster_values[0] & 0xFF, 
-								activationTransferBlock.values.values[0].cluster_values[1] & 0xFF,
-								activationTransferBlock.values.values[1].cluster_values[0] & 0xFF,
-								activationTransferBlock.values.values[1].cluster_values[1] & 0xFF));
-#else
-							EMULATOR_PRINT(("[PE] ActivationTransferBlock [0-4]: %#04x %#04x %#04x %#04x\n",
-								activationTransferBlock.values.values[0].cluster_values[0] & 0xFF, 
-								activationTransferBlock.values.values[0].cluster_values[1] & 0xFF,
-								activationTransferBlock.values.values[1].cluster_values[0] & 0xFF,
-								activationTransferBlock.values.values[1].cluster_values[1] & 0xFF));
-#endif
+// #ifdef FULL_SYSTEM
+// 							EMULATOR_PRINT(("[PE (%d %d)] ActivationTransferBlock [0-4]: %#04x %#04x %#04x %#04x\n",
+// 								idy, idx,
+// 								activationTransferBlock.values.values[0].cluster_values[0] & 0xFF, 
+// 								activationTransferBlock.values.values[0].cluster_values[1] & 0xFF,
+// 								activationTransferBlock.values.values[1].cluster_values[0] & 0xFF,
+// 								activationTransferBlock.values.values[1].cluster_values[1] & 0xFF));
+// #else
+// 							EMULATOR_PRINT(("[PE] ActivationTransferBlock [0-4]: %#04x %#04x %#04x %#04x\n",
+// 								activationTransferBlock.values.values[0].cluster_values[0] & 0xFF, 
+// 								activationTransferBlock.values.values[0].cluster_values[1] & 0xFF,
+// 								activationTransferBlock.values.values[1].cluster_values[0] & 0xFF,
+// 								activationTransferBlock.values.values[1].cluster_values[1] & 0xFF));
+// #endif
 						//}
 
 						countActivation += (unsigned char)(TRANSFER_SIZE);
@@ -2244,20 +2247,20 @@ __kernel void kernelPE ()
 
 						//if (debugCount < maxDebugCount)
 						//{
-#ifdef FULL_SYSTEM
-						EMULATOR_PRINT(("[PE (%d %d)] weightTransferBlock [0-4]: %#04x %#04x %#04x %#04x\n",
-								idy, idx,
-								weightTransferBlock.values.values[0].cluster_values[0] & 0xFF, 
-								weightTransferBlock.values.values[0].cluster_values[1] & 0xFF,
-								weightTransferBlock.values.values[1].cluster_values[0] & 0xFF,
-								weightTransferBlock.values.values[1].cluster_values[1] & 0xFF));
-#else
-						EMULATOR_PRINT(("[PE] weightTransferBlock [0-4]: %#04x %#04x %#04x %#04x\n",
-								weightTransferBlock.values.values[0].cluster_values[0] & 0xFF, 
-								weightTransferBlock.values.values[0].cluster_values[1] & 0xFF,
-								weightTransferBlock.values.values[1].cluster_values[0] & 0xFF,
-								weightTransferBlock.values.values[1].cluster_values[1] & 0xFF));
-#endif
+// #ifdef FULL_SYSTEM
+// 						EMULATOR_PRINT(("[PE (%d %d)] weightTransferBlock [0-4]: %#04x %#04x %#04x %#04x\n",
+// 								idy, idx,
+// 								weightTransferBlock.values.values[0].cluster_values[0] & 0xFF, 
+// 								weightTransferBlock.values.values[0].cluster_values[1] & 0xFF,
+// 								weightTransferBlock.values.values[1].cluster_values[0] & 0xFF,
+// 								weightTransferBlock.values.values[1].cluster_values[1] & 0xFF));
+// #else
+// 						EMULATOR_PRINT(("[PE] weightTransferBlock [0-4]: %#04x %#04x %#04x %#04x\n",
+// 								weightTransferBlock.values.values[0].cluster_values[0] & 0xFF, 
+// 								weightTransferBlock.values.values[0].cluster_values[1] & 0xFF,
+// 								weightTransferBlock.values.values[1].cluster_values[0] & 0xFF,
+// 								weightTransferBlock.values.values[1].cluster_values[1] & 0xFF));
+// #endif
 						//}
 
 						countWeight += (unsigned char)(TRANSFER_SIZE);
