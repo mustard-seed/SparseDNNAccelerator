@@ -305,6 +305,7 @@ protected:
                 unsigned char numInputChannel
             )
     {
+        assert(kernelSize%2==1);
         int numWeightsInOneChannel = kernelSize*kernelSize;
         int numWeightsInOneFilter = numWeightsInOneChannel*numInputChannel;
         int numWeights = numWeightsInOneFilter*2*numInputChannel;
@@ -327,12 +328,12 @@ protected:
         //Setting the identify filters
         for (int iOC=0, iIC=0; iOC<numOC; iOC += 2, iIC++)
         {
-            int index = iOC * numWeightsInOneFilter + iIC;
-            for (int i=0; i<numWeightsInOneChannel; i++)
-            {
+            int index = iOC * numWeightsInOneFilter + numInputChannel*((kernelSize / 2)*kernelSize+kernelSize/2) + iIC;
+            //for (int i=0; i<numWeightsInOneChannel; i++)
+            //{
                 wTensor.at(index) = fpOne;
-                index += numInputChannel;
-            }
+                //index += numInputChannel;
+            //}
         }
 
         return wTensor;
@@ -343,6 +344,8 @@ protected:
             unsigned char _inputHeight,
             unsigned char _numInputChannel,
             unsigned char _widthBlockSize, //1 out of widthBlockSize strips along the width are filled with ones, the rest a zeros
+            unsigned char _sizeOutputTileWidthPerColFull,
+            unsigned char _sizeOutputTileHeight,
             bool _flagEnableRelu
             )
     {
@@ -415,10 +418,10 @@ protected:
         cl_uint strideExternalMemoryIA = compressedInput.externalMemoryAddressStride;
         cl_ushort strideStripIACache = strideExternalMemoryIA / WIDE_SIZE;
         cl_uint strideExternalMemoryOA =
-            (1 + ((1 + (2*_numInputChannel-1) / COMPRESSION_VEC_SIZE / CLUSTER_SIZE) * (COMPRESSION_VEC_SIZE / TRANSFER_SIZE) - 1) / WIDE_SIZE) * WIDE_SIZE;
+            (1 + ((1 + (2*_numInputChannel-1) / COMPRESSION_WINDOW_SIZE / CLUSTER_SIZE) * (COMPRESSION_WINDOW_SIZE / TRANSFER_SIZE) - 1) / WIDE_SIZE);
 
         cl_ushort outputWidth = (cl_uchar) _inputWidth;
-        cl_uchar sizeOutputTileWidthPerColumnFull = 16;
+        cl_uchar sizeOutputTileWidthPerColumnFull = (cl_uchar) _sizeOutputTileWidthPerColFull;
         cl_ushort sizeOutputTileWidthFull = ((cl_uchar) sizeOutputTileWidthPerColumnFull) * PE_COLS;
         cl_uchar sizeOutputTileWidthPerColumnPartial = outputWidth - (outputWidth / sizeOutputTileWidthFull) * sizeOutputTileWidthFull;
         cl_short sizeOutputTileWidthPartial = sizeOutputTileWidthPerColumnPartial; //Lump all the remaining one to 1 column
@@ -433,7 +436,7 @@ protected:
         cl_ushort strideInputTileWidthPartial = sizeOutputTileWidthPartial;
 
         cl_ushort outputHeight = (cl_uchar) _inputHeight;
-        cl_uchar sizeOutputHeightTileFull = 16;
+        cl_uchar sizeOutputHeightTileFull = (cl_uchar) _sizeOutputTileHeight;
         cl_uchar sizeOutputHeightTilePartial = outputHeight - (outputHeight / sizeOutputHeightTileFull) * sizeOutputHeightTileFull;
         cl_uchar numOutputHeightTile = 1 + (outputHeight-1) / sizeOutputHeightTileFull;
         cl_uchar numOutputHeightFullTile = outputHeight / sizeOutputHeightTileFull;
@@ -929,8 +932,8 @@ protected:
         std::cout <<"Output count transfer time (us): "<<outputCountTransferDuration<<std::endl;
 
         //Decompress the output, and check against the input
-        std::cout <<"15. Checking the output"<<std::endl;
         {
+            std::cout <<"15. Decode the output"<<std::endl;
             std::vector<float> outputFloatVector;
 
             decodeFlexibleDirectCompressedTensor(
@@ -940,6 +943,7 @@ protected:
                        INT_WIDTH
             );
 
+             std::cout <<"16. Check the output"<<std::endl;
             for (unsigned char iterHeight=0; iterHeight<outputHeight; iterHeight++)
             {
                 for (unsigned char iterWidth=0; iterWidth<outputWidth; iterWidth++)
@@ -968,13 +972,16 @@ protected:
 
 };
 
-//#define PLAY
+#define PLAY
+#ifdef PLAY
 TEST_F (testFixture, play) {
 
-    unsigned char inputWidth = 1;
-    unsigned char inputHeight = 1;
+    unsigned char inputWidth = 4;
+    unsigned char inputHeight = 4;
     unsigned char numInputChannel = 4;
-    unsigned char widthBlockSize = 2;
+    unsigned char widthBlockSize = 3;
+    unsigned char sizeOutputTileWidthPerColFul = 2;
+    unsigned char sizeOutputTileHeightFull = 2;
     bool flagEnableRelu = true;
 
     launch(
@@ -982,9 +989,51 @@ TEST_F (testFixture, play) {
         inputHeight,
         numInputChannel,
         widthBlockSize,
+        sizeOutputTileWidthPerColFul,
+        sizeOutputTileHeightFull,
+        flagEnableRelu);
+}
+#else
+TEST_F (testFixture, small_1x1) {
+
+    unsigned char inputWidth = 1;
+    unsigned char inputHeight = 1;
+    unsigned char numInputChannel = 4;
+    unsigned char widthBlockSize = 2;
+    unsigned char sizeOutputTileWidthPerColFul = 2;
+    unsigned char sizeOutputTileHeightFull = 2;
+    bool flagEnableRelu = true;
+
+    launch(
+        inputWidth,
+        inputHeight,
+        numInputChannel,
+        widthBlockSize,
+        sizeOutputTileWidthPerColFul,
+        sizeOutputTileHeightFull,
         flagEnableRelu);
 }
 
+TEST_F (testFixture, small_4x4) {
+
+    unsigned char inputWidth = 4;
+    unsigned char inputHeight = 4;
+    unsigned char numInputChannel = 4;
+    unsigned char widthBlockSize = 3;
+    unsigned char sizeOutputTileWidthPerColFul = 2;
+    unsigned char sizeOutputTileHeightFull = 2;
+    bool flagEnableRelu = true;
+
+    launch(
+        inputWidth,
+        inputHeight,
+        numInputChannel,
+        widthBlockSize,
+        sizeOutputTileWidthPerColFul,
+        sizeOutputTileHeightFull,
+        flagEnableRelu);
+}
+#endif
 
 int main(int argc, char* argv[]) {
 

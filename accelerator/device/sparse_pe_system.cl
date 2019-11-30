@@ -1883,7 +1883,7 @@ __kernel void kernelActivationTransport ()
 			}
 
 #ifdef FULL_SYSTEM
-			write_channel_intel(channel_dpActivationInput[idx][idy], peBlock);
+			write_channel_intel(channel_dpActivationInput[idy][idx], peBlock);
 #else
 			write_channel_intel(channel_dpActivationInput[0][0], peBlock);
 #endif

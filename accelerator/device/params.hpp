@@ -60,7 +60,7 @@
 #define PACKET_SIZE 1
 
 #define PE_ROWS 2
-#define PE_COLS 1
+#define PE_COLS 2
 
 //Encoding weight length
 #define ENCODING_LENGTH 64
