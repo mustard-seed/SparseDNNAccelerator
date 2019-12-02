@@ -762,7 +762,7 @@ protected:
             clCQMemoryReader.finish();
             cl_ulong startTime = event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
             cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-            cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*1e3);
+            cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*(cl_double)(1e-3));
             std::cout <<"Transfer the input actvation tensor took "<<elapsedTimeUs<<" us"<<std::endl;
         } // Transfer the input
 
@@ -788,7 +788,7 @@ protected:
             clCQMemoryReader.finish();
             cl_ulong startTime = event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
             cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-            cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*1e3);
+            cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*(cl_double)(1e-3));
             std::cout <<"Transfer the input actvation count took "<<elapsedTimeUs<<" us"<<std::endl;
         } //Transfer the input block
 
@@ -814,7 +814,7 @@ protected:
             clCQMemoryReader.finish();
             cl_ulong startTime = event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
             cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-            cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*1e3);
+            cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*(cl_double)(1e-3));
             std::cout <<"Transfer the weight tensor took "<<elapsedTimeUs<<" us"<<std::endl;
         } // Transfer the weights
 
@@ -840,7 +840,7 @@ protected:
             clCQMemoryReader.finish();
             cl_ulong startTime = event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
             cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-            cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*1e3);
+            cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*(cl_double)(1e-3));
             std::cout <<"Transfer the weight count took "<<elapsedTimeUs<<" us"<<std::endl;
         }
 
@@ -866,7 +866,7 @@ protected:
             clCQMemoryReader.finish();
             cl_ulong startTime = event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
             cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-            cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*1e3);
+            cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*(cl_double)(1e-3));
             std::cout <<"Transfer the bias vector took "<<elapsedTimeUs<<" us"<<std::endl;
         } // bias transfer block
 
@@ -953,13 +953,13 @@ protected:
                         unsigned int outputIndex = (iterHeight*outputWidth + iterWidth)*numFiltersInKernel + iterInputChannel*2;
                         unsigned int inputIndex = (iterHeight*outputWidth + iterWidth)*_numInputChannel + iterInputChannel;
 
-                        char expectedOutput = (_flagEnableRelu && (inputTensorDense.at(inputIndex).getBits() < 0x0)) ?
-                                    0x0 : inputTensorDense.at(inputIndex).getBits();
+                        signed char expectedOutput = (_flagEnableRelu && (inputTensorDense.at(inputIndex).getBits() < ((char) 0x0))) ?
+                                    (char) 0x0 : inputTensorDense.at(inputIndex).getBits();
 
                         char actualOutput = (fixedPointNumber(outputFloatVector.at(outputIndex), FRAC_WIDTH, INT_WIDTH)).getBits();
 
                         EXPECT_TRUE(expectedOutput == actualOutput)
-                            <<"Error: iY, iX, iIC, actualOutput, expectedOutput "
+                        <<"Error: iY, iX, iIC, actualOutput, expectedOutput "
                             <<(unsigned int)iterHeight<<" "<<(unsigned int)iterWidth<<" "<<(unsigned int)iterInputChannel<<" 0x"
                             <<std::bitset<8> (actualOutput)<<" 0x"
                             <<std::bitset<8> (expectedOutput)<<std::endl;
@@ -972,7 +972,7 @@ protected:
 
 };
 
-#define PLAY
+//#define PLAY
 #ifdef PLAY
 TEST_F (testFixture, play) {
 
@@ -1022,6 +1022,46 @@ TEST_F (testFixture, small_4x4) {
     unsigned char widthBlockSize = 3;
     unsigned char sizeOutputTileWidthPerColFul = 2;
     unsigned char sizeOutputTileHeightFull = 2;
+    bool flagEnableRelu = true;
+
+    launch(
+        inputWidth,
+        inputHeight,
+        numInputChannel,
+        widthBlockSize,
+        sizeOutputTileWidthPerColFul,
+        sizeOutputTileHeightFull,
+        flagEnableRelu);
+}
+
+TEST_F (testFixture, small_5x5) {
+
+    unsigned char inputWidth = 5;
+    unsigned char inputHeight = 5;
+    unsigned char numInputChannel = 4;
+    unsigned char widthBlockSize = 3;
+    unsigned char sizeOutputTileWidthPerColFul = 2;
+    unsigned char sizeOutputTileHeightFull = 2;
+    bool flagEnableRelu = true;
+
+    launch(
+        inputWidth,
+        inputHeight,
+        numInputChannel,
+        widthBlockSize,
+        sizeOutputTileWidthPerColFul,
+        sizeOutputTileHeightFull,
+        flagEnableRelu);
+}
+
+TEST_F (testFixture, large_32x32) {
+
+    unsigned char inputWidth = 32;
+    unsigned char inputHeight = 32;
+    unsigned char numInputChannel = 32;
+    unsigned char widthBlockSize = 3;
+    unsigned char sizeOutputTileWidthPerColFul = 8;
+    unsigned char sizeOutputTileHeightFull = 8;
     bool flagEnableRelu = true;
 
     launch(

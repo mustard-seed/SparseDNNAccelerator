@@ -30,7 +30,7 @@ fixedPointNumber::fixedPointNumber (float _realNumber
     bits = bitMask & bits;
 }
 
-fixedPointNumber::fixedPointNumber (char _bits,
+fixedPointNumber::fixedPointNumber (signed char _bits,
                                     char _fracWidth,
                                     char _intWidth)
 {
@@ -41,7 +41,7 @@ fixedPointNumber::fixedPointNumber (char _bits,
     resolution = 1.0f / (float) (1 << _fracWidth);
 }
 
-char fixedPointNumber::getBits() {
+signed char fixedPointNumber::getBits() {
     return bits;
 }
 

@@ -55,7 +55,7 @@ Types involved in operations
 typedef short t_accumulator;
 
 typedef struct {
-    char cluster_values [CLUSTER_SIZE];
+    signed char cluster_values [CLUSTER_SIZE];
 } t_cluster;
 #else
 typedef short t_accumulator;

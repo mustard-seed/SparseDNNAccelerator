@@ -401,7 +401,7 @@ int decodeFlexibleDirectCompressedTensor(
 
                         if (iChannelInGroup <= maxScalarIndexInChannelGroup) {
                             fixedPointNumber fpValue (
-                                (char) (vectorCompressionBlock.at(iVectorCompressionBlock++)), fracWidth, intWidth );
+                                (signed char) (vectorCompressionBlock.at(iVectorCompressionBlock++)), fracWidth, intWidth );
 //                            int iDenseVector =
 //                                iTensor * height * width * channel
 //                                + iHeight * width * channel

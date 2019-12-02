@@ -12,11 +12,11 @@ class fixedPointNumber {
         fixedPointNumber (float _realNumber
                           ,char _fracWidth
                           ,char _intWidth);
-        fixedPointNumber (char _bits,
+        fixedPointNumber (signed char _bits,
                           char _fracWidth,
                           char _intWidth);
 
-        char getBits ();
+        signed char getBits ();
         unsigned char getMask ();
         int getFracWidth ();
         int getIntWidth ();
