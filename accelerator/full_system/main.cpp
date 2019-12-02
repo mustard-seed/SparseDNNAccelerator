@@ -417,8 +417,7 @@ protected:
         cl_uint strideExternalMemoryWeights = compressedWeights.externalMemoryAddressStride;
         cl_uint strideExternalMemoryIA = compressedInput.externalMemoryAddressStride;
         cl_ushort strideStripIACache = strideExternalMemoryIA / WIDE_SIZE;
-        cl_uint strideExternalMemoryOA =
-            (1 + ((1 + (2*_numInputChannel-1) / COMPRESSION_WINDOW_SIZE / CLUSTER_SIZE) * (COMPRESSION_WINDOW_SIZE / TRANSFER_SIZE) - 1) / WIDE_SIZE);
+        cl_uint strideExternalMemoryOA = compressedOutput.externalMemoryAddressStride >> WIDE_SIZE_OFFSET;
 
         cl_ushort outputWidth = (cl_uchar) _inputWidth;
         cl_uchar sizeOutputTileWidthPerColumnFull = (cl_uchar) _sizeOutputTileWidthPerColFull;
@@ -875,9 +874,7 @@ protected:
         std::vector<cl::Event> elist;
 
         cl::Event eventMemoryReader, eventOutputWriter, eventIATileController, eventOATileController;
-        status = clCQOutputWriter.enqueueTask(kernelOutputWriter, NULL, &eventOutputWriter);
-        aocl_utils_cpp::checkError(status, "Failed to launch kernelOutputWriter!");
-        
+
         status = clCQMemoryReader.enqueueTask(kernelMemoryReader, NULL, &eventMemoryReader);
         aocl_utils_cpp::checkError(status, "Failed to launch kernelMemoryReader!");
         
@@ -886,6 +883,9 @@ protected:
         
         status = clCQOATileController.enqueueTask(KernelOATileController, NULL, &eventOATileController);
         aocl_utils_cpp::checkError(status, "Failed to launch KernelOATileController!");
+
+        status = clCQOutputWriter.enqueueTask(kernelOutputWriter, NULL, &eventOutputWriter);
+        aocl_utils_cpp::checkError(status, "Failed to launch kernelOutputWriter!");
 
         
         //Retrieve data
@@ -976,12 +976,12 @@ protected:
 #ifdef PLAY
 TEST_F (testFixture, play) {
 
-    unsigned char inputWidth = 5;
-    unsigned char inputHeight = 5;
-    unsigned char numInputChannel = 4;
+    unsigned char inputWidth = 32;
+    unsigned char inputHeight = 32;
+    unsigned char numInputChannel = 32;
     unsigned char widthBlockSize = 3;
-    unsigned char sizeOutputTileWidthPerColFul = 2;
-    unsigned char sizeOutputTileHeightFull = 2;
+    unsigned char sizeOutputTileWidthPerColFul = 13;
+    unsigned char sizeOutputTileHeightFull = 13;
     bool flagEnableRelu = true;
 
     launch(
@@ -1054,7 +1054,47 @@ TEST_F (testFixture, small_5x5) {
         flagEnableRelu);
 }
 
-TEST_F (testFixture, large_32x32) {
+TEST_F (testFixture, large_32x32_tileSizeCol_2) {
+
+    unsigned char inputWidth = 32;
+    unsigned char inputHeight = 32;
+    unsigned char numInputChannel = 32;
+    unsigned char widthBlockSize = 3;
+    unsigned char sizeOutputTileWidthPerColFul = 2;
+    unsigned char sizeOutputTileHeightFull = 2;
+    bool flagEnableRelu = true;
+
+    launch(
+        inputWidth,
+        inputHeight,
+        numInputChannel,
+        widthBlockSize,
+        sizeOutputTileWidthPerColFul,
+        sizeOutputTileHeightFull,
+        flagEnableRelu);
+}
+
+TEST_F (testFixture, large_32x32_tileSizeCol_4) {
+
+    unsigned char inputWidth = 32;
+    unsigned char inputHeight = 32;
+    unsigned char numInputChannel = 32;
+    unsigned char widthBlockSize = 3;
+    unsigned char sizeOutputTileWidthPerColFul = 4;
+    unsigned char sizeOutputTileHeightFull = 4;
+    bool flagEnableRelu = true;
+
+    launch(
+        inputWidth,
+        inputHeight,
+        numInputChannel,
+        widthBlockSize,
+        sizeOutputTileWidthPerColFul,
+        sizeOutputTileHeightFull,
+        flagEnableRelu);
+}
+
+TEST_F (testFixture, large_32x32_tileSizeCol_8) {
 
     unsigned char inputWidth = 32;
     unsigned char inputHeight = 32;
@@ -1062,6 +1102,26 @@ TEST_F (testFixture, large_32x32) {
     unsigned char widthBlockSize = 3;
     unsigned char sizeOutputTileWidthPerColFul = 8;
     unsigned char sizeOutputTileHeightFull = 8;
+    bool flagEnableRelu = true;
+
+    launch(
+        inputWidth,
+        inputHeight,
+        numInputChannel,
+        widthBlockSize,
+        sizeOutputTileWidthPerColFul,
+        sizeOutputTileHeightFull,
+        flagEnableRelu);
+}
+
+TEST_F (testFixture, large_32x32_tileSizeCol_13) {
+
+    unsigned char inputWidth = 32;
+    unsigned char inputHeight = 32;
+    unsigned char numInputChannel = 32;
+    unsigned char widthBlockSize = 3;
+    unsigned char sizeOutputTileWidthPerColFul = 13;
+    unsigned char sizeOutputTileHeightFull = 13;
     bool flagEnableRelu = true;
 
     launch(
