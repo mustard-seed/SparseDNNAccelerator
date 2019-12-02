@@ -117,7 +117,7 @@
 #define PE_MODE_DRAIN_PSUM 0x05
 
 //PE FIFO parameters
-#define PE_VEC_FIFO_SIZE 4
+#define PE_VEC_FIFO_SIZE 1
 #define PE_NUM_MULT COMPRESSION_VEC_SIZE
 
 //PE datawidth parameters
