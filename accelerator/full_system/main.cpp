@@ -645,6 +645,9 @@ protected:
 
             //unsigned short numCompressionWindowsInputGroup
             kernelMemoryReader.setArg(48 , numCompressionWindowsInputGroup);
+
+            //unsigned short kernelSizexkernelSizexNumFilterFoldsInGroup
+            kernelMemoryReader.setArg(49 , cl_short ((cl_ushort)kernelSize*kernelSize*numFilterFoldsInGroup));
         }
 
         std::cout <<"5. Setting kernel arguments for the output writer."<<std::endl;
@@ -972,13 +975,13 @@ protected:
 
 };
 
-//#define PLAY
+#define PLAY
 #ifdef PLAY
 TEST_F (testFixture, play) {
 
-    unsigned char inputWidth = 32;
-    unsigned char inputHeight = 32;
-    unsigned char numInputChannel = 32;
+    unsigned char inputWidth = 1;
+    unsigned char inputHeight = 1;
+    unsigned char numInputChannel = 4;
     unsigned char widthBlockSize = 3;
     unsigned char sizeOutputTileWidthPerColFul = 13;
     unsigned char sizeOutputTileHeightFull = 13;

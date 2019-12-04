@@ -198,8 +198,10 @@ typedef struct __attribute__((packed))
 {
     unsigned char inputTileWidth;
     unsigned char inputTileHeight;
-    unsigned char stride;
-    unsigned char kernelSize;
+    //unsigned char stride;
+    //unsigned char kernelSize;
+    unsigned char strideConcatKernelSize; //Bit 7:4 stride, 3:0 KernelSize
+    unsigned short numOutputPerCol;
     unsigned char numActivePeCols;
     unsigned short numOutputChannelsInGroup;
     unsigned short strideStripIACache; //Stride in terms of dram block
@@ -276,7 +278,7 @@ typedef struct __attribute__((packed))
     unsigned char numActiveRowsInPartialFolds;
     unsigned char numActivePeCols;
 
-    unsigned short numOutputChannels;
+    unsigned short numGroupsNextLayer;
     unsigned short numChannelsInGroupCurrentLayer;
     unsigned short numChannelsInGroupNextLayer;
     //3:0: number of accumulator bits to right shift
