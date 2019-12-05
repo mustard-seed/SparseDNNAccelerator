@@ -975,12 +975,12 @@ protected:
 
 };
 
-#define PLAY
+//#define PLAY
 #ifdef PLAY
 TEST_F (testFixture, play) {
 
-    unsigned char inputWidth = 8;
-    unsigned char inputHeight = 8;
+    unsigned char inputWidth = 4;
+    unsigned char inputHeight = 4;
     unsigned char numInputChannel = 1;
     unsigned char widthBlockSize = 3;
     unsigned char sizeOutputTileWidthPerColFul = 4;
@@ -1117,14 +1117,54 @@ TEST_F (testFixture, large_32x32_tileSizeCol_8) {
         flagEnableRelu);
 }
 
-TEST_F (testFixture, large_32x32_tileSizeCol_13) {
+TEST_F (testFixture, deep_1x1x32) {
 
-    unsigned char inputWidth = 32;
-    unsigned char inputHeight = 32;
+    unsigned char inputWidth = 1;
+    unsigned char inputHeight = 1;
     unsigned char numInputChannel = 32;
     unsigned char widthBlockSize = 3;
-    unsigned char sizeOutputTileWidthPerColFul = 13;
-    unsigned char sizeOutputTileHeightFull = 13;
+    unsigned char sizeOutputTileWidthPerColFul = 8;
+    unsigned char sizeOutputTileHeightFull = 8;
+    bool flagEnableRelu = true;
+
+    launch(
+        inputWidth,
+        inputHeight,
+        numInputChannel,
+        widthBlockSize,
+        sizeOutputTileWidthPerColFul,
+        sizeOutputTileHeightFull,
+        flagEnableRelu);
+}
+
+TEST_F (testFixture, deep_1x1x64) {
+
+    unsigned char inputWidth = 1;
+    unsigned char inputHeight = 1;
+    unsigned char numInputChannel = 64;
+    unsigned char widthBlockSize = 3;
+    unsigned char sizeOutputTileWidthPerColFul = 8;
+    unsigned char sizeOutputTileHeightFull = 8;
+    bool flagEnableRelu = true;
+
+    launch(
+        inputWidth,
+        inputHeight,
+        numInputChannel,
+        widthBlockSize,
+        sizeOutputTileWidthPerColFul,
+        sizeOutputTileHeightFull,
+        flagEnableRelu);
+}
+
+TEST_F (testFixture, deep_1x1x127) {
+
+    unsigned char inputWidth = 1;
+    unsigned char inputHeight = 1;
+    unsigned char numInputChannel = 127;
+    unsigned char widthBlockSize = 3;
+    unsigned char sizeOutputTileWidthPerColFul = 8;
+    unsigned char sizeOutputTileHeightFull = 8;
     bool flagEnableRelu = true;
 
     launch(

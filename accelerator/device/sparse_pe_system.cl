@@ -944,7 +944,7 @@ __kernel void kernelOutputWriter (
 		unsigned char iOutputHeightInTile = 0;
 		unsigned char iOutputWidthInTile = 0;
 		unsigned char iCol = 0; //iterator for the PE columns
-		unsigned short numGroupNextLayerxTileHeightxTileWidth = numGroupNextLayerxTileHeightxTileWidthPerCol * (unsigned short) maxTQ_A;
+		unsigned short numGroupNextLayerxTileHeightxTileWidth = numGroupNextLayerxTileHeightxTileWidthPerCol * (unsigned short) maxPeCols;
 
 		for (unsigned short iter=0; iter<numGroupNextLayerxTileHeightxTileWidth; iter++)
 		{
