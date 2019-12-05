@@ -659,21 +659,26 @@ __kernel void kernelIATileController (unsigned short numGroupxTiles)
 		*/
 		unsigned char numStripsInTile = inputTileWidth * inputTileHeight;
 		unsigned char loadControlBits = (numActivePeCols-1) << 0x2;
-		unsigned char iStripInTile = 0;
+		//unsigned char iStripInTile = 0;
 		unsigned short iActivationDramBlockAddressBaseLoad = 0;
 		EMULATOR_PRINT(("[kernelIATileController] START sending the buffer refresh instructions for iTile=%d .\n\n", iTile));
-		while (iStripInTile < numStripsInTile)
+		//TODO: use blocking write
+		//while (iStripInTile < numStripsInTile)
+		for (unsigned char iStripInTile = 0; iStripInTile<numStripsInTile; iStripInTile++)
 		{
 			t_input_buffer_tile_buffer_packet tileBufferControlPacket;
 			tileBufferControlPacket.iActivationDramBlockAddressBase = iActivationDramBlockAddressBaseLoad;
 			tileBufferControlPacket.iAddressCache = iStripInTile;
 			tileBufferControlPacket.controlBits = loadControlBits;
-			bool success = write_channel_nb_intel(channel_control_to_ia_buffer[0], tileBufferControlPacket);
-			if (success)
-			{
-				iStripInTile++;
-				iActivationDramBlockAddressBaseLoad += strideStripIACache;
-			}
+
+			write_channel_intel(channel_control_to_ia_buffer[0], tileBufferControlPacket);
+			iActivationDramBlockAddressBaseLoad += strideStripIACache;
+			// bool success = write_channel_nb_intel(channel_control_to_ia_buffer[0], tileBufferControlPacket);
+			// if (success)
+			// {
+			// 	iStripInTile++;
+			// 	iActivationDramBlockAddressBaseLoad += strideStripIACache;
+			// }
 		}
 		EMULATOR_PRINT(("[kernelIATileController] FINISHED sending the buffer refresh instructions for iTile=%d .\n\n", iTile));
 			
@@ -903,6 +908,7 @@ __kernel void kernelOutputWriter (
 		unsigned short maxTQ = (iterWidthTile < numOutputWidthFullTile) ?
 			sizeOutputTileWidthFull : sizeOutputTileWidthPartial;
 
+		unsigned short numGroupNextLayerxTileHeightxTileWidthPerCol = numGroupsNextLayer*maxTP*maxTQ_A;
 		//Send the output control
 		//TODO: Think about the control signal to send carefully
 		//Both to the tile controller, and to the Tees.
@@ -924,7 +930,7 @@ __kernel void kernelOutputWriter (
 			write_channel_intel(channel_output_writer_to_oa_controller, outputControl);
 
 			t_output_tile_tee_packet teePacket;
-			teePacket.numOutputGroupxTileHeightxTileWidth = numGroupsNextLayer*maxTP*maxTQ_A;
+			teePacket.numOutputGroupxTileHeightxTileWidth = numGroupNextLayerxTileHeightxTileWidthPerCol;
 			teePacket.maxColID = (maxPeCols - 1);
 
 			write_channel_intel(channel_output_writer_to_tee[0], teePacket);
@@ -938,8 +944,9 @@ __kernel void kernelOutputWriter (
 		unsigned char iOutputHeightInTile = 0;
 		unsigned char iOutputWidthInTile = 0;
 		unsigned char iCol = 0; //iterator for the PE columns
+		unsigned short numGroupNextLayerxTileHeightxTileWidth = numGroupNextLayerxTileHeightxTileWidthPerCol * (unsigned short) maxTQ_A;
 
-		while (iOutputGroup < numGroupsNextLayer)
+		for (unsigned short iter=0; iter<numGroupNextLayerxTileHeightxTileWidth; iter++)
 		{
 			//Global indices for the sub-tile from the first PE_COL
 			unsigned short iHeightGlobal = iterP + (unsigned short) iOutputHeightInTile;
@@ -1008,7 +1015,7 @@ __kernel void kernelOutputWriter (
 			{
 				iCol++;
 			}
-		} //while-loop over iGroup. Loop for draining output
+		} //for-loop for draining output
 
 		/*
 		Drain the transfer block counts for the tile
@@ -1019,7 +1026,9 @@ __kernel void kernelOutputWriter (
 		unsigned char iAddressHeightInTile = 0;
 		unsigned char iAddressWidthInTile = 0;
 
-		while (iAddressGroup < numGroupsNextLayer)
+		//TODO: Make group exit condition regiular
+		//while (iAddressGroup < numGroupsNextLayer)
+		for (unsigned short iter=0; iter<numGroupNextLayerxTileHeightxTileWidth; iter++)
 		{
 			unsigned int dramAddress = (iAddressGroup*outputHeight + iterP + iAddressHeightInTile) * outputWidth + iterQ + iAddressWidthInTile;
 			unsigned short cacheAddress = (iAddressGroup*maxTP + iAddressHeightInTile) * maxTQ + iAddressWidthInTile;

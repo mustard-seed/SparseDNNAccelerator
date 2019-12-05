@@ -979,12 +979,12 @@ protected:
 #ifdef PLAY
 TEST_F (testFixture, play) {
 
-    unsigned char inputWidth = 1;
-    unsigned char inputHeight = 1;
-    unsigned char numInputChannel = 4;
+    unsigned char inputWidth = 8;
+    unsigned char inputHeight = 8;
+    unsigned char numInputChannel = 1;
     unsigned char widthBlockSize = 3;
-    unsigned char sizeOutputTileWidthPerColFul = 13;
-    unsigned char sizeOutputTileHeightFull = 13;
+    unsigned char sizeOutputTileWidthPerColFul = 4;
+    unsigned char sizeOutputTileHeightFull = 4;
     bool flagEnableRelu = true;
 
     launch(
