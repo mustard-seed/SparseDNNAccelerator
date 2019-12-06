@@ -979,12 +979,12 @@ protected:
 #ifdef PLAY
 TEST_F (testFixture, play) {
 
-    unsigned char inputWidth = 4;
-    unsigned char inputHeight = 4;
-    unsigned char numInputChannel = 1;
+    unsigned char inputWidth = 2;
+    unsigned char inputHeight = 32;
+    unsigned char numInputChannel = 114;
     unsigned char widthBlockSize = 3;
-    unsigned char sizeOutputTileWidthPerColFul = 4;
-    unsigned char sizeOutputTileHeightFull = 4;
+    unsigned char sizeOutputTileWidthPerColFul = 2;
+    unsigned char sizeOutputTileHeightFull = 32;
     bool flagEnableRelu = true;
 
     launch(
@@ -997,46 +997,6 @@ TEST_F (testFixture, play) {
         flagEnableRelu);
 }
 #else
-TEST_F (testFixture, small_1x1) {
-
-    unsigned char inputWidth = 1;
-    unsigned char inputHeight = 1;
-    unsigned char numInputChannel = 4;
-    unsigned char widthBlockSize = 2;
-    unsigned char sizeOutputTileWidthPerColFul = 2;
-    unsigned char sizeOutputTileHeightFull = 2;
-    bool flagEnableRelu = true;
-
-    launch(
-        inputWidth,
-        inputHeight,
-        numInputChannel,
-        widthBlockSize,
-        sizeOutputTileWidthPerColFul,
-        sizeOutputTileHeightFull,
-        flagEnableRelu);
-}
-
-TEST_F (testFixture, small_4x4) {
-
-    unsigned char inputWidth = 4;
-    unsigned char inputHeight = 4;
-    unsigned char numInputChannel = 4;
-    unsigned char widthBlockSize = 3;
-    unsigned char sizeOutputTileWidthPerColFul = 2;
-    unsigned char sizeOutputTileHeightFull = 2;
-    bool flagEnableRelu = true;
-
-    launch(
-        inputWidth,
-        inputHeight,
-        numInputChannel,
-        widthBlockSize,
-        sizeOutputTileWidthPerColFul,
-        sizeOutputTileHeightFull,
-        flagEnableRelu);
-}
-
 TEST_F (testFixture, small_5x5) {
 
     unsigned char inputWidth = 5;
@@ -1057,14 +1017,14 @@ TEST_F (testFixture, small_5x5) {
         flagEnableRelu);
 }
 
-TEST_F (testFixture, large_32x32_tileSizeCol_2) {
+TEST_F (testFixture, medium_16x16x8_tileSizeCol_8) {
 
-    unsigned char inputWidth = 32;
-    unsigned char inputHeight = 32;
-    unsigned char numInputChannel = 32;
+    unsigned char inputWidth = 16;
+    unsigned char inputHeight = 16;
+    unsigned char numInputChannel = 8;
     unsigned char widthBlockSize = 3;
-    unsigned char sizeOutputTileWidthPerColFul = 2;
-    unsigned char sizeOutputTileHeightFull = 2;
+    unsigned char sizeOutputTileWidthPerColFul = 8;
+    unsigned char sizeOutputTileHeightFull = 8;
     bool flagEnableRelu = true;
 
     launch(
@@ -1077,14 +1037,14 @@ TEST_F (testFixture, large_32x32_tileSizeCol_2) {
         flagEnableRelu);
 }
 
-TEST_F (testFixture, large_32x32_tileSizeCol_4) {
+TEST_F (testFixture, medium_16x16x16_tileSizeCol_8) {
 
-    unsigned char inputWidth = 32;
-    unsigned char inputHeight = 32;
-    unsigned char numInputChannel = 32;
+    unsigned char inputWidth = 16;
+    unsigned char inputHeight = 16;
+    unsigned char numInputChannel = 16;
     unsigned char widthBlockSize = 3;
-    unsigned char sizeOutputTileWidthPerColFul = 4;
-    unsigned char sizeOutputTileHeightFull = 4;
+    unsigned char sizeOutputTileWidthPerColFul = 8;
+    unsigned char sizeOutputTileHeightFull = 8;
     bool flagEnableRelu = true;
 
     launch(
@@ -1097,10 +1057,10 @@ TEST_F (testFixture, large_32x32_tileSizeCol_4) {
         flagEnableRelu);
 }
 
-TEST_F (testFixture, large_32x32_tileSizeCol_8) {
+TEST_F (testFixture, medium_16x16x32_tileSizeCol_8) {
 
-    unsigned char inputWidth = 32;
-    unsigned char inputHeight = 32;
+    unsigned char inputWidth = 16;
+    unsigned char inputHeight = 16;
     unsigned char numInputChannel = 32;
     unsigned char widthBlockSize = 3;
     unsigned char sizeOutputTileWidthPerColFul = 8;
@@ -1117,30 +1077,10 @@ TEST_F (testFixture, large_32x32_tileSizeCol_8) {
         flagEnableRelu);
 }
 
-TEST_F (testFixture, deep_1x1x32) {
+TEST_F (testFixture, medium_16x16x64_tileSizeCol_8) {
 
-    unsigned char inputWidth = 1;
-    unsigned char inputHeight = 1;
-    unsigned char numInputChannel = 32;
-    unsigned char widthBlockSize = 3;
-    unsigned char sizeOutputTileWidthPerColFul = 8;
-    unsigned char sizeOutputTileHeightFull = 8;
-    bool flagEnableRelu = true;
-
-    launch(
-        inputWidth,
-        inputHeight,
-        numInputChannel,
-        widthBlockSize,
-        sizeOutputTileWidthPerColFul,
-        sizeOutputTileHeightFull,
-        flagEnableRelu);
-}
-
-TEST_F (testFixture, deep_1x1x64) {
-
-    unsigned char inputWidth = 1;
-    unsigned char inputHeight = 1;
+    unsigned char inputWidth = 16;
+    unsigned char inputHeight = 16;
     unsigned char numInputChannel = 64;
     unsigned char widthBlockSize = 3;
     unsigned char sizeOutputTileWidthPerColFul = 8;
@@ -1157,10 +1097,50 @@ TEST_F (testFixture, deep_1x1x64) {
         flagEnableRelu);
 }
 
-TEST_F (testFixture, deep_1x1x127) {
+TEST_F (testFixture, large_16x16x127_tileSizeCol_2) {
 
-    unsigned char inputWidth = 1;
-    unsigned char inputHeight = 1;
+    unsigned char inputWidth = 16;
+    unsigned char inputHeight = 16;
+    unsigned char numInputChannel = 127;
+    unsigned char widthBlockSize = 3;
+    unsigned char sizeOutputTileWidthPerColFul = 2;
+    unsigned char sizeOutputTileHeightFull = 2;
+    bool flagEnableRelu = true;
+
+    launch(
+        inputWidth,
+        inputHeight,
+        numInputChannel,
+        widthBlockSize,
+        sizeOutputTileWidthPerColFul,
+        sizeOutputTileHeightFull,
+        flagEnableRelu);
+}
+
+TEST_F (testFixture, large_16x16x127_tileSizeCol_4) {
+
+    unsigned char inputWidth = 16;
+    unsigned char inputHeight = 16;
+    unsigned char numInputChannel = 127;
+    unsigned char widthBlockSize = 3;
+    unsigned char sizeOutputTileWidthPerColFul = 4;
+    unsigned char sizeOutputTileHeightFull = 4;
+    bool flagEnableRelu = true;
+
+    launch(
+        inputWidth,
+        inputHeight,
+        numInputChannel,
+        widthBlockSize,
+        sizeOutputTileWidthPerColFul,
+        sizeOutputTileHeightFull,
+        flagEnableRelu);
+}
+
+TEST_F (testFixture, large_16x16x127_tileSizeCol_8) {
+
+    unsigned char inputWidth = 16;
+    unsigned char inputHeight = 16;
     unsigned char numInputChannel = 127;
     unsigned char widthBlockSize = 3;
     unsigned char sizeOutputTileWidthPerColFul = 8;

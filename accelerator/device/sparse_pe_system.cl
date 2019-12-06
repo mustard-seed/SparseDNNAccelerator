@@ -233,7 +233,7 @@ __kernel void kernelMemoryReader (
 			//Index of the address cache array
 			unsigned short iterAddressCache=0;
 
-			unsigned short numGroupsxInputTileWxInputTileH = (unsigned short) numGroups * sizeInputHeightTileLocal * sizeInputWidthTileLocal;
+			unsigned short numGroupsxInputTileWxInputTileH = ((unsigned short) numGroups) * sizeInputHeightTileLocal * sizeInputWidthTileLocal;
 
 			EMULATOR_PRINT(("[kernelMemoryReader] tY=%d, tX=%d. START loading the input counts.\n\n", iterPTile, iterQTile));
 			//Index over X in tile -> Y in tile -> Group
@@ -320,8 +320,8 @@ __kernel void kernelMemoryReader (
 			//tileControllerPacket.kernelSize = kernelSize;
 			tileControllerPacket.strideConcatKernelSize = ((stride & 0xF) << 0x4) | (kernelSize & 0xF);
 			tileControllerPacket.numOutputPerCol = kernelSizexkernelSizexNumFilterFoldsInGroup * sizeOutputHeightTileLocal * sizeOutputWidthTilePerColLocal;
-			tileControllerPacket.numActivePeCols = numActivePeCols;
-			tileControllerPacket.numOutputChannelsInGroup = numFiltersInGroup;
+			tileControllerPacket.numActivePeColsConcatNumOutputChannelsInGroup = (((unsigned short) numActivePeCols) << 12) | (numFiltersInGroup & 0xFFF);
+			//tileControllerPacket.numOutputChannelsInGroup = numFiltersInGroup;
 			tileControllerPacket.strideStripIACache = strideStripIACache;
 
 			write_channel_intel(channel_to_ia_tile_controller, tileControllerPacket);
@@ -616,7 +616,7 @@ __kernel void kernelIABuffer ()
 			}
 			else
 			{
-				t_dram_block dramBlock = cacheIABlocks[iActivationDramBlockAddressBase+(iterAccess >> WIDE_SIZE_OFFSET)];	
+				t_dram_block dramBlock = cacheIABlocks[iActivationDramBlockAddressBase+ ((unsigned short)(iterAccess >> WIDE_SIZE_OFFSET))];	
 
 				t_transferblock_tagged taggedBlock;
 				taggedBlock.values = dramBlock.transferBlocks[iterAccess & WIDE_SIZE_REMAINDER_MASK];
@@ -649,9 +649,9 @@ __kernel void kernelIATileController (unsigned short numGroupxTiles)
 	    //unsigned char kernelSize = tileControlPacketReceived.kernelSize;
 	    unsigned char stride = (tileControlPacketReceived.strideConcatKernelSize >> 0x4) & 0xF;
 	    unsigned char kernelSize = tileControlPacketReceived.strideConcatKernelSize & 0xF;
-	    unsigned short numOutputPerCol = tileControlPacketReceived.numOutputPerCol;
-	    unsigned char numActivePeCols = tileControlPacketReceived.numActivePeCols;
-	    unsigned short numOutputChannelsInGroup = tileControlPacketReceived.numOutputChannelsInGroup;
+        unsigned int numOutputPerCol = tileControlPacketReceived.numOutputPerCol;
+	    unsigned char numActivePeCols = (tileControlPacketReceived.numActivePeColsConcatNumOutputChannelsInGroup >> 12) & 0xF;
+	    unsigned short numOutputChannelsInGroup = (tileControlPacketReceived.numActivePeColsConcatNumOutputChannelsInGroup) & 0xFFF;
 	    unsigned short strideStripIACache = tileControlPacketReceived.strideStripIACache; //S
 
 		/*
@@ -697,7 +697,7 @@ __kernel void kernelIATileController (unsigned short numGroupxTiles)
 		unsigned char iKernelSizeFlat = 0;
 		
 		//while (iFilterInGroup < numOutputChannelsInGroup)
-		for (unsigned short i=0; i<numOutputPerCol; i++)
+        for (unsigned int i=0; i<numOutputPerCol; i++)
 		{
 			unsigned char numActivePeRows = ((numOutputChannelsInGroup - iFilterInGroup) < (unsigned short) (PE_ROWS)) ?
 				(unsigned char) (numOutputChannelsInGroup - iFilterInGroup) : PE_ROWS;
@@ -705,7 +705,7 @@ __kernel void kernelIATileController (unsigned short numGroupxTiles)
 			unsigned char iStripInTile = (iInputTileHeight + iKernelHeight) * inputTileWidth + iInputTileWidth + iKernelWidth;
 
 			t_input_buffer_tile_buffer_packet tileBufferControlPacket;
-			tileBufferControlPacket.iActivationDramBlockAddressBase = (unsigned short) (iStripInTile * strideStripIACache);
+			tileBufferControlPacket.iActivationDramBlockAddressBase = ((unsigned short) iStripInTile) * ((unsigned short) strideStripIACache);
 			tileBufferControlPacket.iAddressCache = iStripInTile;
 			tileBufferControlPacket.maxPeRowID = (numActivePeRows - 1);
 			unsigned char isLastBit = ((iKernelSizeFlat+1) == kernelSizeFlat) ? 0x1 : 0x0;
@@ -908,7 +908,7 @@ __kernel void kernelOutputWriter (
 		unsigned short maxTQ = (iterWidthTile < numOutputWidthFullTile) ?
 			sizeOutputTileWidthFull : sizeOutputTileWidthPartial;
 
-		unsigned short numGroupNextLayerxTileHeightxTileWidthPerCol = numGroupsNextLayer*maxTP*maxTQ_A;
+		unsigned short numGroupNextLayerxTileHeightxTileWidthPerCol = (unsigned short) numGroupsNextLayer* (unsigned short) maxTP* (unsigned short) maxTQ_A;
 		//Send the output control
 		//TODO: Think about the control signal to send carefully
 		//Both to the tile controller, and to the Tees.
@@ -957,7 +957,7 @@ __kernel void kernelOutputWriter (
 				* (unsigned int) strideExterrnalMemoryOA; //iCol*maxTQ_A is zero
 
 			unsigned short iAddressCache = 
-				(iOutputGroup*maxTP + iOutputHeightInTile)*maxTQ + iOutputWidthInTile + iCol*maxTQ_A;
+				(iOutputGroup*maxTP + iOutputHeightInTile)*maxTQ + (unsigned short) iOutputWidthInTile + (unsigned short) iCol * (unsigned short) maxTQ_A;
 
 			unsigned short clusterCount;
 
@@ -1272,7 +1272,7 @@ __kernel void kernelOATileController (unsigned short numGroupxTiles)
 				i));
 	    unsigned short iChannelNextLayer = 0;
 	    unsigned short iOutputTileHxWSend = 0;
-	    unsigned short numOutputTileHeightxWidthxNumGroupsNextLayer = numOutputTileHeightxWidth * numGroupsNextLayer;
+	    unsigned short numOutputTileHeightxWidthxNumGroupsNextLayer = (unsigned short) numOutputTileHeightxWidth * (unsigned short) numGroupsNextLayer;
 	    for  (unsigned short i=0; i<numOutputTileHeightxWidthxNumGroupsNextLayer; i++)
 	    {
 	    	t_output_tile_buffer_packet_tagged bufferPacketTagged;

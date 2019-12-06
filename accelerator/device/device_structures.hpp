@@ -201,9 +201,10 @@ typedef struct __attribute__((packed))
     //unsigned char stride;
     //unsigned char kernelSize;
     unsigned char strideConcatKernelSize; //Bit 7:4 stride, 3:0 KernelSize
-    unsigned short numOutputPerCol;
-    unsigned char numActivePeCols;
-    unsigned short numOutputChannelsInGroup;
+    unsigned int numOutputPerCol;
+    //unsigned char numActivePeCols;
+    //unsigned short numOutputChannelsInGroup;
+    unsigned short numActivePeColsConcatNumOutputChannelsInGroup; //15:12: Number of Active PeCols, 11:0: Number of output channels in group
     unsigned short strideStripIACache; //Stride in terms of dram block
 } t_input_buffer_tile_controller_packet;
 
