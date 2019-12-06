@@ -979,9 +979,9 @@ protected:
 #ifdef PLAY
 TEST_F (testFixture, play) {
 
-    unsigned char inputWidth = 2;
-    unsigned char inputHeight = 32;
-    unsigned char numInputChannel = 114;
+    unsigned char inputWidth = 4;
+    unsigned char inputHeight = 4;
+    unsigned char numInputChannel = 1;
     unsigned char widthBlockSize = 3;
     unsigned char sizeOutputTileWidthPerColFul = 2;
     unsigned char sizeOutputTileHeightFull = 32;

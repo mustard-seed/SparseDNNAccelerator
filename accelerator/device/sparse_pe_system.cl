@@ -560,59 +560,116 @@ __kernel void kernelMemoryReader (
 #endif //MEMORY_READER
 
 #ifdef IA_MEMORY
+#define IA_BUFFER_STATE_DECODE 0x0
+#define IA_BUFFER_STATE_COMPUTE_NUM_ACCESS 0x1
+#define IA_BUFFER_STATE_ACCESS 0x2
+#define IA_BUFFER_STATE_PADD 0x3
+#define IA_BUFFER_PADD_COUNT 2
 __attribute__((max_global_work_dim(0)))
 __attribute__((autorun))
 __attribute__((num_compute_units(PE_COLS)))
 __kernel void kernelIABuffer ()
 {
+	typedef uint2_t t_state;
 	int colID = get_compute_id(0);
 
 	t_dram_block cacheIABlocks [IA_CACHE_DEPTH] __attribute__((bankwidth(BURST_SIZE_BYTE)));
 	t_streamblock_address cacheIAStreamBlockAddress [256];
 
+	/*
+		Loop carried-variables
+	*/
+
+	bool isLoad = false;
+	bool isLast = false;
+	unsigned short iActivationDramBlockAddressBase = 0;
+	unsigned char iAddressCache = 0;
+	unsigned char maxPeRowID = 0;
+	unsigned short numIAAccess = 0;
+	unsigned short iterAccess = 0;
+
+	//Used as a delay counter, after the access run
+	unsigned char paddCount = 0;
+
+	t_state currentState = IA_BUFFER_STATE_DECODE;
+
+	#pragma ivdep array(cacheIABlocks)
+	#pragma ivdep array(cacheIAStreamBlockAddress)
+//	#pragma ivdep safelen(5)
 	while (true)
 	{
+		t_state nextState = currentState;
+		t_dram_block dramBlock;
+		bool dataReadSuccess = false;
+
+		//Handle channel read separately
+        if (((currentState == IA_BUFFER_STATE_COMPUTE_NUM_ACCESS) && (isLoad == true))
+                || ((currentState == IA_BUFFER_STATE_ACCESS) && (isLoad == true)))
+		{
+			dramBlock = read_channel_nb_intel(channel_ia_wide_local[colID], &dataReadSuccess);
+		}
 		/*
 		First, read the instruction from the tile controller
 		*/
-		t_input_buffer_tile_buffer_packet controlPacketReceived = read_channel_intel(channel_control_to_ia_buffer_local[colID]);
-
-		bool isLoad = ((controlPacketReceived.controlBits >> 0x1) & 0x1) == 0x0;
-		bool isLast = (controlPacketReceived.controlBits & 0x1) == 0x1;
-		unsigned short iActivationDramBlockAddressBase = controlPacketReceived.iActivationDramBlockAddressBase;
-		unsigned char iAddressCache = controlPacketReceived.iAddressCache;
-		unsigned char maxPeRowID = controlPacketReceived.maxPeRowID;
-
-		/*
-		Second, determine how many iterations of loading / sending there are
-		*/
-		unsigned short numIAAccess;
-		if (isLoad)
+		if (currentState == IA_BUFFER_STATE_DECODE)
 		{
-			t_dram_block dramBlockCount = read_channel_intel(channel_ia_wide_local[colID]);
-			t_streamblock_address numIATransferBlocks = dramBlock2TransferBlockCount(dramBlockCount);
-			cacheIAStreamBlockAddress[iAddressCache] = numIATransferBlocks;
-			numIAAccess = ((numIATransferBlocks & WIDE_SIZE_REMAINDER_MASK) != 0X0)
-				? (numIATransferBlocks >> WIDE_SIZE_OFFSET) + 1 : (numIATransferBlocks >> WIDE_SIZE_OFFSET);
-		}
-		else
-		{
-			numIAAccess = cacheIAStreamBlockAddress[iAddressCache];
-		}
+			bool success = false;
+			t_input_buffer_tile_buffer_packet controlPacketReceived = read_channel_nb_intel(channel_control_to_ia_buffer_local[colID], &success);
 
-		EMULATOR_PRINT(("[kernelIABuffer %d] START processing instruction. isLoad=%d, isLast=%d, iAddressCache=%d, iActivationDramBlockAddressBase=%d, maxPeRowID=%d\n\n",
-			colID, isLoad, isLast, iAddressCache, iActivationDramBlockAddressBase, maxPeRowID));
+			if (success)
+			{
+				isLoad = ((controlPacketReceived.controlBits >> 0x1) & 0x1) == 0x0;
+				isLast = (controlPacketReceived.controlBits & 0x1) == 0x1;
+				iActivationDramBlockAddressBase = controlPacketReceived.iActivationDramBlockAddressBase;
+				iAddressCache = controlPacketReceived.iAddressCache;
+				maxPeRowID = controlPacketReceived.maxPeRowID;
 
-		/*
-			Finally, load/send the IA blocks
-		*/
-		#pragma ivdep array(cacheIABlocks)
-		for (unsigned short iterAccess = 0; iterAccess < numIAAccess; iterAccess++)
+				EMULATOR_PRINT(("[kernelIABuffer %d] START processing instruction. isLoad=%d, isLast=%d, iAddressCache=%d, iActivationDramBlockAddressBase=%d, maxPeRowID=%d\n\n",
+				colID, isLoad, isLast, iAddressCache, iActivationDramBlockAddressBase, maxPeRowID));
+
+				nextState = IA_BUFFER_STATE_COMPUTE_NUM_ACCESS;
+			}
+		} //IA_BUFFER_STATE_DECODE
+		else if (currentState == IA_BUFFER_STATE_COMPUTE_NUM_ACCESS)
 		{
 			if (isLoad)
 			{
-				t_dram_block dramBlock = read_channel_intel(channel_ia_wide_local[colID]);
-				cacheIABlocks[iterAccess + iActivationDramBlockAddressBase] = dramBlock;
+				if (dataReadSuccess == true)
+				{
+					t_streamblock_address numIATransferBlocks = dramBlock2TransferBlockCount(dramBlock);
+					cacheIAStreamBlockAddress[iAddressCache] = numIATransferBlocks;
+					numIAAccess = ((numIATransferBlocks & WIDE_SIZE_REMAINDER_MASK) != 0X0)
+						? (numIATransferBlocks >> WIDE_SIZE_OFFSET) + 1 : (numIATransferBlocks >> WIDE_SIZE_OFFSET);
+
+					nextState = IA_BUFFER_STATE_ACCESS;
+				}
+			}
+			else
+			{
+				numIAAccess = cacheIAStreamBlockAddress[iAddressCache];
+				nextState = IA_BUFFER_STATE_ACCESS;
+			}
+
+			iterAccess = 0;
+			paddCount = 0;
+		} //IA_BUFFER_STATE_COMPUTE_NUM_ACCESS
+		else if (currentState == IA_BUFFER_STATE_PADD)
+		{
+			paddCount++;
+			if (paddCount >= IA_BUFFER_PADD_COUNT)
+			{
+				nextState = IA_BUFFER_STATE_ACCESS;
+			}
+		} //IA_BUFFER_STATE_PADD
+		else if (currentState == IA_BUFFER_STATE_ACCESS)
+		{
+			if (isLoad)
+			{
+				if (dataReadSuccess)
+				{
+					cacheIABlocks[iterAccess + iActivationDramBlockAddressBase] = dramBlock;
+					iterAccess++;
+				}
 			}
 			else
 			{
@@ -622,11 +679,22 @@ __kernel void kernelIABuffer ()
 				taggedBlock.values = dramBlock.transferBlocks[iterAccess & WIDE_SIZE_REMAINDER_MASK];
 				taggedBlock.maxTransportID = maxPeRowID;
 				taggedBlock.isLast = isLast && ((iterAccess + 1) == numIAAccess);
-				write_channel_intel(channel_activation[0][colID], taggedBlock);
+				bool success = write_channel_nb_intel(channel_activation[0][colID], taggedBlock);
+				if (success)
+				{
+					iterAccess++;
+				}
 			}
-		}
-		EMULATOR_PRINT(("[kernelIABuffer %d] FINISHED processing instruction. isLoad=%d, isLast=%d, iAddressCache=%d, iActivationDramBlockAddressBase=%d, maxPeRowID=%d\n\n",
-			colID, isLoad, isLast, iAddressCache, iActivationDramBlockAddressBase, maxPeRowID));
+
+			if (iterAccess == numIAAccess)
+			{
+				EMULATOR_PRINT(("[kernelIABuffer %d] FINISHED processing instruction. isLoad=%d, isLast=%d, iAddressCache=%d, iActivationDramBlockAddressBase=%d, maxPeRowID=%d\n\n",
+					colID, isLoad, isLast, iAddressCache, iActivationDramBlockAddressBase, maxPeRowID));
+				nextState = IA_BUFFER_STATE_DECODE;
+			}
+		} //IA_BUFFER_STATE_ACCESS
+
+		currentState = nextState;
 	}
 }
 
