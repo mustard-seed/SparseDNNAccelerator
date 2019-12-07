@@ -1150,61 +1150,130 @@ __kernel void kernelOutputWriter (
 #endif //MEMORY_WRITER 
 
 #ifdef OA_MEMORY
+#define OA_BUFFER_STATE_DECODE 0x0
+#define OA_BUFFER_STATE_NUM_ACCESS 0x1
+#define OA_BUFFER_STATE_PADD 0x2
+#define OA_BUFFER_STATE_ACCESS 0x3
+#define OA_BUFFER_PAD_COUNT	 2
 __attribute__((max_global_work_dim(0)))
 __attribute__((autorun))
 __attribute__((num_compute_units(PE_COLS)))
 __kernel void kernelOABuffer ()
 {
+	typedef uint2_t t_state;
+
 	int colID = get_compute_id(0);
 	char cacheOutputActivations[OA_CACHE_SIZE];
 
+	/*
+	 *Loop carried variables
+	*/
+	t_state currentState = OA_BUFFER_STATE_DECODE;
+
+	unsigned short startOutputIndex = 0X0;
+	unsigned short numOutputToAccess = 0X0;
+	uint1_t isDrainBuffer = FALSE;
+
+	//Information relevant for loading the cache only
+	unsigned char numAccumulatorBitsToRightShift = 0x0;
+	uint1_t enableRelu = FALSE;
+	uint1_t enableSparsification = FALSE;
+	unsigned short numClustersToDrain = 0;
+	unsigned short numWindowsToDrain = 0;
+
+	//Loop-carried variables 
+	unsigned char countSurvivingClustersInWindow = 0;
+	unsigned char iClustersInWindowFetched = 0;
+	unsigned short iOutputChannelFetched = 0;
+	unsigned short iClustersFetched = 0;
+	unsigned char mask = 0;
+
+	unsigned short numLoops = 0;
+
+	unsigned char delayCount = 0;
+	unsigned short iLoop = 0;
+	unsigned short indexOutput = 0;
+
+
+#pragma ivdep array(cacheOutputActivations)
 	while (true)
 	{
-		/*
-		1. Get the instruction, and decode it.
-		*/
-		t_output_tile_buffer_packet controlPacket =
-			read_channel_intel(channel_control_to_oa_buffer_local[colID]);
+		t_state nextState = currentState;
 
-		unsigned short startOutputIndex = controlPacket.startOutputIndex;
-		unsigned short numOutputToAccess = controlPacket.numOutputToAccess;
-		uint1_t isDrainBuffer = (controlPacket.controlBits >> 6) & 0x1;
+		if (currentState == OA_BUFFER_STATE_DECODE)
+		{
+			bool readSuccess = false;
 
-		//Information relevant for loading the cache only
-		unsigned char numAccumulatorBitsToRightShift = controlPacket.controlBits & 0xF;
-		uint1_t enableRelu = (controlPacket.controlBits >> 4) & 0x1;
-		uint1_t enableSparsification = ( controlPacket.controlBits >> 5) & 0x1;
-		unsigned short numClustersToDrain = 1 + ((numOutputToAccess - 1) >> VALUE_TO_CLUSTER_SHIFT);
-		unsigned short numWindowsToDrain = 1 + ((numClustersToDrain - 1) >> CLUSTER_TO_WINDOW_SHIFT);
+			t_output_tile_buffer_packet controlPacket =
+				read_channel_nb_intel(channel_control_to_oa_buffer_local[colID], &readSuccess);
 
-		//Loop-carried variables 
-		unsigned char countSurvivingClustersInWindow = 0;
-		unsigned char iClustersInWindowFetched = 0;
-		unsigned short iOutputChannelFetched = 0;
-		unsigned short iClustersFetched = 0;
-		unsigned char mask = 0;
+			if (readSuccess)
+			{
+				startOutputIndex = controlPacket.startOutputIndex;
+				numOutputToAccess = controlPacket.numOutputToAccess;
+                isDrainBuffer = (controlPacket.controlBits >> 6) & 0x1;
 
-		//Loop control
-		unsigned short numLoops = (isDrainBuffer == TRUE) ?
-			(numClustersToDrain + numWindowsToDrain) 
-			: numOutputToAccess;
+				//Information relevant for loading the cache only
+                numAccumulatorBitsToRightShift = controlPacket.controlBits & 0xF;
+                enableRelu = (controlPacket.controlBits >> 4) & 0x1;
+                enableSparsification = ( controlPacket.controlBits >> 5) & 0x1;
+				
+				nextState = OA_BUFFER_STATE_NUM_ACCESS;
+			}
 
-		EMULATOR_PRINT(("[kernelOABuffer %d] START processing instruction. Type=%d, startOutputIndex=%d, numOutputToAccess %d\n\n", 
-				colID, isDrainBuffer, startOutputIndex, numOutputToAccess));
+		}
+		else if (currentState == OA_BUFFER_STATE_NUM_ACCESS)
+		{
+			numClustersToDrain = 1 + ((numOutputToAccess - 1) >> VALUE_TO_CLUSTER_SHIFT);
+			numWindowsToDrain = 1 + ((numClustersToDrain - 1) >> CLUSTER_TO_WINDOW_SHIFT);
 
-		for (unsigned short iLoop=0, indexOutput=startOutputIndex; iLoop<numLoops; iLoop++)
+			//Loop-carried variables 
+			countSurvivingClustersInWindow = 0;
+			iClustersInWindowFetched = 0;
+			iOutputChannelFetched = 0;
+			iClustersFetched = 0;
+			mask = 0;
+
+			//Loop control
+			numLoops = (isDrainBuffer == TRUE) ?
+				(numClustersToDrain + numWindowsToDrain) 
+				: numOutputToAccess;
+
+			delayCount = 0;
+			iLoop = 0;
+			indexOutput = startOutputIndex;
+
+			nextState = OA_BUFFER_STATE_PADD;
+
+			EMULATOR_PRINT(("[kernelOABuffer %d] START processing instruction. Type=%d, startOutputIndex=%d, numOutputToAccess %d\n\n", 
+			colID, isDrainBuffer, startOutputIndex, numOutputToAccess));
+		}
+		else if (currentState == OA_BUFFER_STATE_PADD)
+		{
+			delayCount++;
+			if (delayCount >= OA_BUFFER_PAD_COUNT)
+			{
+				nextState = OA_BUFFER_STATE_ACCESS;
+			}
+		}
+		else if (currentState == OA_BUFFER_STATE_ACCESS)
 		{
 			if (isDrainBuffer == FALSE) //Case: draining the array
 			{
-				t_accumulator wideOutput = read_channel_intel(channel_drain[0][colID]);
-				//t_accumulator wideOutput = 0;
-				t_operand shortOutput = modifyOutput(wideOutput, numAccumulatorBitsToRightShift, enableRelu);
-				cacheOutputActivations[indexOutput] = shortOutput;
+				bool readSuccess = false;
+				t_accumulator wideOutput = read_channel_nb_intel(channel_drain[0][colID], &readSuccess);
+				
+				if (readSuccess == true) {
+					t_operand shortOutput = modifyOutput(wideOutput, numAccumulatorBitsToRightShift, enableRelu);
+					cacheOutputActivations[indexOutput] = shortOutput;
 
-				EMULATOR_PRINT(("[kernelOABuffer %d] Read and processed value from PE. Value: %#04x, %d out of %d values read.\n\n", 
-				colID, shortOutput, indexOutput, numOutputToAccess));
-				//Loop variable updates
-				indexOutput++;
+					EMULATOR_PRINT(("[kernelOABuffer %d] Read and processed value from PE. Value: %#04x, %d out of %d values read.\n\n", 
+					colID, shortOutput, indexOutput, numOutputToAccess));
+					//Loop variable updates
+					indexOutput++;
+					iLoop++;
+
+				}
 			} //Case: draining the array
 
 			else //Case: Stream the buffered output to the cache
@@ -1214,6 +1283,8 @@ __kernel void kernelOABuffer ()
 				{
 					bool keep = (enableSparsification == FALSE);
 					t_cluster cluster;
+					//bool writeSuccess = true;
+
 					#pragma unroll
 					for (unsigned char i=0; i<CLUSTER_SIZE; i++)
 					{
@@ -1224,11 +1295,11 @@ __kernel void kernelOABuffer ()
 						keep = keep || (tempValue != 0x0);
 					}
 
-					if (keep)
+					if (keep == true)
 					{
+						write_channel_intel(channel_output_buffer_to_compressor_data[colID], cluster);
 						mask |= ((unsigned char) 1) << iClustersInWindowFetched;
 						countSurvivingClustersInWindow++;
-						write_channel_intel(channel_output_buffer_to_compressor_data[colID], cluster);
 					}
 
 					iClustersFetched++;
@@ -1237,9 +1308,28 @@ __kernel void kernelOABuffer ()
 					//Gotcha
 					iOutputChannelFetched += CLUSTER_SIZE;
 					indexOutput += CLUSTER_SIZE;
+					iLoop++;
+
+					// if (writeSuccess)
+					// {
+					// 	if (keep == true)
+					// 	{
+					// 		mask |= ((unsigned char) 1) << iClustersInWindowFetched;
+					// 		countSurvivingClustersInWindow++;
+					// 	}
+
+					// 	iClustersFetched++;
+					// 	iClustersInWindowFetched++;
+
+					// 	//Gotcha
+					// 	iOutputChannelFetched += CLUSTER_SIZE;
+					// 	indexOutput += CLUSTER_SIZE;
+					// 	iLoop++;
+					// }
 				}
 				else //Send mask along with other informatin
 				{
+					//bool writeSuccess = false;
 					t_output_cluster_info info;
 					info.bitmask = mask;
 					unsigned char isLastInStrip = (iClustersFetched == numClustersToDrain) ? 0x1 : 0x0;
@@ -1248,16 +1338,32 @@ __kernel void kernelOABuffer ()
 						| ( (((unsigned char) enableSparsification) & 0x1) << 0x7);
 					
 					write_channel_intel(channel_output_buffer_to_compressor_info[colID], info);
-
 					mask = 0;
 					countSurvivingClustersInWindow = 0;
 					iClustersInWindowFetched = 0;
-				}
+					iLoop++;
 
+					//writeSuccess = write_channel_nb_intel(channel_output_buffer_to_compressor_info[colID], info);
+
+					// if (writeSuccess)
+					// {
+					// 	mask = 0;
+					// 	countSurvivingClustersInWindow = 0;
+					// 	iClustersInWindowFetched = 0;
+					// 	iLoop++;
+					// }
+				}
 			} //Case: Stream the buffered output to the cache
-		} // end of for loop
-		EMULATOR_PRINT(("[kernelOABuffer %d] FINISHED processing instruction. Type=%d, startOutputIndex=%d, numOutputToAccess %d\n\n", 
-				colID, isDrainBuffer, startOutputIndex, numOutputToAccess));
+
+            if (iLoop == numLoops)
+            {
+                nextState = OA_BUFFER_STATE_DECODE;
+                    EMULATOR_PRINT(("[kernelOABuffer %d] FINISHED processing instruction. Type=%d, startOutputIndex=%d, numOutputToAccess %d\n\n",
+                colID, isDrainBuffer, startOutputIndex, numOutputToAccess));
+            }
+		}
+
+		currentState = nextState;
 	} //end while
 }
 

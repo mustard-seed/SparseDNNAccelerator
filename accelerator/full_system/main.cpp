@@ -975,7 +975,7 @@ protected:
 
 };
 
-//#define PLAY
+#define PLAY
 #ifdef PLAY
 TEST_F (testFixture, play) {
 
