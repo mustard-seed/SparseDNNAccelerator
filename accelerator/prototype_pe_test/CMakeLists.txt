@@ -163,6 +163,7 @@ file(GLOB_RECURSE kernel_files
 #     ${PROJECT_SOURCE_DIR}/device/peComponents.cl
      ${PROJECT_SOURCE_DIR}/device/sparse_pe_system.cl
      ${CMAKE_CURRENT_SOURCE_DIR}/prototypePETest.cl
+     ${PROJECT_SOURCE_DIR}/device/device_utils.cl
 )
 
 add_aoc_target (
@@ -173,6 +174,7 @@ add_aoc_target (
     RTL_DIR ${rtl_directory}
     PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}
     RTL_LIB ${rtl_lib}
+    BOARD_NAME $BOARD_NAME}
     )
 
 add_aoc_target (
@@ -183,6 +185,7 @@ add_aoc_target (
     RTL_DIR ${rtl_directory} 
     PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}
     RTL_LIB ${rtl_lib}
+    BOARD_NAME ${BOARD_NAME}
     )
 
 add_aoc_target (
@@ -193,6 +196,7 @@ add_aoc_target (
     RTL_DIR ${rtl_directory} 
     PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}
     RTL_LIB ${rtl_lib}
+    BOARD_NAME ${BOARD_NAME}
     )
 
 add_aoc_target (
@@ -203,6 +207,7 @@ add_aoc_target (
     RTL_DIR ${rtl_directory}
     PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}
     RTL_LIB ${rtl_lib}
+    BOARD_NAME ${BOARD_NAME}
     )
 
 add_aoc_target (
@@ -213,6 +218,7 @@ add_aoc_target (
     RTL_DIR ${rtl_directory} 
     PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}
     RTL_LIB ${rtl_lib}
+    BOARD_NAME ${BOARD_NAME}
     )
 
 add_aoc_target (
@@ -223,6 +229,7 @@ add_aoc_target (
     RTL_DIR ${rtl_directory}
     PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}
     RTL_LIB ${rtl_lib}
+    BOARD_NAME ${BOARD_NAME}
     )
 
 #add_aoc_target (

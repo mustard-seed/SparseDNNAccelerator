@@ -1,6 +1,6 @@
 #include "params.hpp"
 #include "device_structures.hpp"
-#include "channels.cl"
+#include "channels.hpp"
 #include "device_utils.hpp"
 #include "ihc_apint.h"
 #include "rtl_lib.hpp"
@@ -574,7 +574,7 @@ __kernel void kernelIABuffer ()
 	int colID = get_compute_id(0);
 
 	t_dram_block cacheIABlocks [IA_CACHE_DEPTH] __attribute__((bankwidth(BURST_SIZE_BYTE)));
-	t_streamblock_address cacheIAStreamBlockAddress [256];
+	t_streamblock_address cacheIAStreamBlockAddress [256] __attribute__((numbanks(1))); ;
 
 	/*
 		Loop carried-variables
@@ -593,9 +593,10 @@ __kernel void kernelIABuffer ()
 
 	t_state currentState = IA_BUFFER_STATE_DECODE;
 
-	#pragma ivdep array(cacheIABlocks)
-	#pragma ivdep array(cacheIAStreamBlockAddress)
+//	#pragma ivdep array(cacheIABlocks)
+//	#pragma ivdep array(cacheIAStreamBlockAddress)
 //	#pragma ivdep safelen(5)
+	#pragma ivdep
 	while (true)
 	{
 		t_state nextState = currentState;
@@ -1163,7 +1164,7 @@ __kernel void kernelOABuffer ()
 	typedef uint2_t t_state;
 
 	int colID = get_compute_id(0);
-	char cacheOutputActivations[OA_CACHE_SIZE];
+	char cacheOutputActivations[OA_CACHE_SIZE] __attribute__((numbanks(1)));
 
 	/*
 	 *Loop carried variables
@@ -1195,7 +1196,8 @@ __kernel void kernelOABuffer ()
 	unsigned short indexOutput = 0;
 
 
-#pragma ivdep array(cacheOutputActivations)
+//#pragma ivdep array(cacheOutputActivations)
+	#pragma ivdep
 	while (true)
 	{
 		t_state nextState = currentState;
@@ -1763,7 +1765,8 @@ __kernel void kernelFilterBuffer ()
 	//unsigned char iHeightInOutputTileRead; //p
 	unsigned short iOutputRead = 0;
 
-	#pragma ivdep array(cacheNzBlocks)
+	//#pragma ivdep array(cacheNzBlocks)
+	#pragma ivdep
 	while (true)
 	{
 		//===============Write side====================
@@ -2241,6 +2244,8 @@ __kernel void kernelPE ()
 
 	//================Ping-ponged registers========================
 	//BRAM for storing the compression windows
+	// t_cluster activationWindow[COMPRESSION_WINDOW_SIZE+1][2]  __attribute__((numbanks(1))); 
+	// t_cluster weightWindow[COMPRESSION_WINDOW_SIZE+1][2]  __attribute__((numbanks(1))); 
 	t_cluster activationWindow[COMPRESSION_WINDOW_SIZE+1][2]; 
 	t_cluster weightWindow[COMPRESSION_WINDOW_SIZE+1][2]; 
 
@@ -2273,10 +2278,10 @@ __kernel void kernelPE ()
 	//================Debug====================
 	//unsigned short debugCount = 0;
 
-	#pragma ivdep array(activationWindow)
-	#pragma ivdep array(weightWindow)
+	//#pragma ivdep array(activationWindow)
+	//#pragma ivdep array(weightWindow)
 	//#pragma ivdep safelen(7)
-	//#pragma ivdep
+	#pragma ivdep
 	while (true)
 	{
 

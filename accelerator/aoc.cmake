@@ -23,12 +23,13 @@
 #                            "_aoc_simulation"
 # HEADER_DIR:  Single valued, optional. Custom header include path for the compiler to see. There is no need to pass <INTELFPGAOCLSDKROOT>/include/kernel_headers via this argument
 # RTL_DIR:     Single valued, optional. Directory of the custom RTL library path. Must be supplied if RTL_LIB is specified
+# BOARD_NAME     Single valued. Optional. Need to set if DE10Standard
 # RTL_LIB_LIST:    List, optional. -l flags of rtl libraries. Must be supplied if RTL_DIR is specified. e.g. {-l mylib1.aoclib -l mylib2.aoclib}
 # SOURCES_LIST: List, required. List of OpenCL kernel files (*.cl) to be compiled.
 # PREPROCESSOR_DEFS_LIST: List, optional. List of preprocessor definition flags. e.g. {-DMY_MACRO1=xxxx -DMY_MACRO2=yyy}             
 function (add_aoc_target)
     set (options )
-    set (oneValueArgs TARGET_NAME TARGET_TYPE HEADER_DIR RTL_DIR)
+    set (oneValueArgs TARGET_NAME TARGET_TYPE HEADER_DIR RTL_DIR BOARD_NAME)
     set (multiValueArgs  SOURCES_LIST PREPROCESSOR_DEFS_LIST RTL_LIB)
 
     cmake_parse_arguments(add_aoc_target "${options}" "${oneValueArgs}" "${multiValueArgs}" "${ARGN}" )    
@@ -46,57 +47,60 @@ function (add_aoc_target)
     
     #Check whether a valid build type is selected
     if ("${add_aoc_target_TARGET_TYPE}" STREQUAL "EMULATION")
-        message (STATUS "Generating the emulation AOC target")
-        set (target_name_local "${add_aoc_target_TARGET_NAME}_aoc_emulation")
-        list (APPEND occflags 
-                -march=emulator 
-                -emulator-channel-depth-model=strict
-                -DEMULATOR
-                -g
-                -o ${target_name_local}
-             )
-    elseif ("${add_aoc_target_TARGET_TYPE}" STREQUAL "SIMULATION")
-             message (STATUS "Generating the simulation AOC target")
-             set (target_name_local "${add_aoc_target_TARGET_NAME}_aoc_simulation")
-             list (APPEND occflags
-                     -march=simulator
-                     -ghdl
-                    # -o ${target_name_local}
-                  )
+        if ("${add_aoc_target_BOARD_NAME}" MATCHES "DE10Standard")
+            message (STATUS "Board is DE10, so no emulation target is generated.")
+        else()
+            message (STATUS "Generating the emulation AOC target")
+            set (target_name_local "${add_aoc_target_TARGET_NAME}_aoc_emulation")
+
+                list (APPEND occflags
+                        -march=emulator
+                        -emulator-channel-depth-model=strict
+                        -DEMULATOR
+                        -g
+                     )
+         endif()
     elseif("${add_aoc_target_TARGET_TYPE}" STREQUAL "RTL_ONLY")
         message (STATUS "Generating the RTL_ONLY AOC target")
         set (target_name_local "${add_aoc_target_TARGET_NAME}_aoc_rtl_only")
-        list (APPEND occflags 
-                -c
-                -o ${target_name_local}
-             )
+        if ("${add_aoc_target_BOARD_NAME}" MATCHES "DE10Standard")
+            list (APPEND occflags
+                    -c
+                    -o ${target_name_local}
+                 )
+         else()
+             list (APPEND occflags
+                     -rtl
+     #                -o ${target_name_local}
+                  )
+         endif()
     elseif("${add_aoc_target_TARGET_TYPE}" STREQUAL "PROFILE_HW")
         message (STATUS "Generating the PROFILE_HW AOC target")
         set (target_name_local "${add_aoc_target_TARGET_NAME}_aoc_profile_hw")
         list (APPEND occflags 
                 -profile
                 -high-effort
-                -o ${target_name_local}
+#                -o ${target_name_local}
              )
      elseif("${add_aoc_target_TARGET_TYPE}" STREQUAL "FAST_COMPILE_HW")
          message (STATUS "Generating the FAST_COMPILE_HW AOC target")
          set (target_name_local "${add_aoc_target_TARGET_NAME}_aoc_fast_compile_hw")
          list (APPEND occflags
                  -fast-compile
-                 -o ${target_name_local}
+#                 -o ${target_name_local}
               )
     elseif("${add_aoc_target_TARGET_TYPE}" STREQUAL "NORMAL_HW")
         message (STATUS "Generating the NORMAL_HW AOC target")
         set (target_name_local "${add_aoc_target_TARGET_NAME}_aoc_normal_hw")
         list (APPEND occflags
-                -o ${target_name_local}
+#                -o ${target_name_local}
              )
     elseif("${add_aoc_target_TARGET_TYPE}" STREQUAL "RELEASE_HW")
         message (STATUS "Generating the RELEASE_HW AOC target")
         set (target_name_local "${add_aoc_target_TARGET_NAME}_aoc_release_hw")
         list (APPEND occflags 
                 -high-effort
-                -o ${target_name_local}
+ #               -o ${target_name_local}
              )
     else()
         message (FATAL_ERROR "Illegal TARGET_TYPE passed to the function add_aoc_target. Valid options are EMULATION, RTL_ONLY, PROFILE_HW, 
@@ -114,9 +118,9 @@ function (add_aoc_target)
     endif()
 
     list (APPEND occflags ${add_aoc_target_SOURCES_LIST})
-    
+
     add_custom_target(${target_name_local}
-        COMMAND aoc ${occflags}
+        COMMAND mkdir ${CMAKE_CURRENT_BINARY_DIR}/${target_name_local} -p && cd ${CMAKE_CURRENT_BINARY_DIR}/${target_name_local} && aoc ${occflags}
     )
 
     #message (STATUS ${occflags})

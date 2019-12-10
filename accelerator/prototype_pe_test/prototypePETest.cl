@@ -2,7 +2,7 @@
 #include "device_structures.hpp"
 #include "device_utils.hpp"
 #include "prototypePE_structs.hpp"
-#include "channels.cl"
+#include "channels.hpp"
 
 
 #define PE_NUM_X PE_COLS
@@ -278,9 +278,10 @@ __kernel void kernelTestInterface (
 				t_transferblock_tagged taggedBlock;
 			#endif
 
-			block = (countInputWeightBlocks == 0) ?
-				bias2TransferBlcok( (t_accumulator) bias)
-				: pWeightInput[countInputWeightBlocks-1];
+			// block = (countInputWeightBlocks == ((unsigned short) 0)) ?
+			// 	bias2TransferBlcok( (t_accumulator) bias)
+			// 	: pWeightInput[countInputWeightBlocks-1];
+			block = bias2TransferBlock( (t_accumulator) bias);
 
 			#pragma unroll
 			for (unsigned char i=0; i<SIMD_SIZE; i++) {

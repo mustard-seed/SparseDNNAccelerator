@@ -175,7 +175,7 @@ include (${PROJECT_SOURCE_DIR}/aoc.cmake)
 file(GLOB_RECURSE kernel_files
 #     ${PROJECT_SOURCE_DIR}/device/simple_weight_memory_test.cl
      ${PROJECT_SOURCE_DIR}/device/sparse_pe_system.cl
-     ${PROJECT_SOURCE_DIR}/device/channels.cl
+     ${PROJECT_SOURCE_DIR}/device/device_utils.cl
 )
 
 add_aoc_target (
@@ -186,6 +186,7 @@ add_aoc_target (
     RTL_DIR ${rtl_directory}
     PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}
     RTL_LIB ${rtl_lib}
+    BOARD_NAME ${BOARD_NAME}
     )
 
 add_aoc_target (
@@ -196,6 +197,7 @@ add_aoc_target (
     RTL_DIR ${rtl_directory} 
     PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}
     RTL_LIB ${rtl_lib}
+    BOARD_NAME ${BOARD_NAME}
     )
 
 add_aoc_target (
@@ -206,6 +208,7 @@ add_aoc_target (
     RTL_DIR ${rtl_directory} 
     PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}
     RTL_LIB ${rtl_lib}
+    BOARD_NAME ${BOARD_NAME}
     )
 
 add_aoc_target (
@@ -216,6 +219,7 @@ add_aoc_target (
     RTL_DIR ${rtl_directory}
     PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}
     RTL_LIB ${rtl_lib}
+    BOARD_NAME ${BOARD_NAME}
     )
 
 add_aoc_target (
@@ -236,6 +240,7 @@ add_aoc_target (
     RTL_DIR ${rtl_directory}
     PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}
     RTL_LIB ${rtl_lib}
+    BOARD_NAME ${BOARD_NAME}
     )
 
 #add_aoc_target (

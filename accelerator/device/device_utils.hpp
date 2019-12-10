@@ -25,42 +25,34 @@ t_operand modifyOutput (
 		t_accumulator accumulator,
 		unsigned char rightShift,
 		uint1_t enableRelu
-		)
-{
-	t_accumulator comparedAccumulator;
-	unsigned char rndRightShift = rightShift - 1;
-	if (enableRelu == TRUE)
-	{
-		comparedAccumulator = (accumulator > 0x0) ? accumulator : 0x0;
-	}
-	else
-	{
-		comparedAccumulator = accumulator;
-	}
+		);
 
-	t_accumulator signExtensionMask = (comparedAccumulator>=0) ?
-		0x00 : ~(0xFFFF >> rndRightShift);
+#ifdef INTELFPGA_CL
+t_transfer_block bias2TransferBlock (t_accumulator bias);
 
-	t_accumulator shiftedAccumulator = comparedAccumulator >> rndRightShift;
+t_accumulator transferBlock2Bias (t_transfer_block block);
 
-	t_accumulator accumulatorWithRndBit = signExtensionMask | shiftedAccumulator;
+t_filter_streamer_control dramBlock2FilterStreamerControl (t_dram_block block);
 
-	t_accumulator accumulatorBiased;
-	if(accumulatorWithRndBit >= ((t_accumulator) 256))
-	{
-		accumulatorBiased = 0x0FF; //=255
-	}
-	else if(accumulatorWithRndBit <((t_accumulator) -256))
-	{
-		accumulatorBiased = 0x0100; //=-256
-	}
-	else
-	{
-		accumulatorBiased = (t_accumulator) ((0x1FF & accumulatorWithRndBit)+ (t_accumulator) 0x01);
-	}
-	// final truncation
-	t_operand result = 0xFF & (accumulatorBiased>>0x01);  // remove the last rounding bit
-	return result;
-}
+t_dram_block filterStreamerControl2dramBlock (t_filter_streamer_control control);
+
+unsigned char outputModifier2RightShiftAmount (unsigned char outputModifier);
+
+unsigned char outputModifier2EnableRelu (unsigned char outputModifier);
+
+unsigned char outputModifier2EnableSparsification (unsigned char outputModifier);
+
+unsigned char generateOutputModifier (unsigned char numBitsToRightShift, unsigned char enableRelu, unsigned char enableSparse);
+
+
+t_dram_block transferBlockCount2DramBlock (t_streamblock_address transferBlockCount);
+
+t_streamblock_address dramBlock2TransferBlockCount (t_dram_block dramBlock);
+
+t_output_dram_block clusterCount2OutputDramBlock (unsigned short clusterCount);
+
+unsigned short outputDramBlock2ClusterCount (t_output_dram_block outputDramBlock);
+
+#endif
 
 #endif
