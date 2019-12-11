@@ -318,7 +318,8 @@ cl::Platform findPlatform(const std::string platform_name_search) {
   }
 
   // No platform found.
-  return NULL;
+  cl::Platform empty;
+  return empty;
 }
 
 // Create a program for all devices associated with the context.

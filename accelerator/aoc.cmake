@@ -32,7 +32,9 @@ function (add_aoc_target)
     set (oneValueArgs TARGET_NAME TARGET_TYPE HEADER_DIR RTL_DIR BOARD_NAME)
     set (multiValueArgs  SOURCES_LIST PREPROCESSOR_DEFS_LIST RTL_LIB)
 
-    cmake_parse_arguments(add_aoc_target "${options}" "${oneValueArgs}" "${multiValueArgs}" "${ARGN}" )    
+    cmake_parse_arguments(add_aoc_target "${options}" "${oneValueArgs}" "${multiValueArgs}" "${ARGN}" )
+
+    list (APPEND occflags ${add_aoc_target_SOURCES_LIST})
 
     #Initialize the aoc compilation flags with the common elements for all compilation targets
     list (APPEND occflags -v -report -fp-relaxed
@@ -54,7 +56,7 @@ function (add_aoc_target)
             set (target_name_local "${add_aoc_target_TARGET_NAME}_aoc_emulation")
 
                 list (APPEND occflags
-                        -march=emulator
+                        -march=emulator -legacy-emulator
                         -emulator-channel-depth-model=strict
                         -DEMULATOR
                         -g
@@ -116,8 +118,6 @@ function (add_aoc_target)
         list (APPEND occflags -I ${add_aoc_target_RTL_DIR} -L ${add_aoc_target_RTL_DIR}
                 ${add_aoc_target_RTL_LIB})
     endif()
-
-    list (APPEND occflags ${add_aoc_target_SOURCES_LIST})
 
     add_custom_target(${target_name_local}
         COMMAND mkdir ${CMAKE_CURRENT_BINARY_DIR}/${target_name_local} -p && cd ${CMAKE_CURRENT_BINARY_DIR}/${target_name_local} && aoc ${occflags}

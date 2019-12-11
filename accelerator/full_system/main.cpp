@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include "CL/cl.hpp"
 #include "AOCLUtilsCpp/aocl_utils_cpp.hpp"
 #include "params.hpp"
 #include <vector>
@@ -35,6 +34,8 @@
 #define FRAC_WIDTH 4
 #define INT_WIDTH 3
 #define OUTPUT_INT_WIDTH 3
+
+#define EMULATOR
 
 typedef
 std::vector<cl_float, boost::alignment::aligned_allocator<cl_float, aocl_utils_cpp::AOCL_ALIGNMENT>>
@@ -85,15 +86,16 @@ protected:
 
     void SetUp() override
     {
+       cl_int status = CL_SUCCESS;
 #ifdef C5SOC
         binaryFile = "fullSystem_aoc_release_hw.aocx";
+        clPlatform = aocl_utils_cpp::findPlatform("Intel(R) FPGA SDK for OpenCL(TM)");
 #else
-        binaryFile = "fullSystem_aoc_emulation.aocx";
+        binaryFile = "operandMatcher_c_model.aocx";
+        clPlatform = aocl_utils_cpp::findPlatform("Intel(R) FPGA SDK for OpenCL(TM)");
 #endif
 
         //Setup and platform and the context
-        cl_int status = CL_SUCCESS;
-        clPlatform = aocl_utils_cpp::findPlatform("Intel(R) FPGA SDK for OpenCL(TM)");
         std::vector<cl::Device> devices;
         status = clPlatform.getDevices(CL_DEVICE_TYPE_ALL, &devices);
         aocl_utils_cpp::checkError(status, "Failed to query the devices");
@@ -975,7 +977,7 @@ protected:
 
 };
 
-//#define PLAY
+#define PLAY
 #ifdef PLAY
 TEST_F (testFixture, play) {
 

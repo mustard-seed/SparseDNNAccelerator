@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include "CL/cl.hpp"
 #include "AOCLUtilsCpp/aocl_utils_cpp.hpp"
 #include "params.hpp"
 #include <vector>
