@@ -119,9 +119,12 @@ function (add_aoc_target)
                 ${add_aoc_target_RTL_LIB})
     endif()
 
-    add_custom_target(${target_name_local}
-        COMMAND mkdir ${CMAKE_CURRENT_BINARY_DIR}/${target_name_local} -p && cd ${CMAKE_CURRENT_BINARY_DIR}/${target_name_local} && aoc ${occflags}
-    )
+    if (("${add_aoc_target_TARGET_TYPE}" STREQUAL "EMULATION") AND ("${add_aoc_target_BOARD_NAME}" MATCHES "DE10Standard"))
+    else()
+        add_custom_target(${target_name_local}
+            COMMAND mkdir ${CMAKE_CURRENT_BINARY_DIR}/${target_name_local} -p && cd ${CMAKE_CURRENT_BINARY_DIR}/${target_name_local} && aoc ${occflags}
+        )
+    endif()
 
     #message (STATUS ${occflags})
     

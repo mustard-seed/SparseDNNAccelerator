@@ -35,8 +35,6 @@
 #define INT_WIDTH 3
 #define OUTPUT_INT_WIDTH 3
 
-#define EMULATOR
-
 typedef
 std::vector<cl_float, boost::alignment::aligned_allocator<cl_float, aocl_utils_cpp::AOCL_ALIGNMENT>>
 //std::vector<cl_ushort>
@@ -51,6 +49,8 @@ typedef struct {
     unsigned int sequenceId;
     unsigned char targetFilterRow;
 } t_filter_coordinates;
+
+typedef enum {TEST, FULL, ZERO} e_tensor_type;
 
 
 class testFixture : public ::testing::Test {
@@ -261,7 +261,8 @@ protected:
                 unsigned char inputWidth,
                 unsigned char inputHeight,
                 unsigned char numInputChannel,
-                unsigned char widthBlockSize //1 out of withBlockSize strips along the width are filled with non-zero number
+                unsigned char widthBlockSize, //1 out of withBlockSize strips along the width are filled with non-zero number
+                e_tensor_type eTensorType
             )
     {
         unsigned int numElements = inputWidth*inputHeight*numInputChannel;
@@ -272,23 +273,40 @@ protected:
         //Initialize the tensor and fill it with zero
         std::vector<fixedPointNumber> tensor (numElements, fpZero);
 
-        //Flag for writing positive or negative number
-        bool writePositive = true;
-
-        //Set designated stripes to be filled with ones
-        for (unsigned char iterHeight=0; iterHeight<inputHeight; iterHeight++)
-        {
-            for (unsigned char iterWidth=0; iterWidth<inputWidth; iterWidth += widthBlockSize)
+        switch (eTensorType) {
+        case TEST:
             {
-                unsigned int index = (iterHeight*inputWidth + iterWidth) * numInputChannel;
-                for (unsigned char iterChannel=0; iterChannel<numInputChannel; iterChannel++)
+                //Flag for writing positive or negative number
+                bool writePositive = true;
+
+                //Set designated stripes to be filled with ones
+                for (unsigned char iterHeight=0; iterHeight<inputHeight; iterHeight++)
                 {
-                    tensor.at(index++) = writePositive ? positiveNumber : negativeNumber;
+                    for (unsigned char iterWidth=0; iterWidth<inputWidth; iterWidth += widthBlockSize)
+                    {
+                        unsigned int index = (iterHeight*inputWidth + iterWidth) * numInputChannel;
+                        for (unsigned char iterChannel=0; iterChannel<numInputChannel; iterChannel++)
+                        {
+                            tensor.at(index++) = writePositive ? positiveNumber : negativeNumber;
+                        }
+                        //Invert the flag
+                        writePositive = !writePositive;
+                    }
                 }
-                //Invert the flag
-                writePositive = !writePositive;
             }
+            break;
+        case FULL:
+            {
+                for (int i=0; i<numElements; i++)
+                {
+                    tensor.at(i) = positiveNumber;
+                }
+            }
+            break;
+        default:
+            break;
         }
+
         return tensor;
     }
 
@@ -304,7 +322,8 @@ protected:
      */
     std::vector<fixedPointNumber> generateWeights (
                 unsigned char kernelSize,
-                unsigned char numInputChannel
+                unsigned char numInputChannel,
+                e_tensor_type eTensorType
             )
     {
         assert(kernelSize%2==1);
@@ -317,25 +336,41 @@ protected:
         //Initialize the weight tensor
         std::vector<fixedPointNumber> wTensor (numWeights, fpZero);
 
-        //Setting the all ones filters
-        for (int iOC=1; iOC<numOC; iOC += 2)
-        {
-            int index = iOC * numWeightsInOneFilter;
-            for (int i=0; i<numWeightsInOneFilter; i++)
+        switch (eTensorType) {
+        case TEST:
             {
-                wTensor.at(index++) = fpOne;
-            }
-        }
+                //Setting the all ones filters
+                for (int iOC=1; iOC<numOC; iOC += 2)
+                {
+                    int index = iOC * numWeightsInOneFilter;
+                    for (int i=0; i<numWeightsInOneFilter; i++)
+                    {
+                        wTensor.at(index++) = fpOne;
+                    }
+                }
 
-        //Setting the identify filters
-        for (int iOC=0, iIC=0; iOC<numOC; iOC += 2, iIC++)
-        {
-            int index = iOC * numWeightsInOneFilter + numInputChannel*((kernelSize / 2)*kernelSize+kernelSize/2) + iIC;
-            //for (int i=0; i<numWeightsInOneChannel; i++)
-            //{
-                wTensor.at(index) = fpOne;
-                //index += numInputChannel;
-            //}
+                //Setting the identify filters
+                for (int iOC=0, iIC=0; iOC<numOC; iOC += 2, iIC++)
+                {
+                    int index = iOC * numWeightsInOneFilter + numInputChannel*((kernelSize / 2)*kernelSize+kernelSize/2) + iIC;
+                    //for (int i=0; i<numWeightsInOneChannel; i++)
+                    //{
+                        wTensor.at(index) = fpOne;
+                        //index += numInputChannel;
+                    //}
+                }
+            }
+            break;
+        case FULL:
+            {
+                for (int i=0; i<numWeights; i++)
+                {
+                    wTensor.at(i) = fpOne;
+                }
+            }
+            break;
+        default:
+            break;
         }
 
         return wTensor;
@@ -348,7 +383,8 @@ protected:
             unsigned char _widthBlockSize, //1 out of widthBlockSize strips along the width are filled with ones, the rest a zeros
             unsigned char _sizeOutputTileWidthPerColFull,
             unsigned char _sizeOutputTileHeight,
-            bool _flagEnableRelu
+            bool _flagEnableRelu,
+            e_tensor_type eTensorType
             )
     {
         /* Fixed parameters
@@ -359,9 +395,9 @@ protected:
         /* First, generate the dense, fixed point tensors
          * */
         assert(_numInputChannel <= 127);
-        std::cout <<"1. Preparing the test tensors."<<std::endl;
-        std::vector<fixedPointNumber> inputTensorDense = generateInputTensor(_inputWidth, _inputHeight, _numInputChannel, _widthBlockSize);
-        std::vector<fixedPointNumber> inputWeightDense = generateWeights((unsigned char) kernelSize, _numInputChannel);
+        std::cout <<"1. Preparing the test tensors. Type: "<<eTensorType<<std::endl;
+        std::vector<fixedPointNumber> inputTensorDense = generateInputTensor(_inputWidth, _inputHeight, _numInputChannel, _widthBlockSize, eTensorType);
+        std::vector<fixedPointNumber> inputWeightDense = generateWeights((unsigned char) kernelSize, _numInputChannel, eTensorType);
         t_aligned_short_vector biasVector (2*_numInputChannel, 0x0);
 
         /* 2. Compress the test tensors
@@ -936,7 +972,7 @@ protected:
         std::cout <<"Output transfer time (us): "<<outputValueTransferDuration<<std::endl;
         std::cout <<"Output count transfer time (us): "<<outputCountTransferDuration<<std::endl;
 
-        //Decompress the output, and check against the input
+        //Decompress the output, and check against the input if necessary
         {
             std::cout <<"15. Decode the output"<<std::endl;
             std::vector<float> outputFloatVector;
@@ -948,36 +984,41 @@ protected:
                        INT_WIDTH
             );
 
-             std::cout <<"16. Check the output"<<std::endl;
-            for (unsigned char iterHeight=0; iterHeight<outputHeight; iterHeight++)
+            std::cout <<"16. Check the output"<<std::endl;
+            if (eTensorType == TEST)
             {
-                for (unsigned char iterWidth=0; iterWidth<outputWidth; iterWidth++)
+                for (unsigned char iterHeight=0; iterHeight<outputHeight; iterHeight++)
                 {
-                    for (unsigned char iterInputChannel=0; iterInputChannel<_numInputChannel; iterInputChannel++)
+                    for (unsigned char iterWidth=0; iterWidth<outputWidth; iterWidth++)
                     {
-                        unsigned int outputIndex = (iterHeight*outputWidth + iterWidth)*numFiltersInKernel + iterInputChannel*2;
-                        unsigned int inputIndex = (iterHeight*outputWidth + iterWidth)*_numInputChannel + iterInputChannel;
+                        for (unsigned char iterInputChannel=0; iterInputChannel<_numInputChannel; iterInputChannel++)
+                        {
+                            unsigned int outputIndex = (iterHeight*outputWidth + iterWidth)*numFiltersInKernel + iterInputChannel*2;
+                            unsigned int inputIndex = (iterHeight*outputWidth + iterWidth)*_numInputChannel + iterInputChannel;
 
-                        signed char expectedOutput = (_flagEnableRelu && (inputTensorDense.at(inputIndex).getBits() < ((char) 0x0))) ?
-                                    (char) 0x0 : inputTensorDense.at(inputIndex).getBits();
+                            signed char expectedOutput = (_flagEnableRelu && (inputTensorDense.at(inputIndex).getBits() < ((char) 0x0))) ?
+                                        (char) 0x0 : inputTensorDense.at(inputIndex).getBits();
 
-                        char actualOutput = (fixedPointNumber(outputFloatVector.at(outputIndex), FRAC_WIDTH, INT_WIDTH)).getBits();
+                            char actualOutput = (fixedPointNumber(outputFloatVector.at(outputIndex), FRAC_WIDTH, INT_WIDTH)).getBits();
 
-                        EXPECT_TRUE(expectedOutput == actualOutput)
-                        <<"Error: iY, iX, iIC, actualOutput, expectedOutput "
-                            <<(unsigned int)iterHeight<<" "<<(unsigned int)iterWidth<<" "<<(unsigned int)iterInputChannel<<" 0x"
-                            <<std::bitset<8> (actualOutput)<<" 0x"
-                            <<std::bitset<8> (expectedOutput)<<std::endl;
+                            EXPECT_TRUE(expectedOutput == actualOutput)
+                            <<"Error: iY, iX, iIC, actualOutput, expectedOutput "
+                                <<(unsigned int)iterHeight<<" "<<(unsigned int)iterWidth<<" "<<(unsigned int)iterInputChannel<<" 0x"
+                                <<std::bitset<8> (actualOutput)<<" 0x"
+                                <<std::bitset<8> (expectedOutput)<<std::endl;
 
-                    } // for iterInputChannel
-                } // for iterWidth
-            } // for iterHeight
+                        } // for iterInputChannel
+                    } // for iterWidth
+                } // for iterHeight
+             } // Test condition block
         } // input checking block
     } //launch
 
 };
 
-#define PLAY
+#define TEST_TYPE TEST
+
+//#define PLAY
 #ifdef PLAY
 TEST_F (testFixture, play) {
 
@@ -996,7 +1037,8 @@ TEST_F (testFixture, play) {
         widthBlockSize,
         sizeOutputTileWidthPerColFul,
         sizeOutputTileHeightFull,
-        flagEnableRelu);
+        flagEnableRelu,
+        TEST_TYPE);
 }
 #else
 TEST_F (testFixture, small_5x5) {
@@ -1016,10 +1058,11 @@ TEST_F (testFixture, small_5x5) {
         widthBlockSize,
         sizeOutputTileWidthPerColFul,
         sizeOutputTileHeightFull,
-        flagEnableRelu);
+        flagEnableRelu,
+        TEST_TYPE);
 }
 
-TEST_F (testFixture, medium_16x16x8_tileSizeCol_8) {
+TEST_F (testFixture, large_16x16x8_tileSizeCol_8) {
 
     unsigned char inputWidth = 16;
     unsigned char inputHeight = 16;
@@ -1036,10 +1079,11 @@ TEST_F (testFixture, medium_16x16x8_tileSizeCol_8) {
         widthBlockSize,
         sizeOutputTileWidthPerColFul,
         sizeOutputTileHeightFull,
-        flagEnableRelu);
+        flagEnableRelu,
+        TEST_TYPE);
 }
 
-TEST_F (testFixture, medium_16x16x16_tileSizeCol_8) {
+TEST_F (testFixture, large_16x16x16_tileSizeCol_8) {
 
     unsigned char inputWidth = 16;
     unsigned char inputHeight = 16;
@@ -1056,10 +1100,11 @@ TEST_F (testFixture, medium_16x16x16_tileSizeCol_8) {
         widthBlockSize,
         sizeOutputTileWidthPerColFul,
         sizeOutputTileHeightFull,
-        flagEnableRelu);
+        flagEnableRelu,
+        TEST_TYPE);
 }
 
-TEST_F (testFixture, medium_16x16x32_tileSizeCol_8) {
+TEST_F (testFixture, large_16x16x32_tileSizeCol_8) {
 
     unsigned char inputWidth = 16;
     unsigned char inputHeight = 16;
@@ -1076,10 +1121,11 @@ TEST_F (testFixture, medium_16x16x32_tileSizeCol_8) {
         widthBlockSize,
         sizeOutputTileWidthPerColFul,
         sizeOutputTileHeightFull,
-        flagEnableRelu);
+        flagEnableRelu,
+        TEST_TYPE);
 }
 
-TEST_F (testFixture, medium_16x16x64_tileSizeCol_8) {
+TEST_F (testFixture, large_16x16x64_tileSizeCol_8) {
 
     unsigned char inputWidth = 16;
     unsigned char inputHeight = 16;
@@ -1096,7 +1142,8 @@ TEST_F (testFixture, medium_16x16x64_tileSizeCol_8) {
         widthBlockSize,
         sizeOutputTileWidthPerColFul,
         sizeOutputTileHeightFull,
-        flagEnableRelu);
+        flagEnableRelu,
+        TEST_TYPE);
 }
 
 TEST_F (testFixture, large_16x16x127_tileSizeCol_2) {
@@ -1116,7 +1163,8 @@ TEST_F (testFixture, large_16x16x127_tileSizeCol_2) {
         widthBlockSize,
         sizeOutputTileWidthPerColFul,
         sizeOutputTileHeightFull,
-        flagEnableRelu);
+        flagEnableRelu,
+        TEST_TYPE);
 }
 
 TEST_F (testFixture, large_16x16x127_tileSizeCol_4) {
@@ -1136,7 +1184,8 @@ TEST_F (testFixture, large_16x16x127_tileSizeCol_4) {
         widthBlockSize,
         sizeOutputTileWidthPerColFul,
         sizeOutputTileHeightFull,
-        flagEnableRelu);
+        flagEnableRelu,
+        TEST_TYPE);
 }
 
 TEST_F (testFixture, large_16x16x127_tileSizeCol_8) {
@@ -1156,7 +1205,113 @@ TEST_F (testFixture, large_16x16x127_tileSizeCol_8) {
         widthBlockSize,
         sizeOutputTileWidthPerColFul,
         sizeOutputTileHeightFull,
-        flagEnableRelu);
+        flagEnableRelu,
+        TEST_TYPE);
+}
+
+TEST_F (testFixture, narrow_1x1x8) {
+
+    unsigned char inputWidth = 1;
+    unsigned char inputHeight = 1;
+    unsigned char numInputChannel = 8;
+    unsigned char widthBlockSize = 3;
+    unsigned char sizeOutputTileWidthPerColFul = 8;
+    unsigned char sizeOutputTileHeightFull = 8;
+    bool flagEnableRelu = true;
+
+    launch(
+        inputWidth,
+        inputHeight,
+        numInputChannel,
+        widthBlockSize,
+        sizeOutputTileWidthPerColFul,
+        sizeOutputTileHeightFull,
+        flagEnableRelu,
+        TEST_TYPE);
+}
+
+TEST_F (testFixture, narrow_1x1x16) {
+
+    unsigned char inputWidth = 1;
+    unsigned char inputHeight = 1;
+    unsigned char numInputChannel = 16;
+    unsigned char widthBlockSize = 3;
+    unsigned char sizeOutputTileWidthPerColFul = 8;
+    unsigned char sizeOutputTileHeightFull = 8;
+    bool flagEnableRelu = true;
+
+    launch(
+        inputWidth,
+        inputHeight,
+        numInputChannel,
+        widthBlockSize,
+        sizeOutputTileWidthPerColFul,
+        sizeOutputTileHeightFull,
+        flagEnableRelu,
+        TEST_TYPE);
+}
+
+TEST_F (testFixture, narrow_1x1x32) {
+
+    unsigned char inputWidth = 1;
+    unsigned char inputHeight = 1;
+    unsigned char numInputChannel = 32;
+    unsigned char widthBlockSize = 3;
+    unsigned char sizeOutputTileWidthPerColFul = 8;
+    unsigned char sizeOutputTileHeightFull = 8;
+    bool flagEnableRelu = true;
+
+    launch(
+        inputWidth,
+        inputHeight,
+        numInputChannel,
+        widthBlockSize,
+        sizeOutputTileWidthPerColFul,
+        sizeOutputTileHeightFull,
+        flagEnableRelu,
+        TEST_TYPE);
+}
+
+TEST_F (testFixture, narrow_1x1x64) {
+
+    unsigned char inputWidth = 1;
+    unsigned char inputHeight = 1;
+    unsigned char numInputChannel = 64;
+    unsigned char widthBlockSize = 3;
+    unsigned char sizeOutputTileWidthPerColFul = 8;
+    unsigned char sizeOutputTileHeightFull = 8;
+    bool flagEnableRelu = true;
+
+    launch(
+        inputWidth,
+        inputHeight,
+        numInputChannel,
+        widthBlockSize,
+        sizeOutputTileWidthPerColFul,
+        sizeOutputTileHeightFull,
+        flagEnableRelu,
+        TEST_TYPE);
+}
+
+TEST_F (testFixture, narrow_1x1x127) {
+
+    unsigned char inputWidth = 1;
+    unsigned char inputHeight = 1;
+    unsigned char numInputChannel = 127;
+    unsigned char widthBlockSize = 3;
+    unsigned char sizeOutputTileWidthPerColFul = 8;
+    unsigned char sizeOutputTileHeightFull = 8;
+    bool flagEnableRelu = true;
+
+    launch(
+        inputWidth,
+        inputHeight,
+        numInputChannel,
+        widthBlockSize,
+        sizeOutputTileWidthPerColFul,
+        sizeOutputTileHeightFull,
+        flagEnableRelu,
+        TEST_TYPE);
 }
 #endif
 
