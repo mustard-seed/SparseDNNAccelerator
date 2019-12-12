@@ -202,7 +202,7 @@ module top(
 //  REG/WIRE declarations
 //=======================================================
 localparam PORT_WIDTH = 16;
-localparam ADDR_WIDTH = 4;
+localparam ADDR_WIDTH = 3;
 
 reg [PORT_WIDTH-1:0] counter;
 reg increment, increment_delay;
@@ -224,7 +224,7 @@ always @ (posedge CLOCK_50) begin
             increment <= 1'b0;
             increment_delay <= increment;
             if (increment == 1'b1) begin
-                  counter <= counter + {{(PORT_WIDTH-2){1'b0}}, 2'b11};
+                  counter <= counter + {{(PORT_WIDTH-2){1'b0}}, 2'b10};
             end
 
             if (update == 1'b0) begin
@@ -260,7 +260,7 @@ regFile #(.PORT_WIDTH(PORT_WIDTH), .ADDR_WIDTH(ADDR_WIDTH)) inst_regFile
             .resetn     (KEY[0])
       );
 
-assign LEDR[9] = ~{readData1, readData0};
+assign LEDR[9] = ^{readData1, readData0};
 assign LEDR[7:0] = readData0[7:0];
 
 

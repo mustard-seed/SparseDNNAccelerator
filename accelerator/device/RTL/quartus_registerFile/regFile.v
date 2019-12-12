@@ -26,14 +26,14 @@ module regFile
 	input resetn
 	);
 
-	reg [2**(ADDR_WIDTH+1)*PORT_WIDTH-1:0] registerFile;
+	reg [2**(ADDR_WIDTH+1)*PORT_WIDTH-1:0] registerFile /* synthesis preserve */;
 	//wire [2**(ADDR_WIDTH+1)-1:0] writeEnableRegisterFile0;
 	//wire [2**(ADDR_WIDTH+1)-1:0] writeEnableRegisterFile1;
 	wire [2**(ADDR_WIDTH)-1:0] writeEnableRegisterFileTransferBlock;
 
 	reg regReadBank;
-	reg [ADDR_WIDTH-1:0] regReadAddress0;
-	reg [ADDR_WIDTH-1:0] regReadAddress1;
+	reg [ADDR_WIDTH-1:0] regReadAddress0 /* synthesis preserve */;
+	reg [ADDR_WIDTH-1:0] regReadAddress1 /* synthesis preserve */;
 
 	//See intel.com/content/dam/www/programmable/us/en/pdfs/literature/catalogs/lpm.pdf
 	// lpm_decode	#(.lpm_decodes(2**(ADDR_WIDTH+1)), .lpm_type("LPM_DECODE"), .lpm_width(ADDR_WIDTH+1))

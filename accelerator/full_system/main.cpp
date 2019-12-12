@@ -1016,7 +1016,7 @@ protected:
 
 };
 
-#define TEST_TYPE TEST
+#define TEST_TYPE ZERO
 
 //#define PLAY
 #ifdef PLAY
