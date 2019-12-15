@@ -134,12 +134,11 @@ typedef struct __attribute__((packed))
 {
     unsigned char inputTileWidth;
     unsigned char inputTileHeight;
-    //unsigned char stride;
-    //unsigned char kernelSize;
     unsigned char strideConcatKernelSize; //Bit 7:4 stride, 3:0 KernelSize
     unsigned int numOutputPerCol;
-    //unsigned char numActivePeCols;
-    //unsigned short numOutputChannelsInGroup;
+    #if !defined (SPARSE_SYSTEM)
+    unsigned short numTBCountPerStrip;
+    #endif
     unsigned short numActivePeColsConcatNumOutputChannelsInGroup; //15:12: Number of Active PeCols, 11:0: Number of output channels in group
     unsigned short strideStripIACache; //Stride in terms of dram block
 } t_input_buffer_tile_controller_packet;
@@ -149,6 +148,10 @@ typedef struct __attribute__((packed))
     unsigned short iActivationDramBlockAddressBase;
     unsigned char iAddressCache;
     unsigned char maxPeRowID; //Only relevant for sending
+
+    #if !defined (SPARSE_SYSTEM)
+    unsigned short numTBCountPerStrip;
+    #endif
 
     //Bit 0: Whether this is the last strip (1 / 0). Only relevant for sending IA from the buffer
     //Bit 1: Whether to update the buffer (0) or to stream from the buffer (1)

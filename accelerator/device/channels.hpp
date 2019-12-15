@@ -80,9 +80,13 @@ Output activation channels coming out of the output buffers
 //channel t_cluster channel_output_buffer_to_compressor[PE_COLS] __attribute__((depth(0)));
 //channel t_output_cluster_tagged channel_output_buffer_to_tee[PE_COLS] __attribute__((depth(0)));
 //channel t_output_cluster_tagged channel_output_buffer_to_tee[PE_COLS] __attribute__((depth(0)));
+#if defined(SPARSE_SYSTEM)
 channel t_output_cluster_info channel_output_buffer_to_compressor_info[PE_COLS] __attribute__((depth(1)));
 channel t_cluster channel_output_buffer_to_compressor_data[PE_COLS] __attribute__((depth(COMPRESSION_WINDOW_SIZE)));
 channel t_output_cluster_tagged channel_compressor_to_tee[PE_COLS] __attribute__((depth(0)));
+#else
+channel t_output_cluster_tagged channel_oa_buffer_to_oa_tee[PE_COLS] __attribute__((depth(0)));
+#endif
 channel t_output_dram_block_tagged channel_output_wide[PE_COLS] __attribute__((depth(0)));
 #endif //ACTIVATION_MEMORY_INTERCONNECT
 
