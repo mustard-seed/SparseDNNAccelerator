@@ -3,25 +3,16 @@
 #include "vectorType.hpp"
 #include "floatFixedPointConversion.hpp"
 
-class flexibleDirectCompressedTensor {
-private:
-
-public:
-    //Vectos holding the nz simdblocks, the relative channel offsets,
-    //and the BRAM addresses of each streamBlock
+class AlignedTensor {
+  protected:
+    //Vectos holding the vector values;
     t_aligned_transfer_block_vector valueVector;
-    t_aligned_streamblock_address_vector streamBlockAddressVector;
-    //The BRAM addresses of each streamBlock can be computed on the fly in the kernel!
-    //t_aligned_streamblock_address_vector streamBlockAddressVector;
 
     //Dimension of the uncompressed, un-flattened tensor
     unsigned short num3DTensors;
     unsigned short channel;
     unsigned short width;
     unsigned short height;
-
-    // Tiling information, only relevant for activation tensor
-    unsigned short tilingSizeWidth;
 
     //If is Kernel, each filter is one streaming block
     //Otherwise, the size of each streaming block is that of one synchorinization block
@@ -33,13 +24,6 @@ public:
 
     //Number of groups in a channel
     unsigned char numChannelGroups;
-
-
-    //The maximum index (starts from 0) of a cluster found inside a compression blcok
-    unsigned char maxClusterIndexInCompressionBlock;
-
-    //The maximum scalar index (0) inside a compression block. Derived from the other values
-    unsigned char maxScalarIndexInCompressionBlock;
 
     //The maximum index (starts from 0) of a suriving cluster found inside a transfer block
     unsigned char maxClusterIndexInTransferBlock;
@@ -54,11 +38,65 @@ public:
     //page_size * ceil (page_size / (channel * row))
     unsigned int externalMemoryAddressStride;
 
-    //Allow the default constructor to stay
-    flexibleDirectCompressedTensor() {}
+  public:
+    AlignedTensor () = delete;
+
+    //Constructor used to initialize, but not populate, a dense aligned tensor
+    AlignedTensor (
+            unsigned short _num3DTensors,
+            unsigned short _channel,
+            unsigned short _width,
+            unsigned short _height,
+            unsigned short _maxScalarIndexInChannelGroup,
+            unsigned char _maxClusterIndexInTransferBlock,
+            unsigned char _maxScalarIndexInCluster,
+            bool _isKernel
+            );
 
     //Constructor for converting a dense vector
-    flexibleDirectCompressedTensor (std::vector<fixedPointNumber> & fixedPointVector,
+    AlignedTensor (std::vector<fixedPointNumber> & fixedPointVector,
+            unsigned short _num3DTensors,
+            unsigned short _channel,
+            unsigned short _width,
+            unsigned short _height,
+            unsigned short _maxScalarIndexInChannelGroup,
+            unsigned char _maxClusterIndexInTransferBlock,
+            unsigned char _maxScalarIndexInCluster,
+            bool _isKernel
+            );
+
+    //Decode the aligned tenor values into a compact tensor of fixed-point numbers
+    virtual void decodeTensor (
+            std::vector<fixedPointNumber> & fixedPointVector,
+            char _fracWidth,
+            char _intWidth
+            );
+
+    t_aligned_transfer_block_vector& getTransferBlockVector();
+
+    unsigned int getExternalMemoryAddressStride();
+
+
+
+};
+
+class FlexibleDirectCompressedTensor : public AlignedTensor {
+protected:
+    //Vectos holding the BRAM addresses of each streamBlock
+    t_aligned_streamblock_address_vector streamBlockAddressVector;
+
+    //The maximum index (starts from 0) of a cluster found inside a compression blcok
+    unsigned char maxClusterIndexInCompressionBlock;
+
+    //The maximum scalar index (0) inside a compression block. Derived from the other values
+    unsigned char maxScalarIndexInCompressionBlock;
+
+public:
+    //Allow the default constructor to stay
+    FlexibleDirectCompressedTensor() = delete;
+
+    //Constructor for converting a dense vector
+    FlexibleDirectCompressedTensor (std::vector<fixedPointNumber> & fixedPointVector,
             unsigned short _num3DTensors,
             unsigned short _channel,
             unsigned short _width,
@@ -71,7 +109,7 @@ public:
             );
 
     //Constructor for initialize a sparse vector
-    flexibleDirectCompressedTensor (
+    FlexibleDirectCompressedTensor (
             unsigned short _num3DTensors,
             unsigned short _channel,
             unsigned short _width,
@@ -83,14 +121,13 @@ public:
             bool _isKernel
             );
 
+    void decodeTensor (
+                std::vector<fixedPointNumber> & _fixedPointVector,
+                char _fracWidth,
+                char _intWidth
+                ) override;
+
+    t_aligned_streamblock_address_vector& getTransferBlockCountVector();
 
 };
-
-//Helper function used to decode a compressed tensor
-int decodeFlexibleDirectCompressedTensor(
-        flexibleDirectCompressedTensor compTensor
-        ,std::vector<float> & denseTensor
-        ,char fracWidth
-        ,char intWidth);
-
 #endif

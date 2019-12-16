@@ -47,8 +47,205 @@ unsigned int lcm (unsigned int a, unsigned int b)
     return ((a*b) / gcd);
 }
 
+AlignedTensor::AlignedTensor(
+        unsigned short _num3DTensors,
+        unsigned short _channel,
+        unsigned short _width,
+        unsigned short _height,
+        unsigned short _maxScalarIndexInChannelGroup,
+        unsigned char _maxClusterIndexInTransferBlock,
+        unsigned char _maxScalarIndexInCluster,
+        bool _isKernel)
+{
+    //Assign values to the member variables
+    num3DTensors = _num3DTensors;
+    channel = _channel;
+    width = _width;
+    height = _height;
+    maxClusterIndexInTransferBlock = _maxClusterIndexInTransferBlock;
+    maxScalarIndexInCluster = _maxScalarIndexInCluster;
+    isKernel = _isKernel;
+
+    unsigned int numScalarPerTransferBlock = (1+maxScalarIndexInCluster)*(1+maxClusterIndexInTransferBlock);
+    unsigned int numTransferBlockPerChannelGroup = 1 + ((1+_maxScalarIndexInChannelGroup)-1) / numScalarPerTransferBlock;
+
+    //==========================================================
+    //Compute the memory stride and allocate space in the vectors
+    if (isKernel) {
+        unsigned int tempStride = width*height*((unsigned int) numTransferBlockPerChannelGroup);
+        externalMemoryAddressStride = (1 + (tempStride - 1)/ WIDE_SIZE)*WIDE_SIZE;
+        valueVector.resize(externalMemoryAddressStride*num3DTensors);
+        numChannelGroups = 1;
+        maxScalarIndexInChannelGroup = _channel - 1;
+     }
+    else {
+        //Channel group size should divide channel size
+        maxScalarIndexInChannelGroup = _maxScalarIndexInChannelGroup;
+        assert( channel % (maxScalarIndexInChannelGroup + 1) == 0 );
+        assert (num3DTensors == 1);
+        numChannelGroups = channel / (maxScalarIndexInChannelGroup + 1);
+        unsigned int tempStride = numTransferBlockPerChannelGroup;
+        externalMemoryAddressStride = (1 + (tempStride - 1)/ WIDE_SIZE)*WIDE_SIZE;
+        valueVector.resize( width * height * numChannelGroups * externalMemoryAddressStride);
+    }
+}
+
+//Initialize and poplulate the tensor
+AlignedTensor::AlignedTensor(
+        std::vector<fixedPointNumber> &fixedPointVector
+        ,unsigned short _num3DTensors
+        ,unsigned short _channel
+        ,unsigned short _width
+        ,unsigned short _height
+        ,unsigned short _maxScalarIndexInChannelGroup
+        ,unsigned char _maxClusterIndexInTransferBlock
+        ,unsigned char _maxScalarIndexInCluster
+        ,bool _isKernel)
+    : AlignedTensor(
+          _num3DTensors
+          ,_channel
+          ,_width
+          ,_height
+          ,_maxScalarIndexInChannelGroup
+          ,_maxClusterIndexInTransferBlock
+          ,_maxScalarIndexInCluster
+          ,_isKernel
+          )
+{
+    unsigned int numTBPerChannelGroup =
+           1 + (1+maxScalarIndexInChannelGroup - 1) / ((1+maxScalarIndexInCluster) * (1+maxClusterIndexInTransferBlock));
+
+    unsigned int iFullVector = 0;
+    for (int iTensor=0; iTensor < num3DTensors; iTensor++){
+
+        unsigned int iAlignedVector = externalMemoryAddressStride * iTensor;
+
+        for (unsigned char iGroup=0; iGroup<numChannelGroups; iGroup++)
+        {
+            for (int iHeight=0; iHeight < height; iHeight++) {
+                for (int iWidth=0; iWidth<width; iWidth++)
+                {
+                    //Overide the startign position in the aligned tensor if the tensor is
+                    //an activation tensor
+                    iAlignedVector = (!isKernel) ?
+                                (iGroup*height*width + width*iHeight + iWidth) * externalMemoryAddressStride : iAlignedVector;
+
+                    unsigned int iChannel = 0;
+                    for (unsigned int iChannelTBInGroup=0;
+                         iChannelTBInGroup < numTBPerChannelGroup;
+                         iChannelTBInGroup++) {
+
+                        t_transfer_block transferBlock;
+
+                        for (int iClusterInTB=0; iClusterInTB<=(this->maxClusterIndexInTransferBlock); iClusterInTB++)
+                        {
+                            for (int iScalarInCluster =0; iScalarInCluster<=(this->maxScalarIndexInCluster); iScalarInCluster++)
+                            {
+                                char value;;
+                                if (iChannel <= (this->maxScalarIndexInChannelGroup))
+                                {
+                                    fixedPointNumber fpNumber = fixedPointVector.at(iFullVector);
+                                    value =  ( (fpNumber.getBits()) & (fpNumber.getMask()) );
+
+                                    iFullVector++;
+                                    iChannel++;
+                                }
+                                else
+                                {
+                                    value = 0x0;
+                                }
+
+                                transferBlock.values[iClusterInTB].cluster_values[iScalarInCluster] = value;
+                            }
+                        } //over one TB
+
+                        valueVector.at(iAlignedVector++) = transferBlock;
+
+                    } // for channel in a channel group
+
+                }//iWidth
+            //Need to stride the value vector here if we are compressing an activation
+            } // for height
+        } //for Groups
+     } //for Tensors
+}
+
+t_aligned_transfer_block_vector& AlignedTensor::getTransferBlockVector()
+{
+    return valueVector;
+}
+
+unsigned int AlignedTensor::getExternalMemoryAddressStride()
+{
+    return externalMemoryAddressStride;
+}
+
+void AlignedTensor::decodeTensor(
+        std::vector<fixedPointNumber> &_fixedPointVector,
+        char _fracWidth,
+        char _intWidth)
+{
+    fixedPointNumber fpZero(0.0f, _fracWidth, _intWidth);
+
+    //Calculatethe number of elements in the fixedPointVector
+    unsigned int numElements =
+            (this->num3DTensors) * (this->numChannelGroups)
+            * (this->width) * (this->height) * (this->maxScalarIndexInChannelGroup + 1);
+
+    unsigned int numTBPerChannelGroup =
+           1 + (1+maxScalarIndexInChannelGroup - 1) / ((1+maxScalarIndexInCluster) * (1+maxClusterIndexInTransferBlock));
+
+    //Allocate space for the result tensor
+    _fixedPointVector.resize(numElements,fpZero);
+
+    //Copy the values
+    unsigned int iFullVector = 0;
+    for (unsigned int iTensor=0; iTensor<(this->num3DTensors); iTensor++)
+    {
+        unsigned int iAlignedVector = externalMemoryAddressStride * iTensor;
+
+        for (unsigned int iGroup=0; iGroup<(this->numChannelGroups); iGroup++)
+        {
+            for (unsigned int iHeight=0; iHeight<(this->height); iHeight++)
+            {
+                for (unsigned int iWidth=0; iWidth<(this->width); iWidth++)
+                {
+                    //Overide the startign position in the aligned tensor if the tensor is
+                    //an activation tensor
+                    iAlignedVector = (!isKernel) ?
+                                (iGroup*height*width + width*iHeight + iWidth) * externalMemoryAddressStride : iAlignedVector;
+
+                    unsigned int iChannel = 0;
+                    for (unsigned int iChannelTBInGroup=0;
+                         iChannelTBInGroup < numTBPerChannelGroup;
+                         iChannelTBInGroup++) {
+
+                        t_transfer_block transferBlock =
+                                valueVector.at(iAlignedVector++);
+
+                        for (int iClusterInTB=0; iClusterInTB<=(this->maxClusterIndexInTransferBlock); iClusterInTB++)
+                        {
+                            for (int iScalarInCluster=0; iScalarInCluster<=(this->maxScalarIndexInCluster); iScalarInCluster++)
+                            {
+                                if (iChannel <= (this->maxScalarIndexInChannelGroup))
+                                {
+                                    signed char value = transferBlock.values[iClusterInTB].cluster_values[iScalarInCluster];
+                                    _fixedPointVector.at(iFullVector) = fixedPointNumber((signed char) value, _fracWidth, _intWidth);
+
+                                    iFullVector++;
+                                    iChannel++;
+                                }
+                            }
+                        } //over one TB
+
+                    } // for channel in a channel group
+                }
+            }
+        }
+    } // for over 3D tensors
+}
 //Constructor for initialize a sparse vector
-flexibleDirectCompressedTensor::flexibleDirectCompressedTensor (
+FlexibleDirectCompressedTensor::FlexibleDirectCompressedTensor (
         unsigned short _num3DTensors,
         unsigned short _channel,
         unsigned short _width,
@@ -59,18 +256,21 @@ flexibleDirectCompressedTensor::flexibleDirectCompressedTensor (
         unsigned char _maxScalarIndexInCluster,
         bool _isKernel
         )
+    : AlignedTensor(
+          _num3DTensors,
+          _channel,
+          _width,
+          _height,
+          _maxScalarIndexInChannelGroup,
+          _maxClusterIndexInTransferBlock,
+          _maxScalarIndexInCluster,
+          _isKernel
+          )
 {
     //Assign values to the member variables
-    num3DTensors = _num3DTensors;
-    channel = _channel;
-    width = _width;
-    height = _height;
-    //tilingSizeWidth = _tilingSizeWidth;
     maxClusterIndexInCompressionBlock = _maxClusterIndexInCompressionBlock;
     maxClusterIndexInTransferBlock = _maxClusterIndexInTransferBlock;
-    maxScalarIndexInCluster = _maxScalarIndexInCluster;
     maxScalarIndexInCompressionBlock = (maxClusterIndexInCompressionBlock+1)*(maxScalarIndexInCluster+1) - 1;
-    isKernel = _isKernel;
 
     //Compute the number of transfer blocks in a compression block
     //Need an extra one at the end to account for the bitmask
@@ -107,7 +307,7 @@ flexibleDirectCompressedTensor::flexibleDirectCompressedTensor (
     }
 }
 
-flexibleDirectCompressedTensor::flexibleDirectCompressedTensor (
+FlexibleDirectCompressedTensor::FlexibleDirectCompressedTensor (
                         std::vector<fixedPointNumber> & fixedPointVector,
                         unsigned short _num3DTensors,
                         unsigned short _channel,
@@ -122,7 +322,7 @@ flexibleDirectCompressedTensor::flexibleDirectCompressedTensor (
 
                     ):
     //Constructor delegation
-    flexibleDirectCompressedTensor(
+    FlexibleDirectCompressedTensor(
                  _num3DTensors,
                  _channel,
                  _width,
@@ -273,41 +473,42 @@ flexibleDirectCompressedTensor::flexibleDirectCompressedTensor (
      } // for Tensor
 }
 
-//Helper function used to decode a compressed tensor
-int decodeFlexibleDirectCompressedTensor(
-        flexibleDirectCompressedTensor compTensor
-        ,std::vector<float> & denseTensor
-        ,char fracWidth
-        ,char intWidth)
+t_aligned_streamblock_address_vector& FlexibleDirectCompressedTensor::getTransferBlockCountVector()
 {
+    return (this->streamBlockAddressVector);
+}
 
-
+void FlexibleDirectCompressedTensor::decodeTensor(
+        std::vector<fixedPointNumber> &_fixedPointVector
+        ,char _fracWidth
+        ,char _intWidth)
+{
     //Dimension of the uncompressed, un-vectorized tensor
-    unsigned short num3DTensors = compTensor.num3DTensors;
-    unsigned short channel = compTensor.channel;
-    unsigned short width = compTensor.width;
-    unsigned short height = compTensor.height;
+    unsigned short num3DTensors = this->num3DTensors;
+    unsigned short channel = this->channel;
+    unsigned short width = this->width;
+    unsigned short height = this->height;
     //unsigned short tileSizeWidth = compTensor.tilingSizeWidth;
-    bool isKernel = compTensor.isKernel;
+    bool isKernel = this->isKernel;
 
     //Compression parameters
-    unsigned short maxScalarIndexInChannelGroup = compTensor.maxScalarIndexInChannelGroup;
+    unsigned short maxScalarIndexInChannelGroup = this->maxScalarIndexInChannelGroup;
     unsigned char maxScalarIndexInCompressionBlock
-        = compTensor.maxScalarIndexInCompressionBlock;
+        = this->maxScalarIndexInCompressionBlock;
     unsigned char maxClusterIndexInCompressionBlock
-        = compTensor.maxClusterIndexInCompressionBlock;
+        = this->maxClusterIndexInCompressionBlock;
     unsigned char maxClusterIndexInTransferBlock
-        = compTensor.maxClusterIndexInTransferBlock;
+        = this->maxClusterIndexInTransferBlock;
     unsigned char maxScalarIndexInCluster =
-            compTensor.maxScalarIndexInCluster;
-    unsigned short numChannelGroups = compTensor.numChannelGroups;
+            this->maxScalarIndexInCluster;
+    unsigned short numChannelGroups = this->numChannelGroups;
 
     //Word stride between the start of adjacent rows in the external memory
     unsigned int externalMemoryAddressStride
-        = compTensor.externalMemoryAddressStride;
+        = this->externalMemoryAddressStride;
 
     //Allocate space for the dense tensor
-    denseTensor.resize(num3DTensors*channel*width*height, 0.0f);
+    _fixedPointVector.resize(num3DTensors*channel*width*height, fixedPointNumber(0.0f, _fracWidth, _intWidth));
 
     //Computer same bounds
     unsigned int numStreamBlocksInTensor =
@@ -324,7 +525,6 @@ int decodeFlexibleDirectCompressedTensor(
     int iChannelInGroupBase = 0;
     int iGroup = 0;
 
-    int countTransferBlocks = 0;
 
     //Read the stream blocks, one at a time
     for (unsigned int iStreamBlock=0;
@@ -334,7 +534,7 @@ int decodeFlexibleDirectCompressedTensor(
         //std::cout <<"flexibleDirectDecompression. iStreamBlock="<<iStreamBlock<<std::endl;
         //Need to know how many transfer blocks are there in the stream block that we
         //are about to read
-        int numTransferBlockInStreamBlock = compTensor.streamBlockAddressVector.at(iStreamBlock);
+        int numTransferBlockInStreamBlock = this->streamBlockAddressVector.at(iStreamBlock);
 
         //============Expands a compression block============
         // A assemble vector for the decompression
@@ -348,9 +548,7 @@ int decodeFlexibleDirectCompressedTensor(
         //Decode each stream block
         for (int i=0; i<numTransferBlockInStreamBlock; i++) {
             t_transfer_block transferBlock =
-                compTensor.valueVector.at(iCompressVector++);
-
-            countTransferBlocks++;
+               this->valueVector.at(iCompressVector++);
 
             if (updateBitmask) {
                 bitmask = transferBlock.values[0].cluster_values[0];
@@ -401,7 +599,7 @@ int decodeFlexibleDirectCompressedTensor(
 
                         if (iChannelInGroup <= maxScalarIndexInChannelGroup) {
                             fixedPointNumber fpValue (
-                                (signed char) (vectorCompressionBlock.at(iVectorCompressionBlock++)), fracWidth, intWidth );
+                                (signed char) (vectorCompressionBlock.at(iVectorCompressionBlock++)), _fracWidth, _intWidth );
 //                            int iDenseVector =
 //                                iTensor * height * width * channel
 //                                + iHeight * width * channel
@@ -417,7 +615,7 @@ int decodeFlexibleDirectCompressedTensor(
 //                            std::cout <<"Bitmask, iTensor, iGroup, iHeight, iWidth, iChannelInGroup: "
 //                               <<(unsigned int) bitmask<<" "<<iTensor<<" "<<iGroup<<" "<<iHeight<<" "<<iWidth<<" "<<iChannelInGroup<<std::endl;
 
-                            denseTensor.at(iDenseVector) = fpValue.convert2Float();
+                            _fixedPointVector.at(iDenseVector) = fpValue;
                         } //if iChannelInGroup <= maxScalarIndexInChannelGroup
                     } // for from 0 to maxScalarIndexInCluster
                 } // while. decode a compression block;
@@ -473,7 +671,5 @@ int decodeFlexibleDirectCompressedTensor(
         }  //for-loop. Expands atream block
         //=====================================================
     }
-    return countTransferBlocks;
-
 }
 
