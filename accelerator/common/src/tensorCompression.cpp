@@ -3,6 +3,7 @@
 #include <cmath> //std::ceil
 #include <iostream> //cout
 #include <cassert>
+#include <stdexcept> //std::runtime_error
 
 unsigned char countNumLeadingZeros (unsigned char bitmask);
 
@@ -244,6 +245,12 @@ void AlignedTensor::decodeTensor(
         }
     } // for over 3D tensors
 }
+
+t_aligned_streamblock_address_vector& AlignedTensor::getTransferBlockCountVector()
+{
+    throw std::runtime_error("AlignedTensor::getTransferBlockCountVector() is not implemented");
+}
+
 //Constructor for initialize a sparse vector
 FlexibleDirectCompressedTensor::FlexibleDirectCompressedTensor (
         unsigned short _num3DTensors,

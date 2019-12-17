@@ -11,6 +11,7 @@
 #include <unistd.h> //usleep
 #include <random>
 #include <bitset> //Print friendly binary number
+#include <memory> //smart pointers
 
 #include "gtest/gtest.h"
 #include "boost/align/aligned_allocator.hpp"
@@ -50,7 +51,7 @@ typedef struct {
     unsigned char targetFilterRow;
 } t_filter_coordinates;
 
-typedef enum {TEST, FULL, ZERO} e_tensor_type;
+typedef enum {TEST, FULL, ZERO, DENSE} e_tensor_type;
 
 
 class testFixture : public ::testing::Test {
@@ -75,14 +76,20 @@ protected:
 
     //Buffer members associated with the memory reader kernel
     cl::Buffer bufferMemoryReaderWideWeights;
+#if defined(SPARSE_SYSTEM)
     cl::Buffer bufferMemoryReaderWeightSBCount;
+#endif
     cl::Buffer bufferMemoryReaderWideInput;
+#if defined(SPARSE_SYSTEM)
     cl::Buffer bufferMemoryReaderInputSBCount;
+#endif
     cl::Buffer bufferMemoryReaderBias;
 
     //Buffer members associated withthe output writer kernel
     cl::Buffer bufferMemoryWriterWideOutput;
+#if defined(SPARSE_SYSTEM)
     cl::Buffer bufferMemoryWriterOutputSBCount;
+#endif
 
     void SetUp() override
     {
@@ -177,6 +184,7 @@ protected:
                     );
         aocl_utils_cpp::checkError(status, "Failed to setup the buffer bufferMemoryReaderWideWeights!");
 
+#if defined(SPARSE_SYSTEM)
         cl_ulong inputWeightSBSize = maxBufferSizeByte < MAX_DRAM_BYTE_INPUT_WEIGHT_SB_COUNT ? maxBufferSizeByte : MAX_DRAM_BYTE_INPUT_WEIGHT_SB_COUNT;
         std::cout <<"Setting the bufferMemoryReaderWeightSBCount buffer. Size: "<<inputWeightSBSize<<" bytes."<<std::endl;
         bufferMemoryReaderWeightSBCount = cl::Buffer (
@@ -187,7 +195,7 @@ protected:
                         &status
                     );
         aocl_utils_cpp::checkError(status, "Failed to setup the buffer bufferMemoryReaderWeightSBCount!");
-
+#endif
         cl_ulong inputActivationSize = maxBufferSizeByte < MAX_DRAM_BYTE_INPUT_ACTIVATION ? maxBufferSizeByte : MAX_DRAM_BYTE_INPUT_ACTIVATION;
         std::cout <<"Setting the bufferMemoryReaderWideInput buffer. Size: "<<inputActivationSize<<" bytes."<<std::endl;
         bufferMemoryReaderWideInput = cl::Buffer (
@@ -198,7 +206,7 @@ protected:
                         &status
                     );
         aocl_utils_cpp::checkError(status, "Failed to setup the buffer bufferMemoryReaderWideInput!");
-
+#if defined(SPARSE_SYSTEM)
         cl_ulong inputActivationSBSize = maxBufferSizeByte < MAX_DRAM_BYTE_INPUT_ACTIVATION_SB_COUNT ? maxBufferSizeByte : MAX_DRAM_BYTE_INPUT_ACTIVATION_SB_COUNT;
         std::cout <<"Setting the bufferMemoryReaderInputSBCount buffer. Size: "<<inputActivationSBSize<<" bytes."<<std::endl;
         bufferMemoryReaderInputSBCount = cl::Buffer (
@@ -209,7 +217,7 @@ protected:
                         &status
                     );
         aocl_utils_cpp::checkError(status, "Failed to setup the buffer bufferMemoryReaderInputSBCount!");
-
+#endif
         cl_ulong inputBiasSize = maxBufferSizeByte < MAX_DRAM_BYTE_INPUT_BIAS ? maxBufferSizeByte : MAX_DRAM_BYTE_INPUT_BIAS;
         std::cout <<"Setting the bufferMemoryReaderBias buffer. Size: "<<inputBiasSize<<" bytes."<<std::endl;
         bufferMemoryReaderBias = cl::Buffer (
@@ -231,7 +239,7 @@ protected:
                         &status
                     );
         aocl_utils_cpp::checkError(status, "Failed to setup the buffer bufferMemoryWriterWideOutput!");
-
+#if defined(SPARSE_SYSTEM)
         cl_ulong outputActivtionSBSize = maxBufferSizeByte < MAX_DRAM_BYTE_OUTPUT_ACTIVATION_SB_COUNT ? maxBufferSizeByte : MAX_DRAM_BYTE_OUTPUT_ACTIVATION_SB_COUNT;
         std::cout <<"Setting the bufferMemoryWriterOutputSBCount buffer. Size: "<<outputActivtionSBSize<<" bytes."<<std::endl;
         bufferMemoryWriterOutputSBCount = cl::Buffer (
@@ -242,7 +250,7 @@ protected:
                         &status
                     );
         aocl_utils_cpp::checkError(status, "Failed to setup the buffer bufferMemoryWriterOutputSBCount!");
-
+#endif
         std::cout <<"AOCL setup compelete"<<std::endl;
     }
 
@@ -402,60 +410,93 @@ protected:
 
         /* 2. Compress the test tensors
          * */
-        std::cout <<"2. Compressing the test tensors."<<std::endl;
+        std::cout <<"2. Preparing the test tensors. Compression flag is: "<<eTensorType<<std::endl;
         unsigned short maxScalarIndexInChannelGroup = _numInputChannel - 1;
         unsigned short maxClusterIndexInCompressionBlock = COMPRESSION_VEC_SIZE*TRANSFER_SIZE-1;
         unsigned short maxClusterIndexInTransferBlock = TRANSFER_SIZE-1;
         unsigned short maxScalarIndexInCluster = CLUSTER_SIZE-1;
 
-        flexibleDirectCompressedTensor compressedInput (
-                        inputTensorDense,
-                        1, //_num3DTensors
-                        _numInputChannel,
-                        _inputWidth,
-                        _inputHeight,
-                        maxScalarIndexInChannelGroup,
-                        maxClusterIndexInCompressionBlock,
-                        maxClusterIndexInTransferBlock,
-                        maxScalarIndexInCluster,
-                        false //isKernel
-                    );
+        std::unique_ptr<AlignedTensor> pInput, pWeights, pOutput;
 
-        flexibleDirectCompressedTensor compressedWeights (
-                        inputWeightDense,
-                        2*_numInputChannel, //_num3DTensors
-                        _numInputChannel,
-                        (unsigned char) kernelSize, //width
-                        (unsigned char) kernelSize, //height
-                        maxScalarIndexInChannelGroup,
-                        maxClusterIndexInCompressionBlock,
-                        maxClusterIndexInTransferBlock,
-                        maxScalarIndexInCluster,
-                        true //isKernel
-                    );
-
-        //Initialize the compressed vector to receive the processed vector
-        flexibleDirectCompressedTensor compressedOutput (
-                    1, //_num3DTensors
-                    2*_numInputChannel, //_channel
-                    _inputWidth, //_width
-                    _inputHeight, //_height
-                    2*_numInputChannel-1, //_maxScalarIndexInChannelGroup
-                    maxClusterIndexInCompressionBlock,
-                    maxClusterIndexInTransferBlock,
-                    maxScalarIndexInCluster,
-                    false //isKernel
-                    );
-
+#if defined(SPARSE_SYSTEM)
+                pInput.reset(new FlexibleDirectCompressedTensor(
+                                inputTensorDense,
+                                1, //_num3DTensors
+                                _numInputChannel,
+                                _inputWidth,
+                                _inputHeight,
+                                maxScalarIndexInChannelGroup,
+                                maxClusterIndexInCompressionBlock,
+                                maxClusterIndexInTransferBlock,
+                                maxScalarIndexInCluster,
+                                false //isKernel
+                            ) );
+                pWeights.reset(new FlexibleDirectCompressedTensor (
+                            inputWeightDense,
+                            2*_numInputChannel, //_num3DTensors
+                            _numInputChannel,
+                            (unsigned char) kernelSize, //width
+                            (unsigned char) kernelSize, //height
+                            maxScalarIndexInChannelGroup,
+                            maxClusterIndexInCompressionBlock,
+                            maxClusterIndexInTransferBlock,
+                            maxScalarIndexInCluster,
+                            true //isKernel
+                        ) );
+                pOutput.reset(new FlexibleDirectCompressedTensor(
+                            1, //_num3DTensors
+                            2*_numInputChannel, //_channel
+                            _inputWidth, //_width
+                            _inputHeight, //_height
+                            2*_numInputChannel-1, //_maxScalarIndexInChannelGroup
+                            maxClusterIndexInCompressionBlock,
+                            maxClusterIndexInTransferBlock,
+                            maxScalarIndexInCluster,
+                            false //isKernel
+                            ) );
+#else
+                pInput.reset( new AlignedTensor(
+                                inputTensorDense,
+                                1, //_num3DTensors
+                                _numInputChannel,
+                                _inputWidth,
+                                _inputHeight,
+                                maxScalarIndexInChannelGroup,
+                                maxClusterIndexInTransferBlock,
+                                maxScalarIndexInCluster,
+                                false //isKernel
+                            ) );
+                pWeights.reset( new AlignedTensor (
+                            inputWeightDense,
+                            2*_numInputChannel, //_num3DTensors
+                            _numInputChannel,
+                            (unsigned char) kernelSize, //width
+                            (unsigned char) kernelSize, //height
+                            maxScalarIndexInChannelGroup,
+                            maxClusterIndexInTransferBlock,
+                            maxScalarIndexInCluster,
+                            true //isKernel
+                        ));
+                pOutput.reset( new AlignedTensor(
+                            1, //_num3DTensors
+                            2*_numInputChannel, //_channel
+                            _inputWidth, //_width
+                            _inputHeight, //_height
+                            2*_numInputChannel-1, //_maxScalarIndexInChannelGroup
+                            maxClusterIndexInTransferBlock,
+                            maxScalarIndexInCluster,
+                            false //isKernel
+                            ));
+#endif
         std::cout <<"3. Compute the kernel arguments that can be computed from problem setup"<<std::endl;
 
         /*
          * 3. Calculate derived parameters
          * */
-        cl_uint strideExternalMemoryWeights = compressedWeights.externalMemoryAddressStride;
-        cl_uint strideExternalMemoryIA = compressedInput.externalMemoryAddressStride;
+        cl_uint strideExternalMemoryWeights = pWeights->getExternalMemoryAddressStride();
+        cl_uint strideExternalMemoryIA = pInput->getExternalMemoryAddressStride();
         cl_ushort strideStripIACache = strideExternalMemoryIA / WIDE_SIZE;
-        cl_uint strideExternalMemoryOA = compressedOutput.externalMemoryAddressStride >> WIDE_SIZE_OFFSET;
+        cl_uint strideExternalMemoryOA = (pOutput->getExternalMemoryAddressStride()) >> WIDE_SIZE_OFFSET;
 
         cl_ushort outputWidth = (cl_uchar) _inputWidth;
         cl_uchar sizeOutputTileWidthPerColumnFull = (cl_uchar) _sizeOutputTileWidthPerColFull;
@@ -505,6 +546,11 @@ protected:
         cl_uchar enableRelu = _flagEnableRelu ? 0X1 : 0X0;
         cl_uchar enableSparsification = _flagCompressionOutput ? 0X1 : 0X0;
 
+        //Only used for the dense case
+        cl_ushort numTBCountPerFilter = (cl_ushort) ( (1 + (_numInputChannel-1) / (TRANSFER_SIZE * CLUSTER_SIZE))*kernelSize*kernelSize);
+        cl_ushort numTBCountPerIAStrip = (cl_ushort) ( 1 + (_numInputChannel-1) / (TRANSFER_SIZE * CLUSTER_SIZE) );
+        cl_ushort numWideCountPerOAStrip = (cl_ushort) ( 1 + (numFiltersInKernel-1) / (TRANSFER_SIZE * CLUSTER_SIZE * WIDE_SIZE) );
+
         std::cout <<"4. Setting kernel arguments for the input reader."<<std::endl;
         {
             //volatile __global t_dram_block* restrict pDramWeights
@@ -512,15 +558,22 @@ protected:
 
             //Pointer to filter transfer block count
             //volatile __global t_streamblock_address* restrict pFilterStreamBlockAddress,
+#if defined(SPARSE_SYSTEM)
             kernelMemoryReader.setArg(1, bufferMemoryReaderWeightSBCount);
-
+#else
+            kernelMemoryReader.setArg(1, numTBCountPerFilter);
+#endif
             //Pointer to input activations
             //volatile __global t_dram_block* restrict pInputActivation,
             kernelMemoryReader.setArg(2, bufferMemoryReaderWideInput);
 
             //Pointer to input activation transfer block count
             //volatile __global t_streamblock_address* restrict pIAStreamBlockAddress,
+#if defined(SPARSE_SYSTEM)
             kernelMemoryReader.setArg(3, bufferMemoryReaderInputSBCount);
+#else
+            kernelMemoryReader.setArg(3, numTBCountPerIAStrip);
+#endif
 
             //Pointer to bias
             //volatile __global t_accumulator* restrict pBias,
@@ -696,7 +749,11 @@ protected:
 
             //Pointer to the output activation transfer block count
             //volatile __global t_streamblock_address* restrict pOAStreamBlockAddress,
+#if defined(SPARSE_SYSTEM)
             kernelOutputWriter.setArg(1 , bufferMemoryWriterOutputSBCount);
+#else
+            kernelOutputWriter.setArg(1 , numWideCountPerOAStrip);
+#endif
 
             //unsigned int strideExterrnalMemoryOA, //In terms of output dram block
             kernelOutputWriter.setArg(2 , strideExternalMemoryOA);
@@ -784,8 +841,8 @@ protected:
         std::cout <<"7. Transfer the input activations "<<std::endl;
         {
             cl::Event event;
-            auto numTransferBlocks = compressedInput.valueVector.size();
-            auto sizeTransferBlockElement = sizeof(typeof(compressedInput.valueVector.at(0)));
+            auto numTransferBlocks = (pInput->getTransferBlockVector()).size();
+            auto sizeTransferBlockElement = sizeof(typeof((pInput->getTransferBlockVector()).at(0)));
             auto valueVectorSizeBytes = sizeTransferBlockElement * numTransferBlocks;
 
             std::cout <<"8. Transfering "<<valueVectorSizeBytes<<" bytes in to bufferMemoryReaderWideInput"<<std::endl;
@@ -794,7 +851,7 @@ protected:
                                                  CL_TRUE, //blocking_write
                                                  0, //offset
                                                  valueVectorSizeBytes, //size
-                                                 compressedInput.valueVector.data(), //data pointer
+                                                 (pInput->getTransferBlockVector()).data(), //data pointer
                                                  NULL, //dependency list
                                                  &event //events generated
                                                 );
@@ -806,12 +863,13 @@ protected:
             std::cout <<"Transfer the input actvation tensor took "<<elapsedTimeUs<<" us"<<std::endl;
         } // Transfer the input
 
+#if defined(SPARSE_SYSTEM)
         //Transfer the input transfer block count
         std::cout <<"9. Transfer the input transfer block count "<<std::endl;
         {
             cl::Event event;
-            auto numBlocks = compressedInput.streamBlockAddressVector.size();
-            auto sizePerElement = sizeof(typeof(compressedInput.streamBlockAddressVector.at(0)));
+            auto numBlocks = (pInput->getTransferBlockCountVector()).size();
+            auto sizePerElement = sizeof(typeof((pInput->getTransferBlockCountVector()).at(0)));
             auto transferSizeBytes = numBlocks * sizePerElement;
 
             std::cout <<"Transfering "<<transferSizeBytes<<" bytes in to bufferMemoryReaderInputSBCount"<<std::endl;
@@ -820,7 +878,7 @@ protected:
                                                  CL_TRUE, //blocking_write
                                                  0, //offset
                                                  transferSizeBytes, //size
-                                                 compressedInput.streamBlockAddressVector.data(), //data pointer
+                                                 (pInput->getTransferBlockCountVector()).data(), //data pointer
                                                  NULL, //dependency list
                                                  &event //events generated
                                                 );
@@ -831,13 +889,13 @@ protected:
             cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*(cl_double)(1e-3));
             std::cout <<"Transfer the input actvation count took "<<elapsedTimeUs<<" us"<<std::endl;
         } //Transfer the input block
-
+#endif
         //Transfer the weight
         std::cout <<"10. Transfer the weight "<<std::endl;
         {
             cl::Event event;
-            auto numBlocks = compressedWeights.valueVector.size();
-            auto sizePerElement = sizeof(typeof(compressedWeights.valueVector.at(0)));
+            auto numBlocks = (pWeights->getTransferBlockVector()).size();
+            auto sizePerElement = sizeof(typeof((pWeights->getTransferBlockVector()).at(0)));
             auto transferSizeBytes = numBlocks * sizePerElement;
 
             std::cout <<"Transfering "<<transferSizeBytes<<" bytes in to bufferMemoryReaderWideWeights"<<std::endl;
@@ -846,7 +904,7 @@ protected:
                                                  CL_TRUE, //blocking_write
                                                  0, //offset
                                                  transferSizeBytes, //size
-                                                 compressedWeights.valueVector.data(), //data pointer
+                                                 (pWeights->getTransferBlockVector()).data(), //data pointer
                                                  NULL, //dependency list
                                                  &event //events generated
                                                 );
@@ -858,12 +916,13 @@ protected:
             std::cout <<"Transfer the weight tensor took "<<elapsedTimeUs<<" us"<<std::endl;
         } // Transfer the weights
 
+#if defined(SPARSE_SYSTEM)
         //Transfer the weight transfer block count
         std::cout <<"11. Transfer the weight block count "<<std::endl;
         {
             cl::Event event;
-            auto numBlocks = compressedWeights.streamBlockAddressVector.size();
-            auto sizePerElement = sizeof(typeof(compressedWeights.streamBlockAddressVector.at(0)));
+            auto numBlocks = (pWeights->getTransferBlockCountVector()).size();
+            auto sizePerElement = sizeof(typeof((pWeights->getTransferBlockCountVector()).at(0)));
             auto transferSizeBytes = numBlocks * sizePerElement;
 
             std::cout <<"Transfering "<<transferSizeBytes<<" bytes in to bufferMemoryReaderWeightSBCount"<<std::endl;
@@ -872,7 +931,7 @@ protected:
                                                  CL_TRUE, //blocking_write
                                                  0, //offset
                                                  transferSizeBytes, //size
-                                                 compressedWeights.streamBlockAddressVector.data(), //data pointer
+                                                 (pWeights->getTransferBlockCountVector()).data(), //data pointer
                                                  NULL, //dependency list
                                                  &event //events generated
                                                 );
@@ -883,6 +942,7 @@ protected:
             cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*(cl_double)(1e-3));
             std::cout <<"Transfer the weight count took "<<elapsedTimeUs<<" us"<<std::endl;
         }
+#endif
 
         //Transfer the bias vector
         std::cout <<"12. Transfer the bias vector"<<std::endl;
@@ -938,22 +998,24 @@ protected:
             bufferMemoryWriterWideOutput,
             CL_TRUE,
             0,
-            sizeof(typeof(compressedOutput.valueVector.at(0))) * compressedOutput.valueVector.size(),
-            compressedOutput.valueVector.data(),
+            sizeof(typeof((pOutput->getTransferBlockVector()).at(0))) * (pOutput->getTransferBlockVector()).size(),
+            (pOutput->getTransferBlockVector()).data(),
             NULL,
             &eventReadOutput
         );
         aocl_utils_cpp::checkError(status, "Failed to read compressed output values!");
 
+#if defined(SPARSE_SYSTEM)
         status = clCQOutputWriter.enqueueReadBuffer(
             bufferMemoryWriterOutputSBCount,
             CL_TRUE,
             0,
-            sizeof(typeof(compressedOutput.streamBlockAddressVector.at(0))) * compressedOutput.streamBlockAddressVector.size(),
-            compressedOutput.streamBlockAddressVector.data(),
+            sizeof(typeof((pOutput->getTransferBlockCountVector()).at(0))) * (pOutput->getTransferBlockCountVector()).size(),
+            (pOutput->getTransferBlockCountVector()).data(),
             NULL,
             &eventReadOutputCount
         );
+#endif
         aocl_utils_cpp::checkError(status, "Failed to read compressed output counts!");
 
         cl_ulong processStart = eventOutputWriter.getProfilingInfo<CL_PROFILING_COMMAND_START>();
@@ -975,14 +1037,9 @@ protected:
         //Decompress the output, and check against the input if necessary
         {
             std::cout <<"15. Decode the output"<<std::endl;
-            std::vector<float> outputFloatVector;
+            std::vector<fixedPointNumber> outputFPVector;
 
-            decodeFlexibleDirectCompressedTensor(
-                       compressedOutput,
-                       outputFloatVector,
-                       FRAC_WIDTH,
-                       INT_WIDTH
-            );
+            pOutput->decodeTensor(outputFPVector, FRAC_WIDTH, INT_WIDTH);
 
             std::cout <<"16. Check the output"<<std::endl;
             if (eTensorType == TEST)
@@ -999,7 +1056,7 @@ protected:
                             signed char expectedOutput = (_flagEnableRelu && (inputTensorDense.at(inputIndex).getBits() < ((char) 0x0))) ?
                                         (char) 0x0 : inputTensorDense.at(inputIndex).getBits();
 
-                            char actualOutput = (fixedPointNumber(outputFloatVector.at(outputIndex), FRAC_WIDTH, INT_WIDTH)).getBits();
+                            char actualOutput = outputFPVector.at(outputIndex).getBits();
 
                             EXPECT_TRUE(expectedOutput == actualOutput)
                             <<"Error: iY, iX, iIC, actualOutput, expectedOutput "
@@ -1016,15 +1073,15 @@ protected:
 
 };
 
-#define TEST_TYPE ZERO
+#define TEST_TYPE TEST
 
-//#define PLAY
+#define PLAY
 #ifdef PLAY
 TEST_F (testFixture, play) {
 
     unsigned char inputWidth = 4;
     unsigned char inputHeight = 4;
-    unsigned char numInputChannel = 1;
+    unsigned char numInputChannel = 2;
     unsigned char widthBlockSize = 3;
     unsigned char sizeOutputTileWidthPerColFul = 2;
     unsigned char sizeOutputTileHeightFull = 32;

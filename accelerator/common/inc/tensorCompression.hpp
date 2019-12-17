@@ -74,7 +74,10 @@ class AlignedTensor {
 
     t_aligned_transfer_block_vector& getTransferBlockVector();
 
+    virtual t_aligned_streamblock_address_vector& getTransferBlockCountVector();
+
     unsigned int getExternalMemoryAddressStride();
+
 
 
 
@@ -127,7 +130,7 @@ public:
                 char _intWidth
                 ) override;
 
-    t_aligned_streamblock_address_vector& getTransferBlockCountVector();
+    t_aligned_streamblock_address_vector& getTransferBlockCountVector() override;
 
 };
 #endif

@@ -859,6 +859,9 @@ __kernel void kernelIATileController (unsigned short numGroupxTiles)
 			tileBufferControlPacket.iActivationDramBlockAddressBase = ((unsigned short) iStripInTile) * ((unsigned short) strideStripIACache);
 			tileBufferControlPacket.iAddressCache = iStripInTile;
 			tileBufferControlPacket.maxPeRowID = (numActivePeRows - 1);
+			#if !defined(SPARSE_SYSTEM)
+		    tileBufferControlPacket.numTBCountPerStrip = numTBCountPerIAStrip;
+		    #endif
 			unsigned char isLastBit = ((iKernelSizeFlat+1) == kernelSizeFlat) ? 0x1 : 0x0;
 			tileBufferControlPacket.controlBits =
 				isLastBit
@@ -1339,7 +1342,9 @@ __kernel void kernelOABuffer ()
 					(numClustersToDrain + numWindowsToDrain) 
 					: numOutputToAccess;
 			#else
-				numLoops = numClustersToDrain;
+                numLoops = (isDrainBuffer == TRUE) ?
+                    (numClustersToDrain)
+                    : numOutputToAccess;
 			#endif
 
 			delayCount = 0;
@@ -1963,7 +1968,6 @@ __kernel void kernelFilterBuffer ()
 				unsigned short indexInDramBlock = (iTransferBlockInFilterRead - 1) & WIDE_SIZE_REMAINDER_MASK;
 				t_dram_block dramBlock = cacheNzBlocks[(~regWriteSide) & 0x1][dramIndex];
 				t_transfer_block tblock = dramBlock.transferBlocks[indexInDramBlock];
-				t_transferblock_tagged taggedBlock;
 				weightBlockTagged.values = tblock;
 				weightBlockTagged.isLast = ((iTransferBlockInFilterRead) >= maxTransferBlockInFilter[(~regWriteSide) & 0x1]) ?
 					TRUE : FALSE;
@@ -1984,17 +1988,17 @@ __kernel void kernelFilterBuffer ()
 			success = write_channel_nb_intel(channel_weight[rowID][0], weightBlockTagged);
 			if (success)
 			{
-				EMULATOR_PRINT(("[kernelFilterBuffer %d] Sent transfer block %d / %d, in the %d / %d time.\n\n", 
-					rowID, iTransferBlockInFilterRead, maxTransferBlockInFilter[(~regWriteSide) & 0x1], iOutputRead, maxOutputCount[(~regWriteSide) & 0x1]));
-				/*
-				EMULATOR_PRINT(("[kernelFilterStreamer %d] Sent tb %d: %d % d %d %d\n", 
+				EMULATOR_PRINT(("[kernelFilterBuffer %d] Sent transfer block %d / %d with lastTag %d in the %d / %d time.\n\n", 
+					rowID, iTransferBlockInFilterRead, maxTransferBlockInFilter[(~regWriteSide) & 0x1], weightBlockTagged.isLast, iOutputRead, maxOutputCount[(~regWriteSide) & 0x1]));
+
+                EMULATOR_PRINT(("[kernelFilterStreamer %d] Sent tb %d: %#04x %#04x %#04x %#04x\n",
 					rowID, 
 					iTransferBlockInFilterRead,
-					tblock.values[0].cluster_values[0],d
-					tblock.values[0].cluster_values[1],
-					tblock.values[1].cluster_values[0],
-					tblock.values[1].cluster_values[1]));
-				*/
+                    weightBlockTagged.values.values[0].cluster_values[0],
+                    weightBlockTagged.values.values[0].cluster_values[1],
+                    weightBlockTagged.values.values[1].cluster_values[0],
+                    weightBlockTagged.values.values[1].cluster_values[1]));
+
 				//Omit plus 1 to send the bias
 				if ((iTransferBlockInFilterRead) >= maxTransferBlockInFilter[(~regWriteSide) & 0x1])
 				{
@@ -2076,7 +2080,7 @@ __kernel void kernelWeightTransport (
 	#endif
 
 	#ifdef FULL_SYSTEM
-				EMULATOR_PRINT(("[WEIGHT TRANSPORT (%d, %d)] Read weight/bias transfer block.\n\n", idy, idx));
+				EMULATOR_PRINT(("[WEIGHT TRANSPORT (%d, %d)] Read weight/bias transfer block. Is Last tag is %d\n\n", idy, idx, block.isLast));
 	#else
 				EMULATOR_PRINT(("[WEIGHT TRANSPORT] Read weight/bias transfer block.\n\n"));
 	#endif
@@ -2841,7 +2845,7 @@ __kernel void kernelDensePE ()
 	int idx = get_compute_id(1);
 	int idy = get_compute_id(0);
 #endif
-	typedef uint3_t instruction_t;
+	typedef unsigned char instruction_t;
 	//====================registers===============
 	t_transfer_block regActivationTB;
 	t_transfer_block regWeightTB;
@@ -2873,7 +2877,7 @@ __kernel void kernelDensePE ()
 			|| (currentInstruction == DENSE_PE_INSTRUCTION_W_FROM_CH_A_FROM_CH_MAC))
 		{
 			#ifdef FULL_SYSTEM
-				t_transferblock_local tempWTBLocal = read_channel_nb_intel (
+                tempWTBLocal = read_channel_nb_intel (
 							channel_dpWeightInput[idy][idx],
 							&readWSuccess
 						);
@@ -2890,14 +2894,14 @@ __kernel void kernelDensePE ()
 			|| (currentInstruction == DENSE_PE_INSTRUCTION_W_FROM_CH_A_FROM_CH_MAC))
 		{
 			#ifdef FULL_SYSTEM
-				t_transferblock_local tempATBLocal = read_channel_nb_intel (
+                tempATBLocal = read_channel_nb_intel (
 							channel_dpActivationInput[idy][idx],
-							&readWSuccess
+							&readASuccess
 						);
 			#else
 				t_transferblock_local tempATBLocal = read_channel_nb_intel (
 							channel_dpActivationInput[0][0],
-							&readWSuccess
+							&readASuccess
 						);
 			#endif
 		}
@@ -2949,9 +2953,14 @@ __kernel void kernelDensePE ()
 				if (readASuccess)
 				{
 					performMAC = true;
+					updateRegA = true;
 
 					if (regIsLast == TRUE) {
 						tempInstruction = DENSE_PE_INSTRUCTION_COMMIT;
+					}
+					else
+					{
+						tempInstruction = DENSE_PE_INSTRUCTION_W_FROM_CH_A_FROM_CH_MAC;
 					}
 				}
 				
@@ -2960,9 +2969,15 @@ __kernel void kernelDensePE ()
 			case (DENSE_PE_INSTRUCTION_W_FROM_CH_A_FROM_R_MAC):{
 				if (readWSuccess) {
 					performMAC = true;
+					updateRegW = true;
+					updateRegIsLast = true;
 
 					if (tempWTBLocal.isLast == TRUE) {
 						tempInstruction = DENSE_PE_INSTRUCTION_COMMIT;
+					}
+					else
+					{
+						tempInstruction = DENSE_PE_INSTRUCTION_W_FROM_CH_A_FROM_CH_MAC;
 					}
 				}
 			} //DENSE_PE_INSTRUCTION_W_FROM_CH_A_FROM_R_MAC
@@ -3014,19 +3029,37 @@ __kernel void kernelDensePE ()
 		} //Select MAC Operands
 
 		//Regs
-		if (updateRegIsLast)
+		if (updateRegIsLast == true)
 		{
 			regIsLast = tempWTBLocal.isLast;
+			// EMULATOR_PRINT(("[PE (%d, %d)] Update regIsLast to %d.\n", idy, idx, regIsLast));
 		}
 
 		if (updateRegA)
 		{
 			regActivationTB = tempATBLocal.values;
+			// EMULATOR_PRINT(("[PE (%d, %d)] Read activation transfer block.\n\n", idy, idx));
 		}
 
-		if (updateRegW)
+		if (updateRegW == true)
 		{
 			regWeightTB = tempWTBLocal.values;
+// #ifdef FULL_SYSTEM
+// 						EMULATOR_PRINT(("[PE (%d %d)] weightTransferBlock [0-4]: %#04x %#04x %#04x %#04x. IsLast=%d\n",
+// 								idy, idx,
+// 								tempWTBLocal.values.values[0].cluster_values[0] & 0xFF, 
+// 								tempWTBLocal.values.values[0].cluster_values[1] & 0xFF,
+// 								tempWTBLocal.values.values[1].cluster_values[0] & 0xFF,
+// 								tempWTBLocal.values.values[1].cluster_values[1] & 0xFF,
+// 								tempWTBLocal.isLast));
+// #else
+// 						EMULATOR_PRINT(("[PE] weightTransferBlock [0-4]: %#04x %#04x %#04x %#04x. IsLast=%d\n",
+// 								tempWTBLocal.values.values[0].cluster_values[0] & 0xFF, 
+// 								tempWTBLocal.values.values[0].cluster_values[1] & 0xFF,
+// 								tempWTBLocal.values.values[1].cluster_values[0] & 0xFF,
+// 								tempWTBLocal.values.values[1].cluster_values[1] & 0xFF,
+// 								tempWTBLocal.isLast));
+// #endif
 		}
 
 		//MAC
@@ -3056,11 +3089,12 @@ __kernel void kernelDensePE ()
 			#endif
 				//DEBUG_PRINT(("[PE Psum] Commit. %#04x\n", pSum));
 				//pSum = 0;
-				tempInstruction = DENSE_PE_INSTRUCTION_W_FROM_CH_A_FROM_CH_MAC;
+				tempInstruction = DENSE_PE_INSTRUCTION_BIAS_FROM_CH;
 				//pSum = 0;
 			}
 		}
 
+		//EMULATOR_PRINT(("[PE (%d, %d)] Instruction: %d\n", idy, idx, currentInstruction));
 		currentInstruction = tempInstruction;
 	} // while-loop
 
