@@ -95,7 +95,7 @@ protected:
     {
        cl_int status = CL_SUCCESS;
 #ifdef C5SOC
-        binaryFile = "fullSystem_aoc_release_hw.aocx";
+        binaryFile = "device_utils.aocx";
         clPlatform = aocl_utils_cpp::findPlatform("Intel(R) FPGA SDK for OpenCL(TM)");
 #else
         binaryFile = "operandMatcher_c_model.aocx";
@@ -1075,16 +1075,16 @@ protected:
 
 #define TEST_TYPE TEST
 
-#define PLAY
+//#define PLAY
 #ifdef PLAY
 TEST_F (testFixture, play) {
 
     unsigned char inputWidth = 4;
     unsigned char inputHeight = 4;
-    unsigned char numInputChannel = 2;
+    unsigned char numInputChannel = 8;
     unsigned char widthBlockSize = 3;
     unsigned char sizeOutputTileWidthPerColFul = 2;
-    unsigned char sizeOutputTileHeightFull = 32;
+    unsigned char sizeOutputTileHeightFull = 2;
     bool flagEnableRelu = true;
 
     launch(

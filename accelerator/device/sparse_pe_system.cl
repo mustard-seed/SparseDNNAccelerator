@@ -694,7 +694,9 @@ __kernel void kernelIABuffer ()
 					nextState = IA_BUFFER_STATE_COMPUTE_NUM_ACCESS;
 				#else
 					nextState = IA_BUFFER_STATE_PADD;
-					numIAAccess = controlPacketReceived.numTBCountPerStrip;
+                    numIAAccess = isLoad ?
+                                1 + ((controlPacketReceived.numTBCountPerStrip - 1) >> WIDE_SIZE_OFFSET)
+                              : controlPacketReceived.numTBCountPerStrip;
 					iterAccess = 0;
 					paddCount = 0;
 				#endif
