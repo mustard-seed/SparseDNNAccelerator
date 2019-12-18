@@ -82,7 +82,7 @@
 #define VALUE_DIVIDED_BY_CLUSTER_SIZE_REMAINDER_MASK 0x1;
 #define CLUSTER_TO_TRANSFER_BLOCK_SHIFT 1 //amount of right shift required to convert a cluster count into transfer block count
 
-#define BURST_SIZE_BYTE 8
+#define BURST_SIZE_BYTE 16
 
 #define KERNEL_CACHE_LANES PE_ROWS
 #define KERNEL_CACHE_LANE_MASK 0x7
@@ -97,8 +97,8 @@
 #define OA_CACHE_SIZE OA_CACHE_SIZE_BYTE
 
 #define WIDE_SIZE (BURST_SIZE_BYTE/CLUSTER_SIZE/TRANSFER_SIZE)  //Each transfer block takes 4 bytes, so need 8 transfer blocks to populate 256 bits
-#define WIDE_SIZE_OFFSET 0x1 //Numnber of bits to shift the transfer block index to the right in order to recover the wide offset
-#define WIDE_SIZE_REMAINDER_MASK 0x1
+#define WIDE_SIZE_OFFSET 0x2 //Numnber of bits to shift the transfer block index to the right in order to recover the wide offset
+#define WIDE_SIZE_REMAINDER_MASK 0x3
 
 #define NUM_CLUSTER_IN_DRAM_SIZE BURST_SIZE_BYTE/CLUSTER_SIZE
 #define CLUSTER_TO_TRANSFER_BLOCK_SIZE_RIGHT_SHIFT 0x1
