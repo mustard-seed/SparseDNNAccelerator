@@ -1,3 +1,5 @@
+#define CL_TARGET_OPENCL_VERSION 200
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -12,6 +14,8 @@
 #include <random>
 #include <bitset> //Print friendly binary number
 #include <memory> //smart pointers
+
+#include <chrono>
 
 #include "gtest/gtest.h"
 #include "boost/align/aligned_allocator.hpp"
@@ -35,6 +39,15 @@
 #define FRAC_WIDTH 4
 #define INT_WIDTH 3
 #define OUTPUT_INT_WIDTH 3
+
+#define PROFILE
+#define PLAY
+#define TEST_TYPE TEST
+#define REPEAT 100
+
+#if defined(C5SOC) //Hack for ARMv7, otherwise chrono won't work
+__asm__(".symver _ZNSt6chrono3_V212system_clock3nowEv,_ZNSt6chrono12system_clock3nowEv@GLIBCXX_3.4.11");
+#endif
 
 typedef
 std::vector<cl_float, boost::alignment::aligned_allocator<cl_float, aocl_utils_cpp::AOCL_ALIGNMENT>>
@@ -95,7 +108,7 @@ protected:
     {
        cl_int status = CL_SUCCESS;
 #ifdef C5SOC
-        binaryFile = "device_utils.aocx";
+        binaryFile = "device_utils_profile.aocx";
         clPlatform = aocl_utils_cpp::findPlatform("Intel(R) FPGA SDK for OpenCL(TM)");
 #else
         binaryFile = "operandMatcher_c_model.aocx";
@@ -498,9 +511,9 @@ protected:
         cl_ushort strideStripIACache = strideExternalMemoryIA / WIDE_SIZE;
         cl_uint strideExternalMemoryOA = (pOutput->getExternalMemoryAddressStride()) >> WIDE_SIZE_OFFSET;
 
-        cl_ushort outputWidth = (cl_uchar) _inputWidth;
-        cl_uchar sizeOutputTileWidthPerColumnFull = (cl_uchar) _sizeOutputTileWidthPerColFull;
-        cl_ushort sizeOutputTileWidthFull = ((cl_uchar) sizeOutputTileWidthPerColumnFull) * PE_COLS;
+        cl_ushort outputWidth = (cl_ushort) _inputWidth;
+        cl_uchar sizeOutputTileWidthPerColumnFull = (cl_ushort) _sizeOutputTileWidthPerColFull;
+        cl_ushort sizeOutputTileWidthFull = ((cl_ushort) sizeOutputTileWidthPerColumnFull) * PE_COLS;
         cl_uchar sizeOutputTileWidthPerColumnPartial = outputWidth - (outputWidth / sizeOutputTileWidthFull) * sizeOutputTileWidthFull;
         cl_short sizeOutputTileWidthPartial = sizeOutputTileWidthPerColumnPartial; //Lump all the remaining one to 1 column
         cl_uchar numPartialColumns = 1;
@@ -513,8 +526,8 @@ protected:
         cl_ushort strideInputTileWidthFull = sizeOutputTileWidthFull;
         cl_ushort strideInputTileWidthPartial = sizeOutputTileWidthPartial;
 
-        cl_ushort outputHeight = (cl_uchar) _inputHeight;
-        cl_uchar sizeOutputHeightTileFull = (cl_uchar) _sizeOutputTileHeight;
+        cl_ushort outputHeight = (cl_ushort) _inputHeight;
+        cl_uchar sizeOutputHeightTileFull = (cl_ushort) _sizeOutputTileHeight;
         cl_uchar sizeOutputHeightTilePartial = outputHeight - (outputHeight / sizeOutputHeightTileFull) * sizeOutputHeightTileFull;
         cl_uchar numOutputHeightTile = 1 + (outputHeight-1) / sizeOutputHeightTileFull;
         cl_uchar numOutputHeightFullTile = outputHeight / sizeOutputHeightTileFull;
@@ -795,7 +808,7 @@ protected:
             //unsigned short numOutputHxWTiles, //numOutputHeightTile * numOutputWidthTile
             kernelOutputWriter.setArg(16 , numOutputTiles);
             //unsigned short numOutputHxW,
-            kernelOutputWriter.setArg(17 , (cl_ushort) (outputWidth * outputHeight));
+            kernelOutputWriter.setArg(17 , (cl_ushort) (((cl_ushort) (outputWidth)) * ((cl_ushort) (outputHeight))) );
             //Number of groups in the output activations
             //unsigned short numOutputChannels,
             kernelOutputWriter.setArg(18 , numFiltersInKernel);
@@ -970,29 +983,80 @@ protected:
             std::cout <<"Transfer the bias vector took "<<elapsedTimeUs<<" us"<<std::endl;
         } // bias transfer block
 
+#if defined(PROFILE) && defined(C5SOC)
+        std::cout <<"Attempting to clear the performance counters."<<std::endl;
+        status = clGetProfileDataDeviceIntelFPGA(
+                  clDevice(),
+                  program(),
+                  CL_TRUE,
+                  CL_TRUE,
+                  CL_FALSE,
+                  0,
+                  NULL,
+                  NULL,
+                  NULL
+                    );
+        aocl_utils_cpp::checkError(status, "Failed to reset the profiling information!");
+#endif
         //Launch the kernels
-        std::cout<<"13. Launch the kernels."<<std::endl;
+        std::cout<<"13. Launch the kernels and run "<<REPEAT<<" times."<<std::endl;
         std::vector<cl::Event> elist;
+       cl_ulong processDurationAgregate = 0;
 
-        cl::Event eventMemoryReader, eventOutputWriter, eventIATileController, eventOATileController;
+        //auto processStart = std::chrono::system_clock::now();
 
-        status = clCQMemoryReader.enqueueTask(kernelMemoryReader, NULL, &eventMemoryReader);
-        aocl_utils_cpp::checkError(status, "Failed to launch kernelMemoryReader!");
-        
-        status = clCQIATileController.enqueueTask(kernelIATileController, NULL, &eventIATileController);
-        aocl_utils_cpp::checkError(status, "Failed to launch kernelIATileController!");
-        
-        status = clCQOATileController.enqueueTask(KernelOATileController, NULL, &eventOATileController);
-        aocl_utils_cpp::checkError(status, "Failed to launch KernelOATileController!");
+        for (int i=0; i<REPEAT; i++)
+        {
+            cl::Event eventMemoryReader, eventOutputWriter, eventIATileController, eventOATileController;
 
-        status = clCQOutputWriter.enqueueTask(kernelOutputWriter, NULL, &eventOutputWriter);
-        aocl_utils_cpp::checkError(status, "Failed to launch kernelOutputWriter!");
+            status = clCQMemoryReader.enqueueTask(kernelMemoryReader, NULL);
+            aocl_utils_cpp::checkError(status, "Failed to launch kernelMemoryReader!");
 
-        
-        //Retrieve data
-        std::cout <<"14. Waiting for the outputs and retrieve it."<<std::endl;
+            status = clCQIATileController.enqueueTask(kernelIATileController, NULL);
+            aocl_utils_cpp::checkError(status, "Failed to launch kernelIATileController!");
+
+            status = clCQOATileController.enqueueTask(KernelOATileController, NULL);
+            aocl_utils_cpp::checkError(status, "Failed to launch KernelOATileController!");
+
+            status = clCQOutputWriter.enqueueTask(kernelOutputWriter, NULL, &eventOutputWriter);
+            aocl_utils_cpp::checkError(status, "Failed to launch kernelOutputWriter!");
+            clCQOutputWriter.finish();
+
+            cl_ulong processStart = eventOutputWriter.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+            cl_ulong processEnd = eventOutputWriter.getProfilingInfo<CL_PROFILING_COMMAND_END>();
+            processDurationAgregate += (processEnd - processStart);
+         }
+
         clCQOutputWriter.finish();
 
+        //auto processEnd = std::chrono::system_clock::now();
+
+        cl_double processAverageDuration = (cl_double)((processDurationAgregate) * (cl_double)(1e-3)) / (cl_double)(REPEAT);
+        //auto duration = std::chrono::duration_cast<std::chrono::microseconds>(processEnd-processStart).count();
+        //double averageDuration = (double)(duration) / (double)(REPEAT);
+#if defined(C5SOC)
+        //Hack for ARMv7
+        //averageDuration = averageDuration * 1000.0;
+#endif
+
+
+#if defined(PROFILE) && defined(C5SOC)
+        std::cout <<"14.b Attempting to retrieve autorun profiling data."<<std::endl;
+        status = clGetProfileDataDeviceIntelFPGA(
+                  clDevice(),
+                  program(),
+                  CL_TRUE,
+                  CL_TRUE,
+                  CL_FALSE,
+                  0,
+                  NULL,
+                  NULL,
+                  NULL
+                    );
+        aocl_utils_cpp::checkError(status, "Failed to retrieve profiling information!");
+#endif
+
+        std::cout <<"14. Retrieve the output."<<std::endl;
         cl::Event eventReadOutput, eventReadOutputCount;
         status = clCQOutputWriter.enqueueReadBuffer(
             bufferMemoryWriterWideOutput,
@@ -1018,10 +1082,6 @@ protected:
 #endif
         aocl_utils_cpp::checkError(status, "Failed to read compressed output counts!");
 
-        cl_ulong processStart = eventOutputWriter.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-        cl_ulong processEnd = eventOutputWriter.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-        cl_double processDuration = (cl_double)((processEnd - processStart) * (cl_double)(1e-3));
-
         cl_ulong outputValueTransferStart = eventReadOutput.getProfilingInfo<CL_PROFILING_COMMAND_START>();
         cl_ulong outputValueTransferEnd = eventReadOutput.getProfilingInfo<CL_PROFILING_COMMAND_END>();
         cl_double outputValueTransferDuration = (cl_double)((outputValueTransferEnd - outputValueTransferStart) * (cl_double)(1e-3));
@@ -1030,7 +1090,7 @@ protected:
         cl_ulong outputCountTransferEnd = eventReadOutputCount.getProfilingInfo<CL_PROFILING_COMMAND_END>();
         cl_double outputCountTransferDuration = (cl_double)((outputCountTransferEnd - outputCountTransferStart) * (cl_double)(1e-3));
 
-        std::cout <<"Convolution time:  (us): "<<processDuration<<std::endl;
+        std::cout <<"Average Convolution time:  (us): "<<processAverageDuration<<std::endl;
         std::cout <<"Output transfer time (us): "<<outputValueTransferDuration<<std::endl;
         std::cout <<"Output count transfer time (us): "<<outputCountTransferDuration<<std::endl;
 
@@ -1072,19 +1132,15 @@ protected:
     } //launch
 
 };
-
-#define TEST_TYPE TEST
-
-//#define PLAY
 #ifdef PLAY
 TEST_F (testFixture, play) {
 
-    unsigned char inputWidth = 4;
-    unsigned char inputHeight = 4;
-    unsigned char numInputChannel = 8;
+    unsigned char inputWidth = 64;
+    unsigned char inputHeight = 64;
+    unsigned char numInputChannel = 32;
     unsigned char widthBlockSize = 3;
-    unsigned char sizeOutputTileWidthPerColFul = 2;
-    unsigned char sizeOutputTileHeightFull = 2;
+    unsigned char sizeOutputTileWidthPerColFul = 8;
+    unsigned char sizeOutputTileHeightFull = 8;
     bool flagEnableRelu = true;
 
     launch(

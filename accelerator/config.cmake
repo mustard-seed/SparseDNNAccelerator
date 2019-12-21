@@ -27,7 +27,7 @@ if (NOT GLOBAL_CONFIG_SET)
     endif(CMAKE_BUILD_TYPE MATCHES "Debug")
 
     ####Optional: Profliing################
-    add_definitions(-DPROFILE)
+    #add_definitions(-DPROFILE)
 
     set(DEFENSIVE_FLAGS "-D_GLIBCXX_ASSERTIONS") # -D_FORTIFY_SOURCE=2 would enable runtime overflow checks, but requires O2
     if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 8.0)
