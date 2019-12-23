@@ -40,7 +40,7 @@
 #define INT_WIDTH 3
 #define OUTPUT_INT_WIDTH 3
 
-#define PROFILE
+//#define PROFILE
 #define PLAY
 #define TEST_TYPE TEST
 #define REPEAT 1
@@ -108,7 +108,7 @@ protected:
     {
        cl_int status = CL_SUCCESS;
 #ifdef C5SOC
-        binaryFile = "device_utils_profile.aocx";
+        binaryFile = "device_utils.aocx";
         clPlatform = aocl_utils_cpp::findPlatform("Intel(R) FPGA SDK for OpenCL(TM)");
 #else
         binaryFile = "operandMatcher_c_model.aocx";
