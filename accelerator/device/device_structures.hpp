@@ -135,7 +135,7 @@ typedef struct __attribute__((packed))
     unsigned char inputTileWidth;
     unsigned char inputTileHeight;
     unsigned char strideConcatKernelSize; //Bit 7:4 stride, 3:0 KernelSize
-    unsigned int numOutputPerCol;
+    unsigned int numOutputInstructions;
     #if !defined (SPARSE_SYSTEM)
     unsigned short numTBCountPerStrip;
     #endif
@@ -146,17 +146,25 @@ typedef struct __attribute__((packed))
 typedef struct __attribute__((packed))
 {
     unsigned short iActivationDramBlockAddressBase;
+    unsigned short strideActivationDramBlock;
+    #if defined(SPARSE_SYSTEM)
     unsigned char iAddressCache;
+    #endif
     unsigned char maxPeRowID; //Only relevant for sending
 
     #if !defined (SPARSE_SYSTEM)
     unsigned short numTBCountPerStrip;
     #endif
 
-    //Bit 0: Whether this is the last strip (1 / 0). Only relevant for sending IA from the buffer
-    //Bit 1: Whether to update the buffer (0) or to stream from the buffer (1)
+    //Bit 1:0: 
+    // - 00: NOP for some fixed cycles. 
+    // - 01: Update the buffer.
+    // - 10: Stream from the buffer, not the last strip. 
+    // - 11: Stream from the buffer, is the last strip
     //Bit 7:2: Max PE Cols to send to; 
     unsigned char controlBits; 
+
+    unsigned char numStripInRow; //Number of strips in the row concerned by the instruction.
 } t_input_buffer_tile_buffer_packet;
 
 

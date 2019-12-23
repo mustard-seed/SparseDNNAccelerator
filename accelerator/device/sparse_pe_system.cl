@@ -166,7 +166,7 @@ __kernel void kernelMemoryReader (
 
 	//TODO: What are these for?
 	unsigned short numCompressionWindowsInputGroup,
-	unsigned short kernelSizexkernelSizexNumFilterFoldsInGroup
+	unsigned short kernelSizexNumFilterFoldsInGroup
 	) 
 {
 
@@ -340,7 +340,7 @@ __kernel void kernelMemoryReader (
 			//tileControllerPacket.stride = stride;
 			//tileControllerPacket.kernelSize = kernelSize;
 			tileControllerPacket.strideConcatKernelSize = ((stride & 0xF) << 0x4) | (kernelSize & 0xF);
-			tileControllerPacket.numOutputPerCol = kernelSizexkernelSizexNumFilterFoldsInGroup * sizeOutputHeightTileLocal * sizeOutputWidthTilePerColLocal;
+			tileControllerPacket.numOutputInstructions = kernelSizexNumFilterFoldsInGroup * sizeOutputHeightTileLocal * sizeOutputWidthTilePerColLocal;
 			tileControllerPacket.numActivePeColsConcatNumOutputChannelsInGroup = (((unsigned short) numActivePeCols) << 12) | (numFiltersInGroup & 0xFFF);
 			//tileControllerPacket.numOutputChannelsInGroup = numFiltersInGroup;
 			tileControllerPacket.strideStripIACache = strideStripIACache;
@@ -622,17 +622,19 @@ __kernel void kernelMemoryReader (
 #endif //MEMORY_READER
 
 #ifdef IA_MEMORY
-#define IA_BUFFER_STATE_DECODE 0x0
-#define IA_BUFFER_STATE_COMPUTE_NUM_ACCESS 0x1
-#define IA_BUFFER_STATE_ACCESS 0x2
-#define IA_BUFFER_STATE_PADD 0x3 //NOP operation
+#define IA_BUFFER_STATE_DECODE 0x1
+#define IA_BUFFER_STATE_COMPUTE_NUM_ACCESS 0x2
+#define IA_BUFFER_STATE_ACCESS 0x4
+#define IA_BUFFER_STATE_PADD 0x8 //NOP operation
+#define IA_BUFFER_STATE_UPDATE_STRIP 0x10
 #define IA_BUFFER_PADD_COUNT 2 
 __attribute__((max_global_work_dim(0)))
 __attribute__((autorun))
 __attribute__((num_compute_units(PE_COLS)))
 __kernel void kernelIABuffer ()
 {
-	typedef uint2_t t_state;
+	typedef uint5_t t_state;
+	typedef uint5_t t_strip;
 	int colID = get_compute_id(0);
 
 	t_dram_block cacheIABlocks [IA_CACHE_DEPTH] __attribute__((bankwidth(BURST_SIZE_BYTE)));
@@ -645,16 +647,20 @@ __kernel void kernelIABuffer ()
 		Loop carried-variables
 	*/
 
-	bool isLoad = false;
-	bool isLast = false;
+	uint1_t isLoad = false;
+	uint1_t isLast = false;
 	unsigned short iActivationDramBlockAddressBase = 0;
+	unsigned short strideActivationDramBlock = 0;
+	#if defined(SPARSE_SYSTEM)
 	unsigned char iAddressCache = 0;
+	#endif
 	unsigned char maxPeRowID = 0;
 	unsigned short numIAAccess = 0;
 	unsigned short iterAccess = 0;
 
-	//Used as a delay counter, after the access run
-	unsigned char paddCount = 0;
+
+	t_strip iStripInRow = 0;
+	t_strip numStripInRow = 0;
 
 	t_state currentState = IA_BUFFER_STATE_DECODE;
 
@@ -669,8 +675,8 @@ __kernel void kernelIABuffer ()
 		bool dataReadSuccess = false;
 
 		//Handle channel read separately
-        if (((currentState == IA_BUFFER_STATE_COMPUTE_NUM_ACCESS) && (isLoad == true))
-                || ((currentState == IA_BUFFER_STATE_ACCESS) && (isLoad == true)))
+        if (((currentState == IA_BUFFER_STATE_COMPUTE_NUM_ACCESS) && (isLoad == TRUE))
+                || ((currentState == IA_BUFFER_STATE_ACCESS) && (isLoad == TRUE)))
 		{
 			dramBlock = read_channel_nb_intel(channel_ia_wide_local[colID], &dataReadSuccess);
 		}
@@ -684,32 +690,43 @@ __kernel void kernelIABuffer ()
 
 			if (success)
 			{
-				isLoad = ((controlPacketReceived.controlBits >> 0x1) & 0x1) == 0x0;
-				isLast = (controlPacketReceived.controlBits & 0x1) == 0x1;
+				isLoad = ((controlPacketReceived.controlBits & 0x3) == 0x1) ? TRUE: FALSE;
+				isLast = ((controlPacketReceived.controlBits & 0x3) == 0x3) ? TRUE : FALSE;
 				iActivationDramBlockAddressBase = controlPacketReceived.iActivationDramBlockAddressBase;
-				iAddressCache = controlPacketReceived.iAddressCache;
+				strideActivationDramBlock = controlPacketReceived.strideActivationDramBlock;
 				maxPeRowID = controlPacketReceived.maxPeRowID;
+				numStripInRow = controlPacketReceived.numStripInRow;
 
-				#if defined(SPARSE_SYSTEM)
-					nextState = IA_BUFFER_STATE_COMPUTE_NUM_ACCESS;
-				#else
+				iterAccess = 0;
+				iStripInRow = 0;
+
+				if ((controlPacketReceived.controlBits & 0x3) == 0x0) // NOP
+				{
 					nextState = IA_BUFFER_STATE_PADD;
-                    numIAAccess = isLoad ?
-                                1 + ((controlPacketReceived.numTBCountPerStrip - 1) >> WIDE_SIZE_OFFSET)
-                              : controlPacketReceived.numTBCountPerStrip;
-					iterAccess = 0;
-					paddCount = 0;
-				#endif
+				}
+				else //Load or stream
+				{
+					#if defined(SPARSE_SYSTEM)
+						iAddressCache = controlPacketReceived.iAddressCache;
+						nextState = IA_BUFFER_STATE_COMPUTE_NUM_ACCESS;
+					#else
+						nextState = IA_BUFFER_STATE_ACCESS;
+	                    numIAAccess = (isLoad == TRUE)?
+	                                1 + ((controlPacketReceived.numTBCountPerStrip - 1) >> WIDE_SIZE_OFFSET)
+	                              : controlPacketReceived.numTBCountPerStrip;
+					#endif
 
-				EMULATOR_PRINT(("[kernelIABuffer %d] START processing instruction. isLoad=%d, isLast=%d, iAddressCache=%d, iActivationDramBlockAddressBase=%d, maxPeRowID=%d\n\n",
-				colID, isLoad, isLast, iAddressCache, iActivationDramBlockAddressBase, maxPeRowID));
+					EMULATOR_PRINT(("[kernelIABuffer %d] START processing instruction. isLoad=%d, isLast=%d, iActivationDramBlockAddressBase=%d, numStrips=%d, maxPeRowID=%d\n\n",
+				colID, isLoad, isLast, iActivationDramBlockAddressBase, numStripInRow, maxPeRowID));
+				}
+
 
 			}
 		} //IA_BUFFER_STATE_DECODE
 		#if defined(SPARSE_SYSTEM)
 			else if (currentState == IA_BUFFER_STATE_COMPUTE_NUM_ACCESS)
 			{
-				if (isLoad)
+				if (isLoad == TRUE)
 				{
 					if (dataReadSuccess == true)
 					{
@@ -719,30 +736,32 @@ __kernel void kernelIABuffer ()
 						numIAAccess = ((numIATransferBlocks & WIDE_SIZE_REMAINDER_MASK) != 0X0)
 							? (numIATransferBlocks >> WIDE_SIZE_OFFSET) + 1 : (numIATransferBlocks >> WIDE_SIZE_OFFSET);
 
+						iAddressCache++;
+
 						nextState = IA_BUFFER_STATE_ACCESS;
 					}
 				}
 				else
 				{
 					numIAAccess = cacheIAStreamBlockAddress[iAddressCache];
+					iAddressCache++;
 					nextState = IA_BUFFER_STATE_ACCESS;
 				}
 
 				iterAccess = 0;
-				paddCount = 0;
 			} //IA_BUFFER_STATE_COMPUTE_NUM_ACCESS
 		#endif
 		else if (currentState == IA_BUFFER_STATE_PADD)
 		{
-			paddCount++;
-			if (paddCount >= IA_BUFFER_PADD_COUNT)
+			iterAccess++;
+			if (iterAccess >= IA_BUFFER_PADD_COUNT)
 			{
-				nextState = IA_BUFFER_STATE_ACCESS;
+				nextState = IA_BUFFER_STATE_DECODE;
 			}
 		} //IA_BUFFER_STATE_PADD
 		else if (currentState == IA_BUFFER_STATE_ACCESS)
 		{
-			if (isLoad)
+			if (isLoad == TRUE)
 			{
 				if (dataReadSuccess)
 				{
@@ -757,7 +776,7 @@ __kernel void kernelIABuffer ()
 				t_transferblock_tagged taggedBlock;
 				taggedBlock.values = dramBlock.transferBlocks[iterAccess & WIDE_SIZE_REMAINDER_MASK];
 				taggedBlock.maxTransportID = maxPeRowID;
-				taggedBlock.isLast = isLast && ((iterAccess + 1) == numIAAccess);
+				taggedBlock.isLast = (isLast==TRUE) && ((iterAccess + 1) == numIAAccess) && ((iStripInRow+1) == numStripInRow);
 				bool success = write_channel_nb_intel(channel_activation[0][colID], taggedBlock);
 				if (success)
 				{
@@ -767,11 +786,29 @@ __kernel void kernelIABuffer ()
 
 			if (iterAccess == numIAAccess)
 			{
-				EMULATOR_PRINT(("[kernelIABuffer %d] FINISHED processing instruction. isLoad=%d, isLast=%d, iAddressCache=%d, iActivationDramBlockAddressBase=%d, maxPeRowID=%d\n\n",
-					colID, isLoad, isLast, iAddressCache, iActivationDramBlockAddressBase, maxPeRowID));
-				nextState = IA_BUFFER_STATE_DECODE;
+				nextState = IA_BUFFER_STATE_UPDATE_STRIP;
 			}
 		} //IA_BUFFER_STATE_ACCESS
+		else if (currentState == IA_BUFFER_STATE_UPDATE_STRIP)
+		{
+			iStripInRow++;
+			iterAccess = 0;
+			if ((iStripInRow) == numStripInRow)
+			{
+				EMULATOR_PRINT(("[kernelIABuffer %d] FINISHED processing instruction. isLoad=%d, isLast=%d, iActivationDramBlockAddressBase=%d, maxPeRowID=%d\n\n",
+					colID, isLoad, isLast, iActivationDramBlockAddressBase, maxPeRowID));
+				nextState = IA_BUFFER_STATE_DECODE;
+			}
+			else
+			{
+				iActivationDramBlockAddressBase += strideActivationDramBlock;
+				#if defined(SPARSE_SYSTEM)
+					nextState = IA_BUFFER_STATE_COMPUTE_NUM_ACCESS;
+				#else
+					nextState = IA_BUFFER_STATE_ACCESS;
+				#endif
+			}
+		}
 
 		currentState = nextState;
 	}
@@ -796,7 +833,7 @@ __kernel void kernelIATileController (unsigned short numGroupxTiles)
 	    //unsigned char kernelSize = tileControlPacketReceived.kernelSize;
 	    unsigned char stride = (tileControlPacketReceived.strideConcatKernelSize >> 0x4) & 0xF;
 	    unsigned char kernelSize = tileControlPacketReceived.strideConcatKernelSize & 0xF;
-        unsigned int numOutputPerCol = tileControlPacketReceived.numOutputPerCol;
+        unsigned int numOutputInstructions = tileControlPacketReceived.numOutputInstructions;
 	    unsigned char numActivePeCols = (tileControlPacketReceived.numActivePeColsConcatNumOutputChannelsInGroup >> 12) & 0xF;
 	    unsigned short numOutputChannelsInGroup = (tileControlPacketReceived.numActivePeColsConcatNumOutputChannelsInGroup) & 0xFFF;
 	    unsigned short strideStripIACache = tileControlPacketReceived.strideStripIACache; //S
@@ -807,25 +844,41 @@ __kernel void kernelIATileController (unsigned short numGroupxTiles)
 		/*
 		2. Send load instructions to the tile buffer
 		*/
-		unsigned char numStripsInTile = inputTileWidth * inputTileHeight;
-		unsigned char loadControlBits = (numActivePeCols-1) << 0x2;
+		unsigned short strideStripInCacheAcrossRow = strideStripIACache * ((unsigned short)(inputTileWidth));
+		unsigned char loadControlBits = ((numActivePeCols-1) << 0x2) | 0x1;;
 		//unsigned char iStripInTile = 0;
 		unsigned short iActivationDramBlockAddressBaseLoad = 0;
 		EMULATOR_PRINT(("[kernelIATileController] START sending the buffer refresh instructions for iTile=%d .\n\n", iTile));
-		for (unsigned char iStripInTile = 0; iStripInTile<numStripsInTile; iStripInTile++)
+		for (unsigned char iStripRowInTile = 0; iStripRowInTile<=inputTileHeight; iStripRowInTile++)
 		{
 			t_input_buffer_tile_buffer_packet tileBufferControlPacket;
 			tileBufferControlPacket.iActivationDramBlockAddressBase = iActivationDramBlockAddressBaseLoad;
-			tileBufferControlPacket.iAddressCache = iStripInTile;
-			tileBufferControlPacket.controlBits = loadControlBits;
+			
+			if (iStripRowInTile<inputTileHeight)
+			{
+				tileBufferControlPacket.controlBits = loadControlBits;
+			}
+			else
+			{
+				tileBufferControlPacket.controlBits = ((numActivePeCols-1) << 0x2);  //NOP
+			}
 
 			#if !defined(SPARSE_SYSTEM)
-		    tileBufferControlPacket.numTBCountPerStrip = numTBCountPerIAStrip;
+		    	tileBufferControlPacket.numTBCountPerStrip = numTBCountPerIAStrip;
+		    #else
+		    	tileBufferControlPacket.iAddressCache = iStripInTile;
 		    #endif
 
+		    tileBufferControlPacket.numStripInRow = inputTileWidth;
+		    tileBufferControlPacket.strideActivationDramBlock = strideStripIACache;
 
 			write_channel_intel(channel_control_to_ia_buffer[0], tileBufferControlPacket);
-			iActivationDramBlockAddressBaseLoad += strideStripIACache;
+
+			iActivationDramBlockAddressBaseLoad += strideStripInCacheAcrossRow;
+
+			//Skip maxPeRowID
+			
+
 			// bool success = write_channel_nb_intel(channel_control_to_ia_buffer[0], tileBufferControlPacket);
 			// if (success)
 			// {
@@ -843,32 +896,32 @@ __kernel void kernelIATileController (unsigned short numGroupxTiles)
 		unsigned short iFilterInGroup = 0;
 		unsigned char iInputTileWidth = 0;
 		unsigned char iInputTileHeight = 0;
-		unsigned char iKernelWidth = 0;
 		unsigned char iKernelHeight = 0;
-		unsigned char kernelSizeFlat = kernelSize * kernelSize;
 		//unsigned short numOutputs = (unsigned short) kernelSizeFlat * (unsigned short) numOutputTileHxW;
 		unsigned char iKernelSizeFlat = 0;
 		
 		//while (iFilterInGroup < numOutputChannelsInGroup)
-        for (unsigned int i=0; i<numOutputPerCol; i++)
+        for (unsigned int i=0; i<numOutputInstructions; i++)
 		{
 			unsigned char numActivePeRows = ((numOutputChannelsInGroup - iFilterInGroup) < (unsigned short) (PE_ROWS)) ?
 				(unsigned char) (numOutputChannelsInGroup - iFilterInGroup) : PE_ROWS;
 
-			unsigned char iStripInTile = (iInputTileHeight + iKernelHeight) * inputTileWidth + iInputTileWidth + iKernelWidth;
+			unsigned char iStripInTile = (iInputTileHeight + iKernelHeight) * inputTileWidth + iInputTileWidth;
 
 			t_input_buffer_tile_buffer_packet tileBufferControlPacket;
 			tileBufferControlPacket.iActivationDramBlockAddressBase = ((unsigned short) iStripInTile) * ((unsigned short) strideStripIACache);
-			tileBufferControlPacket.iAddressCache = iStripInTile;
 			tileBufferControlPacket.maxPeRowID = (numActivePeRows - 1);
 			#if !defined(SPARSE_SYSTEM)
 		    tileBufferControlPacket.numTBCountPerStrip = numTBCountPerIAStrip;
+		    #else
+		    tileBufferControlPacket.iAddressCache = iStripInTile;
 		    #endif
-			unsigned char isLastBit = ((iKernelSizeFlat+1) == kernelSizeFlat) ? 0x1 : 0x0;
+			unsigned char sendInstructionType = ((iKernelHeight+1)==kernelSize) ? 0x3 : 0x2; //If yes, then last, else, then regular
 			tileBufferControlPacket.controlBits =
-				isLastBit
-				| (0x1 << 0x1)
+				(sendInstructionType & 0x3)
 				| ((numActivePeCols-1) << 0x2);
+			tileBufferControlPacket.numStripInRow = kernelSize;
+			tileBufferControlPacket.strideActivationDramBlock = strideStripIACache;
 
 			//bool success = write_channel_nb_intel(channel_control_to_ia_buffer[0], tileBufferControlPacket);
 			write_channel_intel(channel_control_to_ia_buffer[0], tileBufferControlPacket);	
@@ -877,13 +930,11 @@ __kernel void kernelIATileController (unsigned short numGroupxTiles)
 			*/
 			//if (success)
 			//{
-				EMULATOR_PRINT(("[kernelIATileController] FINISHED sending the buffer stream instruction for iTile=%d, iFilterInGroup=%d, iInputTileHeight=%d, iInputTileWidth=%d, iKernelSizeFlat=%d, iStripInTile=%d. \n\n", 
-				iTile, iFilterInGroup, iInputTileHeight, iInputTileWidth, iKernelSizeFlat, iStripInTile));
-				if ((iKernelSizeFlat+1) == kernelSizeFlat)
+				EMULATOR_PRINT(("[kernelIATileController] FINISHED sending the buffer stream instruction for iTile=%d, iFilterInGroup=%d, iInputTileHeight=%d, iInputTileWidth=%d, iKernelHeight=%d, iStripInTile=%d. \n\n", 
+				iTile, iFilterInGroup, iInputTileHeight, iInputTileWidth, iKernelHeight, iStripInTile));
+				if ((iKernelHeight+1) == kernelSize)
 				{
-					iKernelWidth = 0;
 					iKernelHeight = 0;
-					iKernelSizeFlat = 0;
 
 					if ((iInputTileWidth + kernelSize) >= inputTileWidth)
 					{
@@ -906,16 +957,7 @@ __kernel void kernelIATileController (unsigned short numGroupxTiles)
 				}
 				else
 				{
-					iKernelSizeFlat++;
-					if ((iKernelWidth+1)==kernelSize)
-					{
-						iKernelWidth=0;
-						iKernelHeight++;
-					}
-					else
-					{
-						iKernelWidth++;
-					}
+					iKernelHeight++;
 				}
 			//}
 		}

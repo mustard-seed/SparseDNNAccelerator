@@ -43,7 +43,7 @@
 #define PROFILE
 #define PLAY
 #define TEST_TYPE TEST
-#define REPEAT 100
+#define REPEAT 1
 
 #if defined(C5SOC) //Hack for ARMv7, otherwise chrono won't work
 __asm__(".symver _ZNSt6chrono3_V212system_clock3nowEv,_ZNSt6chrono12system_clock3nowEv@GLIBCXX_3.4.11");
@@ -750,8 +750,8 @@ protected:
             //unsigned short numCompressionWindowsInputGroup
             kernelMemoryReader.setArg(48 , numCompressionWindowsInputGroup);
 
-            //unsigned short kernelSizexkernelSizexNumFilterFoldsInGroup
-            kernelMemoryReader.setArg(49 , cl_short ((cl_ushort)kernelSize*kernelSize*numFilterFoldsInGroup));
+            //unsigned short kernelSizexNumFilterFoldsInGroup
+            kernelMemoryReader.setArg(49 , cl_short ((cl_ushort)kernelSize*numFilterFoldsInGroup));
         }
 
         std::cout <<"5. Setting kernel arguments for the output writer."<<std::endl;
@@ -1135,12 +1135,12 @@ protected:
 #ifdef PLAY
 TEST_F (testFixture, play) {
 
-    unsigned char inputWidth = 64;
-    unsigned char inputHeight = 64;
-    unsigned char numInputChannel = 32;
+    unsigned char inputWidth = 5;
+    unsigned char inputHeight = 5;
+    unsigned char numInputChannel = 1;
     unsigned char widthBlockSize = 3;
-    unsigned char sizeOutputTileWidthPerColFul = 8;
-    unsigned char sizeOutputTileHeightFull = 8;
+    unsigned char sizeOutputTileWidthPerColFul = 2;
+    unsigned char sizeOutputTileHeightFull = 2;
     bool flagEnableRelu = true;
 
     launch(
