@@ -53,6 +53,14 @@ t_output_dram_block clusterCount2OutputDramBlock (unsigned short clusterCount);
 
 unsigned short outputDramBlock2ClusterCount (t_output_dram_block outputDramBlock);
 
+unsigned char getIsLast(t_transferblock_tagged blockTagged);
+
+unsigned char getMaxTransferID(t_transferblock_tagged blockTagged);
+
+void setIsLast (t_transferblock_tagged* pBlockTagged, unsigned char isLast);
+
+void setMaxTransferID (t_transferblock_tagged* pBlockTagged, unsigned char maxTransferID);
+
 #endif
 
 #endif

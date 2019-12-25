@@ -10,8 +10,8 @@
 #include "ihc_apint.h"
 #endif
 
-#define TRUE 0x1
-#define FALSE 0X0
+#define TRUE 0x01
+#define FALSE 0X00
 
 #ifdef INTELFPGA_CL
 //typedef short t_spValueAndZCount;
@@ -77,12 +77,13 @@ typedef struct {
 
 typedef struct __attribute__((packed)){
     t_transfer_block values;
-#ifdef INTELFPGA_CL
-    uint1_t isLast;
-#else
-    bool isLast;
-#endif
-    char maxTransportID;
+// #ifdef INTELFPGA_CL
+//     uint1_t isLast;
+// #else
+//     bool isLast;
+// #endif
+//     char maxTransportID;
+    unsigned char isLastConcatMaxTransportID;
 } t_transferblock_tagged;
 
 typedef struct __attribute__((packed)){

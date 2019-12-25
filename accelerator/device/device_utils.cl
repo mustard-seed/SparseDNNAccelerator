@@ -173,4 +173,26 @@ unsigned short outputDramBlock2ClusterCount (t_output_dram_block outputDramBlock
     return count;
 }
 
+unsigned char getIsLast(t_transferblock_tagged blockTagged)
+{
+    return (((blockTagged.isLastConcatMaxTransportID) >> 7) & 0x1);
+}
+
+unsigned char getMaxTransferID(t_transferblock_tagged blockTagged)
+{
+    return (blockTagged.isLastConcatMaxTransportID & 0x7F);
+}
+
+void setIsLast (t_transferblock_tagged* pBlockTagged, unsigned char isLast)
+{
+    pBlockTagged->isLastConcatMaxTransportID &= 0x07F;
+    pBlockTagged->isLastConcatMaxTransportID |= ((unsigned char)((isLast << 7) & 0x080));
+}
+
+void setMaxTransferID (t_transferblock_tagged* pBlockTagged, unsigned char maxTransferID)
+{
+    pBlockTagged->isLastConcatMaxTransportID &= 0x080;
+    pBlockTagged->isLastConcatMaxTransportID |= ((unsigned char)(maxTransferID & 0x07F));
+}
+
 #endif
