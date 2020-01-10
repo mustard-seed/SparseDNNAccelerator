@@ -40,7 +40,7 @@
 #define INT_WIDTH 3
 #define OUTPUT_INT_WIDTH 3
 
-//#define PROFILE
+#define PROFILE
 #define PLAY
 #define TEST_TYPE TEST
 #define REPEAT 1
@@ -108,7 +108,7 @@ protected:
     {
        cl_int status = CL_SUCCESS;
 #ifdef C5SOC
-        binaryFile = "device_utils.aocx";
+        binaryFile = "device_utils_profile.aocx";
         clPlatform = aocl_utils_cpp::findPlatform("Intel(R) FPGA SDK for OpenCL(TM)");
 #else
         binaryFile = "operandMatcher_c_model.aocx";
@@ -1137,10 +1137,10 @@ TEST_F (testFixture, play) {
 
     unsigned char inputWidth = 5;
     unsigned char inputHeight = 5;
-    unsigned char numInputChannel = 2;
+    unsigned char numInputChannel = 1;
     unsigned char widthBlockSize = 3;
-    unsigned char sizeOutputTileWidthPerColFul = 5;
-    unsigned char sizeOutputTileHeightFull = 5;
+    unsigned char sizeOutputTileWidthPerColFul = 2;
+    unsigned char sizeOutputTileHeightFull = 2;
     bool flagEnableRelu = true;
 
     launch(
