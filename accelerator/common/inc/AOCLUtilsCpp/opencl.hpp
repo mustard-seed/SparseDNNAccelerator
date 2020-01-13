@@ -30,13 +30,14 @@
 #include <string>
 #include <memory>
 
-#define CL_USE_DEPRECATED_OPENCL_1_2_APIS
-#define CL_HPP_ENABLE_PROGRAM_CONSTRUCTION_FROM_ARRAY_COMPATIBILITY
+//#define CL_USE_DEPRECATED_OPENCL_1_2_APIS
+//#define CL_HPP_ENABLE_PROGRAM_CONSTRUCTION_FROM_ARRAY_COMPATIBILITY
+#define CL_TARGET_OPENCL_VERSION 200
 
 #ifdef C5SOC
 #include "CL/cl.hpp"
 #else
-#include "CL/cl2.hpp"
+#include "CL/cl.hpp"
 #endif
 
 // This is assumed to be externally provided by the application.
@@ -84,7 +85,7 @@ cl::Platform findPlatform(const std::string platform_name_search);
 // Create a OpenCL program from a binary file.
 // The program is created for all given devices associated with the context. The same
 // binary is used for all devices.
-cl::Program createProgramFromBinary(cl::Context context, const char *binary_file_name, std::vector<cl::Device> devices);
+cl::Program createProgramFromBinary(const cl::Context& context, const char *binary_file_name, const std::vector<cl::Device> &devices);
 
 // Checks if a file exists.
 bool fileExists(const char *file_name);

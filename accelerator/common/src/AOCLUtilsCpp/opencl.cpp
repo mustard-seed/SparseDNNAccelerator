@@ -323,8 +323,7 @@ cl::Platform findPlatform(const std::string platform_name_search) {
 }
 
 // Create a program for all devices associated with the context.
-cl::Program createProgramFromBinary(
-        cl::Context context, const char *binary_file_name, std::vector<cl::Device> devices) {
+cl::Program createProgramFromBinary(const cl::Context &context, const char *binary_file_name, const std::vector<cl::Device> &devices) {
   // Early exit for potentially the most common way to fail: AOCX does not exist.
   if(!fileExists(binary_file_name)) {
     printf("AOCX file '%s' does not exist.\n", binary_file_name);
@@ -342,7 +341,7 @@ cl::Program createProgramFromBinary(
   ::std::string prog(std::istreambuf_iterator<char>(aocx_stream),
                    (std::istreambuf_iterator<char>()));
 
-  cl::Program::Binaries binaries(num_devices, ::std::make_pair(prog.::std::string::c_str(), prog.length()+1));
+  cl::Program::Binaries binaries (num_devices, ::std::make_pair(prog.c_str(), prog.length()));
 
   cl_int status;
   ::std::vector<cl_int> binary_status;

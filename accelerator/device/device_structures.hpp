@@ -77,22 +77,18 @@ typedef struct {
 
 typedef struct __attribute__((packed)){
     t_transfer_block values;
-#ifdef INTELFPGA_CL
-    uint1_t isLast;
-#else
-    bool isLast;
-#endif
-    char maxTransportID;
+    
+    unsigned char isLastConcatMaxTransportID;
 } t_transferblock_tagged;
 
-typedef struct __attribute__((packed)){
-    t_transfer_block values;
-#ifdef INTELFPGA_CL
-    uint1_t isLast;
-#else
-    bool isLast;
-#endif
-} t_transferblock_local;
+// typedef struct __attribute__((packed)){
+//     t_transfer_block values;
+// #ifdef INTELFPGA_CL
+//     uint1_t isLast;
+// #else
+//     bool isLast;
+// #endif
+// } t_transferblock_local;
 
 #ifdef INTELFPGA_CL
 /*

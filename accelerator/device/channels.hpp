@@ -19,13 +19,12 @@ channel t_transferblock_tagged channel_weight[PE_ROWS][PE_COLS]  __attribute__((
 
 channel t_accumulator channel_drain[PE_ROWS][PE_COLS] __attribute__((depth(1)));
 
-channel t_operand channel_processedDrain __attribute__((depth(0)));
 //#endif
 #ifdef PE_SYSTEM
 
 
-channel t_transferblock_local channel_dpWeightInput[PE_ROWS][PE_COLS] __attribute__((depth(PE_VEC_FIFO_SIZE)));
-channel t_transferblock_local channel_dpActivationInput[PE_ROWS][PE_COLS] __attribute__((depth(PE_VEC_FIFO_SIZE)));
+channel t_transferblock_tagged channel_dpWeightInput[PE_ROWS][PE_COLS] __attribute__((depth(PE_VEC_FIFO_SIZE)));
+channel t_transferblock_tagged channel_dpActivationInput[PE_ROWS][PE_COLS] __attribute__((depth(PE_VEC_FIFO_SIZE)));
 
 channel t_accumulator channel_peDrainOutput[PE_ROWS][PE_COLS] __attribute__((depth(0)));
 #endif

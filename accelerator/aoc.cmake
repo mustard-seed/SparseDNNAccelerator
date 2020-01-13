@@ -56,7 +56,7 @@ function (add_aoc_target)
             set (target_name_local "${add_aoc_target_TARGET_NAME}_aoc_emulation")
 
                 list (APPEND occflags
-                        -march=emulator -legacy-emulator
+                        -march=emulator
                         -emulator-channel-depth-model=strict
                         -DEMULATOR
                         -g

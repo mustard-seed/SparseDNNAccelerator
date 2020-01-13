@@ -44,6 +44,7 @@
 #define PLAY
 #define TEST_TYPE TEST
 #define REPEAT 1
+#define EMULATE
 
 #if defined(C5SOC) //Hack for ARMv7, otherwise chrono won't work
 __asm__(".symver _ZNSt6chrono3_V212system_clock3nowEv,_ZNSt6chrono12system_clock3nowEv@GLIBCXX_3.4.11");
@@ -112,7 +113,11 @@ protected:
         clPlatform = aocl_utils_cpp::findPlatform("Intel(R) FPGA SDK for OpenCL(TM)");
 #else
         binaryFile = "operandMatcher_c_model.aocx";
+#if defined(EMULATE)
+        clPlatform = aocl_utils_cpp::findPlatform("Intel(R) FPGA Emulation Platform for OpenCL(TM)");
+#else
         clPlatform = aocl_utils_cpp::findPlatform("Intel(R) FPGA SDK for OpenCL(TM)");
+#endif
 #endif
 
         //Setup and platform and the context
@@ -1135,12 +1140,12 @@ protected:
 #ifdef PLAY
 TEST_F (testFixture, play) {
 
-    unsigned char inputWidth = 5;
-    unsigned char inputHeight = 5;
+    unsigned char inputWidth = 2;
+    unsigned char inputHeight = 2;
     unsigned char numInputChannel = 1;
     unsigned char widthBlockSize = 3;
-    unsigned char sizeOutputTileWidthPerColFul = 2;
-    unsigned char sizeOutputTileHeightFull = 2;
+    unsigned char sizeOutputTileWidthPerColFul = 1;
+    unsigned char sizeOutputTileHeightFull = 1;
     bool flagEnableRelu = true;
 
     launch(
