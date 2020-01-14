@@ -1300,17 +1300,17 @@ __kernel void kernelOutputWriter (
 #endif //MEMORY_WRITER 
 
 #ifdef OA_MEMORY
-#define OA_BUFFER_STATE_DECODE 0x0
-#define OA_BUFFER_STATE_NUM_ACCESS 0x1
-#define OA_BUFFER_STATE_PADD 0x2 //NOP instructions
-#define OA_BUFFER_STATE_ACCESS 0x3
+#define OA_BUFFER_STATE_DECODE 0x1
+#define OA_BUFFER_STATE_NUM_ACCESS 0x2
+#define OA_BUFFER_STATE_PADD 0x4 //NOP instructions
+#define OA_BUFFER_STATE_ACCESS 0x8
 #define OA_BUFFER_PAD_COUNT	 2
 __attribute__((max_global_work_dim(0)))
 __attribute__((autorun))
 __attribute__((num_compute_units(PE_COLS)))
 __kernel void kernelOABuffer ()
 {
-	typedef uint2_t t_state;
+	typedef uint4_t t_state;
 
 	int colID = get_compute_id(0);
 	char cacheOutputActivations[OA_CACHE_SIZE] __attribute__((numbanks(1)));
@@ -1715,15 +1715,15 @@ __kernel void kernelOAControlTee ()
 }
 
 
-#define STATE_OA_TEE_DRAIN_SELF 0x0
-#define STATE_OA_TEE_DRAIN_SELF_SEND_COUNT 0X1
-#define STATE_OA_TEE_DRAIN_OTHERS 0x2
+#define STATE_OA_TEE_DRAIN_SELF 0x1
+#define STATE_OA_TEE_DRAIN_SELF_SEND_COUNT 0X2
+#define STATE_OA_TEE_DRAIN_OTHERS 0x4
 __attribute__((max_global_work_dim(0)))
 __attribute__((autorun))
 __attribute__((num_compute_units(PE_COLS)))
 __kernel void kernelOATee ()
 {
-	typedef uint2_t t_state;
+	typedef uint3_t t_state;
 	int colID = get_compute_id(0);
 
 	while (true)
@@ -1895,13 +1895,13 @@ __kernel void kernelFilterTee ()
 	}
 }
 
-#define STATE_FILTER_STREAMER_WRITE_CACHE_SETUP_CONTROL 0X0
-#define STATE_FILTER_STREAMER_WRITE_CACHE_WRITE 0X1
-#define STATE_FILTER_STREAMER_WRITE_CACHE_WAIT 0X2
+#define STATE_FILTER_STREAMER_WRITE_CACHE_SETUP_CONTROL 0X1
+#define STATE_FILTER_STREAMER_WRITE_CACHE_WRITE 0X2
+#define STATE_FILTER_STREAMER_WRITE_CACHE_WAIT 0X4
 
-#define STATE_FILTER_STREAMER_READ_CACHE_SETUP 0X0
-#define STATE_FILTER_STREAMER_READ_CACHE_READ 0X1
-#define STATE_FILTER_STREAMER_READ_CACHE_WAIT 0X2
+#define STATE_FILTER_STREAMER_READ_CACHE_SETUP 0X1
+#define STATE_FILTER_STREAMER_READ_CACHE_READ 0X2
+#define STATE_FILTER_STREAMER_READ_CACHE_WAIT 0X4
 
 /*! kernelFilterStreamer
 	\brief Stream filter values to the PE array
@@ -1913,7 +1913,7 @@ __kernel void kernelFilterBuffer ()
 {
 	int rowID = get_compute_id(0);
 
-	typedef uint2_t t_state;
+	typedef uint3_t t_state;
 	//important to size the bankwidth, otherwise the default 32 bit will be used, resulting in complex store logic
 	t_dram_block cacheNzBlocks [2][KERNEL_CACHE_DEPTH] __attribute__((bankwidth(BURST_SIZE_BYTE))); 
 	uint1_t regWriteSide = 0x0;
@@ -2115,8 +2115,8 @@ __kernel void kernelWeightTransport (
 	int idy = IDY;
 #endif
 
-	//while (true)
-	//{
+	while (true)
+	{
 
 		#ifdef FULL_SYSTEM
 					EMULATOR_PRINT(("[WEIGHT TRANSPORT (%d, %d)] Waiting weight/bias transfer block.\n", idy, idx));
@@ -2162,12 +2162,12 @@ __kernel void kernelWeightTransport (
 			write_channel_intel(channel_dpWeightInput[0][0], block); 
 		#endif
 
-	//}
+	}
 }
 
-#define STATE_ACTIVATION_TRANSPORT_READ 0X0
-#define STATE_ACTIVATION_TRANSPORT_DRAIN_SELF 0x1
-#define STATE_ACTIVATION_TRANSPORT_DRAIN_OTHERS 0x2
+#define STATE_ACTIVATION_TRANSPORT_READ 0X1
+#define STATE_ACTIVATION_TRANSPORT_DRAIN_SELF 0x2
+#define STATE_ACTIVATION_TRANSPORT_DRAIN_OTHERS 0x4
 
 __attribute__((task))
 __attribute__((max_global_work_dim(0)))
@@ -2177,7 +2177,7 @@ __attribute__((num_compute_units(PE_ROWS, PE_COLS)))
 __attribute__ ((autorun))
 __kernel void kernelActivationTransport ()
 {
-	typedef uint2_t t_state;
+	typedef uint3_t t_state;
 
 #ifdef FULL_SYSTEM
 	int idx = get_compute_id(1);
@@ -2849,11 +2849,11 @@ __kernel void kernelPE ()
 } // end of kernel
 #else //SPARSE_SYSTEM
 
-#define DENSE_PE_INSTRUCTION_BIAS_FROM_CH 0x0
-#define DENSE_PE_INSTRUCTION_W_FROM_CH_A_FROM_CH_MAC 0X1
-#define DENSE_PE_INSTRUCTION_W_FROM_R_A_FROM_CH_MAC 0X2
-#define DENSE_PE_INSTRUCTION_W_FROM_CH_A_FROM_R_MAC 0X3
-#define DENSE_PE_INSTRUCTION_COMMIT 0X4
+#define DENSE_PE_INSTRUCTION_BIAS_FROM_CH 0x1
+#define DENSE_PE_INSTRUCTION_W_FROM_CH_A_FROM_CH_MAC 0X2
+#define DENSE_PE_INSTRUCTION_W_FROM_R_A_FROM_CH_MAC 0X4
+#define DENSE_PE_INSTRUCTION_W_FROM_CH_A_FROM_R_MAC 0X8
+#define DENSE_PE_INSTRUCTION_COMMIT 0X10
 
 __attribute__((task))
 __attribute__((max_global_work_dim(0)))
@@ -2868,7 +2868,7 @@ __kernel void kernelDensePE ()
 	int idx = get_compute_id(1);
 	int idy = get_compute_id(0);
 #endif
-	typedef unsigned char instruction_t;
+	typedef uint5_t instruction_t;
 	//====================registers===============
 	t_transfer_block regActivationTB;
 	t_transfer_block regWeightTB;

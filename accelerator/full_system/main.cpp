@@ -41,9 +41,9 @@
 #define OUTPUT_INT_WIDTH 3
 
 //#define PROFILE
-//#define PLAY
+#define PLAY
 #define TEST_TYPE TEST
-#define REPEAT 20
+#define REPEAT 1
 #define EMULATE
 
 #if defined(C5SOC) //Hack for ARMv7, otherwise chrono won't work
