@@ -2115,14 +2115,14 @@ __kernel void kernelWeightTransport (
 	int idy = IDY;
 #endif
 
-	while (true)
-	{
+	//while (true)
+	//{
 
-		// #ifdef FULL_SYSTEM
-		// 			EMULATOR_PRINT(("[WEIGHT TRANSPORT (%d, %d)] Waiting weight/bias transfer block.\n", idy, idx));
-		// #else
-		// 			EMULATOR_PRINT(("[WEIGHT TRANSPORT] Waiting weight/bias transfer block. \n"));
-		// #endif
+		#ifdef FULL_SYSTEM
+					EMULATOR_PRINT(("[WEIGHT TRANSPORT (%d, %d)] Waiting weight/bias transfer block.\n", idy, idx));
+		#else
+					EMULATOR_PRINT(("[WEIGHT TRANSPORT] Waiting weight/bias transfer block. \n"));
+		#endif
 
 			t_transferblock_tagged block;
 
@@ -2162,7 +2162,7 @@ __kernel void kernelWeightTransport (
 			write_channel_intel(channel_dpWeightInput[0][0], block); 
 		#endif
 
-	}
+	//}
 }
 
 #define STATE_ACTIVATION_TRANSPORT_READ 0X0
@@ -2935,16 +2935,24 @@ __kernel void kernelDensePE ()
 		switch (currentInstruction) {
 
 			case (DENSE_PE_INSTRUCTION_BIAS_FROM_CH):{
+				// if ((idx == 0) && (idy == 0))
+				// {
+				// 	#ifdef FULL_SYSTEM
+				// 		EMULATOR_PRINT(("[PE (%d, %d)] Attempting to load bias.\n", idy, idx));
+				// 	#else
+				// 		EMULATOR_PRINT(("[PE] Attempting to load bias.\n"));
+				// 	#endif
+				// }
 				if (readWSuccess == true) {
 					pSum = transferBlock2Bias(tempWTBLocal.values);
 
-#ifdef FULL_SYSTEM
-			EMULATOR_PRINT(("[PE (%d, %d)] Load Bias.\n", idy, idx));
-#else
-			EMULATOR_PRINT(("[PE] Load Bias\n"));
-#endif
-
 					tempInstruction = DENSE_PE_INSTRUCTION_W_FROM_CH_A_FROM_CH_MAC;
+
+					#ifdef FULL_SYSTEM
+						EMULATOR_PRINT(("[PE (%d, %d)] Loaded bias.\n", idy, idx));
+					#else
+						EMULATOR_PRINT(("[PE] Loaded bias.\n"));
+					#endif
 				}
 			} //DENSE_PE_INSTRUCTION_BIAS_FROM_CH
 			break;
@@ -3088,28 +3096,28 @@ __kernel void kernelDensePE ()
 		//MAC
 		if (performMAC == true)
 		{
-// #ifdef FULL_SYSTEM
-// 						EMULATOR_PRINT(("[PE MAC (%d %d)] weight [0-3]: %#04x %#04x %#04x %#04x. act [0-3]: %#04x %#04x %#04x %#04x \n",
-// 								idy, idx,
-// 								simdWeights.values[0] & 0xFF, 
-// 								simdWeights.values[1] & 0xFF,
-// 								simdWeights.values[2] & 0xFF,
-// 								simdWeights.values[3] & 0xFF,
-// 								simdActivations.values[0] & 0xFF, 
-// 								simdActivations.values[1] & 0xFF,
-// 								simdActivations.values[2] & 0xFF,
-// 								simdActivations.values[3] & 0xFF));
-// #else
-// 						EMULATOR_PRINT(("[PE MAC] weight [0-3]: %#04x %#04x %#04x %#04x. act [0-3]: %#04x %#04x %#04x %#04x \n",
-// 								simdWeights.values[0] & 0xFF, 
-// 								simdWeights.values[1] & 0xFF,
-// 								simdWeights.values[2] & 0xFF,
-// 								simdWeights.values[3] & 0xFF,
-// 								simdActivations.values[0] & 0xFF, 
-// 								simdActivations.values[1] & 0xFF,
-// 								simdActivations.values[2] & 0xFF,
-// 								simdActivations.values[3] & 0xFF));
-// #endif
+#ifdef FULL_SYSTEM
+						EMULATOR_PRINT(("[PE (%d,%d)] MAC: weight [0-3]: %#04x %#04x %#04x %#04x. act [0-3]: %#04x %#04x %#04x %#04x \n",
+								idy, idx,
+								simdWeights.values[0] & 0xFF, 
+								simdWeights.values[1] & 0xFF,
+								simdWeights.values[2] & 0xFF,
+								simdWeights.values[3] & 0xFF,
+								simdActivations.values[0] & 0xFF, 
+								simdActivations.values[1] & 0xFF,
+								simdActivations.values[2] & 0xFF,
+								simdActivations.values[3] & 0xFF));
+#else
+						EMULATOR_PRINT(("[PE] MAC: weight [0-3]: %#04x %#04x %#04x %#04x. act [0-3]: %#04x %#04x %#04x %#04x \n",
+								simdWeights.values[0] & 0xFF, 
+								simdWeights.values[1] & 0xFF,
+								simdWeights.values[2] & 0xFF,
+								simdWeights.values[3] & 0xFF,
+								simdActivations.values[0] & 0xFF, 
+								simdActivations.values[1] & 0xFF,
+								simdActivations.values[2] & 0xFF,
+								simdActivations.values[3] & 0xFF));
+#endif
 			t_accumulator tempPSum = madd(simdActivations, simdWeights);
 			pSum += tempPSum;
 		}

@@ -40,10 +40,10 @@
 #define INT_WIDTH 3
 #define OUTPUT_INT_WIDTH 3
 
-#define PROFILE
-#define PLAY
+//#define PROFILE
+//#define PLAY
 #define TEST_TYPE TEST
-#define REPEAT 1
+#define REPEAT 20
 #define EMULATE
 
 #if defined(C5SOC) //Hack for ARMv7, otherwise chrono won't work
@@ -109,7 +109,7 @@ protected:
     {
        cl_int status = CL_SUCCESS;
 #ifdef C5SOC
-        binaryFile = "device_utils_profile.aocx";
+        binaryFile = "device_utils.aocx";
         clPlatform = aocl_utils_cpp::findPlatform("Intel(R) FPGA SDK for OpenCL(TM)");
 #else
         binaryFile = "operandMatcher_c_model.aocx";
@@ -1140,12 +1140,12 @@ protected:
 #ifdef PLAY
 TEST_F (testFixture, play) {
 
-    unsigned char inputWidth = 2;
-    unsigned char inputHeight = 2;
-    unsigned char numInputChannel = 1;
+    unsigned char inputWidth = 5;
+    unsigned char inputHeight = 5;
+    unsigned char numInputChannel = 2;
     unsigned char widthBlockSize = 3;
-    unsigned char sizeOutputTileWidthPerColFul = 1;
-    unsigned char sizeOutputTileHeightFull = 1;
+    unsigned char sizeOutputTileWidthPerColFul = 2;
+    unsigned char sizeOutputTileHeightFull = 2;
     bool flagEnableRelu = true;
 
     launch(
