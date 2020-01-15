@@ -1417,7 +1417,8 @@ __kernel void kernelOABuffer ()
 			if (isDrainBuffer == FALSE) //Case: draining the array
 			{
 				bool readSuccess = false;
-				t_accumulator wideOutput = read_channel_nb_intel(channel_drain[0][colID], &readSuccess);
+				t_conv_drain_tagged wideOutputTagged = read_channel_nb_intel(channel_drain[0][colID], &readSuccess);
+				t_accumulator wideOutput = wideOutputTagged.value;
 				
 				if (readSuccess == true) {
 					t_operand shortOutput = modifyOutput(wideOutput, numAccumulatorBitsToRightShift, enableRelu);
@@ -2165,11 +2166,6 @@ __kernel void kernelWeightTransport (
 	}
 }
 
-#define STATE_ACTIVATION_TRANSPORT_READ 0X1
-#define STATE_ACTIVATION_TRANSPORT_DRAIN_SELF 0x2
-#define STATE_ACTIVATION_TRANSPORT_DRAIN_OTHERS 0x4
-
-__attribute__((task))
 __attribute__((max_global_work_dim(0)))
 #ifdef FULL_SYSTEM
 __attribute__((num_compute_units(PE_ROWS, PE_COLS)))
@@ -2177,120 +2173,251 @@ __attribute__((num_compute_units(PE_ROWS, PE_COLS)))
 __attribute__ ((autorun))
 __kernel void kernelActivationTransport ()
 {
-	typedef uint3_t t_state;
-
-#ifdef FULL_SYSTEM
-	int idx = get_compute_id(1);
-	int idy = get_compute_id(0);
-#else
-	int idx = IDX;
-	int idy = IDY;
-#endif
-
-	t_state state = STATE_ACTIVATION_TRANSPORT_READ;
-	unsigned char numOtherPSumToDrain;
-	unsigned char countOtherPSum;
+	#ifdef FULL_SYSTEM
+		int idx = get_compute_id(1);
+		int idy = get_compute_id(0);
+	#else
+		int idx = IDX;
+		int idy = IDY;
+	#endif
 
 	while (true)
 	{
-		t_state nextState = state;
-		t_accumulator pSum;
-		if (state == STATE_ACTIVATION_TRANSPORT_READ)
-		{
-			t_transferblock_tagged block;
-#ifdef FULL_SYSTEM
+		t_transferblock_tagged block;
+
+		//Read incoming activaiton transfer blocks
+		#ifdef FULL_SYSTEM
 			block = read_channel_intel(channel_activation[idy][idx]);
-#else
+		#else
 			block = read_channel_intel(channel_activation[0][0]);
-#endif
+		#endif
 
-			unsigned char maxTransportID = getMaxTransferID(block);
 
-			if (idy < (PE_ROWS - 1)){
-				if ( idy < maxTransportID ) {
-					//EMULATOR_PRINT ( ("[kernelWeightTransport]: Waiting to pass an activation block to the output\n") );
-#ifdef FULL_SYSTEM
-			write_channel_intel(channel_activation[idy+1][idx], block);
-#else
-			write_channel_intel(channel_activation[0][1], block);
-#endif
-				}
+		//Determine whether the block should be passed to the next PE on the column
+		unsigned char maxTransportID = getMaxTransferID(block);
+
+		if (idy < (PE_ROWS - 1)){
+			if ( idy < maxTransportID ) {
+				//EMULATOR_PRINT ( ("[kernelWeightTransport]: Waiting to pass an activation block to the output\n") );
+				#ifdef FULL_SYSTEM
+							write_channel_intel(channel_activation[idy+1][idx], block);
+				#else
+							write_channel_intel(channel_activation[0][1], block);
+				#endif
 			}
+		}
 
-			unsigned char isLastTemp = getIsLast(block);
-
-			if (isLastTemp == TRUE)
-			{
-#ifdef FULL_SYSTEM
-			EMULATOR_PRINT(("[ACTIVATION TRANSPORT (%d, %d)] End of activation compression window detected.\n\n", idy, idx));
-#else
-			EMULATOR_PRINT(("[ACTIVATION TRANSPORT] End of activation compression window detected.\n\n"));
-#endif
-				nextState = STATE_ACTIVATION_TRANSPORT_DRAIN_SELF;	
-				numOtherPSumToDrain = getMaxTransferID(block) - (unsigned char) idy;
-				countOtherPSum = 0;
-			}
-
-#ifdef FULL_SYSTEM
+		#ifdef FULL_SYSTEM
 			write_channel_intel(channel_dpActivationInput[idy][idx], block);
-#else
+		#else
 			write_channel_intel(channel_dpActivationInput[0][0], block);
-#endif
-			 
+		#endif
 
-		} //STATE_ACTIVATION_TRANSPORT_READ
-		else if (state == STATE_ACTIVATION_TRANSPORT_DRAIN_SELF)
+		unsigned char isLastTemp = getIsLast(block);
+
+		if (isLastTemp == TRUE)
 		{
+			#ifdef FULL_SYSTEM
+						EMULATOR_PRINT(("[ACTIVATION TRANSPORT (%d, %d)] End of activation compression window detected.\n\n", idy, idx));
+			#else
+						EMULATOR_PRINT(("[ACTIVATION TRANSPORT] End of activation compression window detected.\n\n"));
+			#endif	
+
+			unsigned char isLastDrain = (maxTransportID == idy) ? TRUE : FALSE;
+
+			write_channel_intel(channel_drain_token[idy][idx], isLastDrain);
+		}
+	} //while
+}
+
+#define STATE_DRAIN_TRANSPORT_DRAIN_SELF 0X1
+#define STATE_DRAIN_TRANSPORT_DRAIN_OTHERS 0x2
+__attribute__((max_global_work_dim(0)))
 #ifdef FULL_SYSTEM
-			pSum = read_channel_intel(channel_peDrainOutput[idy][idx]);
-			EMULATOR_PRINT(("[ACTIVATION TRANSPORT (%d, %d)] Drained from PE\n\n", idy, idx));
-#else
-			pSum = read_channel_intel(channel_peDrainOutput[0][0]);
-			EMULATOR_PRINT(("[ACTIVATION TRANSPORT] Drained from PE\n\n"));
+__attribute__((num_compute_units(PE_ROWS, PE_COLS)))
 #endif
-			if (countOtherPSum == numOtherPSumToDrain)
+__attribute__ ((autorun))
+__kernel void kernelDrainTransport ()
+{
+	#ifdef FULL_SYSTEM
+		int idx = get_compute_id(1);
+		int idy = get_compute_id(0);
+	#else
+		int idx = IDX;
+		int idy = IDY;
+	#endif
+
+	typedef uint2_t t_drain_state;
+
+	t_drain_state drainState = STATE_DRAIN_TRANSPORT_DRAIN_SELF;
+
+	while (true)
+	{
+		t_conv_drain_tagged drainTransportBlock;
+		t_drain_state tempState = drainState;
+
+		//Drain from PE and get the initialization
+		if (drainState == STATE_DRAIN_TRANSPORT_DRAIN_SELF)
+		{
+			//Read the drain token and the PE output
+			t_accumulator peResult = read_channel_intel(channel_peDrainOutput[idy][idx]);
+			unsigned char isLastDrain = read_channel_intel(channel_drain_token[idy][idx]);
+			drainTransportBlock.isLast = isLastDrain;
+			drainTransportBlock.value = peResult;
+
+			if ((isLastDrain == FALSE) && (idy < (PE_ROWS - 1) ))
 			{
-				nextState = STATE_ACTIVATION_TRANSPORT_READ;
+				tempState = STATE_DRAIN_TRANSPORT_DRAIN_OTHERS;
 			}
 			else
 			{
-				nextState = STATE_ACTIVATION_TRANSPORT_DRAIN_OTHERS;
+				tempState = STATE_DRAIN_TRANSPORT_DRAIN_SELF;
 			}
-		} //STATE_ACTIVATION_TRANSPORT_DRAIN_SELF
-		else if (state == STATE_ACTIVATION_TRANSPORT_DRAIN_OTHERS)
-		{
-			//TODO: change the following in deply
-#ifdef FULL_SYSTEM
-			if (idy < PE_ROWS - 1)
-			{
-				pSum = read_channel_intel(channel_drain[idy+1][idx]);
-				EMULATOR_PRINT(("[ACTIVATION TRANSPORT (%d, %d)] Drained from others. %d more to drain\n\n", idy, idx, numOtherPSumToDrain-countOtherPSum-1));
-			}
-#else
-				pSum = read_channel_intel(channel_drain[1][0]);
-				EMULATOR_PRINT(("[ACTIVATION TRANSPORT] Drained from others. %d more to drain\n\n", idy, idx, numOtherPSumToDrain-countOtherPSum-1));
-#endif
-			countOtherPSum++;
-			if (countOtherPSum == numOtherPSumToDrain)
-			{
-				nextState = STATE_ACTIVATION_TRANSPORT_READ;
-			} 
-		} //STATE_ACTIVATION_TRANSPORT_DRAIN_OTHERS
-
-		if ((state == STATE_ACTIVATION_TRANSPORT_DRAIN_OTHERS) 
-			|| 
-			(state == STATE_ACTIVATION_TRANSPORT_DRAIN_SELF))
-		{
-#ifdef FULL_SYSTEM
-			write_channel_intel(channel_drain[idy][idx], pSum);
-#else
-			write_channel_intel(channel_drain[0][0], pSum);
-#endif
 		}
+		else if (drainState == STATE_DRAIN_TRANSPORT_DRAIN_OTHERS)
+		{
+			if (idy < (PE_ROWS - 1))
+			{
+				drainTransportBlock = read_channel_intel(channel_drain[idy+1][idx]);
+				if (drainTransportBlock.isLast == TRUE)
+				{
+					tempState = STATE_DRAIN_TRANSPORT_DRAIN_SELF;
+				}
 
-		state = nextState;
+			}
+		}
+		write_channel_intel(channel_drain[idy][idx], drainTransportBlock);
+		drainState = tempState;
 	}
 }
+
+
+
+// #define STATE_ACTIVATION_TRANSPORT_READ 0X1
+// #define STATE_ACTIVATION_TRANSPORT_DRAIN_SELF 0x2
+// #define STATE_ACTIVATION_TRANSPORT_DRAIN_OTHERS 0x4
+
+// __attribute__((max_global_work_dim(0)))
+// #ifdef FULL_SYSTEM
+// __attribute__((num_compute_units(PE_ROWS, PE_COLS)))
+// #endif
+// __attribute__ ((autorun))
+// __kernel void kernelActivationTransport ()
+// {
+// 	typedef uint3_t t_state;
+
+// #ifdef FULL_SYSTEM
+// 	int idx = get_compute_id(1);
+// 	int idy = get_compute_id(0);
+// #else
+// 	int idx = IDX;
+// 	int idy = IDY;
+// #endif
+
+// 	t_state state = STATE_ACTIVATION_TRANSPORT_READ;
+// 	unsigned char numOtherPSumToDrain;
+// 	unsigned char countOtherPSum;
+
+// 	while (true)
+// 	{
+// 		t_state nextState = state;
+// 		t_accumulator pSum;
+// 		if (state == STATE_ACTIVATION_TRANSPORT_READ)
+// 		{
+// 			t_transferblock_tagged block;
+// #ifdef FULL_SYSTEM
+// 			block = read_channel_intel(channel_activation[idy][idx]);
+// #else
+// 			block = read_channel_intel(channel_activation[0][0]);
+// #endif
+
+// 			unsigned char maxTransportID = getMaxTransferID(block);
+
+// 			if (idy < (PE_ROWS - 1)){
+// 				if ( idy < maxTransportID ) {
+// 					//EMULATOR_PRINT ( ("[kernelWeightTransport]: Waiting to pass an activation block to the output\n") );
+// #ifdef FULL_SYSTEM
+// 			write_channel_intel(channel_activation[idy+1][idx], block);
+// #else
+// 			write_channel_intel(channel_activation[0][1], block);
+// #endif
+// 				}
+// 			}
+
+// 			unsigned char isLastTemp = getIsLast(block);
+
+// 			if (isLastTemp == TRUE)
+// 			{
+// #ifdef FULL_SYSTEM
+// 			EMULATOR_PRINT(("[ACTIVATION TRANSPORT (%d, %d)] End of activation compression window detected.\n\n", idy, idx));
+// #else
+// 			EMULATOR_PRINT(("[ACTIVATION TRANSPORT] End of activation compression window detected.\n\n"));
+// #endif
+// 				nextState = STATE_ACTIVATION_TRANSPORT_DRAIN_SELF;	
+// 				numOtherPSumToDrain = getMaxTransferID(block) - (unsigned char) idy;
+// 				countOtherPSum = 0;
+// 			}
+
+// #ifdef FULL_SYSTEM
+// 			write_channel_intel(channel_dpActivationInput[idy][idx], block);
+// #else
+// 			write_channel_intel(channel_dpActivationInput[0][0], block);
+// #endif
+			 
+
+// 		} //STATE_ACTIVATION_TRANSPORT_READ
+// 		else if (state == STATE_ACTIVATION_TRANSPORT_DRAIN_SELF)
+// 		{
+// #ifdef FULL_SYSTEM
+// 			pSum = read_channel_intel(channel_peDrainOutput[idy][idx]);
+// 			EMULATOR_PRINT(("[ACTIVATION TRANSPORT (%d, %d)] Drained from PE\n\n", idy, idx));
+// #else
+// 			pSum = read_channel_intel(channel_peDrainOutput[0][0]);
+// 			EMULATOR_PRINT(("[ACTIVATION TRANSPORT] Drained from PE\n\n"));
+// #endif
+// 			if (countOtherPSum == numOtherPSumToDrain)
+// 			{
+// 				nextState = STATE_ACTIVATION_TRANSPORT_READ;
+// 			}
+// 			else
+// 			{
+// 				nextState = STATE_ACTIVATION_TRANSPORT_DRAIN_OTHERS;
+// 			}
+// 		} //STATE_ACTIVATION_TRANSPORT_DRAIN_SELF
+// 		else if (state == STATE_ACTIVATION_TRANSPORT_DRAIN_OTHERS)
+// 		{
+// 			//TODO: change the following in deply
+// #ifdef FULL_SYSTEM
+// 			if (idy < PE_ROWS - 1)
+// 			{
+// 				pSum = read_channel_intel(channel_drain[idy+1][idx]);
+// 				EMULATOR_PRINT(("[ACTIVATION TRANSPORT (%d, %d)] Drained from others. %d more to drain\n\n", idy, idx, numOtherPSumToDrain-countOtherPSum-1));
+// 			}
+// #else
+// 				pSum = read_channel_intel(channel_drain[1][0]);
+// 				EMULATOR_PRINT(("[ACTIVATION TRANSPORT] Drained from others. %d more to drain\n\n", idy, idx, numOtherPSumToDrain-countOtherPSum-1));
+// #endif
+// 			countOtherPSum++;
+// 			if (countOtherPSum == numOtherPSumToDrain)
+// 			{
+// 				nextState = STATE_ACTIVATION_TRANSPORT_READ;
+// 			} 
+// 		} //STATE_ACTIVATION_TRANSPORT_DRAIN_OTHERS
+
+// 		if ((state == STATE_ACTIVATION_TRANSPORT_DRAIN_OTHERS) 
+// 			|| 
+// 			(state == STATE_ACTIVATION_TRANSPORT_DRAIN_SELF))
+// 		{
+// #ifdef FULL_SYSTEM
+// 			write_channel_intel(channel_drain[idy][idx], pSum);
+// #else
+// 			write_channel_intel(channel_drain[0][0], pSum);
+// #endif
+// 		}
+
+// 		state = nextState;
+// 	}
+// }
 
 t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 	t_accumulator output = 0x0;

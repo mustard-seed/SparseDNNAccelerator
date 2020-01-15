@@ -77,9 +77,14 @@ typedef struct {
 
 typedef struct __attribute__((packed)){
     t_transfer_block values;
-    
+
     unsigned char isLastConcatMaxTransportID;
 } t_transferblock_tagged;
+
+typedef struct __attribute__((packed)){
+    t_accumulator value;
+    unsigned char isLast;
+} t_conv_drain_tagged;
 
 // typedef struct __attribute__((packed)){
 //     t_transfer_block values;

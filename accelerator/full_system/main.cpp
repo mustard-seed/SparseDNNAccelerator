@@ -1144,8 +1144,8 @@ TEST_F (testFixture, play) {
     unsigned char inputHeight = 5;
     unsigned char numInputChannel = 2;
     unsigned char widthBlockSize = 3;
-    unsigned char sizeOutputTileWidthPerColFul = 2;
-    unsigned char sizeOutputTileHeightFull = 2;
+    unsigned char sizeOutputTileWidthPerColFul = 3;
+    unsigned char sizeOutputTileHeightFull = 3;
     bool flagEnableRelu = true;
 
     launch(
