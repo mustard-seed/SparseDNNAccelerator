@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<simPackage>
+ <file
+   path="altera_mult_add_171/sim/a10_mac_8bitx4_input_registered_altera_mult_add_171_i4fixgy.v"
+   type="VERILOG"
+   library="altera_mult_add_171" />
+ <file
+   path="sim/a10_mac_8bitx4_input_registered.v"
+   type="VERILOG"
+   library="a10_mac_8bitx4_input_registered"
+   hasInlineConfiguration="true" />
+ <topLevel
+   name="a10_mac_8bitx4_input_registered.a10_mac_8bitx4_input_registered" />
+ <deviceFamily name="arria10" />
+</simPackage>

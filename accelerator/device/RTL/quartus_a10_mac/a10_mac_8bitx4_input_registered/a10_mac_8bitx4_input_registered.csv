@@ -1,0 +1,18 @@
+# system info a10_mac_8bitx4_input_registered on 2020.01.16.10:07:54
+system_info:
+name,value
+DEVICE,10AX115S2F45I2SGES
+DEVICE_FAMILY,Arria 10
+GENERATION_ID,0
+#
+#
+# Files generated for a10_mac_8bitx4_input_registered on 2020.01.16.10:07:54
+files:
+filepath,kind,attributes,module,is_top
+sim/a10_mac_8bitx4_input_registered.v,VERILOG,CONTAINS_INLINE_CONFIGURATION,a10_mac_8bitx4_input_registered,true
+altera_mult_add_171/sim/a10_mac_8bitx4_input_registered_altera_mult_add_171_i4fixgy.v,VERILOG,,a10_mac_8bitx4_input_registered_altera_mult_add_171_i4fixgy,false
+#
+# Map from instance-path to kind of module
+instances:
+instancePath,module
+a10_mac_8bitx4_input_registered.mult_add_0,a10_mac_8bitx4_input_registered_altera_mult_add_171_i4fixgy

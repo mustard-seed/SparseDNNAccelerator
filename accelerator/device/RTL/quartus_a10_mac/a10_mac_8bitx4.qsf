@@ -1644,3 +1644,4 @@ set_global_assignment -name BOARD "Arria 10 FPGA Development Kit"
 set_global_assignment -name EDA_SIMULATION_TOOL "ModelSim-Altera (Verilog)"
 set_global_assignment -name EDA_OUTPUT_DATA_FORMAT "VERILOG HDL" -section_id eda_simulation
 set_global_assignment -name IP_FILE a10_mac_8bitx4.ip
+set_global_assignment -name IP_FILE a10_mac_8bitx4_input_registered.ip

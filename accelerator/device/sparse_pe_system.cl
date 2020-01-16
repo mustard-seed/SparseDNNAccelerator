@@ -2428,7 +2428,7 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 			//output += input.data[i]*weights.data[i];
 			// use packed DSP blocks to improve efficiency
 			#if defined (ARRIA10)
-				output += (t_accumulator) a10_mac_8bitx4(
+				output += (t_accumulator) a10_mac_8bitx4_input_registered(
 					activations.values[i*4],
 					weights.values[i*4],
 					activations.values[i*4+1],
@@ -2439,7 +2439,7 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 					weights.values[i*4+3]
 					);
 			#elif defined (C5SOC)
-				output += (t_accumulator) c5_mac_8bitx4(
+				output += (t_accumulator) c5_mac_8bitx4_input_registered(
 						activations.values[i*4],
 						weights.values[i*4],
 						activations.values[i*4+1],
