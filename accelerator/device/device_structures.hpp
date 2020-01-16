@@ -249,7 +249,7 @@ typedef struct {
 
 typedef struct __attribute__((packed)) {
     t_output_dram_block block;
-    bool isLast;
+    unsigned char isLastFlag; //Bit 0: Is last dram block in a transfer. Bit 1: Is last column
 } t_output_dram_block_tagged;
 #endif
 //#endif

@@ -1177,7 +1177,7 @@ __kernel void kernelOutputWriter (
 				while (proceed)
 				{
 					t_output_dram_block_tagged receivedBlock = read_channel_intel(channel_output_wide[0]);
-					if (receivedBlock.isLast)
+					if ((receivedBlock.isLastFlag & 0x1) == 0x1)
 					{
 						proceed = false;
 						clusterCount = outputDramBlock2ClusterCount(receivedBlock.block);
@@ -1716,142 +1716,252 @@ __kernel void kernelOAControlTee ()
 }
 
 
-#define STATE_OA_TEE_DRAIN_SELF 0x1
-#define STATE_OA_TEE_DRAIN_SELF_SEND_COUNT 0X2
-#define STATE_OA_TEE_DRAIN_OTHERS 0x4
+#define OA_TEE_INSTRUCTION_DRAIN_SELF 0X1
+#define OA_TEE_INSTRUCTION_DRAIN_PADD 0X2
+#define OA_TEE_INSTRUCTION_SEND_SELF 0x4
+#define OA_TEE_INSTRUCTION_DRAIN_OTHERS 0X8
+#define OA_TEE_INSTRUCTION_DECODE_COMMAND 0X10
+#define OA_TEE_INSTRUCTION_SEND_COUNT 0x20
+#define OA_TEE_INSTRUCTION_LOOP_UPDATE0 0x40
+#define OA_TEE_INSTRUCTION_LOOP_UPDATE1 0X80
 __attribute__((max_global_work_dim(0)))
 __attribute__((autorun))
 __attribute__((num_compute_units(PE_COLS)))
 __kernel void kernelOATee ()
 {
-	typedef uint3_t t_state;
+	typedef uint8_t t_instruction;
 	int colID = get_compute_id(0);
+
+	//Registers
+	unsigned short regNumOutputGroupxTileHeightxTileWidth;
+	unsigned short iOutputGroupxTileHeightxTileWidth;
+	unsigned char regIsLastTee = FALSE;
+	t_instruction regInstruction = OA_TEE_INSTRUCTION_DECODE_COMMAND;
+	unsigned short iClusters = 0;
+	unsigned char iClusterInDram = 0;
+
+	//Shift register
+	t_output_dram_block_tagged regDramBlockTagged;
+
 
 	while (true)
 	{
-		/*
-		Read the control
-		*/
-		t_output_tile_tee_packet teeControl = read_channel_intel(channel_output_writer_to_tee[colID]);
+		// bool readInstructionSuccess = false;
+		// bool readClusterSelfSuccess = false;
+		// bool readDramBlockOtherSuccess = true; //Special
+		// bool writeInstructionSuccess = true; //Special
+		// bool writeDramBlockSuccess = false;
 
+		bool sendInstructionNextEnable = false;
+		bool sendDramBlockPreviousEnable = false;
 
-		/*
-		Decode the control
-		*/
-		unsigned short numOutputGroupxTileHeightxTileWidth = teeControl.numOutputGroupxTileHeightxTileWidth;
-		unsigned char maxColID = teeControl.maxColID;
-		unsigned char numOtherColToCollect = maxColID - colID;
+		bool shiftInNewCluster = false;
 
+		t_instruction tempInstruction = regInstruction;
+		t_output_cluster_tagged tempClusterTagged;
+		t_output_tile_tee_packet tempTeeControl;
+		t_output_dram_block_tagged tempDramBlockTagged;
 
-		/*
-		Pass on the control to the right if needed
-		*/
-		if (colID < (PE_COLS - 1))
+		//Select the output instruction to read
+		if ( regInstruction == OA_TEE_INSTRUCTION_DECODE_COMMAND )
 		{
-			if (colID < maxColID)
+			tempTeeControl = read_channel_intel(channel_output_writer_to_tee[colID]);
+			sendInstructionNextEnable = true;
+		}
+
+		//Select the output cluster to read
+		if (regInstruction == OA_TEE_INSTRUCTION_DRAIN_SELF)
+		{
+			#if defined(SPARSE_SYSTEM)
+				tempClusterTagged = read_channel_intel(channel_compressor_to_tee[colID]);
+			#else
+				tempClusterTagged = read_channel_intel(channel_oa_buffer_to_oa_tee[colID]);
+			#endif
+		}
+		else
+		{
+			tempClusterTagged.isLastInStrip = true;
+			#pragma unroll
+			for (int i=0; i<CLUSTER_SIZE; i++)
 			{
-				write_channel_intel(channel_output_writer_to_tee[colID+1], teeControl);
+				tempClusterTagged.cluster.cluster_values[i] = 0x0;
 			}
 		}
 
-		/*
-		Drain the outputs
-		*/
-		for (unsigned char iterOutput=0; iterOutput<numOutputGroupxTileHeightxTileWidth; iterOutput++)
+		//Select the output dram block to be sent back
+		if (regInstruction == OA_TEE_INSTRUCTION_DRAIN_OTHERS)
 		{
-			t_state state = STATE_OA_TEE_DRAIN_SELF;
-			unsigned short iClusters = 0;
-			unsigned short iClusterInDram = 0;
-			unsigned char iColDrained = 0;
-			unsigned char numColToDrain = numOtherColToCollect + 1;
-			t_output_dram_block dramBlock;
-
-			while (iColDrained < numColToDrain)
+			if ( (colID < (PE_COLS-1)))
 			{
-				t_output_dram_block_tagged dramBlockTagged;
-				bool writeChannel = false;
-				t_state nextState = state;
+				tempDramBlockTagged = read_channel_intel(channel_output_wide[colID+1]);
+				sendDramBlockPreviousEnable = true;
+			}
+		}
+		else if (regInstruction == OA_TEE_INSTRUCTION_SEND_SELF)
+		{
+			#if defined(SPARSE_SYSTEM)
+				tempDramBlockTagged.isLastFlag = ((regIsLastTee & 0x1) << 0x1);
+			#else
+				tempDramBlockTagged.isLastFlag = regDramBlockTagged.isLastFlag;
+			#endif
+			tempDramBlockTagged.block = regDramBlockTagged.block;
+			sendDramBlockPreviousEnable = true;
+		}
+		#if defined(SPARSE_SYSTEM)
+			else if (regInstruction == OA_TEE_INSTRUCTION_SEND_COUNT)
+			{
+				tempDramBlockTagged.isLastFlag = ((regIsLastTee & 0x1) << 0x1) | 0x01;
+				t_output_dram_block countDramBlock = clusterCount2OutputDramBlock(iClusters);
+				tempDramBlockTagged.block = countDramBlock;
+				sendDramBlockPreviousEnable = true;
+			}
+		#endif
 
-				if (state == STATE_OA_TEE_DRAIN_SELF)
+		//Write channels: instruction passing
+		if ( sendInstructionNextEnable == true )
+		{
+			if ( (colID < (PE_COLS-1)) && (colID < tempTeeControl.maxColID ) )
+			{
+				write_channel_intel(channel_output_writer_to_tee[colID+1], tempTeeControl);
+			}
+		}
+
+		//Write channels: output dram block passing
+		if ( sendDramBlockPreviousEnable == true)
+		{
+			write_channel_intel(channel_output_wide[colID], tempDramBlockTagged);
+		}
+
+		//State and register update (excluding the shift register)
+
+		switch (regInstruction) {
+			case (OA_TEE_INSTRUCTION_DRAIN_SELF) :
+			{
+				shiftInNewCluster = true;
+				iClusters++;
+				iClusterInDram++;
+				regDramBlockTagged.isLastFlag = ((regIsLastTee & 0x1) << 0x1) | (tempClusterTagged.isLastInStrip & 0x01);
+
+				if ( iClusterInDram == NUM_CLUSTER_IN_DRAM_SIZE )
+				{
+					tempInstruction = OA_TEE_INSTRUCTION_SEND_SELF;
+				}
+                else if ( tempClusterTagged.isLastInStrip == true )
+				{
+					tempInstruction = OA_TEE_INSTRUCTION_DRAIN_PADD;
+				}
+			} //OA_TEE_INSTRUCTION_DRAIN_SELF
+			break;
+			case (OA_TEE_INSTRUCTION_DRAIN_PADD) :
+			{
+				shiftInNewCluster = true;
+				iClusterInDram++;
+
+				if ( iClusterInDram == NUM_CLUSTER_IN_DRAM_SIZE )
+				{
+					tempInstruction = OA_TEE_INSTRUCTION_SEND_SELF;
+				}
+			} //OA_TEE_INSTRUCTION_DRAIN_PADD
+			break;
+			case (OA_TEE_INSTRUCTION_SEND_SELF) :
+			{
+				iClusterInDram = 0;
+				if ((tempDramBlockTagged.isLastFlag & 0x01) == 0x01)
 				{
 					#if defined(SPARSE_SYSTEM)
-						t_output_cluster_tagged clusterTagged = read_channel_intel(channel_compressor_to_tee[colID]);
+						tempInstruction = OA_TEE_INSTRUCTION_SEND_COUNT;
 					#else
-						t_output_cluster_tagged clusterTagged = read_channel_intel(channel_oa_buffer_to_oa_tee[colID]);
+						if (regIsLastTee == FALSE)
+						{
+							tempInstruction = OA_TEE_INSTRUCTION_DRAIN_OTHERS;
+						}
+						else
+						{
+							tempInstruction = OA_TEE_INSTRUCTION_LOOP_UPDATE0;
+						}
 					#endif
-					dramBlock.clusters[iClusterInDram] = clusterTagged.cluster;
-					iClusters++;
+				}
+				else 
+				{
+					tempInstruction = OA_TEE_INSTRUCTION_DRAIN_SELF;
+				}
+			} //OA_TEE_INSTRUCTION_SEND_SELF
+			break;
+			case (OA_TEE_INSTRUCTION_DRAIN_OTHERS) :
+			{
+				if ((tempDramBlockTagged.isLastFlag & 0x3) == 0x3)
+				{
+					tempInstruction = OA_TEE_INSTRUCTION_LOOP_UPDATE0;
+				}
+			} //OA_TEE_INSTRUCTION_DRAIN_OTHERS
+			break;
+			case (OA_TEE_INSTRUCTION_DECODE_COMMAND) :
+			{
+				//regMaxColID = tempTeeControl.maxColID;
+				//regNumColToDrain = tempTeeControl.maxColID - colID + 1;
+				regIsLastTee = (tempTeeControl.maxColID > colID) ? FALSE: TRUE;
+				regNumOutputGroupxTileHeightxTileWidth = tempTeeControl.numOutputGroupxTileHeightxTileWidth;
+				iOutputGroupxTileHeightxTileWidth = 0;
 
-					if ( ( (iClusterInDram + 1) == NUM_CLUSTER_IN_DRAM_SIZE) || (clusterTagged.isLastInStrip) )
+				tempInstruction = OA_TEE_INSTRUCTION_DRAIN_SELF;
+			}
+			break;
+			case (OA_TEE_INSTRUCTION_LOOP_UPDATE0) :
+			{
+				iClusters = 0;
+				//iColDrained = 0;
+				iOutputGroupxTileHeightxTileWidth++;
+				tempInstruction = OA_TEE_INSTRUCTION_LOOP_UPDATE1;
+				
+			}
+			break;
+			case (OA_TEE_INSTRUCTION_LOOP_UPDATE1) :
+			{
+				if (iOutputGroupxTileHeightxTileWidth == regNumOutputGroupxTileHeightxTileWidth)
+				{
+					tempInstruction = OA_TEE_INSTRUCTION_DECODE_COMMAND;
+				}
+				else
+				{
+					tempInstruction = OA_TEE_INSTRUCTION_DRAIN_SELF;
+				}
+			}
+			break;
+			#if defined(SPARSE_SYSTEM)
+				case (OA_TEE_INSTRUCTION_SEND_COUNT) :
+				{
+					if (regIsLastTee == FALSE)
 					{
-						writeChannel = true;
-
-						dramBlockTagged.block = dramBlock;
-						#if defined(SPARSE_SYSTEM)
-							dramBlockTagged.isLast = false;
-						#else
-							dramBlockTagged.isLast = clusterTagged.isLastInStrip;
-						#endif
-
-						iClusterInDram = 0;
+						tempInstruction = OA_TEE_INSTRUCTION_DRAIN_OTHERS;
+						//iColDrained++;
 					}
 					else
 					{
-						iClusterInDram++;
+						tempInstruction = OA_TEE_INSTRUCTION_LOOP_UPDATE0;
 					}
-					
-					if (clusterTagged.isLastInStrip)
-					{
-						#if defined(SPARSE_SYSTEM)
-							nextState = STATE_OA_TEE_DRAIN_SELF_SEND_COUNT;
-						#else
-							nextState = STATE_OA_TEE_DRAIN_OTHERS;
-							iColDrained++;
-						#endif
-					}
-				} //STATE_OA_TEE_DRAIN_SELF
-				#if defined(SPARSE_SYSTEM)
-					else if (state == STATE_OA_TEE_DRAIN_SELF_SEND_COUNT)
-					{
-						writeChannel = true;
-
-						t_output_dram_block countDramBlock = clusterCount2OutputDramBlock(iClusters);
-
-						dramBlockTagged.block = countDramBlock;
-						dramBlockTagged.isLast = true;
-
-						nextState = STATE_OA_TEE_DRAIN_OTHERS;
-						iColDrained++;
-					} //STATE_OA_TEE_DRAIN_SELF_SEND_COUNT
-				#endif
-				else if (state == STATE_OA_TEE_DRAIN_OTHERS)
-				{
-
-					if (colID < (PE_COLS - 1))
-					{	
-						writeChannel = true;
-						t_output_dram_block_tagged receivedBlock = read_channel_intel(channel_output_wide[colID+1]);
-						dramBlockTagged = receivedBlock;
-						if (receivedBlock.isLast)
-						{
-							iColDrained++;
-						}
-					}
-
-				} //STATE_OA_TEE_DRAIN_OTHERS
-
-				if (writeChannel)
-				{
-					write_channel_intel(channel_output_wide[colID], dramBlockTagged);
 				}
+				break;
+			#endif
+			default:
+			break;
+		}
 
-				state = nextState;
-			} //while
+		regInstruction = tempInstruction;
 
-		} //for
+		#pragma unroll
+		for (int i=0; i<NUM_CLUSTER_IN_DRAM_SIZE-1; i++)
+		{
+			if (shiftInNewCluster == true)
+			{
+				regDramBlockTagged.block.clusters[i] = regDramBlockTagged.block.clusters[i+1];
+			}
+		}
+		if (shiftInNewCluster == true)
+		{
+			regDramBlockTagged.block.clusters[NUM_CLUSTER_IN_DRAM_SIZE-1] = tempClusterTagged.cluster;
+		}
 
-	} //while
-
+	}//while
 }
 #endif  //OA_MEMORY
 
