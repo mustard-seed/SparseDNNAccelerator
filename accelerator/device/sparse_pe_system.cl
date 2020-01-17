@@ -1746,12 +1746,6 @@ __kernel void kernelOATee ()
 
 	while (true)
 	{
-		// bool readInstructionSuccess = false;
-		// bool readClusterSelfSuccess = false;
-		// bool readDramBlockOtherSuccess = true; //Special
-		// bool writeInstructionSuccess = true; //Special
-		// bool writeDramBlockSuccess = false;
-
 		bool sendInstructionNextEnable = false;
 		bool sendDramBlockPreviousEnable = false;
 
@@ -1762,20 +1756,25 @@ __kernel void kernelOATee ()
 		t_output_tile_tee_packet tempTeeControl;
 		t_output_dram_block_tagged tempDramBlockTagged;
 
+		bool readSuccess = false;
+
 		//Select the output instruction to read
 		if ( regInstruction == OA_TEE_INSTRUCTION_DECODE_COMMAND )
 		{
-			tempTeeControl = read_channel_intel(channel_output_writer_to_tee[colID]);
-			sendInstructionNextEnable = true;
+			tempTeeControl = read_channel_nb_intel(channel_output_writer_to_tee[colID], &readSuccess);
+			if (readSuccess == true)
+			{
+				sendInstructionNextEnable = true;
+			}
 		}
 
 		//Select the output cluster to read
 		if (regInstruction == OA_TEE_INSTRUCTION_DRAIN_SELF)
 		{
 			#if defined(SPARSE_SYSTEM)
-				tempClusterTagged = read_channel_intel(channel_compressor_to_tee[colID]);
+				tempClusterTagged = read_channel_nb_intel(channel_compressor_to_tee[colID], &readSuccess);
 			#else
-				tempClusterTagged = read_channel_intel(channel_oa_buffer_to_oa_tee[colID]);
+				tempClusterTagged = read_channel_nb_intel(channel_oa_buffer_to_oa_tee[colID], &readSuccess);
 			#endif
 		}
 		else
@@ -1793,8 +1792,11 @@ __kernel void kernelOATee ()
 		{
 			if ( (colID < (PE_COLS-1)))
 			{
-				tempDramBlockTagged = read_channel_intel(channel_output_wide[colID+1]);
-				sendDramBlockPreviousEnable = true;
+				tempDramBlockTagged = read_channel_nb_intel(channel_output_wide[colID+1], &readSuccess);
+				if (readSuccess == true)
+				{
+					sendDramBlockPreviousEnable = true;
+				}
 			}
 		}
 		else if (regInstruction == OA_TEE_INSTRUCTION_SEND_SELF)
@@ -1837,18 +1839,21 @@ __kernel void kernelOATee ()
 		switch (regInstruction) {
 			case (OA_TEE_INSTRUCTION_DRAIN_SELF) :
 			{
-				shiftInNewCluster = true;
-				iClusters++;
-				iClusterInDram++;
-				regDramBlockTagged.isLastFlag = ((regIsLastTee & 0x1) << 0x1) | (tempClusterTagged.isLastInStrip & 0x01);
+				if (readSuccess == true)
+				{
+					shiftInNewCluster = true;
+					iClusters++;
+					iClusterInDram++;
+					regDramBlockTagged.isLastFlag = ((regIsLastTee & 0x1) << 0x1) | (tempClusterTagged.isLastInStrip & 0x01);
 
-				if ( iClusterInDram == NUM_CLUSTER_IN_DRAM_SIZE )
-				{
-					tempInstruction = OA_TEE_INSTRUCTION_SEND_SELF;
-				}
-                else if ( tempClusterTagged.isLastInStrip == true )
-				{
-					tempInstruction = OA_TEE_INSTRUCTION_DRAIN_PADD;
+					if ( iClusterInDram == NUM_CLUSTER_IN_DRAM_SIZE )
+					{
+						tempInstruction = OA_TEE_INSTRUCTION_SEND_SELF;
+					}
+	                else if ( tempClusterTagged.isLastInStrip == true )
+					{
+						tempInstruction = OA_TEE_INSTRUCTION_DRAIN_PADD;
+					}
 				}
 			} //OA_TEE_INSTRUCTION_DRAIN_SELF
 			break;
@@ -1889,21 +1894,25 @@ __kernel void kernelOATee ()
 			break;
 			case (OA_TEE_INSTRUCTION_DRAIN_OTHERS) :
 			{
-				if ((tempDramBlockTagged.isLastFlag & 0x3) == 0x3)
+				if (readSuccess == true)
 				{
-					tempInstruction = OA_TEE_INSTRUCTION_LOOP_UPDATE0;
+					if ((tempDramBlockTagged.isLastFlag & 0x3) == 0x3)
+					{
+						tempInstruction = OA_TEE_INSTRUCTION_LOOP_UPDATE0;
+					}
 				}
 			} //OA_TEE_INSTRUCTION_DRAIN_OTHERS
 			break;
 			case (OA_TEE_INSTRUCTION_DECODE_COMMAND) :
 			{
-				//regMaxColID = tempTeeControl.maxColID;
-				//regNumColToDrain = tempTeeControl.maxColID - colID + 1;
-				regIsLastTee = (tempTeeControl.maxColID > colID) ? FALSE: TRUE;
-				regNumOutputGroupxTileHeightxTileWidth = tempTeeControl.numOutputGroupxTileHeightxTileWidth;
-				iOutputGroupxTileHeightxTileWidth = 0;
+				if (readSuccess == true)
+				{
+					regIsLastTee = (tempTeeControl.maxColID > colID) ? FALSE: TRUE;
+					regNumOutputGroupxTileHeightxTileWidth = tempTeeControl.numOutputGroupxTileHeightxTileWidth;
+					iOutputGroupxTileHeightxTileWidth = 0;
 
-				tempInstruction = OA_TEE_INSTRUCTION_DRAIN_SELF;
+					tempInstruction = OA_TEE_INSTRUCTION_DRAIN_SELF;
+				}
 			}
 			break;
 			case (OA_TEE_INSTRUCTION_LOOP_UPDATE0) :
