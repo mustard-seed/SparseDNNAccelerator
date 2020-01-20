@@ -538,7 +538,7 @@ __kernel void kernelMemoryReader (
 					t_accumulator bias = cacheBias[iFilterGlobal];
 
 					unsigned short maxDramBlockInFilter = ((maxTransferBlockInFilter-1) >> WIDE_SIZE_OFFSET) + 1;
-					unsigned short maxTransmitCount = maxDramBlockInFilter+1; //one extra for filter stream control;
+					//unsigned short maxTransmitCount = maxDramBlockInFilter+1; //one extra for filter stream control;
 					
 					t_filter_streamer_control control;
 					control.numOutputs = (unsigned short) sizeOutputHeightTileLocal * (unsigned short) sizeOutputWidthTilePerColLocal;
@@ -550,7 +550,8 @@ __kernel void kernelMemoryReader (
 
 					unsigned int iTransferBlockDDR = iTransferBlockFilterBaseDDR;
 
-					for (unsigned short iTransmitCount=0; iTransmitCount<maxTransmitCount; iTransmitCount++)
+					//one extra for filter stream control
+					for (unsigned short iTransmitCount=0; iTransmitCount<=maxDramBlockInFilter; iTransmitCount++)
 					{
 						t_dram_block block;
 						if (iTransmitCount == 0) 
