@@ -35,6 +35,28 @@ module selectGenerator
 	end
 endmodule
 
+module oneHotGenerator 
+	#	(
+			parameter BITMASK_LENGTH = 16,
+			parameter INDEX_BITWIDTH = 5
+		)
+	(
+		input wire [BITMASK_LENGTH-1 : 0] binaryMask,
+		output reg [BITMASK_LENGTH-1 : 0] oneHotMask
+
+	);
+	reg [BITMASK_LENGTH-1 : 0] carry;
+	integer i;
+	always @ (*) begin
+		carry[0] = binaryMask[0];
+		oneHotMask[0] = binaryMask[0];
+		for (i=1; i<BITMASK_LENGTH; i=i+1) begin
+			carry[i] = binaryMask[i] | carry[i-1];
+			oneHotMask[i] = binaryMask[i] & (~carry[i-1]);
+		end
+	end
+endmodule
+
 /*
  * \brief Filter and coalesce a sparse input bus using the input mask
  * \input sparseInput: input with gaps. Each element has INPUT_ELEMENT_WIDTH bits.
@@ -51,7 +73,8 @@ module inputFilter
 	#	(
 			parameter BITMASK_LENGTH = 16,
 			parameter INDEX_BITWIDTH = 5,
-			parameter INPUT_ELEMENT_WIDTH = 1
+			parameter INPUT_ELEMENT_WIDTH = 1,
+			parameter METHOD = 0
 		)
 	(
 		input wire [INPUT_ELEMENT_WIDTH*BITMASK_LENGTH-1 : 0] sparseInput,
@@ -74,14 +97,43 @@ module inputFilter
 
 	genvar iGenOutput;
 	generate
-			for (iGenOutput = 0; iGenOutput < BITMASK_LENGTH; iGenOutput=iGenOutput+1) begin: GENFOR_OUTPUT
-				integer iAccumMask;
-				always @ (*) begin
-					denseOutput[(iGenOutput+1)*INPUT_ELEMENT_WIDTH-1 -: INPUT_ELEMENT_WIDTH] = {INPUT_ELEMENT_WIDTH{1'b0}};
-					for (iAccumMask = BITMASK_LENGTH; iAccumMask>0; iAccumMask=iAccumMask-1) begin:FOR_ACCUM
-						if (accumulatedIndex[iAccumMask*INDEX_BITWIDTH-1 -: INDEX_BITWIDTH] == (iGenOutput+1)) begin
-							denseOutput[(iGenOutput+1)*INPUT_ELEMENT_WIDTH-1 -: INPUT_ELEMENT_WIDTH] 
-								= sparseInput[iAccumMask*INPUT_ELEMENT_WIDTH-1 -: INPUT_ELEMENT_WIDTH];
+			if (METHOD == 0) begin
+				for (iGenOutput = 0; iGenOutput < BITMASK_LENGTH; iGenOutput=iGenOutput+1) begin: GENFOR_OUTPUT
+					reg [BITMASK_LENGTH-1:0] compareMask;
+					wire [BITMASK_LENGTH-1:0] oneHotMask;
+					integer position;
+
+					oneHotGenerator #(.BITMASK_LENGTH(BITMASK_LENGTH), .INDEX_BITWIDTH(INDEX_BITWIDTH))
+						oneHotGenerator_inst (.binaryMask(compareMask), .oneHotMask(oneHotMask));
+
+					always @ (*) begin
+						denseOutput[(iGenOutput+1)*INPUT_ELEMENT_WIDTH-1 -: INPUT_ELEMENT_WIDTH] = {INPUT_ELEMENT_WIDTH{1'b0}};
+
+						//Generate the comparator outputs
+						for (position=0; position < BITMASK_LENGTH; position=position+1) begin:FOR_COMPARE
+							compareMask[position] = (accumulatedIndex[(position+1)*INDEX_BITWIDTH-1 -: INDEX_BITWIDTH] == (iGenOutput+1)) ?
+									1'b1 : 1'b0; 
+						end
+
+						for (position=0; position < BITMASK_LENGTH; position=position+1) begin:FOR_MUX
+							if (oneHotMask == (1 << position)) begin
+								denseOutput[(iGenOutput+1)*INPUT_ELEMENT_WIDTH-1 -: INPUT_ELEMENT_WIDTH] 
+									= sparseInput[(position+1)*INPUT_ELEMENT_WIDTH-1 -: INPUT_ELEMENT_WIDTH];
+							end
+						end
+					end
+				end
+			end
+			else if (METHOD == 1) begin
+				for (iGenOutput = 0; iGenOutput < BITMASK_LENGTH; iGenOutput=iGenOutput+1) begin: GENFOR_OUTPUT
+					integer iAccumMask;
+					always @ (*) begin
+						denseOutput[(iGenOutput+1)*INPUT_ELEMENT_WIDTH-1 -: INPUT_ELEMENT_WIDTH] = {INPUT_ELEMENT_WIDTH{1'b0}};
+						for (iAccumMask = BITMASK_LENGTH; iAccumMask>0; iAccumMask=iAccumMask-1) begin:FOR_ACCUM
+							if (accumulatedIndex[iAccumMask*INDEX_BITWIDTH-1 -: INDEX_BITWIDTH] == (iGenOutput+1)) begin
+								denseOutput[(iGenOutput+1)*INPUT_ELEMENT_WIDTH-1 -: INPUT_ELEMENT_WIDTH] 
+									= sparseInput[iAccumMask*INPUT_ELEMENT_WIDTH-1 -: INPUT_ELEMENT_WIDTH];
+							end
 						end
 					end
 				end

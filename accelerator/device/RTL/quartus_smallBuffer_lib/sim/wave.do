@@ -1,1 +1,1 @@
-add wave /*
+add wave -recursive /* 
