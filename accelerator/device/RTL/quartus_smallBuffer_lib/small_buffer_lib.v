@@ -141,7 +141,14 @@ module inputFilter
 	endgenerate
 endmodule
 
-module clMaskMatcher16 (
+module clMaskMatcher16 
+	#	(
+			parameter BITMASK_LENGTH = 16,
+			parameter INDEX_BITWIDTH = 5,
+			parameter INPUT_ELEMENT_WIDTH = 1
+		) 
+
+	(
 		input   wire clock,
 		input   wire resetn,
 		input   wire ivalid, 
@@ -149,8 +156,8 @@ module clMaskMatcher16 (
 		output  wire ovalid, 
 		output  wire oready,
 
-		input 	wire [15:0] bitmaskW,
-		input 	wire [15:0] bitmaskA,
+		input 	wire [BITMASK_LENGTH-1:0] bitmaskW,
+		input 	wire [BITMASK_LENGTH-1:0] bitmaskA,
 
 		//[15:0] packed bitmask W
 		//[31:16] packed bitmask A
@@ -159,33 +166,36 @@ module clMaskMatcher16 (
 		output wire [63:0] result
 	);
 
+
 	assign ovalid = 1'b1;
 	assign oready = 1'b1;
 
-	wire [15:0] bitmaskMutual = bitmaskA & bitmaskW;
+	wire [BITMASK_LENGTH-1:0] bitmaskMutual = bitmaskA & bitmaskW;
 
 	inputFilter #(
-		.BITMASK_LENGTH     (16),
-		.INDEX_BITWIDTH     (5),
-		.INPUT_ELEMENT_WIDTH(1)
+		.BITMASK_LENGTH     (BITMASK_LENGTH),
+		.INDEX_BITWIDTH     (INDEX_BITWIDTH),
+		.INPUT_ELEMENT_WIDTH(INPUT_ELEMENT_WIDTH),
+		.METHOD             (1)
 	)
 	maskWFilter (
 		.sparseInput  (bitmaskMutual),
 		.bitmask      (bitmaskW),
-		.denseOutput  (result[15:0]),
-		.numDenseInput(result[36:32])
+		.denseOutput  (result[0+BITMASK_LENGTH*INPUT_ELEMENT_WIDTH-1:0]),
+		.numDenseInput(result[32+INDEX_BITWIDTH-1:32])
 		);
 
 	inputFilter #(
-		.BITMASK_LENGTH     (16),
-		.INDEX_BITWIDTH     (5),
-		.INPUT_ELEMENT_WIDTH(1)
+		.BITMASK_LENGTH     (BITMASK_LENGTH),
+		.INDEX_BITWIDTH     (INDEX_BITWIDTH),
+		.INPUT_ELEMENT_WIDTH(INPUT_ELEMENT_WIDTH),
+		.METHOD             (1)
 	)
 	maskAFilter (
 		.sparseInput  (bitmaskMutual),
 		.bitmask      (bitmaskA),
-		.denseOutput  (result[31:16]),
-		.numDenseInput(result[44:40])
+		.denseOutput  (result[16+BITMASK_LENGTH*INPUT_ELEMENT_WIDTH-1:16]),
+		.numDenseInput(result[40+INDEX_BITWIDTH-1:40])
 		);
 
 endmodule

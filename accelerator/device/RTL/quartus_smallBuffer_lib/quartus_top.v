@@ -27,15 +27,19 @@ module top (
       inout     [35:0]         GPIO_1
 	);
 
+  localparam BITMASK_LENGTH = 2;
+  localparam INDEX_BITWIDTH = 2;
+
 	wire [63:0] result;
 	reg [15:0] regW, regA;
 	reg [63:0] regResult;
 	reg [15:0] muxMaskOutput;
 	reg [4:0] muxCountOutput;
 
-	clMaskMatcher16 maskMatcher (
-			.bitmaskW(regW),
-			.bitmaskA(regA),
+	clMaskMatcher16 #(.BITMASK_LENGTH(BITMASK_LENGTH), .INDEX_BITWIDTH(INDEX_BITWIDTH) )
+  maskMatcher (
+			.bitmaskW(regW[BITMASK_LENGTH-1:0]),
+			.bitmaskA(regA[BITMASK_LENGTH-1:0]),
 			.result(result)
 		);
 
@@ -64,12 +68,12 @@ module top (
 
 	always @ (*) begin
 		if (KEY[1] == 1'b1) begin
-			muxMaskOutput = regResult[15:0];
-			muxCountOutput = regResult[36:32];
+			muxMaskOutput = regResult[BITMASK_LENGTH-1:0];
+			muxCountOutput = regResult[32+INDEX_BITWIDTH-1:32];
 		end
 		else begin
-			muxMaskOutput = regResult[31:16];
-			muxCountOutput = regResult[44:40];
+			muxMaskOutput = regResult[16+BITMASK_LENGTH-1:16];
+			muxCountOutput = regResult[40+INDEX_BITWIDTH-1:40];
 		end
 	end
 	
