@@ -27,19 +27,23 @@ module top (
       inout     [35:0]         GPIO_1
 	);
 
-  localparam BITMASK_LENGTH = 2;
-  localparam INDEX_BITWIDTH = 2;
+  localparam BITMASK_LENGTH = 4;
+  localparam INDEX_BITWIDTH = 3;
+  localparam COUNT_BITWIDTH = 3;
+  localparam MAX_NUM_OUTPUT = 4;
 
 	wire [63:0] result;
 	reg [15:0] regW, regA;
 	reg [63:0] regResult;
 	reg [15:0] muxMaskOutput;
-	reg [4:0] muxCountOutput;
+	reg [4:0] muxNextStartIndexOutput;
 
-	clMaskMatcher16 #(.BITMASK_LENGTH(BITMASK_LENGTH), .INDEX_BITWIDTH(INDEX_BITWIDTH) )
+	clMaskMatcher #(.BITMASK_LENGTH(BITMASK_LENGTH), .INDEX_BITWIDTH(INDEX_BITWIDTH), .INPUT_ELEMENT_WIDTH(1), .COUNT_BITWIDTH(COUNT_BITWIDTH), .MAX_NUM_OUTPUT(MAX_NUM_OUTPUT) )
   maskMatcher (
 			.bitmaskW(regW[BITMASK_LENGTH-1:0]),
 			.bitmaskA(regA[BITMASK_LENGTH-1:0]),
+			.startIndexA({INDEX_BITWIDTH{1'b0}}),
+			.startIndexW({INDEX_BITWIDTH{1'b0}}),
 			.result(result)
 		);
 
@@ -47,8 +51,8 @@ module top (
 	hexDriver H1 (muxMaskOutput[7:4], HEX1);
 	hexDriver H2 (muxMaskOutput[11:8], HEX2);
 	hexDriver H3 (muxMaskOutput[15:12], HEX3);
-	hexDriver H4 (muxCountOutput[3:0], HEX4);
-	hexDriver H5 ({3'b000, muxCountOutput[4]}, HEX5);
+	hexDriver H4 (muxNextStartIndexOutput[3:0], HEX4);
+	hexDriver H5 ({3'b000, muxNextStartIndexOutput[4]}, HEX5);
 
 	assign LEDR[9:5] = SW[9:5];
 	assign LEDR[4:0] = SW[4:0];
@@ -69,11 +73,11 @@ module top (
 	always @ (*) begin
 		if (KEY[1] == 1'b1) begin
 			muxMaskOutput = regResult[BITMASK_LENGTH-1:0];
-			muxCountOutput = regResult[32+INDEX_BITWIDTH-1:32];
+			muxNextStartIndexOutput = regResult[32+INDEX_BITWIDTH-1:32];
 		end
 		else begin
 			muxMaskOutput = regResult[16+BITMASK_LENGTH-1:16];
-			muxCountOutput = regResult[40+INDEX_BITWIDTH-1:40];
+			muxNextStartIndexOutput = regResult[40+INDEX_BITWIDTH-1:40];
 		end
 	end
 	
