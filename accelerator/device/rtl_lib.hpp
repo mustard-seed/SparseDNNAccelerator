@@ -42,5 +42,27 @@ unsigned long operandMatcher8 (
 
 unsigned char leadingZeroCounter (unsigned char bitmask);
 
+//clMaskFilter16c2_1bit
+//Filter up to 2 "1" bit from the mask
+unsigned short smallBufferMaskFilter (unsigned short bitmask, unsigned short sparseInput, unsigned char startIndex);
+
+//clSparseMacBufferUpdate
+ulong2 smallBufferMacBufferUpdate (
+		unsigned char inputSelectBitmask,
+
+		unsigned char inputTransferBlockA0,
+		unsigned char inputTransferBlockA1,
+		unsigned char inputTransferBlockB0,
+		unsigned char inputTransferBlockB1,
+
+		unsigned char currentBufferA0,
+		unsigned char currentBufferA1,
+		unsigned char currentBufferB0,
+		unsigned char currentbufferB1,
+
+		unsigned char currentBufferSize
+	);
+
+unsigned char getNthOnePosition (unsigned short bitmask, unsigned char n, unsigned char startIndex);
 
 #endif  

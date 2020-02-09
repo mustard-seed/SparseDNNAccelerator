@@ -12,4 +12,5 @@ add_subdirectory(toy_ping_pong)
 add_subdirectory(simple_weight_memory)
 add_subdirectory(flexible_bitmask_compression_test)
 add_subdirectory(full_system)
+add_subdirectory(small_buffer_test)
 
