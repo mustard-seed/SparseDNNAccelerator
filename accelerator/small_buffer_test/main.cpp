@@ -26,6 +26,7 @@
  * Assume the biggest test convolves a 32x32x64 tensor with a 128*32*32*64 tensor
  * Add a safety factor of 2
  * */
+#define EMULATE
 
 class testFixture : public ::testing::Test {
 protected:
@@ -51,10 +52,10 @@ protected:
        cl_int status = CL_SUCCESS;
 //TODO: CHANGE THE NAME
 #ifdef C5SOC
-        binaryFile = "device_utils.aocx";
+        binaryFile = "smallBufferTest.aocx";
         clPlatform = aocl_utils_cpp::findPlatform("Intel(R) FPGA SDK for OpenCL(TM)");
 #else
-        binaryFile = "operandMatcher_c_model.aocx";
+        binaryFile = "smallBuffer.aocx";
 #if defined(EMULATE)
         clPlatform = aocl_utils_cpp::findPlatform("Intel(R) FPGA Emulation Platform for OpenCL(TM)");
 #else
@@ -97,8 +98,8 @@ protected:
         aocl_utils_cpp::checkError(status, "Failed to setup the command queue clCQTestHarness!");
 
         //Instantiate the buffers
-        cl_ulong maxBufferSizeByte = clDevice.getInfo<CL_DEVICE_MAX_MEM_ALLOC_SIZE> (&status);
-        aocl_utils_cpp::checkError(status, "Failed to query the maximum buffer size in bytes!");
+        cl_ulong maxBufferSizeByte = 2048;
+        //aocl_utils_cpp::checkError(status, "Failed to query the maximum buffer size in bytes!");
 
         std::cout <<"Setting the buffer bufferTransferBlocks. Size: "<<maxBufferSizeByte<<" bytes."<<std::endl;
         bufferTransferBlocks = cl::Buffer (
@@ -165,8 +166,8 @@ protected:
             kernel.setArg(2, bufferNextBuffer);
             kernel.setArg(3, bufferMacValidFlags);
             kernel.setArg(4, (cl_uchar) numTransferBlocks);
-            kernel.setArg(5, (cl_ushort) bitmask);
-            kernel.setArg(6, (cl_ushort) mutualBitmask);
+            kernel.setArg(5, (cl_uchar) bitmask);
+            kernel.setArg(6, (cl_uchar) mutualBitmask);
 
         }
 
@@ -250,44 +251,88 @@ protected:
 
         //Print the input and the output
         {
-            std::cout <<"Input mutual bitmask "<<std::bitset<16>(mutualBitmask)<<std::endl;
-            std::cout <<"Input bitmask "<<std::bitset<16>(bitmask)<<std::endl;
+            std::cout <<"Input mutual bitmask "<<std::bitset<8>(mutualBitmask)<<std::endl;
+            std::cout <<"Input bitmask "<<std::bitset<8>(bitmask)<<std::endl;
             for (unsigned i=0; i<numTransferBlocks; i++)
             {
                 std::cout <<"Input transfer block ["<<i<<"]: "
-                         <<inputTransferBlocks.at(i).values[0]<<" "
-                         <<inputTransferBlocks.at(i).values[1]<<" "
-                         <<inputTransferBlocks.at(i).values[2]<<" "
-                         <<inputTransferBlocks.at(i).values[3]<<std::endl;
+                         <<(int) inputTransferBlocks.at(i).values[0]<<" "
+                         <<(int) inputTransferBlocks.at(i).values[1]<<" "
+                         <<(int) inputTransferBlocks.at(i).values[2]<<" "
+                         <<(int) inputTransferBlocks.at(i).values[3]<<std::endl;
 
                 std::cout <<"Filtered blocks ["<<i<<"]: "
-                         <<filteredTransferBlocks.at(i).values[0]<<" "
-                         <<filteredTransferBlocks.at(i).values[1]<<" "
-                         <<filteredTransferBlocks.at(i).values[2]<<" "
-                         <<filteredTransferBlocks.at(i).values[3]<<std::endl;
+                         <<(int) filteredTransferBlocks.at(i).values[0]<<" "
+                         <<(int) filteredTransferBlocks.at(i).values[1]<<" "
+                         <<(int) filteredTransferBlocks.at(i).values[2]<<" "
+                         <<(int) filteredTransferBlocks.at(i).values[3]<<std::endl;
 
                 std::cout <<"New buffer blocks ["<<i<<"]: "
-                         <<nextBuffers.at(i).values[0]<<" "
-                         <<nextBuffers.at(i).values[1]<<" "
-                         <<nextBuffers.at(i).values[2]<<" "
-                         <<nextBuffers.at(i).values[3]<<std::endl;
+                         <<(int) nextBuffers.at(i).values[0]<<" "
+                         <<(int) nextBuffers.at(i).values[1]<<" "
+                         <<(int) nextBuffers.at(i).values[2]<<" "
+                         <<(int) nextBuffers.at(i).values[3]<<std::endl;
 
                 std::cout <<"Mac valid flags ["<<i<<"]: "
-                         <<macValidFlags.at(i)<<" "
-                         <<macValidFlags.at(i)<<" "
-                         <<macValidFlags.at(i)<<" "
-                         <<macValidFlags.at(i)<<std::endl;
+                         <<(int) macValidFlags.at(i)<<std::endl;
             }
         } // input checking block
     } //launch
 
 };
-#define PLAY
+//#define PLAY
 #ifdef PLAY
 TEST_F (testFixture, play) {
-
+    //bitmask: 16'b01101111_11110110
+    unsigned short _bitmask = 0x6FF6;
+    //mutual bitmask: 16'b01100110_01100110
+    unsigned short _mutualBitmask = 0x6666;
+    std::vector<t_smb_tb> _testTB(6, {0,0,0,0});
+    _testTB.at(0) = {0, 1, 2, 3};
+    _testTB.at(1) = {4, 5, 6, 7};
+    _testTB.at(2) = {8, 9, 10, 11};
+    _testTB.at(3) = {12, 13, 14, 15};
+    _testTB.at(4) = {16, 17, 18, 19};
+    _testTB.at(5) = {20, 21, 22, 23};
+    launch(
+           _bitmask,
+           _mutualBitmask,
+           _testTB
+           );
 }
 #else
+TEST_F (testFixture, test0) {
+    //bitmask: 8'b11110110
+    unsigned char _bitmask = 0xF6;
+    //mutual bitmask: 8'b01100110
+    unsigned char _mutualBitmask = 0x66;
+    std::vector<t_smb_tb> _testTB(3, {0,0,0,0});
+    _testTB.at(0) = {0, 1, 2, 3};
+    _testTB.at(1) = {4, 5, 6, 7};
+    _testTB.at(2) = {8, 9, 10, 11};
+    launch(
+           _bitmask,
+           _mutualBitmask,
+           _testTB
+           );
+}
+
+TEST_F (testFixture, test1) {
+    //bitmask: 8'b11111111
+    unsigned char _bitmask = 0xFFFF;
+    //mutual bitmask: 8'b01100110
+    unsigned char _mutualBitmask = 0x66;
+    std::vector<t_smb_tb> _testTB(4, {0,0,0,0});
+    _testTB.at(0) = {0, 1, 2, 3};
+    _testTB.at(1) = {4, 5, 6, 7};
+    _testTB.at(2) = {8, 9, 10, 11};
+    _testTB.at(3) = {12, 13, 14, 15};
+    launch(
+           _bitmask,
+           _mutualBitmask,
+           _testTB
+           );
+}
 
 #endif
 

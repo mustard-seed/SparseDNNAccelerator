@@ -70,24 +70,24 @@ module selectGenerator
 			smallBufferAccumulator #(.POSITION(i), .COUNT_BITWIDTH(COUNT_BITWIDTH), .INDEX_BITWIDTH(INDEX_BITWIDTH), .MAX_NUM_OUTPUT(MAX_NUM_OUTPUT))
 				accum_inst(.startIndex(startIndex), .b(bitmask[i]), .previousAccum(wireAccum), .accum(accumulation[(i+1)*COUNT_BITWIDTH-1 -: COUNT_BITWIDTH]));
 		end
-	endgenerate
 
-	if (ENABLE_NEXT_START_INDEX == 1) begin
-		integer idxI;
+		if (ENABLE_NEXT_START_INDEX == 1) begin
+			integer idxI;
 
-		always @(*) begin
-			if (accumulation[BITMASK_LENGTH*COUNT_BITWIDTH-1 -: COUNT_BITWIDTH] == {COUNT_BITWIDTH{1'b0}}) begin
-				nextStartIndex = BITMASK_LENGTH;
-			end
-			else begin
-				for (idxI=BITMASK_LENGTH; idxI>0; idxI=idxI-1) begin
-					if (accumulation[idxI*COUNT_BITWIDTH-1 -: COUNT_BITWIDTH] == accumulation[BITMASK_LENGTH*COUNT_BITWIDTH-1 -: COUNT_BITWIDTH]) begin
-						nextStartIndex = idxI;
+			always @(*) begin
+				if (accumulation[BITMASK_LENGTH*COUNT_BITWIDTH-1 -: COUNT_BITWIDTH] == {COUNT_BITWIDTH{1'b0}}) begin
+					nextStartIndex = BITMASK_LENGTH;
+				end
+				else begin
+					for (idxI=BITMASK_LENGTH; idxI>0; idxI=idxI-1) begin
+						if (accumulation[idxI*COUNT_BITWIDTH-1 -: COUNT_BITWIDTH] == accumulation[BITMASK_LENGTH*COUNT_BITWIDTH-1 -: COUNT_BITWIDTH]) begin
+							nextStartIndex = idxI;
+						end
 					end
 				end
 			end
 		end
-	end
+	endgenerate
 endmodule
 
 /*
@@ -155,7 +155,7 @@ module inputFilter
 endmodule
 
 //TODO: Change this module if OpenCL code changes
-module clMaskFilter16c2_1bit
+module clMaskFilter8c2_1bit
 	(
 		input   wire clock,
 		input   wire resetn,
@@ -181,19 +181,19 @@ module clMaskFilter16c2_1bit
 
 	inputFilter #(
 		.ENABLE_NEXT_START_INDEX(1),
-		.BITMASK_LENGTH     (16),
-		.INDEX_BITWIDTH     (5),
+		.BITMASK_LENGTH     (8),
+		.INDEX_BITWIDTH     (4),
 		.INPUT_ELEMENT_WIDTH(1),
 		.MAX_NUM_OUTPUT     (2),
 		.COUNT_BITWIDTH     (2)
 	)
 	maskFilter (
-		.sparseInput  (sparseInput),
-		.bitmask      (bitmask),
+		.sparseInput  (sparseInput[7:0]),
+		.bitmask      (bitmask[7:0]),
 		.denseOutput  (result[9:8]),
-		.startIndex    (startIndex[4:0]),
+		.startIndex    (startIndex[3:0]),
 		.numDenseOutput	(),
-		.nextStartIndex(result[4:0])
+		.nextStartIndex(result[3:0])
 		);
 endmodule
 
@@ -235,7 +235,7 @@ module clSparseMacBufferUpdate
 	wire [31:0] currentBuffer;
 	wire [31:0] inputTransferBlock;
 
-	assign currentBuffer = {currentbufferB1, currentBufferB0, currentBufferA1, currentBufferA0};
+	assign currentBuffer = {currentBufferB1, currentBufferB0, currentBufferA1, currentBufferA0};
 	assign inputTransferBlock = {inputTransferBlockB1, inputTransferBlockB0, inputTransferBlockA1, inputTransferBlockA0};
 
 	wire [1:0] numClusterValid;
@@ -243,9 +243,11 @@ module clSparseMacBufferUpdate
 	wire [1:0] totalSize;
 	wire macClustersValid;
 	wire [1:0] newSize;
-	reg [31:0] newBuffer;
-	reg [31:0] macClusters;
+	wire [31:0] newBuffer;
+	wire [31:0] macClusters;
 	reg [63:0] concatenatedBuffer;
+	wire [63:0] paddedCurrentBuffer;
+	wire [63:0] paddedDenseClusters;
 
 	assign result[63:0] = {newBuffer, macClusters};
 	assign result[65:64] = newSize;
@@ -261,7 +263,7 @@ module clSparseMacBufferUpdate
 		)
 	operandFilter (
 			.sparseInput   (inputTransferBlock),
-			.bitmask       (inputSelectBitmask),
+			.bitmask       (inputSelectBitmask[1:0]),
 			.startIndex    (2'd0),
 			.denseOutput   (denseClusters),
 			.nextStartIndex(),
@@ -271,17 +273,19 @@ module clSparseMacBufferUpdate
 	assign totalSize = numClusterValid + currentBufferSize[1:0];
 	assign macClustersValid = totalSize[1];
 	assign newSize = {1'b0, totalSize[0]};
+	assign paddedCurrentBuffer = {32'd0, currentBuffer};
+	assign paddedDenseClusters = {32'd0, denseClusters};
 
 	//Select content for the concatenated buffer
-	always @ (*) begin
+	always @ (*) begin: FOR_CONCATENTATED_BUFFER_SELECT
 		integer i;
 		for (i=0; i<4; i=i+1) begin
 			if (i < {1'b0, currentBufferSize[1:0]}) begin
-				concatenatedBuffer[(i+1)*16-1 -: 16] = currentBuffer[(i+1)*16-1 -: 16];
+				concatenatedBuffer[(i+1)*16-1 -: 16] = paddedCurrentBuffer[(i+1)*16-1 -: 16];
 			end
 			else begin
 				if (i < ({1'b0, currentBufferSize[1:0]} + {1'b0, numClusterValid})) begin
-					concatenatedBuffer[(i+1)*16-1 -: 16] = denseClusters[(i-{1'b0, currentBufferSize[1:0]}+1)*16-1 -: 16];
+					concatenatedBuffer[(i+1)*16-1 -: 16] = paddedDenseClusters[(i-{1'b0, currentBufferSize[1:0]}+1)*16-1 -: 16];
 				end
 				else begin
 					concatenatedBuffer[(i+1)*16-1 -: 16] = {16{1'b0}};
@@ -290,7 +294,7 @@ module clSparseMacBufferUpdate
 		end
 	end
 
-	assign newBuffer = (macClustersValid == 1'b0) ? concatenatedBuffer[4*16-1 -: 32] : concatenatedBuffer[2*16-1 -: 32];
+	assign newBuffer = (macClustersValid == 1'b1) ? concatenatedBuffer[4*16-1 -: 32] : concatenatedBuffer[2*16-1 -: 32];
 	assign macClusters = concatenatedBuffer[2*16-1 -: 32];
 endmodule
 

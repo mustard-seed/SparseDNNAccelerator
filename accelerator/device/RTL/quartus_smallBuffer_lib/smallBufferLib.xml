@@ -1,7 +1,7 @@
 <RTL_SPEC>
   <!-- 'name' is how this function will be called from an OpenCL kernel.
        'module' is the top-level HDL module name that implements the function. -->
-  <FUNCTION name="smallBufferMaskFilter" module="clMaskFilter16c2_1bit">
+  <FUNCTION name="smallBufferMaskFilter" module="clMaskFilter8c2_1bit">
     <ATTRIBUTES>
       <!-- Setting IS_STALL_FREE="yes" means the function neither generates stalls internally nor can it 
            properly handle incoming stalls (because it simply ignores its stall/valid inputs). If set

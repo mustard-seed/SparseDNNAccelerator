@@ -39,7 +39,7 @@ unsigned short smallBufferMaskFilter (
 		nextStartIndex = pos+1;
 	}
 
-	return (((denseOutput << 8) & 0xFF00) | (nextStartIndex & 0x00FF));
+	return ((( ((unsigned short) denseOutput) << 8) & 0xFF00) | ( ((unsigned short) nextStartIndex) & 0x00FF));
 }
 
 ulong2 smallBufferMacBufferUpdate (
@@ -80,7 +80,7 @@ ulong2 smallBufferMacBufferUpdate (
 	{
 		unsigned char pos = getNthOnePosition((inputSelectBitmask & 0x03), n+1, 0);
 		unsigned char block0 = 0;
-		usnigned char block1 = 0;
+		unsigned char block1 = 0;
 		if (pos < 2) {
 			block0 = inputTransferBlock[pos*2];
 			block1 = inputTransferBlock[pos*2+1];
@@ -102,7 +102,7 @@ ulong2 smallBufferMacBufferUpdate (
 		else if (i < (currentBufferSize + numFiltered))
 		{
 			block0 = filteredTransferBlock[(i-currentBufferSize)*2];
-			block0 = filteredTransferBlock[(i-currentBufferSize)*2+1];
+			block1 = filteredTransferBlock[(i-currentBufferSize)*2+1];
 		}
 
 		concatenatedBuffer[i*2] = block0;
@@ -130,14 +130,14 @@ ulong2 smallBufferMacBufferUpdate (
 
 	ulong2 result;
 	result.x = 
-		((nextBuffer[3] & 0x0FF) << 56)
-		| ((nextBuffer[2] & 0x0FF) << 48)
-		| ((nextBuffer[1] & 0x0FF) << 40)
-		| ((nextBuffer[0] & 0x0FF) << 32)
-		| ((macOutput[3] & 0x0FF) << 24)
-		| ((macOutput[2] & 0x0FF) << 16)
-		| ((macOutput[1] & 0x0FF) << 8)
-		| ((macOutput[0] & 0x0FF) << 0);
+		(( ((unsigned long) nextBuffer[3]) & 0x0FF) << 56)
+		| (( ((unsigned long) nextBuffer[2]) & 0x0FF) << 48)
+		| (( ((unsigned long) nextBuffer[1]) & 0x0FF) << 40)
+		| (( ((unsigned long) nextBuffer[0]) & 0x0FF) << 32)
+		| (( ((unsigned long) macOutput[3]) & 0x0FF) << 24)
+		| (( ((unsigned long) macOutput[2]) & 0x0FF) << 16)
+		| (( ((unsigned long) macOutput[1]) & 0x0FF) << 8)
+		| (( ((unsigned long) macOutput[0]) & 0x0FF) << 0);
 
 	result.y = ((macValid & 0x01) << 8) | ((newSize & 0x11));
 
