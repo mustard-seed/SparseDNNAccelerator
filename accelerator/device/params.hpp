@@ -82,6 +82,9 @@
 #define VALUE_DIVIDED_BY_CLUSTER_SIZE_REMAINDER_MASK 0x1;
 #define CLUSTER_TO_TRANSFER_BLOCK_SHIFT 1 //amount of right shift required to convert a cluster count into transfer block count
 
+#define SURVIVING_COUNT_CLUSTER_INDEX 0X1
+#define SURVIVING_COUNT_TRANSFER_BLOCK_INDEX 0x1
+
 #define BURST_SIZE_BYTE 8
 
 #define KERNEL_CACHE_LANES PE_ROWS

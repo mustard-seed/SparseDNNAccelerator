@@ -397,6 +397,7 @@ FlexibleDirectCompressedTensor::FlexibleDirectCompressedTensor (
 
                            //Compute the bitmask, and form the blocks
                            unsigned char bitmask = 0x0;
+                           unsigned char numSurivingClustes = 0x0;
                            for (unsigned int i=0; i<=maxClusterIndexInCompressionBlock; i++) {
                                bool preserve = false;
                                for (unsigned int j=0; j<=maxScalarIndexInCluster; j++)
@@ -406,6 +407,7 @@ FlexibleDirectCompressedTensor::FlexibleDirectCompressedTensor (
                                }
                                unsigned char bit = (preserve) ?
                                            0x01 : 0x00;
+                               numSurivingClustes = (preserve) ? (numSurivingClustes) + 1 : numSurivingClustes;
                                bitmask |= (bit << i);
                            } // for bitmask
 
@@ -414,13 +416,15 @@ FlexibleDirectCompressedTensor::FlexibleDirectCompressedTensor (
                            //First load the bitmask
                            //Assume it is 8 bits
                            transferBlock.values[0].cluster_values[0] = bitmask;
+                           transferBlock.values[SURVIVING_COUNT_TRANSFER_BLOCK_INDEX].cluster_values[SURVIVING_COUNT_CLUSTER_INDEX] = numSurivingClustes;
 
                            //std::cout <<"bitmask L: "<<(int)(bitmask & 0xFF)<<std::endl;
 
-
-                           //valueVector.at(iCompressVector++) = transferBlock;
-                            unsigned char iTransferBlock = 1; //account for the bitmask;
-                           //streamBlockAddress++;
+                           //Bitmask and count occupies its own transfer block
+                           valueVector.at(iCompressVector++) = transferBlock;
+                            //unsigned char iTransferBlock = 1; //account for the bitmask;
+                           unsigned char iTransferBlock = 0;
+                           streamBlockAddress++;
 
                            //iterate through the compression block and transfer the non-zero values
                            for (int i=0; i<=maxClusterIndexInCompressionBlock; i++) {
@@ -559,20 +563,21 @@ void FlexibleDirectCompressedTensor::decodeTensor(
 
             if (updateBitmask) {
                 bitmask = transferBlock.values[0].cluster_values[0];
-                numNZClustersInCompressionBlock = countNumOnes(bitmask);
+                //numNZClustersInCompressionBlock = countNumOnes(bitmask);
+                numNZClustersInCompressionBlock = transferBlock.values[SURVIVING_COUNT_TRANSFER_BLOCK_INDEX].cluster_values[SURVIVING_COUNT_CLUSTER_INDEX];
                 countNZClustersInCompressionBlock = 0;
                 vectorCompressionBlock.resize(0);
                 //std::cout <<"bitmask R: "<<(int)(bitmask & 0xFF)<<std::endl;
                 //std::cout <<"numNZClustersInCompressionBlock: "<<(int)(numNZClustersInCompressionBlock)<<std::endl;
                 updateBitmask = false;
-                for (int i=1; i<=maxClusterIndexInTransferBlock; i++)
-                {
-                    for (int j=0; j<=maxScalarIndexInCluster; j++)
-                    {
-                        vectorCompressionBlock.push_back(transferBlock.values[i].cluster_values[j]);
-                    }
-                }
-                 countNZClustersInCompressionBlock += (maxClusterIndexInTransferBlock);
+//                for (int i=1; i<=maxClusterIndexInTransferBlock; i++)
+//                {
+//                    for (int j=0; j<=maxScalarIndexInCluster; j++)
+//                    {
+//                        vectorCompressionBlock.push_back(transferBlock.values[i].cluster_values[j]);
+//                    }
+//                }
+                 //countNZClustersInCompressionBlock += (maxClusterIndexInTransferBlock);
             }
             else {
                 for (int i=0; i<=maxClusterIndexInTransferBlock; i++)
