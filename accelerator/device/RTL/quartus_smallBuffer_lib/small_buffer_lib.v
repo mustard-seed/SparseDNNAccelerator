@@ -11,22 +11,44 @@ module smallBufferAccumulator
 		input wire [INDEX_BITWIDTH-1:0] startIndex,
 		input wire b,
 		input wire [COUNT_BITWIDTH-1:0] previousAccum,
-		output reg [COUNT_BITWIDTH-1:0] accum
+		output wire [COUNT_BITWIDTH-1:0] accum
 	);
+
+	reg [COUNT_BITWIDTH-1:0] operandA;
+	reg [COUNT_BITWIDTH-1:0] operandB;
+
+	// always @ (*) begin
+	// 	//Priority mux
+	// 	if (previousAccum <  MAX_NUM_OUTPUT) begin
+	// 		if (startIndex > POSITION) begin
+	// 			accum = {COUNT_BITWIDTH{1'b0}};
+	// 		end
+	// 		else begin
+	// 			accum = previousAccum + {{(COUNT_BITWIDTH-1){1'b0}}, b};
+	// 		end
+	// 	end
+	// 	else begin
+	// 		accum = previousAccum;
+	// 	end
+	// end
+
 	always @ (*) begin
-		//Priority mux
 		if (previousAccum <  MAX_NUM_OUTPUT) begin
 			if (startIndex > POSITION) begin
-				accum = {COUNT_BITWIDTH{1'b0}};
+				operandA = {(COUNT_BITWIDTH){1'b0}};
+				operandB = {(COUNT_BITWIDTH){1'b0}};
 			end
 			else begin
-				accum = previousAccum + {{(COUNT_BITWIDTH-1){1'b0}}, b};
+				operandA = previousAccum;
+				operandB = {{(COUNT_BITWIDTH-1){1'b0}}, b};
 			end
 		end
 		else begin
-			accum = previousAccum;
+			operandA = previousAccum;
+			operandB = {(COUNT_BITWIDTH){1'b0}};
 		end
 	end
+	assign accum = operandA + operandB;
 endmodule
 
 /**
@@ -155,7 +177,7 @@ module inputFilter
 endmodule
 
 //TODO: Change this module if OpenCL code changes
-module clMaskFilter8c2_1bit
+module clMaskFilter
 	(
 		input   wire clock,
 		input   wire resetn,
@@ -188,7 +210,7 @@ module clMaskFilter8c2_1bit
 		.COUNT_BITWIDTH     (2)
 	)
 	maskFilter (
-		.sparseInput  (sparseInput[7:0]),
+		.sparseInput  (sparseInput[15:0]),
 		.bitmask      (bitmask[7:0]),
 		.denseOutput  (result[9:8]),
 		.startIndex    (startIndex[3:0]),

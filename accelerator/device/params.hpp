@@ -1,6 +1,7 @@
 #ifndef PARAMS_DEFINED
 #define PARAMS_DEFINED
 
+#define SPARSE_SYSTEM
 #define INSTRUCTION_SIZE_BYTE 24
 #define DEPENDENCY_LIST_SIZE_BYTE 2
 #define MAX_INSTRUCTION_IN_FLIGHT_COUNT_PER_TYPE 3
@@ -59,8 +60,8 @@
 
 #define PACKET_SIZE 1
 
-#define PE_ROWS 8
-#define PE_COLS 2
+#define PE_ROWS 1
+#define PE_COLS 1
 
 //Encoding weight length
 #define ENCODING_LENGTH 64

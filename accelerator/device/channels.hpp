@@ -28,7 +28,13 @@ channel t_transferblock_tagged channel_dpWeightInput[PE_ROWS][PE_COLS] __attribu
 channel t_transferblock_tagged channel_dpActivationInput[PE_ROWS][PE_COLS] __attribute__((depth(PE_VEC_FIFO_SIZE)));
 
 channel t_accumulator channel_peDrainOutput[PE_ROWS][PE_COLS] __attribute__((depth(0)));
-#endif
+
+#if defined(SPARSE_SYSTEM)
+channel t_transferblock_tagged channel_filterWeight[PE_ROWS][PE_COLS] __attribute__((depth(0)));
+channel t_transferblock_tagged channel_filterActivation[PE_ROWS][PE_COLS] __attribute__((depth(0)));
+#endif //SPARSE_SYSTEM
+
+#endif //PE_SYSTEM
 
 #ifdef WEIGHT_MEMORY_INTERCONNECT
 //channel t_transfer_block channel_weightLanes[PE_ROWS][PE_COLS] __attribute__((depth(0)));
@@ -84,6 +90,7 @@ Output activation channels coming out of the output buffers
 channel t_output_cluster_info channel_output_buffer_to_compressor_info[PE_COLS] __attribute__((depth(1)));
 channel t_cluster channel_output_buffer_to_compressor_data[PE_COLS] __attribute__((depth(COMPRESSION_WINDOW_SIZE)));
 channel t_output_cluster_tagged channel_compressor_to_tee[PE_COLS] __attribute__((depth(0)));
+
 #else
 channel t_output_cluster_tagged channel_oa_buffer_to_oa_tee[PE_COLS] __attribute__((depth(0)));
 #endif

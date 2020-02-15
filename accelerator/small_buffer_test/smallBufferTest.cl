@@ -12,8 +12,8 @@ __kernel void smallBufferTest (
 		__global unsigned char* pValid,
 
 		unsigned char numTransferBlocks,
-		unsigned char bitmask,
-		unsigned char mutualBitmask
+		unsigned short bitmask,
+		unsigned short mutualBitmask
 	)
 {
 	t_smb_tb operandBuffer;

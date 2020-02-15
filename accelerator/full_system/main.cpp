@@ -42,7 +42,7 @@
 
 //#define PROFILE
 #define PLAY
-#define TEST_TYPE TEST
+#define TEST_TYPE FULL
 #define REPEAT 1
 #define EMULATE
 
@@ -112,7 +112,7 @@ protected:
         binaryFile = "device_utils.aocx";
         clPlatform = aocl_utils_cpp::findPlatform("Intel(R) FPGA SDK for OpenCL(TM)");
 #else
-        binaryFile = "operandMatcher_c_model.aocx";
+        binaryFile = "smallBuffer.aocx";
 #if defined(EMULATE)
         clPlatform = aocl_utils_cpp::findPlatform("Intel(R) FPGA Emulation Platform for OpenCL(TM)");
 #else
