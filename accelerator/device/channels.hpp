@@ -24,14 +24,14 @@ channel unsigned char channel_drain_token[PE_ROWS][PE_COLS] __attribute__((depth
 #ifdef PE_SYSTEM
 
 
-channel t_transferblock_tagged channel_dpWeightInput[PE_ROWS][PE_COLS] __attribute__((depth(PE_VEC_FIFO_SIZE)));
-channel t_transferblock_tagged channel_dpActivationInput[PE_ROWS][PE_COLS] __attribute__((depth(PE_VEC_FIFO_SIZE)));
+channel t_transferblock_tagged channel_dpWeightInput[PE_ROWS][PE_COLS] __attribute__((depth(0)));
+channel t_transferblock_tagged channel_dpActivationInput[PE_ROWS][PE_COLS] __attribute__((depth(0)));
 
 channel t_accumulator channel_peDrainOutput[PE_ROWS][PE_COLS] __attribute__((depth(0)));
 
 #if defined(SPARSE_SYSTEM)
-channel t_transferblock_tagged channel_filterWeight[PE_ROWS][PE_COLS] __attribute__((depth(0)));
-channel t_transferblock_tagged channel_filterActivation[PE_ROWS][PE_COLS] __attribute__((depth(0)));
+channel t_transferblock_tagged channel_filterWeight[PE_ROWS][PE_COLS] __attribute__((depth(PE_VEC_FIFO_SIZE)));
+channel t_transferblock_tagged channel_filterActivation[PE_ROWS][PE_COLS] __attribute__((depth(PE_VEC_FIFO_SIZE)));
 #endif //SPARSE_SYSTEM
 
 #endif //PE_SYSTEM

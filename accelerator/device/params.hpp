@@ -60,8 +60,13 @@
 
 #define PACKET_SIZE 1
 
-#define PE_ROWS 1
-#define PE_COLS 1
+#if defined FULL_SYSTEM
+	#define PE_ROWS 1
+	#define PE_COLS 1
+#else
+	#define PE_ROWS 2
+	#define PE_COLS 2
+#endif
 
 //Encoding weight length
 #define ENCODING_LENGTH 64
@@ -121,15 +126,13 @@
 #define PE_MODE_DRAIN_PSUM 0x05
 
 //PE FIFO parameters
-#define PE_VEC_FIFO_SIZE 1
+#define PE_VEC_FIFO_SIZE (COMPRESSION_WINDOW_SIZE / TRANSFER_SIZE)  //Need to set this to avoid deadlock
+//#define PE_VEC_FIFO_SIZE 1
 #define PE_NUM_MULT COMPRESSION_VEC_SIZE
 
 //PE datawidth parameters
 #define REG_FF_FRAC 16 //16 bit fraction width, make  sure it is wider than all possible frac_width used on the short data format
 #define REG_FF_WIDTH 32 //32 bit FF, int
-
-#define IDX 0
-#define IDY 0
 
 
 
