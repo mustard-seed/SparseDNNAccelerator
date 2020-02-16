@@ -3086,13 +3086,13 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 #define OPERAND_FILTER_ACCEPT_MASK 0x2
 #define OPERAND_FILTER_MASK_SYNC 0x4
 #define OPERAND_FILTER_FILTER 0x8
-#define OPERAND_FILTER_WIN_SYNC 0x10
-#define OPERAND_FILTER_FILTER_SYNC 0x20
+// #define OPERAND_FILTER_WIN_SYNC 0x10
+#define OPERAND_FILTER_FILTER_SYNC 0x10
 
 #ifndef SPARSE_UTILITY
 #define SPARSE_UTILITY
 	//Define the instruction type
-	typedef uint6_t t_instruction;
+	typedef uint5_t t_instruction;
 	typedef unsigned char t_bitmask;
 	typedef uint5_t t_start;
 	typedef uint2_t t_buffer_size;
@@ -3124,6 +3124,8 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 			t_instruction currentInstruction,
 			t_flag thisTBAvailable,
 			t_flag otherTBAvailable,
+			t_flag thisMaskAvailable,
+			t_flag otherMaskAvailable,
 			t_flag thisWindowDone,
 			t_flag otherWindowDone,
 			t_flag thisLastTB,
@@ -3142,41 +3144,13 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 
 			case (OPERAND_FILTER_ACCEPT_MASK) :{
 
-				if (thisTBAvailable == TRUE) {
+				if (thisMaskAvailable == TRUE) {
 					nextInstruction = OPERAND_FILTER_MASK_SYNC;
 
-					if (otherTBAvailable == TRUE) {
+					if (otherMaskAvailable == TRUE) {
 						nextInstruction = OPERAND_FILTER_FILTER;
 
 						if (thisWindowDone == TRUE)
-						{
-							nextInstruction = OPERAND_FILTER_WIN_SYNC;
-
-							if (otherWindowDone == TRUE) {
-								nextInstruction = OPERAND_FILTER_ACCEPT_MASK;
-
-								if (thisLastTB == TRUE)
-								{
-									nextInstruction = OPERAND_FILTER_FILTER_SYNC;
-								}
-							}
-						}
-					}
-				}
-			}
-			break; //OPERAND_FILTER_ACCEPT_MASK
-
-			case (OPERAND_FILTER_MASK_SYNC) :{
-
-				if (otherTBAvailable == TRUE)
-				{
-					nextInstruction = OPERAND_FILTER_FILTER;
-
-					if (thisWindowDone == TRUE)
-					{
-						nextInstruction = OPERAND_FILTER_WIN_SYNC;
-
-						if (otherWindowDone == TRUE)
 						{
 							nextInstruction = OPERAND_FILTER_ACCEPT_MASK;
 
@@ -3188,13 +3162,15 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 					}
 				}
 			}
-			break; //OPERAND_FILTER_MASK_SYNC
+			break; //OPERAND_FILTER_ACCEPT_MASK
 
-			case (OPERAND_FILTER_FILTER) :{
-				if (thisTBAvailable == TRUE && (thisWindowDone == TRUE)) {
-					nextInstruction = OPERAND_FILTER_WIN_SYNC;
+			case (OPERAND_FILTER_MASK_SYNC) :{
 
-					if (otherWindowDone == TRUE)
+				if (otherMaskAvailable == TRUE)
+				{
+					nextInstruction = OPERAND_FILTER_FILTER;
+
+					if (thisWindowDone == TRUE)
 					{
 						nextInstruction = OPERAND_FILTER_ACCEPT_MASK;
 
@@ -3204,13 +3180,11 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 						}
 					}
 				}
-
 			}
-			break; //OPERAND_FILTER_FILTER
+			break; //OPERAND_FILTER_MASK_SYNC
 
-			case (OPERAND_FILTER_WIN_SYNC) :{
-				if (otherWindowDone == TRUE)
-				{
+			case (OPERAND_FILTER_FILTER) :{
+				if (thisTBAvailable == TRUE && (thisWindowDone == TRUE)) {
 					nextInstruction = OPERAND_FILTER_ACCEPT_MASK;
 
 					if (thisLastTB == TRUE)
@@ -3218,8 +3192,9 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 						nextInstruction = OPERAND_FILTER_FILTER_SYNC;
 					}
 				}
+
 			}
-			break; //OPERAND_FILTER_WIN_SYNC
+			break; //OPERAND_FILTER_FILTER
 
 			case (OPERAND_FILTER_FILTER_SYNC) :{
 				if (otherIsLast == TRUE)
@@ -3523,10 +3498,10 @@ __kernel void kernelOperandFilter ()
 				}
 			}
 		}
-		else if (weightFilterInstruction == OPERAND_FILTER_WIN_SYNC)
-		{
-			weightWindowDone = TRUE;
-		}
+		// else if (weightFilterInstruction == OPERAND_FILTER_WIN_SYNC)
+		// {
+		// 	weightWindowDone = TRUE;
+		// }
 		else if (weightFilterInstruction == OPERAND_FILTER_FILTER_SYNC)
 		{
 			weightFilterDone = TRUE;
@@ -3593,10 +3568,10 @@ __kernel void kernelOperandFilter ()
 				}
 			}
 		}
-		else if (activationFilterInstruction == OPERAND_FILTER_WIN_SYNC)
-		{
-			activationWindowDone = TRUE;
-		}
+		// else if (activationFilterInstruction == OPERAND_FILTER_WIN_SYNC)
+		// {
+		// 	activationWindowDone = TRUE;
+		// }
 		else if (activationFilterInstruction == OPERAND_FILTER_FILTER_SYNC)
 		{
 			activationFilterDone = TRUE;
@@ -3699,8 +3674,10 @@ __kernel void kernelOperandFilter ()
 				weightFilterInstruction, //current instruction
 				weightTBAvailable, //thisTBAvailable,
 				activationTBAvailable, //otherTBAvailable,
-				weightWindowDone, //thisWindowDone
-				activationWindowDone, //otherWindowDone,
+				weightMaskNew, //thisMaskAvailable
+				activationMaskNew, //otherMaskAvailabe,
+				weightWindowDone, //this window done
+				activationWindowDone, //other window done
 				nextWeightIsLast, //thisLastTB
 				activationFilterDone
 			);
@@ -3709,6 +3686,8 @@ __kernel void kernelOperandFilter ()
 				activationFilterInstruction, //current instruction
 				activationTBAvailable, //thisTBAvailable,
 				weightTBAvailable, //otherTBAvailable,
+				activationMaskNew, //thisMaskAvaialble
+				weightMaskNew, //otherMaskAvailable
 				activationWindowDone, //thisWindowDone
 				weightWindowDone, //otherWindowDone,
 				nextActivationIsLast, //thisLastTB

@@ -138,7 +138,7 @@ protected:
 //    EXPECT_TRUE (COMPRESSION_VEC_SIZE == 4);
 //    EXPECT_TRUE(true);
 //}
-#define PLAY
+//#define PLAY
 #ifdef PLAY
 TEST_F (peTestFixture, testPlayfield) {
 /* Test goal: Verify the correctness of the bias loading, dot product and drainage capability
