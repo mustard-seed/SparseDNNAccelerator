@@ -670,7 +670,7 @@ __kernel void kernelIABuffer ()
 //	#pragma ivdep array(cacheIABlocks)
 //	#pragma ivdep array(cacheIAStreamBlockAddress)
 //	#pragma ivdep safelen(5)
-	#pragma ivdep
+//	#pragma ivdep
 	while (true)
 	{
 		t_state nextState = currentState;
@@ -881,7 +881,8 @@ __kernel void kernelIATileController (unsigned short numGroupxTiles)
 			#if !defined(SPARSE_SYSTEM)
 		    	tileBufferControlPacket.numTBCountPerStrip = numTBCountPerIAStrip;
 		    #else
-		    	tileBufferControlPacket.iAddressCache = iStripInTile++;
+                tileBufferControlPacket.iAddressCache = iStripInTile;
+                iStripInTile += inputTileWidth;
 		    #endif
 
 		    tileBufferControlPacket.numStripInRow = inputTileWidth;
@@ -1316,6 +1317,7 @@ __kernel void kernelOutputWriter (
 #define OA_BUFFER_STATE_PADD 0x4 //NOP instructions
 #define OA_BUFFER_STATE_ACCESS 0x8
 #define OA_BUFFER_PAD_COUNT	 2
+//#define OA_BUFFER_PAD_COUNT	 20
 __attribute__((max_global_work_dim(0)))
 __attribute__((autorun))
 __attribute__((num_compute_units(PE_COLS)))
@@ -1356,7 +1358,7 @@ __kernel void kernelOABuffer ()
 	unsigned short indexOutput = 0;
 
 
-	#pragma ivdep
+	//#pragma ivdep
 	while (true)
 	{
 		t_state nextState = currentState;
@@ -1659,7 +1661,7 @@ __kernel void kernelCompressorOranizer()
 
 		//Depending on whether sparsification is enabled, we may or may not to add an extra cluster to encode the bitmask/surviving cluster count
 		unsigned char numClustersToSend = enableSparsification ?
-			 numSurvivingClusters + 1 : numSurvivingClusters;
+			 numSurvivingClusters + TRANSFER_SIZE : numSurvivingClusters;
 
 		//For every weindow, we want to sent a number of clusters that is a multiple of transfer size
 		//The number of clusters that we actually need to send is the number of surviving clusters, the bitmask/surviving cluster count
@@ -1675,9 +1677,20 @@ __kernel void kernelCompressorOranizer()
 				//TODO: Change this if the number of bitmask grows
 				if ((iClusterSent == 0) && enableSparsification)
 				{
-					//TODO: Account for case that doesn't require sparsification
 					clusterTagged.cluster.cluster_values[0] = bitmask;
-					clusterTagged.cluster.cluster_values[1] = numSurvivingClusters;
+					//clusterTagged.cluster.cluster_values[1] = numSurvivingClusters;
+				}
+				else if ((iClusterSent < (TRANSFER_SIZE - 1)) && enableSparsification)
+				{
+					#pragma unroll
+					for (int i=0; i<CLUSTER_SIZE; i++)
+					{
+						clusterTagged.cluster.cluster_values[i] = 0x0;
+					}
+				}
+				else if ((iClusterSent == (TRANSFER_SIZE - 1)) && enableSparsification)
+				{
+					clusterTagged.cluster.cluster_values[SURVIVING_COUNT_CLUSTER_INDEX] = numSurvivingClusters;
 				}
 				else
 				{
@@ -1754,6 +1767,7 @@ __kernel void kernelOATee ()
 
 	//Shift register
 	t_output_dram_block_tagged regDramBlockTagged;
+	regDramBlockTagged.isLastFlag = 0x0;
 
 
 	while (true)
@@ -1767,6 +1781,8 @@ __kernel void kernelOATee ()
 		t_output_cluster_tagged tempClusterTagged;
 		t_output_tile_tee_packet tempTeeControl;
 		t_output_dram_block_tagged tempDramBlockTagged;
+
+		uint1_t transferIsLast = regDramBlockTagged.isLastFlag & 0x01;
 
 		bool readSuccess = false;
 
@@ -1813,11 +1829,12 @@ __kernel void kernelOATee ()
 		}
 		else if (regInstruction == OA_TEE_INSTRUCTION_SEND_SELF)
 		{
-			#if defined(SPARSE_SYSTEM)
-				tempDramBlockTagged.isLastFlag = ((regIsLastTee & 0x1) << 0x1);
-			#else
+			transferIsLast = (regDramBlockTagged.isLastFlag & 0x1);
+            #if defined(SPARSE_SYSTEM)
+                tempDramBlockTagged.isLastFlag = ((regIsLastTee & 0x1) << 0x1);
+            #else
 				tempDramBlockTagged.isLastFlag = regDramBlockTagged.isLastFlag;
-			#endif
+            #endif
 			tempDramBlockTagged.block = regDramBlockTagged.block;
 			sendDramBlockPreviousEnable = true;
 		}
@@ -1828,7 +1845,7 @@ __kernel void kernelOATee ()
 				t_output_dram_block countDramBlock = clusterCount2OutputDramBlock(iClusters);
 				tempDramBlockTagged.block = countDramBlock;
 				sendDramBlockPreviousEnable = true;
-			}
+            }
 		#endif
 
 		//Write channels: instruction passing
@@ -1871,7 +1888,7 @@ __kernel void kernelOATee ()
 			break;
 			case (OA_TEE_INSTRUCTION_DRAIN_PADD) :
 			{
-				shiftInNewCluster = true;
+				shiftInNewCluster = true;	
 				iClusterInDram++;
 
 				if ( iClusterInDram == NUM_CLUSTER_IN_DRAM_SIZE )
@@ -1883,7 +1900,7 @@ __kernel void kernelOATee ()
 			case (OA_TEE_INSTRUCTION_SEND_SELF) :
 			{
 				iClusterInDram = 0;
-				if ((tempDramBlockTagged.isLastFlag & 0x01) == 0x01)
+				if (transferIsLast == TRUE)
 				{
 					#if defined(SPARSE_SYSTEM)
 						tempInstruction = OA_TEE_INSTRUCTION_SEND_COUNT;
@@ -1938,6 +1955,7 @@ __kernel void kernelOATee ()
 			break;
 			case (OA_TEE_INSTRUCTION_LOOP_UPDATE1) :
 			{
+				regDramBlockTagged.isLastFlag = 0x0;
 				if (iOutputGroupxTileHeightxTileWidth == regNumOutputGroupxTileHeightxTileWidth)
 				{
 					tempInstruction = OA_TEE_INSTRUCTION_DECODE_COMMAND;
