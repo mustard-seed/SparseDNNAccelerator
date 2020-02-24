@@ -1174,7 +1174,9 @@ TEST_F (testFixture, play) {
 //    unsigned char widthBlockSize = 3;
 //    unsigned char sizeOutputTileWidthPerColFul = 3;
 //    unsigned char sizeOutputTileHeightFull = 3;
-//    bool flagEnableRelu = true;
+//    float bias = 0.0;
+//    bool flagEnableRelu = false;
+//    bool flagCompression = false;
     unsigned char inputWidth = 4;
     unsigned char inputHeight = 4;
     unsigned char numInputChannel = 14;
