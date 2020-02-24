@@ -129,7 +129,8 @@ protected:
                                 ,float bias
                                 ,char fracIn
                                 ,char fracOut
-                                ,char fracW);
+                                ,char fracW
+                                ,unsigned char numTests=1);
 };
 
 //TEST_F (peTestFixture, testFixture) 0, //tilingSizeWidth
@@ -138,7 +139,7 @@ protected:
 //    EXPECT_TRUE (COMPRESSION_VEC_SIZE == 4);
 //    EXPECT_TRUE(true);
 //}
-//#define PLAY
+#define PLAY
 #ifdef PLAY
 TEST_F (peTestFixture, testPlayfield) {
 /* Test goal: Verify the correctness of the bias loading, dot product and drainage capability
@@ -151,11 +152,31 @@ TEST_F (peTestFixture, testPlayfield) {
     char fracIn = 2, fracOut = 3, fracW = 2;
 //    float probOne = 1.0;
 
-//    float biasFloat = 0.0;
+    float biasFloat = 0.0;
 
 //    std::vector<float> activationRealInput (16, 0.00);
+//    for (int i=0; i<activationRealInput.size(); i++)
+//    {
+//        activationRealInput.at(i) = (i+1)*0.25f;
+//    }
 //    std::vector<float> weightRealInput (16, 0.00);
 
+//    unsigned char numTests = 100;
+
+//    //activationRealInput.at(12) = 1.0f;
+//    weightRealInput.at(12) = 1.0f;
+
+    std::vector<float> weightRealInput (16, 0.00);
+    for (int i=0; i<activationRealInput.size(); i++)
+    {
+        weightRealInput.at(i) = (i+1)*0.25f;
+    }
+    std::vector<float> activationRealInput (16, 0.00);
+
+    unsigned char numTests = 100;
+
+    //activationRealInput.at(12) = 1.0f;
+    activationRealInput.at(12) = 1.0f;
 
 //    for (int i=0; i<4; i++)
 //    {
@@ -167,36 +188,37 @@ TEST_F (peTestFixture, testPlayfield) {
 //            }
 //        //}
 //    }
-    float probOne = 1.0;
+//    float probOne = 1.0;
 
-    unsigned int numElements = 32;
-    float biasFloat = 1.0;
+//    unsigned int numElements = 32;
+//    float biasFloat = 1.0;
 
-    // Generate a block of activations
-    std::vector<float> activationRealInput = initialize_vector(
-                VECTOR_A_SEED,
-                numElements,
-                probOne,
-                -1.14,
-                1.14
-                );
-    //std::vector<float> activationRealInput = {-3.14f};
+//    // Generate a block of activations
+//    std::vector<float> activationRealInput = initialize_vector(
+//                VECTOR_A_SEED,
+//                numElements,
+//                probOne,
+//                -1.14,
+//                1.14
+//                );
+//    //std::vector<float> activationRealInput = {-3.14f};
 
-    // Generate a block of activations
-    std::vector<float> weightRealInput = initialize_vector(
-                VECTOR_B_SEED,
-                numElements,
-                probOne,
-                -3.14,
-                3.14
-                );
+//    // Generate a block of activations
+//    std::vector<float> weightRealInput = initialize_vector(
+//                VECTOR_B_SEED,
+//                numElements,
+//                probOne,
+//                -3.14,
+//                3.14
+//                );
     launch (
            activationRealInput,
            weightRealInput,
            biasFloat,
            fracIn,
            fracOut,
-           fracW
+           fracW,
+           numTests
            );
 
 }
@@ -506,18 +528,19 @@ float dot_product_regular_vectors (const std::vector<float> & inputVectorA
 void peTestFixture::SetUp() {
 #ifdef ARRIA10
         binaryFile = "smallBuffer.aocx";
+        #if defined(EMULATE)
+            clPlatform = aocl_utils_cpp::findPlatform("Intel(R) FPGA Emulation Platform for OpenCL(TM)");
+        #else
+            clPlatform = aocl_utils_cpp::findPlatform("Intel(R) FPGA SDK for OpenCL(TM)");
+        #endif
 #else
         //std::cout <<"Please type in the FPGA image (e.g. foo.aocx): "<<std::endl;
         //std::cin >> binaryFile;
-        binaryFile = "prototypePE_aoc_release_hw.aocx";
+        binaryFile = "device_utils.aocx";
+        clPlatform = aocl_utils_cpp::findPlatform("Intel(R) FPGA SDK for OpenCL(TM)");
 #endif
         //Setup and platform and the context
         cl_int status = CL_SUCCESS;
-#if defined(EMULATE)
-        clPlatform = aocl_utils_cpp::findPlatform("Intel(R) FPGA Emulation Platform for OpenCL(TM)");
-#else
-        clPlatform = aocl_utils_cpp::findPlatform("Intel(R) FPGA SDK for OpenCL(TM)");
-#endif
         std::vector<cl::Device> devices;
         status = clPlatform.getDevices(CL_DEVICE_TYPE_ALL, &devices);
         aocl_utils_cpp::checkError(status, "Failed to query the devices");
@@ -629,7 +652,8 @@ void peTestFixture::launch (std::vector<float>& vecRealWeight
                             ,float bias
                             ,char fracIn
                             ,char fracOut
-                            ,char fracW) {
+                            ,char fracW
+                            ,unsigned char numTests) {
 
                    std::cout <<"1. Quantize the input weight, activation, and bias to fixed point number"<<std::endl;
                    EXPECT_EQ(vecRealActivation.size(), vecRealActivation.size()) << "Input weight and activaiton have unequal sizes"<<std::endl;
@@ -779,7 +803,7 @@ void peTestFixture::launch (std::vector<float>& vecRealWeight
 
                    t_aligned_transfer_block_vector outWeightVector;
                    t_aligned_transfer_block_vector outActivationVector;
-                   signed char drain;
+                   std::vector<signed char> vecDrain(numTests, 0x0);
 
                    outWeightVector.resize(numInputWeightBlocks);
                    outActivationVector.resize(numInputActivationBlocks);
@@ -801,6 +825,7 @@ void peTestFixture::launch (std::vector<float>& vecRealWeight
                    kernelTestInterface.setArg(10, (cl_ushort) numOutputWeightBlocks); //numOutputWeightBlocks
 
                    kernelTestInterface.setArg(11, (cl_ushort) numOutputDrain); //numOutputDrain
+                   kernelTestInterface.setArg(12, (cl_uchar) numTests);
                    cl::Event event;
                    //Launch kernels
 
@@ -837,22 +862,27 @@ void peTestFixture::launch (std::vector<float>& vecRealWeight
                                bufferDrainOutput,
                                CL_TRUE,
                                0,
-                               sizeof(char),
-                               &drain
+                               sizeof(typeof(vecDrain.at(0))) * vecDrain.size(),
+                               vecDrain.data()
                                );
 
 
                    std::cout <<"7. Compare the results"<<std::endl;
-                   float actualOutputReal = fixedPointNumber((signed char)drain, fracOut, WEIGHT_BITWIDTH-fracOut-1).convert2Float();
+                   for (int i=0; i<vecDrain.size(); i++)
+                   {
+                       signed char drain = vecDrain.at(i);
+                       float actualOutputReal = fixedPointNumber((signed char) drain, fracOut, WEIGHT_BITWIDTH-fracOut-1).convert2Float();
 
-                   std::cout <<"Expected output bits: "<<std::bitset<WEIGHT_BITWIDTH>((expectedOutputFP.getBits()) & WEIGHT_MASK)<<std::endl;
-                   std::cout <<"Actual output bits: "<<std::bitset<WEIGHT_BITWIDTH>((drain & WEIGHT_MASK))<<std::endl;
+                       std::cout <<"Test "<<i<<": Expected output bits: "<<std::bitset<WEIGHT_BITWIDTH>((expectedOutputFP.getBits()) & WEIGHT_MASK)<<std::endl;
+                       std::cout <<"Test "<<i<<": Actual output bits: "<<std::bitset<WEIGHT_BITWIDTH>((drain & WEIGHT_MASK))<<std::endl;
 
-                   EXPECT_TRUE(
-                        std::abs(actualOutputReal - expectedOutputFP.convert2Float()) <= 1.0 / (1 << fracOut))
-                        << "Actual output: "<<actualOutputReal<<" "<<std::bitset<WEIGHT_BITWIDTH>(drain & WEIGHT_MASK)
-                        <<std::endl<<"Expected output: "<<expectedOutputFP.convert2Float()<<" "<<std::bitset<WEIGHT_BITWIDTH>((expectedOutputFP.getBits()) & WEIGHT_MASK)<<std::endl
-                        <<"Golden output: "<<expectedResultReal<<std::endl;
+                       EXPECT_TRUE(
+                            std::abs(actualOutputReal - expectedOutputFP.convert2Float()) <= 1.0 / (1 << fracOut))
+                            <<"Test "<<i<< ": Actual output: "<<actualOutputReal<<" "<<std::bitset<WEIGHT_BITWIDTH>(drain & WEIGHT_MASK)
+                            <<std::endl<<"Test "<<i<<": Expected output: "<<expectedOutputFP.convert2Float()<<" "<<std::bitset<WEIGHT_BITWIDTH>((expectedOutputFP.getBits()) & WEIGHT_MASK)<<std::endl
+                            <<"Golden output: "<<expectedResultReal<<std::endl;
+                   }
+
 
                    std::cout <<"Test kernel time (us): "<<kernelRunTime<<std::endl;
                    std::cout <<"Number of weight transfer blocks: "<<numInputActivationBlocks<<std::endl;

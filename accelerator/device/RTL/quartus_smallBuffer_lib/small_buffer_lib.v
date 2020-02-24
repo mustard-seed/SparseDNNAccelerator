@@ -196,10 +196,11 @@ module clMaskFilter
 		output wire [15:0] result
 	);
 
-	assign ovalid = 1'b1;
+	assign ovalid = ivalid;
 	assign oready = 1'b1;
 
-	assign {result[7:5], result[15:10]} = 0;
+	//Make sure to zero out the unused values
+	assign {result[7:4], result[15:10]} = 0;
 
 	inputFilter #(
 		.ENABLE_NEXT_START_INDEX(1),
@@ -210,7 +211,7 @@ module clMaskFilter
 		.COUNT_BITWIDTH     (2)
 	)
 	maskFilter (
-		.sparseInput  (sparseInput[15:0]),
+		.sparseInput  (sparseInput[7:0]),
 		.bitmask      (bitmask[7:0]),
 		.denseOutput  (result[9:8]),
 		.startIndex    (startIndex[3:0]),
@@ -251,7 +252,7 @@ module clSparseMacBufferUpdate
 		//[72] macOutputIsValid
 		output wire [127:0] result
 	);
-	assign ovalid = 1'b1;
+	assign ovalid = ivalid;
 	assign oready = 1'b1;
 
 	wire [31:0] currentBuffer;

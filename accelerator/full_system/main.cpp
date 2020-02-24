@@ -411,6 +411,7 @@ protected:
             unsigned char _sizeOutputTileHeight,
             bool _flagEnableRelu,
             e_tensor_type eTensorType,
+            float _bias = 2.0f,
             bool _flagCompressionOutput = true
             )
     {
@@ -425,7 +426,8 @@ protected:
         std::cout <<"1. Preparing the test tensors. Type: "<<eTensorType<<std::endl;
         std::vector<fixedPointNumber> inputTensorDense = generateInputTensor(_inputWidth, _inputHeight, _numInputChannel, _widthBlockSize, eTensorType);
         std::vector<fixedPointNumber> inputWeightDense = generateWeights((unsigned char) kernelSize, _numInputChannel, eTensorType);
-        t_aligned_short_vector biasVector (2*_numInputChannel, 0x0);
+        t_accumulator fixedBias = (t_accumulator) (round(_bias * (float) (1 << (FRAC_WIDTH + FRAC_WIDTH)) ));
+        t_aligned_short_vector biasVector (2*_numInputChannel, fixedBias);
 
         /* 2. Compress the test tensors
          * */
@@ -1139,13 +1141,18 @@ protected:
                             unsigned int outputIndex = (iterHeight*outputWidth + iterWidth)*numFiltersInKernel + iterInputChannel*2;
                             unsigned int inputIndex = (iterHeight*outputWidth + iterWidth)*_numInputChannel + iterInputChannel;
 
-                            signed char expectedOutput = (_flagEnableRelu && (inputTensorDense.at(inputIndex).getBits() < ((char) 0x0))) ?
-                                        (char) 0x0 : inputTensorDense.at(inputIndex).getBits();
+                            fixedPointNumber expectedOutputBiased(inputTensorDense.at(inputIndex).convert2Float() + _bias,
+                                                                         FRAC_WIDTH,
+                                                                         INT_WIDTH
+                                                                         );
+
+                            signed char expectedOutput = (_flagEnableRelu && (expectedOutputBiased.getBits() < ((char) 0x0))) ?
+                                        (char) 0x0 : expectedOutputBiased.getBits();
 
                             signed char actualOutput = outputFPVector.at(outputIndex).getBits();
 
-                            //EXPECT_TRUE(expectedOutput == actualOutput)
-                            std::cout<<"Error: iY, iX, iIC, actualOutput, expectedOutput "
+                            EXPECT_TRUE(expectedOutput == actualOutput)
+                            //std::cout<<"Error: iY, iX, iIC, actualOutput, expectedOutput "
                                 <<(unsigned int)iterHeight<<" "<<(unsigned int)iterWidth<<" "<<(unsigned int)iterInputChannel<<" 0x"
                                 <<std::bitset<8> (actualOutput)<<" 0x"
                                 <<std::bitset<8> (expectedOutput)<<std::endl;
@@ -1168,12 +1175,13 @@ TEST_F (testFixture, play) {
 //    unsigned char sizeOutputTileWidthPerColFul = 3;
 //    unsigned char sizeOutputTileHeightFull = 3;
 //    bool flagEnableRelu = true;
-    unsigned char inputWidth = 2;
-    unsigned char inputHeight = 2;
+    unsigned char inputWidth = 4;
+    unsigned char inputHeight = 4;
     unsigned char numInputChannel = 14;
     unsigned char widthBlockSize = 1;
     unsigned char sizeOutputTileWidthPerColFul = 2;
     unsigned char sizeOutputTileHeightFull = 2;
+    float bias = 0.0;
     bool flagEnableRelu = false;
     bool flagCompression = false;
 
@@ -1186,6 +1194,7 @@ TEST_F (testFixture, play) {
         sizeOutputTileHeightFull,
         flagEnableRelu,
         TEST_TYPE,
+        bias,
         flagCompression);
 }
 #else

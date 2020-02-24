@@ -2411,6 +2411,7 @@ __kernel void kernelDrainTransport ()
 			}
 		}
 #endif
+		//Will generated "unitialized usage warning", but it is actually ok
 		write_channel_intel(channel_drain[idy][idx], drainTransportBlock);
 		drainState = tempState;
 	}
@@ -3291,8 +3292,9 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 			pNextBuffer[j / CLUSTER_SIZE].cluster_values[j % CLUSTER_SIZE] = (bufferUpdateBus.x >> ((j*8) + 32)) & 0x0FF;
 		}
 
+		//Define the following as MASkS!!!!
 		*pMacValid = (bufferUpdateBus.y >> 8) & 0x01;
-		*pNextStartIndex = maskFilterOutput & 0x0FF;
+		*pNextStartIndex = maskFilterOutput & 0x0F;
 		*pNextBufferSize = bufferUpdateBus.y & 0x03;
 
 	}
