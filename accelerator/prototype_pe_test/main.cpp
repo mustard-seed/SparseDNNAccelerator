@@ -149,7 +149,7 @@ TEST_F (peTestFixture, testPlayfield) {
 */
 
     //This test won't pass if fracIn > fractOut
-    char fracIn = 2, fracOut = 3, fracW = 2;
+    char fracIn = 4, fracOut = 4, fracW = 4;
 //    float probOne = 1.0;
 
     float biasFloat = 0.0;
@@ -166,17 +166,33 @@ TEST_F (peTestFixture, testPlayfield) {
 //    //activationRealInput.at(12) = 1.0f;
 //    weightRealInput.at(12) = 1.0f;
 
-    std::vector<float> weightRealInput (16, 0.00);
-    for (int i=0; i<activationRealInput.size(); i++)
+    std::vector<float> weightRealInput (14*9, 0.00);
+    weightRealInput.at(4*14+7) = 1.0f;
+    std::vector<float> activationRealInput(14*9, 0.0f);
+    unsigned int iChannel = 0, iWidth = 0, iHeight = 0;
+    for (auto &val : activationRealInput)
     {
-        weightRealInput.at(i) = (i+1)*0.25f;
+        if ((iWidth >= 1) && (iHeight >= 1))
+        {
+            val = ((iWidth - 1) % 2 == 0) ? 1.5f : -1.5f;
+        }
+        ++iChannel;
+        if (iChannel >= 14)
+        {
+            iChannel = 0;
+            ++iWidth;
+            if (iWidth >= 3)
+            {
+                iWidth = 0;
+                ++iHeight;
+            }
+        }
     }
-    std::vector<float> activationRealInput (16, 0.00);
 
-    unsigned char numTests = 100;
+    unsigned char numTests = 4;
 
     //activationRealInput.at(12) = 1.0f;
-    activationRealInput.at(12) = 1.0f;
+    //activationRealInput.at(12) = 1.0f;
 
 //    for (int i=0; i<4; i++)
 //    {

@@ -569,8 +569,8 @@ void FlexibleDirectCompressedTensor::decodeTensor(
                 numNZClustersInCompressionBlock = transferBlock.values[SURVIVING_COUNT_TRANSFER_BLOCK_INDEX].cluster_values[SURVIVING_COUNT_CLUSTER_INDEX];
                 countNZClustersInCompressionBlock = 0;
                 vectorCompressionBlock.resize(0);
-                std::cout <<"bitmask R: "<<std::bitset<8>(bitmask & 0xFF)<<std::endl;
-                std::cout <<"numNZClustersInCompressionBlock: "<<(int)(numNZClustersInCompressionBlock)<<std::endl;
+                //std::cout <<"bitmask R: "<<std::bitset<8>(bitmask & 0xFF)<<std::endl;
+                //std::cout <<"numNZClustersInCompressionBlock: "<<(int)(numNZClustersInCompressionBlock)<<std::endl;
                 updateBitmask = false;
 //                for (int i=1; i<=maxClusterIndexInTransferBlock; i++)
 //                {
@@ -624,8 +624,8 @@ void FlexibleDirectCompressedTensor::decodeTensor(
                                 + iWidth * channel
                                 + iGroup * (maxScalarIndexInChannelGroup + 1)
                                 + iChannelInGroup;
-                            std::cout <<"Bitmask, iTensor, iGroup, iHeight, iWidth, iChannelInGroup: "
-                               <<std::bitset<8> (bitmask)<<" "<<iTensor<<" "<<iGroup<<" "<<iHeight<<" "<<iWidth<<" "<<iChannelInGroup<<std::endl;
+                           // std::cout <<"Bitmask, iTensor, iGroup, iHeight, iWidth, iChannelInGroup: "
+                           //    <<std::bitset<8> (bitmask)<<" "<<iTensor<<" "<<iGroup<<" "<<iHeight<<" "<<iWidth<<" "<<iChannelInGroup<<std::endl;
 
                             _fixedPointVector.at(iDenseVector) = fpValue;
                         } //if iChannelInGroup <= maxScalarIndexInChannelGroup
