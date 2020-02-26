@@ -1168,30 +1168,30 @@ protected:
 #ifdef PLAY
 TEST_F (testFixture, play) {
 
-//    unsigned char inputWidth = 5;
-//    unsigned char inputHeight = 5;
-//    unsigned char numInputChannel = 2;
-//    unsigned char widthBlockSize = 3;
-//    unsigned char sizeOutputTileWidthPerColFul = 3;
-//    unsigned char sizeOutputTileHeightFull = 3;
-//    float bias = 0.0;
-//    bool flagEnableRelu = false;
-//    bool flagCompression = false;
+    unsigned char inputWidth = 5;
+    unsigned char inputHeight = 5;
+    unsigned char numInputChannel = 2;
+    unsigned char widthBlockSize = 3;
+    unsigned char sizeOutputTileWidthPerColFul = 3;
+    unsigned char sizeOutputTileHeightFull = 3;
+    float bias = 0.0;
+    bool flagEnableRelu = false;
+    bool flagCompression = false;
 //    unsigned char inputWidth = 4;
 //    unsigned char inputHeight = 4;
 //    unsigned char numInputChannel = 14;
 //    unsigned char widthBlockSize = 1;
 //    unsigned char sizeOutputTileWidthPerColFul = 2;
 //    unsigned char sizeOutputTileHeightFull = 2;
-    unsigned char inputWidth = 3;
-    unsigned char inputHeight = 3;
-    unsigned char numInputChannel = 16;
-    unsigned char widthBlockSize = 1;
-    unsigned char sizeOutputTileWidthPerColFul = 1;
-    unsigned char sizeOutputTileHeightFull = 1;
-    float bias = 0.0;
-    bool flagEnableRelu = false;
-    bool flagCompression = false;
+//    unsigned char inputWidth = 3;
+//    unsigned char inputHeight = 3;
+//    unsigned char numInputChannel = 16;
+//    unsigned char widthBlockSize = 1;
+//    unsigned char sizeOutputTileWidthPerColFul = 1;
+//    unsigned char sizeOutputTileHeightFull = 1;
+//    float bias = 0.0;
+//    bool flagEnableRelu = false;
+//    bool flagCompression = false;
 
     launch(
         inputWidth,

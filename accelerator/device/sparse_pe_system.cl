@@ -3103,17 +3103,17 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 // 	} // while true
 // } // end of kernel
 
-#define OPERAND_FILTER_READ_BIAS 0x1
-#define OPERAND_FILTER_ACCEPT_MASK 0x2
-#define OPERAND_FILTER_MASK_SYNC 0x4
-#define OPERAND_FILTER_FILTER 0x8
-// #define OPERAND_FILTER_WIN_SYNC 0x10
-#define OPERAND_FILTER_FILTER_SYNC 0x10
+#define OPERAND_FILTER_READ_BIAS 0x0
+#define OPERAND_FILTER_ACCEPT_MASK 0x1
+#define OPERAND_FILTER_MASK_SYNC 0x2
+#define OPERAND_FILTER_FILTER 0x3
+#define OPERAND_FILTER_MAC_SYNC 0x4
+#define OPERAND_FILTER_FILTER_SYNC 0x5
 
 #ifndef SPARSE_UTILITY
 #define SPARSE_UTILITY
 	//Define the instruction type
-	typedef uint5_t t_instruction;
+	typedef uint3_t t_instruction;
 	typedef unsigned char t_bitmask;
 	typedef uint5_t t_start;
 	typedef uint2_t t_buffer_size;
@@ -3150,7 +3150,9 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 			t_flag thisWindowDone,
 			t_flag otherWindowDone,
 			t_flag thisLastTB,
-			t_flag otherIsLast
+			t_flag otherIsLast,
+			t_flag thisMacAvailable,
+			t_flag otherMacAvailable
 		)
 	{
 		t_instruction nextInstruction = currentInstruction;
@@ -3205,17 +3207,38 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 			break; //OPERAND_FILTER_MASK_SYNC
 
 			case (OPERAND_FILTER_FILTER) :{
-				if (thisTBAvailable == TRUE && (thisWindowDone == TRUE)) {
-					nextInstruction = OPERAND_FILTER_ACCEPT_MASK;
-
-					if (thisLastTB == TRUE)
-					{
-						nextInstruction = OPERAND_FILTER_FILTER_SYNC;
+				if (thisMacAvailable == TRUE && (otherMacAvailable == FALSE))
+				{
+					nextInstruction = OPERAND_FILTER_MAC_SYNC;
+				}
+				else
+				{
+					if (thisTBAvailable == TRUE && (thisWindowDone == TRUE)) {
+						nextInstruction = OPERAND_FILTER_ACCEPT_MASK;
+						if (thisLastTB == TRUE)
+						{
+							nextInstruction = OPERAND_FILTER_FILTER_SYNC;
+						}
 					}
 				}
 
 			}
 			break; //OPERAND_FILTER_FILTER
+
+			case (OPERAND_FILTER_MAC_SYNC) : {
+				if (otherMacAvailable == TRUE)
+				{
+					nextInstruction = OPERAND_FILTER_FILTER;
+					if (thisWindowDone == TRUE)
+					{
+						nextInstruction = OPERAND_FILTER_ACCEPT_MASK;
+						if (thisLastTB == TRUE)
+						{
+							nextInstruction = OPERAND_FILTER_FILTER_SYNC;
+						}
+					}
+				}
+			} //OPERAND_FILTER_MAC_SYNC
 
 			case (OPERAND_FILTER_FILTER_SYNC) :{
 				if (otherIsLast == TRUE)
@@ -3255,7 +3278,7 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 			t_transfer_block* pNewBlock,
 
 			t_cluster* pNextBuffer,
-			t_transfer_block* pMacOutput,
+			t_cluster* pMacOutput,
 			t_flag* pMacValid,
 			t_start* pNextStartIndex,
 			t_buffer_size* pNextBufferSize
@@ -3290,7 +3313,7 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 		#pragma unroll
 		for (unsigned char j=0; j<(TRANSFER_SIZE*CLUSTER_SIZE); j++)
 		{
-			pMacOutput[0].values[j / CLUSTER_SIZE].cluster_values[j % CLUSTER_SIZE] = (bufferUpdateBus.x >> (j*8)) & 0x0FF;
+			pMacOutput[j / CLUSTER_SIZE].cluster_values[j % CLUSTER_SIZE] = (bufferUpdateBus.x >> (j*8)) & 0x0FF;
 			pNextBuffer[j / CLUSTER_SIZE].cluster_values[j % CLUSTER_SIZE] = (bufferUpdateBus.x >> ((j*8) + 32)) & 0x0FF;
 		}
 
@@ -3319,10 +3342,14 @@ __kernel void kernelOperandFilter ()
 		int idy = 0;
 	#endif	
 
+	//Psum
+	t_accumulator pSum = 0;
+
 	//========Weight filter states=========
 	t_instruction weightFilterInstruction = OPERAND_FILTER_READ_BIAS;
 	//TODO: make the weight buffer size parametrizable
-	t_cluster weightBuffer[2];
+	t_cluster weightBuffer[TRANSFER_SIZE];
+	t_cluster macWeightBuffer[TRANSFER_SIZE];
 	t_bitmask regWeightBitmask = 0;
 	t_start regWeightWindowStartIndex = 0;
 	t_buffer_size regWeightBufferSize = 0;
@@ -3334,7 +3361,8 @@ __kernel void kernelOperandFilter ()
 
 	//=========Activation filter states===
 	t_instruction activationFilterInstruction = OPERAND_FILTER_READ_BIAS;
-	t_cluster activationBuffer[2];
+	t_cluster activationBuffer[TRANSFER_SIZE];
+	t_cluster macActivationBuffer[TRANSFER_SIZE];
 	t_bitmask regActivationBitmask = 0;
 	t_start regActivationWindowStartIndex = 0;
 	t_buffer_size regActivationBufferSize = 0;
@@ -3356,15 +3384,20 @@ __kernel void kernelOperandFilter ()
 		t_flag weightFilterDone = FALSE; 
 		t_flag weightMaskNew = FALSE;
 
-		t_cluster nextWeightBuffer[2];
+		t_cluster nextWeightBuffer[TRANSFER_SIZE];
 		//GOTCHAA!!!!!!
 		#pragma unroll
-		for (unsigned char i=0; i<2; i++)
+		for (unsigned char i=0; i<TRANSFER_SIZE; i++)
 		{
 			nextWeightBuffer[i] = weightBuffer[i];
 		}
 
-		t_transfer_block macWeightOutput;
+		t_cluster nextMacWeightBuffer[TRANSFER_SIZE];
+		#pragma unroll
+		for (unsigned char i=0; i<TRANSFER_SIZE; i++)
+		{
+			nextMacWeightBuffer[i] = macWeightBuffer[i];
+		}
 
 		t_flag nextWeightIsLast = regWeightIsLast;
 		t_num_tb nextNumWeightClusterLeft = regNumWeightClusterLeft;
@@ -3380,15 +3413,20 @@ __kernel void kernelOperandFilter ()
 		t_flag activationFilterDone = FALSE;
 		t_flag activationMaskNew = FALSE;
 
-		t_cluster nextActivationBuffer[2];
+		t_cluster nextActivationBuffer[TRANSFER_SIZE];
 		//GOTCHAA!!!!
 		#pragma unroll
-		for (unsigned char i=0; i<2; i++)
+		for (unsigned char i=0; i<TRANSFER_SIZE; i++)
 		{
 			nextActivationBuffer[i] = activationBuffer[i];
 		}
 
-		t_transfer_block macActivationOutput;
+		t_cluster nextMacActivationBuffer[TRANSFER_SIZE];
+		#pragma unroll
+		for (unsigned char i=0; i<TRANSFER_SIZE; i++)
+		{
+			nextMacActivationBuffer[i] = macActivationBuffer[i];
+		}
 
 		t_flag nextActivationIsLast = regActivationIsLast;
 		t_num_tb nextNumActivationClusterLeft = regNumActivationClusterLeft;
@@ -3516,11 +3554,11 @@ __kernel void kernelOperandFilter ()
 						regMutualBitmask, //regMutualBitmask
 						regWeightWindowStartIndex,
 						regWeightBufferSize,
-						&(weightBuffer[0]),
+						weightBuffer,
 						&(weightBlock.values),
 
-						&(nextWeightBuffer[0]),
-						&macWeightOutput,
+						nextWeightBuffer,
+						nextMacWeightBuffer,
 						&validWeightMac,
 						&nextWeightWindowIndex,
 						&nextWeightBufferSize
@@ -3532,15 +3570,23 @@ __kernel void kernelOperandFilter ()
 				{
 					weightWindowDone = TRUE;
 				}
+
 			}
 		}
-		// else if (weightFilterInstruction == OPERAND_FILTER_WIN_SYNC)
-		// {
-		// 	weightWindowDone = TRUE;
-		// }
+		else if (weightFilterInstruction == OPERAND_FILTER_MAC_SYNC)
+		{
+			if (nextNumWeightClusterLeft <= 0x0)
+			{
+				weightWindowDone = TRUE;
+			}
+
+			validWeightMac = TRUE;
+		}
 		else if (weightFilterInstruction == OPERAND_FILTER_FILTER_SYNC)
 		{
 			weightFilterDone = TRUE;
+
+			validWeightMac = TRUE;
 		}
 
 		/*
@@ -3586,11 +3632,11 @@ __kernel void kernelOperandFilter ()
 						regMutualBitmask, //regMutualBitmask
 						regActivationWindowStartIndex,
 						regActivationBufferSize,
-						&(activationBuffer[0]),
+						activationBuffer,
 						&(activationBlock.values),
 
-						&(nextActivationBuffer[0]),
-						&macActivationOutput,
+						nextActivationBuffer,
+						nextMacActivationBuffer,
 						&validActivationMac,
 						&nextActivationWindowIndex,
 						&nextActivationBufferSize
@@ -3604,13 +3650,20 @@ __kernel void kernelOperandFilter ()
 				}
 			}
 		}
-		// else if (activationFilterInstruction == OPERAND_FILTER_WIN_SYNC)
-		// {
-		// 	activationWindowDone = TRUE;
-		// }
+		else if (activationFilterInstruction == OPERAND_FILTER_MAC_SYNC)
+		{
+			if (nextNumActivationClusterLeft <= 0x0)
+			{
+				activationWindowDone = TRUE;
+			}
+
+			validActivationMac = TRUE;
+		}
 		else if (activationFilterInstruction == OPERAND_FILTER_FILTER_SYNC)
 		{
 			activationFilterDone = TRUE;
+
+			validActivationMac = TRUE;
 		}
 
 		/*
@@ -3624,85 +3677,50 @@ __kernel void kernelOperandFilter ()
 				,idy, idx, (unsigned char) nextActivationBitmask, (unsigned char) nextWeightBitmask, (unsigned char) nextMutualBitmask, (unsigned char) activationFilterInstruction));
 		}
 
+		/*
+		 * Performas MAC
+		*/
+		if ( (weightFilterInstruction == OPERAND_FILTER_READ_BIAS) && (weightTBAvailable == TRUE) )
+		{
+			pSum = transferBlock2Bias(weightBlock.values);
+		}
+		else if ( (validActivationMac == TRUE) && (validWeightMac == TRUE))
+		{
+			t_simd_operand simdActivations, simdWeights;
+			#pragma unroll
+			for (unsigned char i=0; i<SIMD_SIZE; i++) {
+				#pragma unroll
+				for (unsigned char j=0; j<CLUSTER_SIZE; j++)
+				{
+					simdActivations.values[CLUSTER_SIZE*i + j] = nextMacActivationBuffer[i].cluster_values[j];
+					simdWeights.values[CLUSTER_SIZE*i + j] = nextMacWeightBuffer[i].cluster_values[j];
+				}
+			}
+
+			EMULATOR_PRINT(("[Op Filter (%d,%d)] MAC: weight [0-3]: %#04x %#04x %#04x %#04x. act [0-3]: %#04x %#04x %#04x %#04x \n",
+					idy, idx,
+					simdWeights.values[0] & 0xFF, 
+					simdWeights.values[1] & 0xFF,
+					simdWeights.values[2] & 0xFF,
+					simdWeights.values[3] & 0xFF,
+					simdActivations.values[0] & 0xFF, 
+					simdActivations.values[1] & 0xFF,
+					simdActivations.values[2] & 0xFF,
+					simdActivations.values[3] & 0xFF));
+
+			t_accumulator tempPSum = madd(simdActivations, simdWeights);
+			pSum += tempPSum;
+		}
+
 		//=====================================
 		
 		/*
-		 * Weight channel write
+			Writting the output
 		*/
-		t_flag writeWeightChannel = FALSE;
-		t_transferblock_tagged weightBlockOut;
-		if ( (weightFilterInstruction == OPERAND_FILTER_READ_BIAS) && (weightTBAvailable == TRUE) )
+		if ( (weightFilterInstruction == OPERAND_FILTER_FILTER_SYNC) && (activationFilterInstruction == OPERAND_FILTER_FILTER_SYNC))
 		{
-			writeWeightChannel = TRUE;
-			weightBlockOut = weightBlock;
-            EMULATOR_PRINT(("[Op Filter WEIGHT (%d, %d)] Assemble bias \n", idy, idx));
-		}
-		else if ((weightFilterInstruction == OPERAND_FILTER_FILTER) && (validWeightMac == TRUE))
-		{
-			writeWeightChannel = TRUE;
-			weightBlockOut.values = macWeightOutput;
-			setIsLast(&weightBlockOut, FALSE);
-            EMULATOR_PRINT(("[Op Filter WEIGHT (%d, %d)] Assemble MAC \n", idy, idx));
-		}
-		else if ((weightFilterInstruction == OPERAND_FILTER_FILTER_SYNC) && (activationFilterDone == TRUE))
-		{
-			writeWeightChannel = TRUE;
-			#pragma unroll
-			for (unsigned char i=0; i<TRANSFER_SIZE; i++)
-			{
-				// #pragma unroll
-				// for (unsigned char j=0; j<TRANSFER_SIZE; j++)
-				// {
-				// 	weightBlockOut.values.values[i].cluster_values[j] = 0x0;
-				// }
-				weightBlockOut.values.values[i] = weightBuffer[i];
-			}
-			setIsLast(&weightBlockOut, TRUE);
-            EMULATOR_PRINT(("[Op Filter WEIGHT (%d, %d)] Assemble LAST \n", idy, idx));
-		}
-
-		if (writeWeightChannel == TRUE)
-		{
-            write_channel_intel(channel_filterWeight[idy][idx], weightBlockOut);
-			EMULATOR_PRINT(("[Op Filter WEIGHT (%d, %d)] WROTE mac weight block. Current instruction: %#04x \n", idy, idx, (unsigned char) weightFilterInstruction));
-
-		}
-
-		/*
-		 * Activation channel write
-		*/
-		t_flag writeActivationChannel = FALSE;
-		t_transferblock_tagged activationBlockOut;
-		if ((activationFilterInstruction == OPERAND_FILTER_FILTER) && (validActivationMac == TRUE) )
-		{
-			writeActivationChannel = TRUE;
-			activationBlockOut.values = macActivationOutput;
-			setIsLast(&activationBlockOut, FALSE);
-            EMULATOR_PRINT(("[Op Filter ACTIVATION (%d, %d)] Assemble MAC \n", idy, idx));
-		}
-		else if ((activationFilterInstruction == OPERAND_FILTER_FILTER_SYNC) && (weightFilterDone == TRUE))
-		{
-			writeActivationChannel = TRUE;
-			#pragma unroll
-			for (unsigned char i=0; i<TRANSFER_SIZE; i++)
-			{
-				// #pragma unroll
-				// for (unsigned char j=0; j<TRANSFER_SIZE; j++)
-				// {
-				// 	activationBlockOut.values.values[i].cluster_values[j] = 0x0;
-				// }
-				activationBlockOut.values.values[i] = activationBuffer[i];
-			}
-			setIsLast(&activationBlockOut, TRUE);
-            EMULATOR_PRINT(("[Op Filter ACTIVATION (%d, %d)] Assemble LAST \n", idy, idx));
-		}
-
-		if (writeActivationChannel == TRUE)
-		{
-            write_channel_intel(channel_filterActivation[idy][idx], activationBlockOut);
-
-			EMULATOR_PRINT(("[Op Filter ACTIVATION (%d, %d)] WROTE mac activation block. Current instruction: %#04x \n", idy, idx, (unsigned char) activationFilterInstruction));
-
+			EMULATOR_PRINT(("[Op Filter (%d, %d)] Commit. pSum value: %#04x \n", idy, idx, pSum));
+			write_channel_intel(channel_peDrainOutput[idy][idx], pSum);
 		}
 
 		//=========Next state update==============
@@ -3715,7 +3733,9 @@ __kernel void kernelOperandFilter ()
 				weightWindowDone, //this window done
 				activationWindowDone, //other window done
 				nextWeightIsLast, //thisLastTB
-				activationFilterDone
+				activationFilterDone,
+				validWeightMac,
+				validActivationMac
 			);
 
 		nextActivationFilterInstruction = sparseOperandFilterStateUpdate (
@@ -3727,7 +3747,9 @@ __kernel void kernelOperandFilter ()
 				activationWindowDone, //thisWindowDone
 				weightWindowDone, //otherWindowDone,
 				nextActivationIsLast, //thisLastTB
-				weightFilterDone
+				weightFilterDone,
+				validActivationMac,
+				validWeightMac
 			);
 		//========================================
 		
@@ -3743,9 +3765,10 @@ __kernel void kernelOperandFilter ()
 
 		weightFilterInstruction = nextWeightFilterInstruction;
 		#pragma unroll
-		for (unsigned char i=0; i<2; i++)
+		for (unsigned char i=0; i<TRANSFER_SIZE; i++)
 		{
 			weightBuffer[i] = nextWeightBuffer[i];
+			macWeightBuffer[i] = nextMacWeightBuffer[i];
 		}
 
 		//Activation filter update
@@ -3758,10 +3781,12 @@ __kernel void kernelOperandFilter ()
 
 		activationFilterInstruction = nextActivationFilterInstruction;
 		#pragma unroll
-		for (unsigned char i=0; i<2; i++)
+		for (unsigned char i=0; i<TRANSFER_SIZE; i++)
 		{
 			activationBuffer[i] = nextActivationBuffer[i];
+			macActivationBuffer[i] = nextMacActivationBuffer[i];
 		}
+
 
 		regMutualBitmask = nextMutualBitmask;
 		
@@ -3769,7 +3794,7 @@ __kernel void kernelOperandFilter ()
 	} //while
 
 }
-#endif //SPARSE_SYSTEM
+#else //SPARSE_SYSTEM
 
 #define DENSE_PE_INSTRUCTION_BIAS_FROM_CH 0x1
 #define DENSE_PE_INSTRUCTION_W_FROM_CH_A_FROM_CH_MAC 0X2
@@ -3824,34 +3849,20 @@ __kernel void kernelDensePE ()
 			|| (currentInstruction == DENSE_PE_INSTRUCTION_W_FROM_CH_A_FROM_R_MAC)
 			|| (currentInstruction == DENSE_PE_INSTRUCTION_W_FROM_CH_A_FROM_CH_MAC))
 		{
-			#if defined(SPARSE_SYSTEM)
-           		 tempWTBLocal = read_channel_nb_intel (
-						channel_filterWeight[idy][idx],
-						&readWSuccess
-					);
-			#else
-	            tempWTBLocal = read_channel_nb_intel (
-						channel_dpWeightInput[idy][idx],
-						&readWSuccess
-					);
-			#endif
+            tempWTBLocal = read_channel_nb_intel (
+					channel_dpWeightInput[idy][idx],
+					&readWSuccess
+				);
 		}
 
 		//Handling reading from the A channel
 		if ( (currentInstruction == DENSE_PE_INSTRUCTION_W_FROM_R_A_FROM_CH_MAC)
 			|| (currentInstruction == DENSE_PE_INSTRUCTION_W_FROM_CH_A_FROM_CH_MAC))
 		{
-			#if defined(SPARSE_SYSTEM)
-               		 tempATBLocal = read_channel_nb_intel (
-						channel_filterActivation[idy][idx],
-						&readASuccess
-						);
-			#else
-                tempATBLocal = read_channel_nb_intel (
-						channel_dpActivationInput[idy][idx],
-						&readASuccess
-						);
-			#endif
+            tempATBLocal = read_channel_nb_intel (
+					channel_dpActivationInput[idy][idx],
+					&readASuccess
+					);
 		}
 
 		unsigned char isLastW = getIsLast(tempWTBLocal); //Predication
@@ -4054,5 +4065,7 @@ __kernel void kernelDensePE ()
 	} // while-loop
 
 }
+#endif //SPARSE SYSTEM
+
 #endif //PE_SYSTEM
 
