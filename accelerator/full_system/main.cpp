@@ -40,8 +40,12 @@
 #define INT_WIDTH 3
 #define OUTPUT_INT_WIDTH 3
 
+#define WEIGHT_SEED 1234
+#define INPUT_SEED   7653
+
 //#define PROFILE
 //#define PLAY
+#define SPARSE_LEVEL_TEST
 #define TEST_TYPE ZERO
 #define REPEAT 1
 #define EMULATE
@@ -65,7 +69,7 @@ typedef struct {
     unsigned char targetFilterRow;
 } t_filter_coordinates;
 
-typedef enum {TEST, FULL, ZERO, DENSE} e_tensor_type;
+typedef enum {TEST, FULL, ZERO, DENSE, SPARSE} e_tensor_type;
 
 
 class testFixture : public ::testing::Test {
@@ -288,7 +292,8 @@ protected:
                 unsigned char inputHeight,
                 unsigned char numInputChannel,
                 unsigned char widthBlockSize, //1 out of withBlockSize strips along the width are filled with non-zero number
-                e_tensor_type eTensorType
+                e_tensor_type eTensorType,
+                float denseProb = 1.0f
             )
     {
         unsigned int numElements = inputWidth*inputHeight*numInputChannel;
@@ -329,6 +334,29 @@ protected:
                 }
             }
             break;
+        case SPARSE:
+            {
+                std::mt19937 generator(WEIGHT_SEED);
+                std::bernoulli_distribution bernDistribution(denseProb);
+                bool writePositive = true;
+                for (unsigned char iterHeight=0; iterHeight<inputHeight; iterHeight++)
+                {
+                    for (unsigned char iterWidth=0; iterWidth<inputWidth; iterWidth ++)
+                    {
+                        unsigned int index = (iterHeight*inputWidth + iterWidth) * numInputChannel;
+                        for (unsigned char iterChannel=0; iterChannel<numInputChannel; iterChannel++)
+                        {
+                            if (bernDistribution(generator))
+                            {
+                                tensor.at(index++) = writePositive ? positiveNumber : negativeNumber;
+                            }
+                        }
+                        //Invert the flag
+                        writePositive = !writePositive;
+                    }
+                }
+            }
+            break;
         default:
             break;
         }
@@ -349,7 +377,8 @@ protected:
     std::vector<fixedPointNumber> generateWeights (
                 unsigned char kernelSize,
                 unsigned char numInputChannel,
-                e_tensor_type eTensorType
+                e_tensor_type eTensorType,
+                float denseProb = 1.0f
             )
     {
         assert(kernelSize%2==1);
@@ -359,6 +388,7 @@ protected:
         int numOC = 2*numInputChannel;
         fixedPointNumber fpZero(0.0f, FRAC_WIDTH, INT_WIDTH);
         fixedPointNumber fpOne (1.0f, FRAC_WIDTH, INT_WIDTH);
+        fixedPointNumber fpNegative (-1.0f, FRAC_WIDTH, INT_WIDTH);
         //Initialize the weight tensor
         std::vector<fixedPointNumber> wTensor (numWeights, fpZero);
 
@@ -395,6 +425,21 @@ protected:
                 }
             }
             break;
+        case SPARSE:
+            {
+                std::mt19937 generator(INPUT_SEED);
+                std::bernoulli_distribution bernDistribution(denseProb);
+                bool writePositive = true;
+                for (auto &val : wTensor)
+                {
+                    if (bernDistribution(generator) == true)
+                    {
+                        val = writePositive ? fpOne : fpNegative;
+                    }
+                    writePositive = !writePositive;
+                }
+            }
+            break;
         default:
             break;
         }
@@ -412,7 +457,8 @@ protected:
             bool _flagEnableRelu,
             e_tensor_type eTensorType,
             float _bias = 2.0f,
-            bool _flagCompressionOutput = true
+            bool _flagCompressionOutput = true,
+            float denseProb = 1.0f
             )
     {
         /* Fixed parameters
@@ -424,14 +470,22 @@ protected:
          * */
         assert(_numInputChannel <= 127);
         std::cout <<"1. Preparing the test tensors. Type: "<<eTensorType<<std::endl;
-        std::vector<fixedPointNumber> inputTensorDense = generateInputTensor(_inputWidth, _inputHeight, _numInputChannel, _widthBlockSize, eTensorType);
-        std::vector<fixedPointNumber> inputWeightDense = generateWeights((unsigned char) kernelSize, _numInputChannel, eTensorType);
+        std::vector<fixedPointNumber> inputTensorDense = generateInputTensor(_inputWidth, _inputHeight, _numInputChannel, _widthBlockSize, eTensorType, denseProb);
+        std::vector<fixedPointNumber> inputWeightDense = generateWeights((unsigned char) kernelSize, _numInputChannel, eTensorType, denseProb);
         t_accumulator fixedBias = (t_accumulator) (round(_bias * (float) (1 << (FRAC_WIDTH + FRAC_WIDTH)) ));
         t_aligned_short_vector biasVector (2*_numInputChannel, fixedBias);
 
         /* 2. Compress the test tensors
          * */
         std::cout <<"2. Preparing the test tensors. Compression flag is: "<<eTensorType<<std::endl;
+        std::cout <<"Input width:  "<<(unsigned int) _inputWidth<<std::endl
+                  <<"Input height: "<<(unsigned int) _inputHeight<<std::endl
+                  <<"Input channels: "<<(unsigned int) _numInputChannel<<std::endl
+                  <<"Output channels: "<<(unsigned int)(2 * _numInputChannel)<<std::endl;
+        if (eTensorType == SPARSE)
+        {
+               std::cout <<"Sparsity level is "<<(1.0f - denseProb)<<std::endl;
+        }
         unsigned short maxScalarIndexInChannelGroup = _numInputChannel - 1;
         unsigned short maxClusterIndexInCompressionBlock = COMPRESSION_VEC_SIZE*TRANSFER_SIZE-1;
         unsigned short maxClusterIndexInTransferBlock = TRANSFER_SIZE-1;
@@ -1175,8 +1229,11 @@ TEST_F (testFixture, play) {
     unsigned char sizeOutputTileWidthPerColFul = 3;
     unsigned char sizeOutputTileHeightFull = 3;
     float bias = 0.0;
+    e_tensor_type tensorType = SPARSE;
     bool flagEnableRelu = false;
     bool flagCompression = false;
+    float sparseProb = 0.7f;
+
 //    unsigned char inputWidth = 4;
 //    unsigned char inputHeight = 4;
 //    unsigned char numInputChannel = 14;
@@ -1201,9 +1258,634 @@ TEST_F (testFixture, play) {
         sizeOutputTileWidthPerColFul,
         sizeOutputTileHeightFull,
         flagEnableRelu,
-        TEST_TYPE,
+        tensorType,
         bias,
-        flagCompression);
+        flagCompression,
+        1.0f - sparseProb);
+}
+#else
+#if defined(SPARSE_LEVEL_TEST)
+TEST_F (testFixture, sparse_16x16x127_0p) {
+
+    unsigned char inputWidth = 16;
+    unsigned char inputHeight = 16;
+    unsigned char numInputChannel = 127;
+    unsigned char widthBlockSize = 1;
+    unsigned char sizeOutputTileWidthPerColFul = 8;
+    unsigned char sizeOutputTileHeightFull = 8;
+    bool flagEnableRelu = true;
+    float bias = 0.0;
+    e_tensor_type tensorType = SPARSE;
+    bool flagCompression = false;
+    float sparseProb = 0.0f;
+
+    launch(
+        inputWidth,
+        inputHeight,
+        numInputChannel,
+        widthBlockSize,
+        sizeOutputTileWidthPerColFul,
+        sizeOutputTileHeightFull,
+        flagEnableRelu,
+        tensorType,
+        bias,
+        flagCompression,
+        1.0f - sparseProb);
+}
+TEST_F (testFixture, sparse_16x16x127_0p1) {
+
+    unsigned char inputWidth = 16;
+    unsigned char inputHeight = 16;
+    unsigned char numInputChannel = 127;
+    unsigned char widthBlockSize = 1;
+    unsigned char sizeOutputTileWidthPerColFul = 8;
+    unsigned char sizeOutputTileHeightFull = 8;
+    bool flagEnableRelu = true;
+    float bias = 0.0;
+    e_tensor_type tensorType = SPARSE;
+    bool flagCompression = false;
+    float sparseProb = 0.1f;
+
+    launch(
+        inputWidth,
+        inputHeight,
+        numInputChannel,
+        widthBlockSize,
+        sizeOutputTileWidthPerColFul,
+        sizeOutputTileHeightFull,
+        flagEnableRelu,
+        tensorType,
+        bias,
+        flagCompression,
+        1.0f - sparseProb);
+}
+TEST_F (testFixture, sparse_16x16x127_0p2) {
+
+    unsigned char inputWidth = 16;
+    unsigned char inputHeight = 16;
+    unsigned char numInputChannel = 127;
+    unsigned char widthBlockSize = 1;
+    unsigned char sizeOutputTileWidthPerColFul = 8;
+    unsigned char sizeOutputTileHeightFull = 8;
+    bool flagEnableRelu = true;
+    float bias = 0.0;
+    e_tensor_type tensorType = SPARSE;
+    bool flagCompression = false;
+    float sparseProb = 0.2f;
+
+    launch(
+        inputWidth,
+        inputHeight,
+        numInputChannel,
+        widthBlockSize,
+        sizeOutputTileWidthPerColFul,
+        sizeOutputTileHeightFull,
+        flagEnableRelu,
+        tensorType,
+        bias,
+        flagCompression,
+        1.0f - sparseProb);
+}
+TEST_F (testFixture, sparse_16x16x127_0p3) {
+
+    unsigned char inputWidth = 16;
+    unsigned char inputHeight = 16;
+    unsigned char numInputChannel = 127;
+    unsigned char widthBlockSize = 1;
+    unsigned char sizeOutputTileWidthPerColFul = 8;
+    unsigned char sizeOutputTileHeightFull = 8;
+    bool flagEnableRelu = true;
+    float bias = 0.0;
+    e_tensor_type tensorType = SPARSE;
+    bool flagCompression = false;
+    float sparseProb = 0.3f;
+
+    launch(
+        inputWidth,
+        inputHeight,
+        numInputChannel,
+        widthBlockSize,
+        sizeOutputTileWidthPerColFul,
+        sizeOutputTileHeightFull,
+        flagEnableRelu,
+        tensorType,
+        bias,
+        flagCompression,
+        1.0f - sparseProb);
+}
+TEST_F (testFixture, sparse_16x16x127_0p4) {
+
+    unsigned char inputWidth = 16;
+    unsigned char inputHeight = 16;
+    unsigned char numInputChannel = 127;
+    unsigned char widthBlockSize = 1;
+    unsigned char sizeOutputTileWidthPerColFul = 8;
+    unsigned char sizeOutputTileHeightFull = 8;
+    bool flagEnableRelu = true;
+    float bias = 0.0;
+    e_tensor_type tensorType = SPARSE;
+    bool flagCompression = false;
+    float sparseProb = 0.4f;
+
+    launch(
+        inputWidth,
+        inputHeight,
+        numInputChannel,
+        widthBlockSize,
+        sizeOutputTileWidthPerColFul,
+        sizeOutputTileHeightFull,
+        flagEnableRelu,
+        tensorType,
+        bias,
+        flagCompression,
+        1.0f - sparseProb);
+}
+TEST_F (testFixture, sparse_16x16x127_0p5) {
+
+    unsigned char inputWidth = 16;
+    unsigned char inputHeight = 16;
+    unsigned char numInputChannel = 127;
+    unsigned char widthBlockSize = 1;
+    unsigned char sizeOutputTileWidthPerColFul = 8;
+    unsigned char sizeOutputTileHeightFull = 8;
+    bool flagEnableRelu = true;
+    float bias = 0.0;
+    e_tensor_type tensorType = SPARSE;
+    bool flagCompression = false;
+    float sparseProb = 0.5f;
+
+    launch(
+        inputWidth,
+        inputHeight,
+        numInputChannel,
+        widthBlockSize,
+        sizeOutputTileWidthPerColFul,
+        sizeOutputTileHeightFull,
+        flagEnableRelu,
+        tensorType,
+        bias,
+        flagCompression,
+        1.0f - sparseProb);
+}
+TEST_F (testFixture, sparse_16x16x127_0p6) {
+
+    unsigned char inputWidth = 16;
+    unsigned char inputHeight = 16;
+    unsigned char numInputChannel = 127;
+    unsigned char widthBlockSize = 1;
+    unsigned char sizeOutputTileWidthPerColFul = 8;
+    unsigned char sizeOutputTileHeightFull = 8;
+    bool flagEnableRelu = true;
+    float bias = 0.0;
+    e_tensor_type tensorType = SPARSE;
+    bool flagCompression = false;
+    float sparseProb = 0.6f;
+
+    launch(
+        inputWidth,
+        inputHeight,
+        numInputChannel,
+        widthBlockSize,
+        sizeOutputTileWidthPerColFul,
+        sizeOutputTileHeightFull,
+        flagEnableRelu,
+        tensorType,
+        bias,
+        flagCompression,
+        1.0f - sparseProb);
+}
+TEST_F (testFixture, sparse_16x16x127_0p7) {
+
+    unsigned char inputWidth = 16;
+    unsigned char inputHeight = 16;
+    unsigned char numInputChannel = 127;
+    unsigned char widthBlockSize = 1;
+    unsigned char sizeOutputTileWidthPerColFul = 8;
+    unsigned char sizeOutputTileHeightFull = 8;
+    bool flagEnableRelu = true;
+    float bias = 0.0;
+    e_tensor_type tensorType = SPARSE;
+    bool flagCompression = false;
+    float sparseProb = 0.7f;
+
+    launch(
+        inputWidth,
+        inputHeight,
+        numInputChannel,
+        widthBlockSize,
+        sizeOutputTileWidthPerColFul,
+        sizeOutputTileHeightFull,
+        flagEnableRelu,
+        tensorType,
+        bias,
+        flagCompression,
+        1.0f - sparseProb);
+}
+TEST_F (testFixture, sparse_16x16x127_0p8) {
+
+    unsigned char inputWidth = 16;
+    unsigned char inputHeight = 16;
+    unsigned char numInputChannel = 127;
+    unsigned char widthBlockSize = 1;
+    unsigned char sizeOutputTileWidthPerColFul = 8;
+    unsigned char sizeOutputTileHeightFull = 8;
+    bool flagEnableRelu = true;
+    float bias = 0.0;
+    e_tensor_type tensorType = SPARSE;
+    bool flagCompression = false;
+    float sparseProb = 0.8f;
+
+    launch(
+        inputWidth,
+        inputHeight,
+        numInputChannel,
+        widthBlockSize,
+        sizeOutputTileWidthPerColFul,
+        sizeOutputTileHeightFull,
+        flagEnableRelu,
+        tensorType,
+        bias,
+        flagCompression,
+        1.0f - sparseProb);
+}
+TEST_F (testFixture, sparse_16x16x127_0p9) {
+
+    unsigned char inputWidth = 16;
+    unsigned char inputHeight = 16;
+    unsigned char numInputChannel = 127;
+    unsigned char widthBlockSize = 1;
+    unsigned char sizeOutputTileWidthPerColFul = 8;
+    unsigned char sizeOutputTileHeightFull = 8;
+    bool flagEnableRelu = true;
+    float bias = 0.0;
+    e_tensor_type tensorType = SPARSE;
+    bool flagCompression = false;
+    float sparseProb = 0.9f;
+
+    launch(
+        inputWidth,
+        inputHeight,
+        numInputChannel,
+        widthBlockSize,
+        sizeOutputTileWidthPerColFul,
+        sizeOutputTileHeightFull,
+        flagEnableRelu,
+        tensorType,
+        bias,
+        flagCompression,
+        1.0f - sparseProb);
+}
+TEST_F (testFixture, sparse_16x16x127_1p) {
+
+    unsigned char inputWidth = 16;
+    unsigned char inputHeight = 16;
+    unsigned char numInputChannel = 127;
+    unsigned char widthBlockSize = 1;
+    unsigned char sizeOutputTileWidthPerColFul = 8;
+    unsigned char sizeOutputTileHeightFull = 8;
+    bool flagEnableRelu = true;
+    float bias = 0.0;
+    e_tensor_type tensorType = SPARSE;
+    bool flagCompression = false;
+    float sparseProb = 1.0f;
+
+    launch(
+        inputWidth,
+        inputHeight,
+        numInputChannel,
+        widthBlockSize,
+        sizeOutputTileWidthPerColFul,
+        sizeOutputTileHeightFull,
+        flagEnableRelu,
+        tensorType,
+        bias,
+        flagCompression,
+        1.0f - sparseProb);
+}
+
+TEST_F (testFixture, sparse_1x1x127_0p) {
+
+    unsigned char inputWidth = 1;
+    unsigned char inputHeight = 1;
+    unsigned char numInputChannel = 127;
+    unsigned char widthBlockSize = 3;
+    unsigned char sizeOutputTileWidthPerColFul = 8;
+    unsigned char sizeOutputTileHeightFull = 8;
+    bool flagEnableRelu = true;
+    float bias = 0.0;
+    e_tensor_type tensorType = SPARSE;
+    bool flagCompression = false;
+    float sparseProb = 0.0f;
+
+    launch(
+        inputWidth,
+        inputHeight,
+        numInputChannel,
+        widthBlockSize,
+        sizeOutputTileWidthPerColFul,
+        sizeOutputTileHeightFull,
+        flagEnableRelu,
+        tensorType,
+        bias,
+        flagCompression,
+        1.0f - sparseProb);
+}
+TEST_F (testFixture, sparse_1x1x127_0p05) {
+
+    unsigned char inputWidth = 1;
+    unsigned char inputHeight = 1;
+    unsigned char numInputChannel = 127;
+    unsigned char widthBlockSize = 3;
+    unsigned char sizeOutputTileWidthPerColFul = 8;
+    unsigned char sizeOutputTileHeightFull = 8;
+    bool flagEnableRelu = true;
+    float bias = 0.0;
+    e_tensor_type tensorType = SPARSE;
+    bool flagCompression = false;
+    float sparseProb = 0.05f;
+
+    launch(
+        inputWidth,
+        inputHeight,
+        numInputChannel,
+        widthBlockSize,
+        sizeOutputTileWidthPerColFul,
+        sizeOutputTileHeightFull,
+        flagEnableRelu,
+        tensorType,
+        bias,
+        flagCompression,
+        1.0f - sparseProb);
+}
+TEST_F (testFixture, sparse_1x1x127_0p1) {
+
+    unsigned char inputWidth = 1;
+    unsigned char inputHeight = 1;
+    unsigned char numInputChannel = 127;
+    unsigned char widthBlockSize = 3;
+    unsigned char sizeOutputTileWidthPerColFul = 8;
+    unsigned char sizeOutputTileHeightFull = 8;
+    bool flagEnableRelu = true;
+    float bias = 0.0;
+    e_tensor_type tensorType = SPARSE;
+    bool flagCompression = false;
+    float sparseProb = 0.1f;
+
+    launch(
+        inputWidth,
+        inputHeight,
+        numInputChannel,
+        widthBlockSize,
+        sizeOutputTileWidthPerColFul,
+        sizeOutputTileHeightFull,
+        flagEnableRelu,
+        tensorType,
+        bias,
+        flagCompression,
+        1.0f - sparseProb);
+}
+TEST_F (testFixture, sparse_1x1x127_0p2) {
+
+    unsigned char inputWidth = 1;
+    unsigned char inputHeight = 1;
+    unsigned char numInputChannel = 127;
+    unsigned char widthBlockSize = 3;
+    unsigned char sizeOutputTileWidthPerColFul = 8;
+    unsigned char sizeOutputTileHeightFull = 8;
+    bool flagEnableRelu = true;
+    float bias = 0.0;
+    e_tensor_type tensorType = SPARSE;
+    bool flagCompression = false;
+    float sparseProb = 0.2f;
+
+    launch(
+        inputWidth,
+        inputHeight,
+        numInputChannel,
+        widthBlockSize,
+        sizeOutputTileWidthPerColFul,
+        sizeOutputTileHeightFull,
+        flagEnableRelu,
+        tensorType,
+        bias,
+        flagCompression,
+        1.0f - sparseProb);
+}
+TEST_F (testFixture, sparse_1x1x127_0p3) {
+
+    unsigned char inputWidth = 1;
+    unsigned char inputHeight = 1;
+    unsigned char numInputChannel = 127;
+    unsigned char widthBlockSize = 3;
+    unsigned char sizeOutputTileWidthPerColFul = 8;
+    unsigned char sizeOutputTileHeightFull = 8;
+    bool flagEnableRelu = true;
+    float bias = 0.0;
+    e_tensor_type tensorType = SPARSE;
+    bool flagCompression = false;
+    float sparseProb = 0.3f;
+
+    launch(
+        inputWidth,
+        inputHeight,
+        numInputChannel,
+        widthBlockSize,
+        sizeOutputTileWidthPerColFul,
+        sizeOutputTileHeightFull,
+        flagEnableRelu,
+        tensorType,
+        bias,
+        flagCompression,
+        1.0f - sparseProb);
+}
+TEST_F (testFixture, sparse_1x1x127_0p4) {
+
+    unsigned char inputWidth = 1;
+    unsigned char inputHeight = 1;
+    unsigned char numInputChannel = 127;
+    unsigned char widthBlockSize = 3;
+    unsigned char sizeOutputTileWidthPerColFul = 8;
+    unsigned char sizeOutputTileHeightFull = 8;
+    bool flagEnableRelu = true;
+    float bias = 0.0;
+    e_tensor_type tensorType = SPARSE;
+    bool flagCompression = false;
+    float sparseProb = 0.4f;
+
+    launch(
+        inputWidth,
+        inputHeight,
+        numInputChannel,
+        widthBlockSize,
+        sizeOutputTileWidthPerColFul,
+        sizeOutputTileHeightFull,
+        flagEnableRelu,
+        tensorType,
+        bias,
+        flagCompression,
+        1.0f - sparseProb);
+}
+TEST_F (testFixture, sparse_1x1x127_0p5) {
+
+    unsigned char inputWidth = 1;
+    unsigned char inputHeight = 1;
+    unsigned char numInputChannel = 127;
+    unsigned char widthBlockSize = 3;
+    unsigned char sizeOutputTileWidthPerColFul = 8;
+    unsigned char sizeOutputTileHeightFull = 8;
+    bool flagEnableRelu = true;
+    float bias = 0.0;
+    e_tensor_type tensorType = SPARSE;
+    bool flagCompression = false;
+    float sparseProb = 0.5f;
+
+    launch(
+        inputWidth,
+        inputHeight,
+        numInputChannel,
+        widthBlockSize,
+        sizeOutputTileWidthPerColFul,
+        sizeOutputTileHeightFull,
+        flagEnableRelu,
+        tensorType,
+        bias,
+        flagCompression,
+        1.0f - sparseProb);
+}
+TEST_F (testFixture, sparse_1x1x127_0p6) {
+
+    unsigned char inputWidth = 1;
+    unsigned char inputHeight = 1;
+    unsigned char numInputChannel = 127;
+    unsigned char widthBlockSize = 3;
+    unsigned char sizeOutputTileWidthPerColFul = 8;
+    unsigned char sizeOutputTileHeightFull = 8;
+    bool flagEnableRelu = true;
+    float bias = 0.0;
+    e_tensor_type tensorType = SPARSE;
+    bool flagCompression = false;
+    float sparseProb = 0.6f;
+
+    launch(
+        inputWidth,
+        inputHeight,
+        numInputChannel,
+        widthBlockSize,
+        sizeOutputTileWidthPerColFul,
+        sizeOutputTileHeightFull,
+        flagEnableRelu,
+        tensorType,
+        bias,
+        flagCompression,
+        1.0f - sparseProb);
+}
+TEST_F (testFixture, sparse_1x1x127_0p7) {
+
+    unsigned char inputWidth = 1;
+    unsigned char inputHeight = 1;
+    unsigned char numInputChannel = 127;
+    unsigned char widthBlockSize = 3;
+    unsigned char sizeOutputTileWidthPerColFul = 8;
+    unsigned char sizeOutputTileHeightFull = 8;
+    bool flagEnableRelu = true;
+    float bias = 0.0;
+    e_tensor_type tensorType = SPARSE;
+    bool flagCompression = false;
+    float sparseProb = 0.7f;
+
+    launch(
+        inputWidth,
+        inputHeight,
+        numInputChannel,
+        widthBlockSize,
+        sizeOutputTileWidthPerColFul,
+        sizeOutputTileHeightFull,
+        flagEnableRelu,
+        tensorType,
+        bias,
+        flagCompression,
+        1.0f - sparseProb);
+}
+TEST_F (testFixture, sparse_1x1x127_0p8) {
+
+    unsigned char inputWidth = 1;
+    unsigned char inputHeight = 1;
+    unsigned char numInputChannel = 127;
+    unsigned char widthBlockSize = 3;
+    unsigned char sizeOutputTileWidthPerColFul = 8;
+    unsigned char sizeOutputTileHeightFull = 8;
+    bool flagEnableRelu = true;
+    float bias = 0.0;
+    e_tensor_type tensorType = SPARSE;
+    bool flagCompression = false;
+    float sparseProb = 0.8f;
+
+    launch(
+        inputWidth,
+        inputHeight,
+        numInputChannel,
+        widthBlockSize,
+        sizeOutputTileWidthPerColFul,
+        sizeOutputTileHeightFull,
+        flagEnableRelu,
+        tensorType,
+        bias,
+        flagCompression,
+        1.0f - sparseProb);
+}
+TEST_F (testFixture, sparse_1x1x127_0p9) {
+
+    unsigned char inputWidth = 1;
+    unsigned char inputHeight = 1;
+    unsigned char numInputChannel = 127;
+    unsigned char widthBlockSize = 3;
+    unsigned char sizeOutputTileWidthPerColFul = 8;
+    unsigned char sizeOutputTileHeightFull = 8;
+    bool flagEnableRelu = true;
+    float bias = 0.0;
+    e_tensor_type tensorType = SPARSE;
+    bool flagCompression = false;
+    float sparseProb = 0.9f;
+
+    launch(
+        inputWidth,
+        inputHeight,
+        numInputChannel,
+        widthBlockSize,
+        sizeOutputTileWidthPerColFul,
+        sizeOutputTileHeightFull,
+        flagEnableRelu,
+        tensorType,
+        bias,
+        flagCompression,
+        1.0f - sparseProb);
+}
+TEST_F (testFixture, sparse_1x1x127_1p) {
+
+    unsigned char inputWidth = 1;
+    unsigned char inputHeight = 1;
+    unsigned char numInputChannel = 127;
+    unsigned char widthBlockSize = 3;
+    unsigned char sizeOutputTileWidthPerColFul = 8;
+    unsigned char sizeOutputTileHeightFull = 8;
+    bool flagEnableRelu = true;
+    float bias = 0.0;
+    e_tensor_type tensorType = SPARSE;
+    bool flagCompression = false;
+    float sparseProb = 1.0f;
+
+    launch(
+        inputWidth,
+        inputHeight,
+        numInputChannel,
+        widthBlockSize,
+        sizeOutputTileWidthPerColFul,
+        sizeOutputTileHeightFull,
+        flagEnableRelu,
+        tensorType,
+        bias,
+        flagCompression,
+        1.0f - sparseProb);
 }
 #else
 TEST_F (testFixture, small_5x5) {
@@ -1478,7 +2160,8 @@ TEST_F (testFixture, narrow_1x1x127) {
         flagEnableRelu,
         TEST_TYPE);
 }
-#endif
+#endif //SPARSE_LEVEL_TEST
+#endif  //PLAY
 
 int main(int argc, char* argv[]) {
 
