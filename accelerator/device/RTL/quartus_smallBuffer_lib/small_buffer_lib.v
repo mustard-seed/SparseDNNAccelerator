@@ -2,14 +2,11 @@
 
 module smallBufferAccumulator 
 	# 	(
-			parameter POSITION = 4,
-			parameter COUNT_BITWIDTH = 5,
-			parameter INDEX_BITWIDTH = 5,
-			parameter MAX_NUM_OUTPUT = 2
+			parameter MAX_NUM_OUTPUT = 2,
+			localparam COUNT_BITWIDTH = $rtoi($clog2(MAX_NUM_OUTPUT) + 1)
 		)
 	(
-		input wire [INDEX_BITWIDTH-1:0] startIndex,
-		input wire b,
+		input wire inputBit,
 		input wire [COUNT_BITWIDTH-1:0] previousAccum,
 		output wire [COUNT_BITWIDTH-1:0] accum
 	);
@@ -17,64 +14,36 @@ module smallBufferAccumulator
 	reg [COUNT_BITWIDTH-1:0] operandA;
 	reg [COUNT_BITWIDTH-1:0] operandB;
 
-	// always @ (*) begin
-	// 	//Priority mux
-	// 	if (previousAccum <  MAX_NUM_OUTPUT) begin
-	// 		if (startIndex > POSITION) begin
-	// 			accum = {COUNT_BITWIDTH{1'b0}};
-	// 		end
-	// 		else begin
-	// 			accum = previousAccum + {{(COUNT_BITWIDTH-1){1'b0}}, b};
-	// 		end
-	// 	end
-	// 	else begin
-	// 		accum = previousAccum;
-	// 	end
-	// end
-
 	always @ (*) begin
-		if (previousAccum <  MAX_NUM_OUTPUT) begin
-			if (startIndex > POSITION) begin
-				operandA = {(COUNT_BITWIDTH){1'b0}};
-				operandB = {(COUNT_BITWIDTH){1'b0}};
-			end
-			else begin
-				operandA = previousAccum;
-				operandB = {{(COUNT_BITWIDTH-1){1'b0}}, b};
-			end
+		operandA = previousAccum;
+		if (previousAccum == MAX_NUM_OUTPUT) begin
+			operandA = 0;
 		end
-		else begin
-			operandA = previousAccum;
-			operandB = {(COUNT_BITWIDTH){1'b0}};
-		end
+		operandB = {(COUNT_BITWIDTH-1){inputBit}};
 	end
 	assign accum = operandA + operandB;
+
 endmodule
 
 /**
- * \brief Count the number of 1s preceding and up to each bit in the bit mask, starting from the startIndex argument
+ * \brief Count the number of 1s preceding and up to each bit in the bitmask, starting from the startIndex argument
  * The number of ones is capped by the parameter MAX_NUM_OUTPUT 
  * bitmask is counted from LSB to MSB
  * i.e. bitmask[N] is considered AFTER bitmask [N-1]
  * This piece of logic is combinational
  * \input bitmask The bitmask to generate the accumlated indices from
- * \input startIndex The first position from which the accumulation starts
  * \output outAccumulation The accumulated index
- * \output nextStartIndex The index from which the next accumulation cycle should start
  */
-module selectGenerator
+module smallBufferMaskAccumulator
 	#	(
-			parameter ENABLE_NEXT_START_INDEX = 1, //1 for adding logic to generate the start index. 0 else
-			parameter BITMASK_LENGTH = 16, //Number of input bitmask length
-			parameter MAX_NUM_OUTPUT = 16, //Max number of the number of 1s that we care, must be at least 1
-			parameter COUNT_BITWIDTH = 5, //Number of bits per accumulated index. LOG2(MAX_NUM_OUTPUT)
-			parameter INDEX_BITWIDTH = 5 //Number of bits per position index. floor(LOG2(BITMASK_LENGTH)) + 1
+			parameter BITMASK_LENGTH = 8, //Number of input bitmask length
+			parameter MAX_NUM_OUTPUT = 2,
+			localparam COUNT_BITWIDTH = $rtoi($clog2(MAX_NUM_OUTPUT) + 1),
+			localparam ACCUMULATION_MASK_WIDTH = COUNT_BITWIDTH*BITMASK_LENGTH
 	  	) 
 	(
 		input wire [BITMASK_LENGTH-1 : 0] bitmask,
-		input wire [INDEX_BITWIDTH-1 : 0] startIndex,
-		output wire [COUNT_BITWIDTH*BITMASK_LENGTH-1 : 0] outAccumulation,
-		output reg [INDEX_BITWIDTH-1 : 0] nextStartIndex
+		output wire [ACCUMULATION_MASK_WIDTH-1 : 0] outAccumulation
 
     );
 
@@ -83,34 +52,56 @@ module selectGenerator
 	//bitmask is counted from LSB to MSB
 	//i.e. bitmask[N] is considered AFTER bitmask [N-1]
 	//===============================================
-	wire [COUNT_BITWIDTH*BITMASK_LENGTH-1 : 0] accumulation;
+	wire [ACCUMULATION_MASK_WIDTH-1 : 0] accumulation;
 	assign outAccumulation = accumulation;
 	genvar i;
 	generate
 		for (i=0; i<BITMASK_LENGTH; i=i+1) begin: FOR_SELECT_GEN
 			wire [COUNT_BITWIDTH-1:0] wireAccum = (i==0) ? 0 : accumulation[i*COUNT_BITWIDTH-1 -: COUNT_BITWIDTH];
-			smallBufferAccumulator #(.POSITION(i), .COUNT_BITWIDTH(COUNT_BITWIDTH), .INDEX_BITWIDTH(INDEX_BITWIDTH), .MAX_NUM_OUTPUT(MAX_NUM_OUTPUT))
-				accum_inst(.startIndex(startIndex), .b(bitmask[i]), .previousAccum(wireAccum), .accum(accumulation[(i+1)*COUNT_BITWIDTH-1 -: COUNT_BITWIDTH]));
-		end
-
-		if (ENABLE_NEXT_START_INDEX == 1) begin
-			integer idxI;
-
-			always @(*) begin
-				if (accumulation[BITMASK_LENGTH*COUNT_BITWIDTH-1 -: COUNT_BITWIDTH] == {COUNT_BITWIDTH{1'b0}}) begin
-					nextStartIndex = BITMASK_LENGTH;
-				end
-				else begin
-					for (idxI=BITMASK_LENGTH; idxI>0; idxI=idxI-1) begin
-						if (accumulation[idxI*COUNT_BITWIDTH-1 -: COUNT_BITWIDTH] == accumulation[BITMASK_LENGTH*COUNT_BITWIDTH-1 -: COUNT_BITWIDTH]) begin
-							nextStartIndex = idxI;
-						end
-					end
-				end
-			end
+			smallBufferAccumulator #(.MAX_NUM_OUTPUT(MAX_NUM_OUTPUT))
+				accum_inst(.inputBit(bitmask[i]), .previousAccum(wireAccum), .accum(accumulation[(i+1)*COUNT_BITWIDTH-1 -: COUNT_BITWIDTH]));
 		end
 	endgenerate
 endmodule
+
+//TODO; Need to create the C model for this module
+module clMaskAccumulatorWrapper
+	(
+		input   wire clock,
+		input   wire resetn,
+		input   wire ivalid, 
+		input   wire iready,
+		output  wire ovalid, 
+		output  wire oready,
+
+		//Break up a long bitmask into bytes
+		input wire bitmask0[7:0],
+		input wire bitmask1[7:0],
+		input wire bitmask2[7:0],
+		input wire bitmask3[7:0],
+		input wire bitmask4[7:0],
+		input wire bitmask5[7:0],
+		input wire bitmask6[7:0],
+		input wire bitmask7[7:0],
+
+		//Over provisioned to handle the most general case
+		output wire [254:0] result
+	);
+
+	localparam BITMASK_LENGTH = 8;
+	localparam MAX_NUM_OUTPUT = 2;
+	localparam COUNT_BITWIDTH = $rtoi($clog2(MAX_NUM_OUTPUT) + 1);
+
+	assign ovalid = ivalid;
+	assign oready = 1'b1;
+
+	wire [63:0] bitmask;
+	assign bitmask = {bitmask7, bitmask6, bitmask5, bitmask4, bitmask3, bitmask2, bitmask1, bitmask0};
+
+	smallBufferMaskAccumulator #(.BITMASK_LENGTH(BITMASK_LENGTH), .MAX_NUM_OUTPUT(MAX_NUM_OUTPUT))
+		mask_accumulator (.bitmask(bitmask[BITMASK_LENGTH - 1 : 0]), .outAccumulation(result[BITMASK_LENGTH*COUNT_BITWIDTH-1 : 0]));
+endmodule
+
 
 /*
  * \brief Filter and coalesce a sparse input bus with BITMASK_LENGTH elements to NUM_OUTPUT elements using the input mask
