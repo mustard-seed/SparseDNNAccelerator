@@ -3,7 +3,7 @@
 module smallBufferAccumulator 
 	# 	(
 			parameter MAX_NUM_OUTPUT = 2,
-			localparam COUNT_BITWIDTH = $rtoi($clog2(MAX_NUM_OUTPUT) + 1)
+			localparam COUNT_BITWIDTH = $rtoi($clog2(MAX_NUM_OUTPUT) + 1.0)
 		)
 	(
 		input wire inputBit,
@@ -19,7 +19,7 @@ module smallBufferAccumulator
 		if (previousAccum == MAX_NUM_OUTPUT) begin
 			operandA = 0;
 		end
-		operandB = {(COUNT_BITWIDTH-1){inputBit}};
+		operandB = {{(COUNT_BITWIDTH-1){1'b0}}, {inputBit}};
 	end
 	assign accum = operandA + operandB;
 
@@ -38,7 +38,7 @@ module smallBufferMaskAccumulator
 	#	(
 			parameter BITMASK_LENGTH = 8, //Number of input bitmask length
 			parameter MAX_NUM_OUTPUT = 2,
-			localparam COUNT_BITWIDTH = $rtoi($clog2(MAX_NUM_OUTPUT) + 1),
+			localparam COUNT_BITWIDTH = $rtoi($clog2(MAX_NUM_OUTPUT) + 1.0),
 			localparam ACCUMULATION_MASK_WIDTH = COUNT_BITWIDTH*BITMASK_LENGTH
 	  	) 
 	(
@@ -65,7 +65,10 @@ module smallBufferMaskAccumulator
 endmodule
 
 //TODO; Need to create the C model for this module
-module clMaskAccumulatorWrapper
+module clMaskAccumulatorWrapper # (
+		parameter BITMASK_LENGTH = 8,
+		parameter MAX_NUM_OUTPUT = 2
+	)
 	(
 		input   wire clock,
 		input   wire resetn,
@@ -75,22 +78,21 @@ module clMaskAccumulatorWrapper
 		output  wire oready,
 
 		//Break up a long bitmask into bytes
-		input wire bitmask0[7:0],
-		input wire bitmask1[7:0],
-		input wire bitmask2[7:0],
-		input wire bitmask3[7:0],
-		input wire bitmask4[7:0],
-		input wire bitmask5[7:0],
-		input wire bitmask6[7:0],
-		input wire bitmask7[7:0],
+		input wire [7:0] bitmask0,
+		input wire [7:0] bitmask1,
+		input wire [7:0] bitmask2,
+		input wire [7:0] bitmask3,
+		input wire [7:0] bitmask4,
+		input wire [7:0] bitmask5,
+		input wire [7:0] bitmask6,
+		input wire [7:0] bitmask7,
 
 		//Over provisioned to handle the most general case
 		output wire [254:0] result
 	);
 
-	localparam BITMASK_LENGTH = 8;
-	localparam MAX_NUM_OUTPUT = 2;
-	localparam COUNT_BITWIDTH = $rtoi($clog2(MAX_NUM_OUTPUT) + 1);
+	//TODO: Change these parameters if TRANSFER_SIZE changes
+	localparam COUNT_BITWIDTH = $rtoi($clog2(MAX_NUM_OUTPUT) + 1.0);
 
 	assign ovalid = ivalid;
 	assign oready = 1'b1;
@@ -117,47 +119,46 @@ endmodule
 */
 module inputFilter
 	#	(
-			parameter ENABLE_NEXT_START_INDEX = 1, //1 for adding logic to generate the start index. 0 else
 			parameter BITMASK_LENGTH = 16,
-			parameter INDEX_BITWIDTH = 5,
 			parameter INPUT_ELEMENT_WIDTH = 1,
 			parameter MAX_NUM_OUTPUT = 4,
-			parameter COUNT_BITWIDTH = 4
+			localparam COUNT_BITWIDTH = $rtoi($clog2(MAX_NUM_OUTPUT) + 1.0), //Number of bits per element in the accumulated bitmask
+			localparam INDEX_BITWIDTH = $rtoi($ceil($clog2(BITMASK_LENGTH))) , //Number of bits to encode the bitmask index position
+			localparam INPUT_WIDTH = INPUT_ELEMENT_WIDTH*BITMASK_LENGTH,
+			localparam OUTPUT_WIDTH = INPUT_ELEMENT_WIDTH*MAX_NUM_OUTPUT,
+			localparam ACCUMULATION_MASK_WIDTH = BITMASK_LENGTH * COUNT_BITWIDTH
 		)
 	(
-		input wire [INPUT_ELEMENT_WIDTH*BITMASK_LENGTH-1 : 0] sparseInput,
-		input wire [BITMASK_LENGTH-1 : 0] bitmask,
+		input wire [INPUT_WIDTH - 1 : 0] sparseInput,
+		input wire [ACCUMULATION_MASK_WIDTH-1 : 0] accumulatedBitmask,
 		input wire [INDEX_BITWIDTH-1 : 0] startIndex,
-		output reg [INPUT_ELEMENT_WIDTH*MAX_NUM_OUTPUT-1 : 0 ] denseOutput,
-		output wire [COUNT_BITWIDTH-1 : 0] numDenseOutput,
-		output wire [INDEX_BITWIDTH-1 : 0] nextStartIndex
+		output reg [OUTPUT_WIDTH-1 : 0 ] denseOutput,
+		output reg [COUNT_BITWIDTH-1 : 0] numDenseOutput,
+		output reg [INDEX_BITWIDTH-1 : 0] nextStartIndex
 	);
 
-	wire [COUNT_BITWIDTH*BITMASK_LENGTH-1 : 0] accumulatedIndex;
-	assign numDenseOutput = accumulatedIndex[COUNT_BITWIDTH*BITMASK_LENGTH-1 -: COUNT_BITWIDTH];
+	//wire [ACCUMULATION_MASK_WIDTH-1 : 0] accumulatedIndex;
+	//assign numDenseOutput = accumulatedIndex[COUNT_BITWIDTH*BITMASK_LENGTH-1 -: COUNT_BITWIDTH];
 
-	selectGenerator # (
-		.ENABLE_NEXT_START_INDEX(ENABLE_NEXT_START_INDEX),
-		.BITMASK_LENGTH(BITMASK_LENGTH),
-		.MAX_NUM_OUTPUT(MAX_NUM_OUTPUT),
-		.COUNT_BITWIDTH(COUNT_BITWIDTH),
-		.INDEX_BITWIDTH(INDEX_BITWIDTH)
-		)
-	inst_select_generator (
-		.bitmask(bitmask),
-		.startIndex     (startIndex),
-		.outAccumulation(accumulatedIndex),
-		.nextStartIndex (nextStartIndex)
-		);
-
+	//Select the appropriate filter
 	genvar iGenOutput;
 	generate
 		for (iGenOutput = 0; iGenOutput < MAX_NUM_OUTPUT; iGenOutput=iGenOutput+1) begin: GENFOR_OUTPUT
+			/**
+			 * Priority encoder
+			 */
+
+			 //Index of accumulated index
 			integer iAccumMask;
 			always @ (*) begin
 				denseOutput[(iGenOutput+1)*INPUT_ELEMENT_WIDTH-1 -: INPUT_ELEMENT_WIDTH] = {INPUT_ELEMENT_WIDTH{1'b0}};
 				for (iAccumMask = BITMASK_LENGTH; iAccumMask>0; iAccumMask=iAccumMask-1) begin:FOR_ACCUM
-					if (accumulatedIndex[iAccumMask*COUNT_BITWIDTH-1 -: COUNT_BITWIDTH] == (iGenOutput+1)) begin
+					//Generate the priority bitmask
+					if (
+							(accumulatedBitmask[iAccumMask*COUNT_BITWIDTH-1 -: COUNT_BITWIDTH] == (iGenOutput+1)) 
+							&& ((iAccumMask-1) >= startIndex)
+						)
+					begin
 						denseOutput[(iGenOutput+1)*INPUT_ELEMENT_WIDTH-1 -: INPUT_ELEMENT_WIDTH] 
 							= sparseInput[iAccumMask*INPUT_ELEMENT_WIDTH-1 -: INPUT_ELEMENT_WIDTH];
 					end
@@ -165,10 +166,32 @@ module inputFilter
 			end
 		end
 	endgenerate
+
+	//Search for the next start index.
+	//It is the first index (counting from the LSB) at which the accumulated mask value is MAX_NUM_OUTPUT
+	integer iNextIndex;
+	always @ (*) begin
+		nextStartIndex = BITMASK_LENGTH;
+		numDenseOutput = accumulatedBitmask[ACCUMULATION_MASK_WIDTH-1 -: COUNT_BITWIDTH];
+		for (iNextIndex = BITMASK_LENGTH; iNextIndex > 0; iNextIndex = iNextIndex-1) begin
+			if 	(
+					(accumulatedBitmask[iNextIndex*COUNT_BITWIDTH-1 -: COUNT_BITWIDTH] == MAX_NUM_OUTPUT)
+					&&  ((iNextIndex-1) > startIndex)
+				)
+			begin
+				nextStartIndex = iNextIndex; //Do not substract 1
+				numDenseOutput = accumulatedBitmask[iNextIndex*COUNT_BITWIDTH-1 -: COUNT_BITWIDTH];
+			end
+		end
+	end
+
 endmodule
 
 //TODO: Change this module if OpenCL code changes
-module clMaskFilter
+module clMaskFilter # (
+		parameter COMPRESSION_WINDOW_SIZE = 64, //Bitmask length 
+		parameter TRANSFER_SIZE = 8 //MAX_NUM_OUTPUT
+    )
 	(
 		input   wire clock,
 		input   wire resetn,
@@ -177,41 +200,138 @@ module clMaskFilter
 		output  wire ovalid, 
 		output  wire oready,
 
-		input 	wire [15:0] bitmask,
-		input 	wire [15:0] sparseInput, //Mutual bitmask
+		//Bytes of the mutual mask
+		input 	wire [7:0] mutualBitmask0,
+		input 	wire [7:0] mutualBitmask1,
+		input 	wire [7:0] mutualBitmask2,
+		input   wire [7:0] mutualBitmask3,
+		input 	wire [7:0] mutualBitmask4,
+		input 	wire [7:0] mutualBitmask5,
+		input 	wire [7:0] mutualBitmask6,
+		input   wire [7:0] mutualBitmask7,
+
+
+		//Bytes of the accumulated bitmask
+		//Might not need all of them
+		input 	wire [7:0]	accumulatedBitmask0,
+		input 	wire [7:0]	accumulatedBitmask1,
+		input 	wire [7:0]	accumulatedBitmask2,
+		input 	wire [7:0]	accumulatedBitmask3,
+		input 	wire [7:0]	accumulatedBitmask4,
+		input 	wire [7:0]	accumulatedBitmask5,
+		input 	wire [7:0]	accumulatedBitmask6,
+		input 	wire [7:0]	accumulatedBitmask7,
+		input 	wire [7:0]	accumulatedBitmask8,
+		input 	wire [7:0]	accumulatedBitmask9,
+		input 	wire [7:0]	accumulatedBitmask10,
+		input 	wire [7:0]	accumulatedBitmask11,
+		input 	wire [7:0]	accumulatedBitmask12,
+		input 	wire [7:0]	accumulatedBitmask13,
+		input 	wire [7:0]	accumulatedBitmask14,
+		input 	wire [7:0]	accumulatedBitmask15,
+		input 	wire [7:0]	accumulatedBitmask16,
+		input 	wire [7:0]	accumulatedBitmask17,
+		input 	wire [7:0]	accumulatedBitmask18,
+		input 	wire [7:0]	accumulatedBitmask19,
+		input 	wire [7:0]	accumulatedBitmask20,
+		input 	wire [7:0]	accumulatedBitmask21,
+		input 	wire [7:0]	accumulatedBitmask22,
+		input 	wire [7:0]	accumulatedBitmask23,
+		input 	wire [7:0]	accumulatedBitmask24,
+		input 	wire [7:0]	accumulatedBitmask25,
+		input 	wire [7:0]	accumulatedBitmask26,
+		input 	wire [7:0]	accumulatedBitmask27,
+		input 	wire [7:0]	accumulatedBitmask28,
+		input 	wire [7:0]	accumulatedBitmask29,
+		input 	wire [7:0]	accumulatedBitmask30,
+		input 	wire [7:0]	accumulatedBitmask31,
+
 		input 	wire [7:0] startIndex,
 
 
-		//[7:0] Next start index
-		//[15:8] Packed output, only bit 9 and 8 are meaningful
+		//[7:0] Packed mutual bitmask. Only [TRANSFER_SIZE-1 : 0] are meaningful
+		//[15:8] Next start index. Only [8 + INDEX_BITWIDTH - 1 -: INDEX_BITWIDTH] are meanintful
 		output wire [15:0] result
 	);
+
+	localparam INDEX_BITWIDTH = $rtoi($ceil($clog2(COMPRESSION_WINDOW_SIZE)));
+
+	localparam COUNT_BITWIDTH = $rtoi($clog2(TRANSFER_SIZE) + 1.0); //Number of bits per element in the accumulated bitmask
+	localparam ACCUMULATION_MASK_WIDTH = COMPRESSION_WINDOW_SIZE * COUNT_BITWIDTH;
 
 	assign ovalid = ivalid;
 	assign oready = 1'b1;
 
 	//Make sure to zero out the unused values
-	assign {result[7:4], result[15:10]} = 0;
+	assign {result[7 -: (8 - TRANSFER_SIZE)], result[15 -: (8 - INDEX_BITWIDTH)]} = 0;
 
+	wire [255 : 0] accumulatedBitmask
+		= {
+			accumulatedBitmask31,
+			accumulatedBitmask30,
+			accumulatedBitmask29,
+			accumulatedBitmask28,
+			accumulatedBitmask27,
+			accumulatedBitmask26,
+			accumulatedBitmask25,
+			accumulatedBitmask24,
+			accumulatedBitmask23,
+			accumulatedBitmask22,
+			accumulatedBitmask21,
+			accumulatedBitmask20,
+			accumulatedBitmask19,
+			accumulatedBitmask18,
+			accumulatedBitmask17,
+			accumulatedBitmask16,
+			accumulatedBitmask15,
+			accumulatedBitmask14,
+			accumulatedBitmask13,
+			accumulatedBitmask12,
+			accumulatedBitmask11,
+			accumulatedBitmask10,
+			accumulatedBitmask9,
+			accumulatedBitmask8,
+			accumulatedBitmask7,
+			accumulatedBitmask6,
+			accumulatedBitmask5,
+			accumulatedBitmask4,
+			accumulatedBitmask3,
+			accumulatedBitmask2,
+			accumulatedBitmask1,
+			accumulatedBitmask0
+		   };
+
+	wire [63 : 0] mutualBitmask
+		= {
+			mutualBitmask7,
+			mutualBitmask6,
+			mutualBitmask5,
+			mutualBitmask4,
+			mutualBitmask3,
+			mutualBitmask2,
+			mutualBitmask1,
+			mutualBitmask0
+		};
+	
 	inputFilter #(
-		.ENABLE_NEXT_START_INDEX(1),
-		.BITMASK_LENGTH     (8),
-		.INDEX_BITWIDTH     (4),
-		.INPUT_ELEMENT_WIDTH(1),
-		.MAX_NUM_OUTPUT     (2),
-		.COUNT_BITWIDTH     (2)
-	)
+		.BITMASK_LENGTH     (COMPRESSION_WINDOW_SIZE),
+		.INPUT_ELEMENT_WIDTH    (1),
+		.MAX_NUM_OUTPUT     (TRANSFER_SIZE)
+		)
 	maskFilter (
-		.sparseInput  (sparseInput[7:0]),
-		.bitmask      (bitmask[7:0]),
-		.denseOutput  (result[9:8]),
-		.startIndex    (startIndex[3:0]),
+		.sparseInput  (mutualBitmask[COMPRESSION_WINDOW_SIZE - 1 : 0]),
+		.accumulatedBitmask      (accumulatedBitmask[ACCUMULATION_MASK_WIDTH - 1 : 0]),
+		.denseOutput  (result [TRANSFER_SIZE - 1 : 0]),
+		.startIndex    (startIndex [INDEX_BITWIDTH - 1 : 0]),
 		.numDenseOutput	(),
-		.nextStartIndex(result[3:0])
+		.nextStartIndex(result[8 + INDEX_BITWIDTH - 1 -: INDEX_BITWIDTH])
 		);
 endmodule
 
-module clSparseMacBufferUpdate
+module clSparseMacBufferUpdate # (
+		parameter TRANSFER_SIZE = 8,
+		parameter CLUSTER_BITWIDTH = 8
+	)
 	(
 		input   wire clock,
 		input   wire resetn,
@@ -221,106 +341,153 @@ module clSparseMacBufferUpdate
 		output  wire oready,
 
 		input 	wire [7:0] inputSelectBitmask,
-		//input 	wire [31:0] inputTransferBlock,
-		//input 	wire [31:0] currentBuffer,
-		input 	wire [7:0] inputTransferBlockA0,
-		input 	wire [7:0] inputTransferBlockA1,
-		input 	wire [7:0] inputTransferBlockB0,
-		input 	wire [7:0] inputTransferBlockB1,
 
-		input 	wire [7:0] currentBufferA0,
-		input 	wire [7:0] currentBufferA1,
-		input 	wire [7:0] currentBufferB0,
-		input 	wire [7:0] currentBufferB1,
+		//Bytes of the input buffer
+		input 	wire [7:0] inputTransferBlock0,
+		input 	wire [7:0] inputTransferBlock1,
+		input 	wire [7:0] inputTransferBlock2,
+		input 	wire [7:0] inputTransferBlock3,
+		input 	wire [7:0] inputTransferBlock4,
+		input 	wire [7:0] inputTransferBlock5,
+		input 	wire [7:0] inputTransferBlock6,
+		input 	wire [7:0] inputTransferBlock7,
+
+		//Bytes of the buffer
+		input 	wire [7:0] currentBuffer0,
+		input 	wire [7:0] currentBuffer1,
+		input 	wire [7:0] currentBuffer2,
+		input 	wire [7:0] currentBuffer3,
+		input 	wire [7:0] currentBuffer4,
+		input 	wire [7:0] currentBuffer5,
+		input 	wire [7:0] currentBuffer6,
+		input 	wire [7:0] currentBuffer7,
 
 		input 	wire [7:0]	currentBufferSize,
 
 
 
-		//[31:0] macOutput
-		//[63:32] nextBuffer
-		//[65:64] Next buffer size
-		//[72] macOutputIsValid
-		output wire [127:0] result
+		//[63:0] macOutput
+		//[127:64] nextBuffer
+		//[128 + BUFFER_COUNT_WIDTH -1	-:	BUFFER_COUNT_WIDTH]  Next buffer size
+		//[128 + BUFFER_COUNT_WIDTH] macOutputIsValid
+		output wire [191:0] result
 	);
+
+	localparam INDEX_BITWIDTH = $rtoi($ceil($clog2(TRANSFER_SIZE)));
+
+	localparam COUNT_BITWIDTH = $rtoi($clog2(TRANSFER_SIZE) + 1.0); //Number of bits per element in the accumulated bitmask
+	localparam ACCUMULATION_MASK_WIDTH = TRANSFER_SIZE * COUNT_BITWIDTH;
+	localparam BUFFER_BITWIDTH = CLUSTER_BITWIDTH * TRANSFER_SIZE;
+	localparam BUFFER_COUNT_WIDTH = COUNT_BITWIDTH;
+	localparam CONCATENTATED_BUFFER_COUNT_WIDTH = BUFFER_COUNT_WIDTH;
+
 	assign ovalid = ivalid;
 	assign oready = 1'b1;
 
-	wire [31:0] currentBuffer;
-	wire [31:0] inputTransferBlock;
+	wire [ACCUMULATION_MASK_WIDTH - 1 : 0] accumulationMask;
 
-	assign currentBuffer = {currentBufferB1, currentBufferB0, currentBufferA1, currentBufferA0};
-	assign inputTransferBlock = {inputTransferBlockB1, inputTransferBlockB0, inputTransferBlockA1, inputTransferBlockA0};
+	wire [BUFFER_BITWIDTH-1:0] currentBuffer;
+	wire [BUFFER_BITWIDTH-1:0] inputTransferBlock;
 
-	wire [1:0] numClusterValid;
-	wire [31:0] denseClusters;
-	wire [1:0] totalSize;
+	assign currentBuffer = {currentBuffer7, currentBuffer6, currentBuffer5, currentBuffer4, currentBuffer3, currentBuffer2, currentBuffer1, currentBuffer0};
+	assign inputTransferBlock = {inputTransferBlock7, inputTransferBlock6, inputTransferBlock5, inputTransferBlock4, inputTransferBlock3, inputTransferBlock2, inputTransferBlock1, inputTransferBlock0};
+
+	wire [BUFFER_COUNT_WIDTH-1	:	0] numClusterValid;
+	wire [BUFFER_BITWIDTH-1	:	0] denseClusters;
+	wire [CONCATENTATED_BUFFER_COUNT_WIDTH - 1	:	0] totalSize;
 	wire macClustersValid;
-	wire [1:0] newSize;
-	wire [31:0] newBuffer;
-	wire [31:0] macClusters;
-	reg [63:0] concatenatedBuffer;
-	wire [63:0] paddedCurrentBuffer;
-	wire [63:0] paddedDenseClusters;
+	wire [BUFFER_COUNT_WIDTH - 2 	:	0] newSize;
+	wire [BUFFER_BITWIDTH-1	:	0] newBuffer;
+	wire [BUFFER_BITWIDTH-1	:	0] macClusters;
+	reg  [2*BUFFER_BITWIDTH-1	:	0] concatenatedBuffer;
+	wire [2*BUFFER_BITWIDTH-1	:	0] paddedCurrentBuffer;
+	wire [2*BUFFER_BITWIDTH-1	:	0] paddedDenseClusters;
 
-	assign result[63:0] = {newBuffer, macClusters};
-	assign result[65:64] = newSize;
-	assign result[72] = macClustersValid;
+	assign result[63:0] 	= 	macClusters;
+	assign result[127:64] 	= 	newBuffer;
+	assign result[128 + BUFFER_COUNT_WIDTH -2	-:	(BUFFER_COUNT_WIDTH-1)] 	= 	newSize;
+	assign result[128 + BUFFER_COUNT_WIDTH - 1] 		=	macClustersValid;
+
+	smallBufferMaskAccumulator #(
+			.BITMASK_LENGTH         (TRANSFER_SIZE),
+			.MAX_NUM_OUTPUT         (TRANSFER_SIZE)
+		)
+	inst_maskAccum (
+			.bitmask (inputSelectBitmask[TRANSFER_SIZE  - 1 : 0]),
+			.outAccumulation(accumulationMask)
+		);
 
 	inputFilter #(
-			.ENABLE_NEXT_START_INDEX(0),
-			.BITMASK_LENGTH     (2),
-			.INDEX_BITWIDTH     (2),
-			.INPUT_ELEMENT_WIDTH(16),
-			.MAX_NUM_OUTPUT     (2),
-			.COUNT_BITWIDTH     (2)
+			.BITMASK_LENGTH     (TRANSFER_SIZE),
+			.INPUT_ELEMENT_WIDTH(CLUSTER_BITWIDTH),
+			.MAX_NUM_OUTPUT     (TRANSFER_SIZE)
 		)
 	operandFilter (
-			.sparseInput   (inputTransferBlock),
-			.bitmask       (inputSelectBitmask[1:0]),
-			.startIndex    (2'd0),
+			.sparseInput   (inputTransferBlock [TRANSFER_SIZE*CLUSTER_BITWIDTH-1 : 0]),
+			.accumulatedBitmask       (accumulationMask),
+			.startIndex    (0),
 			.denseOutput   (denseClusters),
 			.nextStartIndex(),
 			.numDenseOutput(numClusterValid)
 		);
 
-	assign totalSize = numClusterValid + currentBufferSize[1:0];
-	assign macClustersValid = totalSize[1];
-	assign newSize = {1'b0, totalSize[0]};
-	assign paddedCurrentBuffer = {32'd0, currentBuffer};
-	assign paddedDenseClusters = {32'd0, denseClusters};
+	assign totalSize = {1'b0, numClusterValid[BUFFER_COUNT_WIDTH - 1 : 0]} + {2'b00 ,currentBufferSize[BUFFER_COUNT_WIDTH - 2 : 0]};
+	assign macClustersValid = totalSize[CONCATENTATED_BUFFER_COUNT_WIDTH - 1];
+	assign newSize = totalSize[BUFFER_COUNT_WIDTH -2 : 0]; //New size has one less bit!!!!
+	assign paddedCurrentBuffer = {{BUFFER_BITWIDTH{1'b0}}, currentBuffer};
+	assign paddedDenseClusters = {{BUFFER_BITWIDTH{1'b0}}, denseClusters};
 
 	//Select content for the concatenated buffer
 	always @ (*) begin: FOR_CONCATENTATED_BUFFER_SELECT
 		integer i;
-		for (i=0; i<4; i=i+1) begin
-			if (i < {1'b0, currentBufferSize[1:0]}) begin
-				concatenatedBuffer[(i+1)*16-1 -: 16] = paddedCurrentBuffer[(i+1)*16-1 -: 16];
+		for (i=0; i<(2*TRANSFER_SIZE); i=i+1) begin
+			if (i < {2'b00, currentBufferSize[BUFFER_COUNT_WIDTH-2 : 0]}) begin
+				concatenatedBuffer[(i+1)*CLUSTER_BITWIDTH-1 -: CLUSTER_BITWIDTH] = paddedCurrentBuffer[(i+1)*CLUSTER_BITWIDTH-1 -: CLUSTER_BITWIDTH];
 			end
 			else begin
-				if (i < ({1'b0, currentBufferSize[1:0]} + {1'b0, numClusterValid})) begin
-					concatenatedBuffer[(i+1)*16-1 -: 16] = paddedDenseClusters[(i-{1'b0, currentBufferSize[1:0]}+1)*16-1 -: 16];
+				if (i < ({2'b00, currentBufferSize[BUFFER_COUNT_WIDTH-2 : 0]} + {1'b0, numClusterValid})) begin
+					concatenatedBuffer[(i+1)*CLUSTER_BITWIDTH-1 -: CLUSTER_BITWIDTH] 
+						= paddedDenseClusters[(i-{2'b00, currentBufferSize[BUFFER_COUNT_WIDTH - 2:0]}+1)*CLUSTER_BITWIDTH-1 -: CLUSTER_BITWIDTH];
 				end
 				else begin
-					concatenatedBuffer[(i+1)*16-1 -: 16] = {16{1'b0}};
+					concatenatedBuffer[(i+1)*CLUSTER_BITWIDTH-1 -: CLUSTER_BITWIDTH] = {CLUSTER_BITWIDTH{1'b0}};
 				end
 			end
 		end
 	end
 
-	assign newBuffer = (macClustersValid == 1'b1) ? concatenatedBuffer[4*16-1 -: 32] : concatenatedBuffer[2*16-1 -: 32];
-	assign macClusters = concatenatedBuffer[2*16-1 -: 32];
+	assign newBuffer = (macClustersValid == 1'b1) ? 
+		concatenatedBuffer[2*TRANSFER_SIZE*CLUSTER_BITWIDTH-1 -: TRANSFER_SIZE*CLUSTER_BITWIDTH] 
+		: concatenatedBuffer[TRANSFER_SIZE*CLUSTER_BITWIDTH-1 -: TRANSFER_SIZE*CLUSTER_BITWIDTH];
+
+	assign macClusters = concatenatedBuffer[TRANSFER_SIZE*CLUSTER_BITWIDTH-1 -: TRANSFER_SIZE*CLUSTER_BITWIDTH];
 endmodule
 
-module clMaskMatcher
-	#	(
-			parameter BITMASK_LENGTH = 16,
-			parameter INDEX_BITWIDTH = 5,
-			parameter INPUT_ELEMENT_WIDTH = 1,
-			parameter COUNT_BITWIDTH = 2,
-			parameter MAX_NUM_OUTPUT = 2
-		) 
 
+module smallBufferPopCount # (
+		parameter BITMASK_LENGTH = 64,
+		localparam COUNT_BITWIDTH = $rtoi($clog2(BITMASK_LENGTH) + 1.0)
+	)
+	(
+		input wire [BITMASK_LENGTH - 1:0] bitmask,
+		output wire [COUNT_BITWIDTH - 1:0] sum
+	);
+
+	reg [BITMASK_LENGTH*COUNT_BITWIDTH-1 : 0] counterBank;
+	assign sum = counterBank[BITMASK_LENGTH*COUNT_BITWIDTH-1 -: COUNT_BITWIDTH];
+	integer i;
+	always @ (*) begin
+		counterBank[COUNT_BITWIDTH - 1 : 0] = {{(COUNT_BITWIDTH-1){1'b0}}, bitmask[0]};
+		for (i=1; i<BITMASK_LENGTH; i=i+1) begin
+			counterBank[(i+1)*COUNT_BITWIDTH-1 -: COUNT_BITWIDTH] = 
+				counterBank[i*COUNT_BITWIDTH-1 -: COUNT_BITWIDTH] + {{(COUNT_BITWIDTH-1){1'b0}}, bitmask[i]};
+		end
+	end
+endmodule
+
+module clSmallBufferPopCount #(
+		parameter BITMASK_LENGTH = 64
+	)
 	(
 		input   wire clock,
 		input   wire resetn,
@@ -329,60 +496,27 @@ module clMaskMatcher
 		output  wire ovalid, 
 		output  wire oready,
 
-		input 	wire [BITMASK_LENGTH-1:0] bitmaskW,
-		input 	wire [BITMASK_LENGTH-1:0] bitmaskA,
-		input 	wire [INDEX_BITWIDTH-1:0] startIndexA,
-		input 	wire [INDEX_BITWIDTH-1:0] startIndexW,
+		input wire [7:0] bitmask0,
+		input wire [7:0] bitmask1,
+		input wire [7:0] bitmask2,
+		input wire [7:0] bitmask3,
+		input wire [7:0] bitmask4,
+		input wire [7:0] bitmask5,
+		input wire [7:0] bitmask6,
+		input wire [7:0] bitmask7,
 
-		//[15:0] packed bitmask W
-		//[31:16] packed bitmask A
-		//[36:32] Next start index of W
-		//[38:37] Number of dense output for W
-		//[44:40] Next start index of A
-		//[46:45] Number of dense output for A
-		output wire [63:0] result
+		output wire [7:0] result
+
 	);
+	localparam COUNT_BITWIDTH = $rtoi($clog2(BITMASK_LENGTH) + 1.0);
 
+	wire [COUNT_BITWIDTH*BITMASK_LENGTH-1 : 0] bitmask = 
+		{bitmask7, bitmask6, bitmask5, bitmask4, bitmask3, bitmask2, bitmask1, bitmask0};
 
-	assign ovalid = 1'b1;
-	assign oready = 1'b1;
+	assign result[7 -: (8-COUNT_BITWIDTH)] = 0;
 
-	wire [BITMASK_LENGTH-1:0] bitmaskMutual = bitmaskA & bitmaskW;
-
-	inputFilter #(
-		.ENABLE_NEXT_START_INDEX(1),
-		.BITMASK_LENGTH     (BITMASK_LENGTH),
-		.INDEX_BITWIDTH     (INDEX_BITWIDTH),
-		.INPUT_ELEMENT_WIDTH(INPUT_ELEMENT_WIDTH),
-		.MAX_NUM_OUTPUT     (MAX_NUM_OUTPUT),
-		.COUNT_BITWIDTH     (COUNT_BITWIDTH)
-	)
-	maskWFilter (
-		.sparseInput  (bitmaskMutual),
-		.bitmask      (bitmaskW),
-		.denseOutput  (result[0+BITMASK_LENGTH*INPUT_ELEMENT_WIDTH-1:0]),
-		.startIndex    (startIndexW),
-		.numDenseOutput (result[38:37]),
-		.nextStartIndex(result[32+INDEX_BITWIDTH-1:32])
-		);
-
-	inputFilter #(
-		.BITMASK_LENGTH     (BITMASK_LENGTH),
-		.INDEX_BITWIDTH     (INDEX_BITWIDTH),
-		.INPUT_ELEMENT_WIDTH(INPUT_ELEMENT_WIDTH),
-		.MAX_NUM_OUTPUT     (MAX_NUM_OUTPUT),
-		.COUNT_BITWIDTH     (COUNT_BITWIDTH)
-	)
-	maskAFilter (
-		.sparseInput  (bitmaskMutual),
-		.bitmask      (bitmaskA),
-		.denseOutput  (result[16+BITMASK_LENGTH*INPUT_ELEMENT_WIDTH-1:16]),
-		.startIndex    (startIndexA),
-		.numDenseOutput(result[46:45]),
-		.nextStartIndex(result[40+INDEX_BITWIDTH-1:40])
-		);
-
+	smallBufferPopCount #(
+			.BITMASK_LENGTH(BITMASK_LENGTH)
+		)
+	inst_pop_counter (.bitmask(bitmask), .sum(result[COUNT_BITWIDTH-1 : 0]));
 endmodule
-
-
-
