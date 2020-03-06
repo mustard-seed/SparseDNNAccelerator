@@ -45,8 +45,8 @@
 
 //#define PROFILE
 //#define PLAY
-#define SPARSE_LEVEL_TEST
-#define TEST_TYPE ZERO
+//#define SPARSE_LEVEL_TEST
+#define TEST_TYPE TEST
 #define REPEAT 1
 #define EMULATE
 
@@ -1229,7 +1229,7 @@ TEST_F (testFixture, play) {
     unsigned char sizeOutputTileWidthPerColFul = 3;
     unsigned char sizeOutputTileHeightFull = 3;
     float bias = 0.0;
-    e_tensor_type tensorType = SPARSE;
+    e_tensor_type tensorType = TEST;
     bool flagEnableRelu = false;
     bool flagCompression = false;
     float sparseProb = 0.7f;

@@ -88,6 +88,16 @@
 #define VALUE_DIVIDED_BY_CLUSTER_SIZE_REMAINDER_MASK 0x1;
 #define CLUSTER_TO_TRANSFER_BLOCK_SHIFT 1 //amount of right shift required to convert a cluster count into transfer block count
 
+/**
+ * Small buffer operand filterign related
+ */
+#define BITMASK_LENGTH COMPRESSION_WINDOW_SIZE
+#define MAX_NUM_OUTPUT TRANSFER_SIZE
+#define BITMASK_ACCUM_COUNT_BITWIDTH 2 //$rtoi($clog2(MAX_NUM_OUTPUT) + 1.0)
+#define BITMASK_INDEX_BITWIDTH 3 //$rtoi($ceil($clog2(COMPRESSION_WINDOW_SIZE)))
+
+//=========================================
+
 #define SURVIVING_COUNT_CLUSTER_INDEX 0X1
 #define SURVIVING_COUNT_TRANSFER_BLOCK_INDEX 0x1
 

@@ -45,6 +45,7 @@ protected:
     cl::Buffer bufferTransferBlocks;
     cl::Buffer bufferFilteredBlocks;
     cl::Buffer bufferNextBuffer;
+    cl::Buffer bufferNumClusters;
     cl::Buffer bufferMacValidFlags;
 
     void SetUp() override
@@ -131,6 +132,16 @@ protected:
                     );
         aocl_utils_cpp::checkError(status, "Failed to setup the buffer bufferNextBuffer!");
 
+        std::cout <<"Setting the buffer bufferNumClusters. Size: "<<32<<" bytes."<<std::endl;
+        bufferNumClusters = cl::Buffer (
+                        clContext,
+                        CL_MEM_WRITE_ONLY,
+                        32,
+                        NULL,
+                        &status
+                    );
+        aocl_utils_cpp::checkError(status, "Failed to setup the buffer bufferNumClusters!");
+
         std::cout <<"Setting the buffer bufferMacValidFlags. Size: "<<maxBufferSizeByte<<" bytes."<<std::endl;
         bufferMacValidFlags = cl::Buffer (
                         clContext,
@@ -159,15 +170,18 @@ protected:
         std::vector<unsigned char> macValidFlags;
         macValidFlags.resize(numTransferBlocks);
 
+        unsigned char numClusters = 0;
+
         std::cout <<"1. Setting kernel arguments for the test harness."<<std::endl;
         {
             kernel.setArg(0, bufferTransferBlocks);
             kernel.setArg(1, bufferFilteredBlocks);
             kernel.setArg(2, bufferNextBuffer);
-            kernel.setArg(3, bufferMacValidFlags);
-            kernel.setArg(4, (cl_uchar) numTransferBlocks);
-            kernel.setArg(5, (cl_ushort) bitmask);
-            kernel.setArg(6, (cl_ushort) mutualBitmask);
+            kernel.setArg(3, bufferNumClusters);
+            kernel.setArg(4, bufferMacValidFlags);
+            kernel.setArg(5, (cl_uchar) numTransferBlocks);
+            kernel.setArg(6, (cl_ushort) bitmask);
+            kernel.setArg(7, (cl_ushort) mutualBitmask);
 
         }
 
@@ -249,29 +263,43 @@ protected:
         );
         aocl_utils_cpp::checkError(status, "Failed to read the mac valid flags!");
 
+        status = clCQTestHarness.enqueueReadBuffer(
+            bufferNumClusters,
+            CL_TRUE,
+            0,
+            sizeof(unsigned char),
+            (void *)(&numClusters)
+        );
+        aocl_utils_cpp::checkError(status, "Failed to read the number of clusters!");
+
         //Print the input and the output
         {
             std::cout <<"Input mutual bitmask "<<std::bitset<8>(mutualBitmask)<<std::endl;
             std::cout <<"Input bitmask "<<std::bitset<8>(bitmask)<<std::endl;
+
+            std::cout <<"Number of nz clusters: "<<(unsigned int)numClusters<<std::endl;
             for (unsigned i=0; i<numTransferBlocks; i++)
             {
-                std::cout <<"Input transfer block ["<<i<<"]: "
-                         <<(int) inputTransferBlocks.at(i).values[0]<<" "
-                         <<(int) inputTransferBlocks.at(i).values[1]<<" "
-                         <<(int) inputTransferBlocks.at(i).values[2]<<" "
-                         <<(int) inputTransferBlocks.at(i).values[3]<<std::endl;
+                std::cout <<"Input transfer block ["<<i<<"]: ";
+                for (int j=0; j<SMB_BUFFER_SIZE; j++)
+                {
+                    std::cout <<(int) inputTransferBlocks.at(i).values[j]<<" ";
+                }
+                std::cout<<std::endl;
 
-                std::cout <<"Filtered blocks ["<<i<<"]: "
-                         <<(int) filteredTransferBlocks.at(i).values[0]<<" "
-                         <<(int) filteredTransferBlocks.at(i).values[1]<<" "
-                         <<(int) filteredTransferBlocks.at(i).values[2]<<" "
-                         <<(int) filteredTransferBlocks.at(i).values[3]<<std::endl;
+                std::cout <<"Filtered blocks ["<<i<<"]: ";
+                for (int j=0; j<SMB_BUFFER_SIZE; j++)
+                {
+                    std::cout <<(int) filteredTransferBlocks.at(i).values[j]<<" ";
+                }
+                std::cout<<std::endl;
 
-                std::cout <<"New buffer blocks ["<<i<<"]: "
-                         <<(int) nextBuffers.at(i).values[0]<<" "
-                         <<(int) nextBuffers.at(i).values[1]<<" "
-                         <<(int) nextBuffers.at(i).values[2]<<" "
-                         <<(int) nextBuffers.at(i).values[3]<<std::endl;
+                std::cout <<"New buffer blocks ["<<i<<"]: ";
+                for (int j=0; j<SMB_BUFFER_SIZE; j++)
+                {
+                    std::cout <<(int) nextBuffers.at(i).values[j]<<" ";
+                }
+                std::cout<<std::endl;
 
                 std::cout <<"Mac valid flags ["<<i<<"]: "
                          <<(int) macValidFlags.at(i)<<std::endl;
@@ -280,20 +308,18 @@ protected:
     } //launch
 
 };
-//#define PLAY
+#define PLAY
 #ifdef PLAY
 TEST_F (testFixture, play) {
-    //bitmask: 16'b01101111_11110110
-    unsigned short _bitmask = 0x6FF6;
-    //mutual bitmask: 16'b01100110_01100110
-    unsigned short _mutualBitmask = 0x6666;
-    std::vector<t_smb_tb> _testTB(6, {0,0,0,0});
+    //bitmask: 16'b00000000_11110110
+    unsigned short _bitmask = 0x00F6;
+    //mutual bitmask: 16'b00000000_01100110
+    unsigned short _mutualBitmask = 0x0066;
+    std::vector<t_smb_tb> _testTB(6, {0,0});
     _testTB.at(0) = {0, 1, 2, 3};
     _testTB.at(1) = {4, 5, 6, 7};
     _testTB.at(2) = {8, 9, 10, 11};
     _testTB.at(3) = {12, 13, 14, 15};
-    _testTB.at(4) = {16, 17, 18, 19};
-    _testTB.at(5) = {20, 21, 22, 23};
     launch(
            _bitmask,
            _mutualBitmask,

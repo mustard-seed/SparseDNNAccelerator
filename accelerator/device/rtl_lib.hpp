@@ -42,27 +42,130 @@ unsigned long operandMatcher8 (
 
 unsigned char leadingZeroCounter (unsigned char bitmask);
 
-//clMaskFilter16c2_1bit
-//Filter up to 2 "1" bit from the mask
-unsigned short smallBufferMaskFilter (unsigned short bitmask, unsigned short sparseInput, unsigned char startIndex);
+/**
+ * Small buffer library
+ */
+unsigned char smallBufferPopCounter (
+		unsigned char bitmask0,
+		unsigned char bitmask1,
+		unsigned char bitmask2,
+		unsigned char bitmask3,
+		unsigned char bitmask4,
+		unsigned char bitmask5,
+		unsigned char bitmask6,
+		unsigned char bitmask7
+	);
+
+ulong4 smallBufferMaskAccumulator (
+		unsigned char bitmask0,
+		unsigned char bitmask1,
+		unsigned char bitmask2,
+		unsigned char bitmask3,
+		unsigned char bitmask4,
+		unsigned char bitmask5,
+		unsigned char bitmask6,
+		unsigned char bitmask7
+	);
+
+
+//[7:0] Packed mutual bitmask. Only [TRANSFER_SIZE-1 : 0] are meaningful
+//[15:8] Next start index. Only [8 + INDEX_BITWIDTH - 1 -: INDEX_BITWIDTH] are meanintful
+unsigned short smallBufferMaskFilter (
+		//Bytes of the mutual mask
+		unsigned char mutualBitmask0,
+		unsigned char mutualBitmask1,
+		unsigned char mutualBitmask2,
+		unsigned char mutualBitmask3,
+		unsigned char mutualBitmask4,
+		unsigned char mutualBitmask5,
+		unsigned char mutualBitmask6,
+		unsigned char mutualBitmask7,
+
+
+		//Bytes of the accumulated bitmask
+		//Might not need all of them
+		unsigned char	accumulatedBitmask0,
+		unsigned char	accumulatedBitmask1,
+		unsigned char	accumulatedBitmask2,
+		unsigned char	accumulatedBitmask3,
+		unsigned char	accumulatedBitmask4,
+		unsigned char	accumulatedBitmask5,
+		unsigned char	accumulatedBitmask6,
+		unsigned char	accumulatedBitmask7,
+		unsigned char	accumulatedBitmask8,
+		unsigned char	accumulatedBitmask9,
+		unsigned char	accumulatedBitmask10,
+		unsigned char	accumulatedBitmask11,
+		unsigned char	accumulatedBitmask12,
+		unsigned char	accumulatedBitmask13,
+		unsigned char	accumulatedBitmask14,
+		unsigned char	accumulatedBitmask15,
+		unsigned char	accumulatedBitmask16,
+		unsigned char	accumulatedBitmask17,
+		unsigned char	accumulatedBitmask18,
+		unsigned char	accumulatedBitmask19,
+		unsigned char	accumulatedBitmask20,
+		unsigned char	accumulatedBitmask21,
+		unsigned char	accumulatedBitmask22,
+		unsigned char	accumulatedBitmask23,
+		unsigned char	accumulatedBitmask24,
+		unsigned char	accumulatedBitmask25,
+		unsigned char	accumulatedBitmask26,
+		unsigned char	accumulatedBitmask27,
+		unsigned char	accumulatedBitmask28,
+		unsigned char	accumulatedBitmask29,
+		unsigned char	accumulatedBitmask30,
+		unsigned char	accumulatedBitmask31,
+
+		unsigned char startIndex
+	);
 
 //clSparseMacBufferUpdate
-ulong2 smallBufferMacBufferUpdate (
+//[63:0] macOutput
+//[127:64] nextBuffer
+//[128 + BUFFER_COUNT_WIDTH -2	-:	(BUFFER_COUNT_WIDTH-1)]  Next buffer size
+//[136] macOutputIsValid
+ulong4 smallBufferMacBufferUpdate (
 		unsigned char inputSelectBitmask,
 
-		unsigned char inputTransferBlockA0,
-		unsigned char inputTransferBlockA1,
-		unsigned char inputTransferBlockB0,
-		unsigned char inputTransferBlockB1,
+		//Bytes of the input buffer
+		unsigned char inputTransferBlock0,
+		unsigned char inputTransferBlock1,
+		unsigned char inputTransferBlock2,
+		unsigned char inputTransferBlock3,
+		unsigned char inputTransferBlock4,
+		unsigned char inputTransferBlock5,
+		unsigned char inputTransferBlock6,
+		unsigned char inputTransferBlock7,
 
-		unsigned char currentBufferA0,
-		unsigned char currentBufferA1,
-		unsigned char currentBufferB0,
-		unsigned char currentbufferB1,
+		//Bytes of the buffer
+		unsigned char currentBuffer0,
+		unsigned char currentBuffer1,
+		unsigned char currentBuffer2,
+		unsigned char currentBuffer3,
+		unsigned char currentBuffer4,
+		unsigned char currentBuffer5,
+		unsigned char currentBuffer6,
+		unsigned char currentBuffer7,
 
 		unsigned char currentBufferSize
 	);
 
+//N starts counting from 1.
 unsigned char getNthOnePosition (unsigned short bitmask, unsigned char n, unsigned char startIndex);
+
+int findFirstOccurance (unsigned char accumulatedIndices [], int startIndex, int bitsPerIndex, unsigned char target);
+
+//nLow and nHigh are positions in the destination
+void setBitsInByte (unsigned char * pDestination, unsigned char source, int nLow, int nHigh);
+
+//nlOw and nHigh are positions in the source
+unsigned char getBitsInByte (unsigned char source, int nLow, int nHigh);
+
+//nLow and nHigh are positions in the destination
+void setBitsInBus (unsigned char pDestination[], unsigned char pSource[], int nLow, int nHigh);
+
+//nlOw and nHigh are positions in the source
+void getBitsInBus (unsigned char pDestination[], unsigned char pSource[], int nLow, int nHigh);
 
 #endif  

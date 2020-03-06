@@ -46,7 +46,7 @@ module small_buffer_lib_tb ();
 	assign newBuffer = updaterOutput[127:64];
 	assign macOperands = updaterOutput[63:0];
 	assign newBufferSize = updaterOutput[128 + BUFFER_COUNT_WIDTH -2	-:	(BUFFER_COUNT_WIDTH-1)];
-	assign macOutputValid = updaterOutput[128 + BUFFER_COUNT_WIDTH - 1];
+	assign macOutputValid = updaterOutput[136];
 
 	clMaskAccumulatorWrapper #(
 		.BITMASK_LENGTH(COMPRESSION_WINDOW_SIZE),

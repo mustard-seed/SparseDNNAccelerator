@@ -1,6 +1,147 @@
 <RTL_SPEC>
   <!-- 'name' is how this function will be called from an OpenCL kernel.
        'module' is the top-level HDL module name that implements the function. -->
+  <FUNCTION name="smallBufferPopCounter" module="clSmallBufferPopCount">
+    <ATTRIBUTES>
+      <!-- Setting IS_STALL_FREE="yes" means the function neither generates stalls internally nor can it 
+           properly handle incoming stalls (because it simply ignores its stall/valid inputs). If set
+           to "no", the function must properly handle stall/valid signals. 
+           IS_STALL_FREE="yes" requires IS_FIXED_LATENCY="yes". -->
+      <IS_STALL_FREE value="yes"/>
+      
+      <!-- If the function always takes known number of clock cycles (specified by EXPECTED_LATENCY)
+           to compute its output, set IS_FIXED_LATENCY to "yes".
+           Note that IS_FIXED_LATENCY could be "yes" while IS_STALL_FREE="no". Such a function would
+           produce its output in fixed number of cycles but could still deal with stall signals 
+           properly.  -->
+      <IS_FIXED_LATENCY value="yes"/>
+      
+      <!-- Expected latency of this function. If IS_FIXED_LATENCY="yes", this is the number of 
+           pipeline stages inside the function. In this case, EXPECTED_LATENCY must be set exactly
+           to the latency of the function, otherwise incorrect hardware will result.
+           For variable latency functions, pipeline around this function will be balanced to this 
+           value. Setting EXPECTED_LATENCY to a different value will still produce correct results
+           but may affect number of stalls inside the pipeline. -->
+      <EXPECTED_LATENCY value="0"/>
+      
+      <!-- Number of multiple inputs that can be processed simultaneously by this function.
+           If IS_STALL_FREE="no" and IS_FIXED_LATENCY="no", the CAPACITY value must be specified.
+           Otherwise, it is not required.
+           If CAPACITY is strictly less than EXPECTED_LATENCY, the compiler will automatically 
+           insert capacity-balancing FIFOs after this function when required. -->
+      <CAPACITY value="1"/>
+      
+      <!-- Set to "yes" to indicate that this function has side-effects. Calls to functions
+           with side-effects will not be optimized away and only valid data will be fed
+           to such functions.
+           Functions that have internal state or talk to external memories are examples of functions
+           with side-effects. -->
+      <HAS_SIDE_EFFECTS value="no"/>
+            
+      <!-- Set to "yes" to allow multiple instances of this function to be merged by the compiler.
+           This property should be set to "yes". 
+           Note that marking function with HAS_SIDE_EFFECTS does not prevent merging. -->
+      <ALLOW_MERGING value="yes"/>
+    </ATTRIBUTES>
+    <INTERFACE>
+      <AVALON port="clock" type="clock"/>
+      <AVALON port="resetn" type="resetn"/>
+      <AVALON port="ivalid" type="ivalid"/>
+      <AVALON port="iready" type="iready"/>
+      <AVALON port="ovalid" type="ovalid"/>
+      <AVALON port="oready" type="oready"/>
+
+      <INPUT  port="bitmask0" width="8"/>
+      <INPUT  port="bitmask1" width="8"/>
+      <INPUT  port="bitmask2" width="8"/>
+      <INPUT  port="bitmask3" width="8"/>
+      <INPUT  port="bitmask4" width="8"/>
+      <INPUT  port="bitmask5" width="8"/>
+      <INPUT  port="bitmask6" width="8"/>
+      <INPUT  port="bitmask7" width="8"/>
+
+      <OUTPUT port="result" width="8"/>
+    </INTERFACE>
+
+    <C_MODEL>
+      <FILE name="smallBuffer.cl" />
+    </C_MODEL>
+    <REQUIREMENTS>
+      <FILE name="small_buffer_lib.v" />
+   </REQUIREMENTS>
+  </FUNCTION>
+
+  <FUNCTION name="smallBufferMaskAccumulator" module="clMaskAccumulatorWrapper">
+    <ATTRIBUTES>
+      <!-- Setting IS_STALL_FREE="yes" means the function neither generates stalls internally nor can it 
+           properly handle incoming stalls (because it simply ignores its stall/valid inputs). If set
+           to "no", the function must properly handle stall/valid signals. 
+           IS_STALL_FREE="yes" requires IS_FIXED_LATENCY="yes". -->
+      <IS_STALL_FREE value="yes"/>
+      
+      <!-- If the function always takes known number of clock cycles (specified by EXPECTED_LATENCY)
+           to compute its output, set IS_FIXED_LATENCY to "yes".
+           Note that IS_FIXED_LATENCY could be "yes" while IS_STALL_FREE="no". Such a function would
+           produce its output in fixed number of cycles but could still deal with stall signals 
+           properly.  -->
+      <IS_FIXED_LATENCY value="yes"/>
+      
+      <!-- Expected latency of this function. If IS_FIXED_LATENCY="yes", this is the number of 
+           pipeline stages inside the function. In this case, EXPECTED_LATENCY must be set exactly
+           to the latency of the function, otherwise incorrect hardware will result.
+           For variable latency functions, pipeline around this function will be balanced to this 
+           value. Setting EXPECTED_LATENCY to a different value will still produce correct results
+           but may affect number of stalls inside the pipeline. -->
+      <EXPECTED_LATENCY value="0"/>
+      
+      <!-- Number of multiple inputs that can be processed simultaneously by this function.
+           If IS_STALL_FREE="no" and IS_FIXED_LATENCY="no", the CAPACITY value must be specified.
+           Otherwise, it is not required.
+           If CAPACITY is strictly less than EXPECTED_LATENCY, the compiler will automatically 
+           insert capacity-balancing FIFOs after this function when required. -->
+      <CAPACITY value="1"/>
+      
+      <!-- Set to "yes" to indicate that this function has side-effects. Calls to functions
+           with side-effects will not be optimized away and only valid data will be fed
+           to such functions.
+           Functions that have internal state or talk to external memories are examples of functions
+           with side-effects. -->
+      <HAS_SIDE_EFFECTS value="no"/>
+            
+      <!-- Set to "yes" to allow multiple instances of this function to be merged by the compiler.
+           This property should be set to "yes". 
+           Note that marking function with HAS_SIDE_EFFECTS does not prevent merging. -->
+      <ALLOW_MERGING value="yes"/>
+    </ATTRIBUTES>
+    <INTERFACE>
+      <AVALON port="clock" type="clock"/>
+      <AVALON port="resetn" type="resetn"/>
+      <AVALON port="ivalid" type="ivalid"/>
+      <AVALON port="iready" type="iready"/>
+      <AVALON port="ovalid" type="ovalid"/>
+      <AVALON port="oready" type="oready"/>
+
+      <INPUT  port="bitmask0" width="8"/>
+      <INPUT  port="bitmask1" width="8"/>
+      <INPUT  port="bitmask2" width="8"/>
+      <INPUT  port="bitmask3" width="8"/>
+      <INPUT  port="bitmask4" width="8"/>
+      <INPUT  port="bitmask5" width="8"/>
+      <INPUT  port="bitmask6" width="8"/>
+      <INPUT  port="bitmask7" width="8"/>
+
+      <OUTPUT port="result" width="256"/>
+    </INTERFACE>
+
+    <C_MODEL>
+      <FILE name="smallBuffer.cl" />
+    </C_MODEL>
+    <REQUIREMENTS>
+      <FILE name="small_buffer_lib.v" />
+   </REQUIREMENTS>
+  </FUNCTION>
+
+
   <FUNCTION name="smallBufferMaskFilter" module="clMaskFilter">
     <ATTRIBUTES>
       <!-- Setting IS_STALL_FREE="yes" means the function neither generates stalls internally nor can it 
@@ -51,9 +192,51 @@
       <AVALON port="ovalid" type="ovalid"/>
       <AVALON port="oready" type="oready"/>
 
-      <INPUT  port="bitmask" width="16"/>
-      <INPUT  port="sparseInput" width="16"/>
-      <INPUT port="startIndex"  width="8"/>
+      <INPUT  port="mutualBitmask0" width="8"/>
+      <INPUT  port="mutualBitmask1" width="8"/>
+      <INPUT  port="mutualBitmask2" width="8"/>
+      <INPUT  port="mutualBitmask3" width="8"/>
+      <INPUT  port="mutualBitmask4" width="8"/>
+      <INPUT  port="mutualBitmask5" width="8"/>
+      <INPUT  port="mutualBitmask6" width="8"/>
+      <INPUT  port="mutualBitmask7" width="8"/>
+
+      <INPUT  port="accumulatedBitmask0" width="8"/>
+      <INPUT  port="accumulatedBitmask1" width="8"/>
+      <INPUT  port="accumulatedBitmask2" width="8"/>
+      <INPUT  port="accumulatedBitmask3" width="8"/>
+      <INPUT  port="accumulatedBitmask4" width="8"/>
+      <INPUT  port="accumulatedBitmask5" width="8"/>
+      <INPUT  port="accumulatedBitmask6" width="8"/>
+      <INPUT  port="accumulatedBitmask7" width="8"/>
+      <INPUT  port="accumulatedBitmask8" width="8"/>
+      <INPUT  port="accumulatedBitmask9" width="8"/>
+      <INPUT  port="accumulatedBitmask10" width="8"/>
+      <INPUT  port="accumulatedBitmask11" width="8"/>
+      <INPUT  port="accumulatedBitmask12" width="8"/>
+      <INPUT  port="accumulatedBitmask13" width="8"/>
+      <INPUT  port="accumulatedBitmask14" width="8"/>
+      <INPUT  port="accumulatedBitmask15" width="8"/>
+      <INPUT  port="accumulatedBitmask16" width="8"/>
+      <INPUT  port="accumulatedBitmask17" width="8"/>
+      <INPUT  port="accumulatedBitmask18" width="8"/>
+      <INPUT  port="accumulatedBitmask19" width="8"/>
+      <INPUT  port="accumulatedBitmask20" width="8"/>
+      <INPUT  port="accumulatedBitmask21" width="8"/>
+      <INPUT  port="accumulatedBitmask22" width="8"/>
+      <INPUT  port="accumulatedBitmask23" width="8"/>
+      <INPUT  port="accumulatedBitmask24" width="8"/>
+      <INPUT  port="accumulatedBitmask25" width="8"/>
+      <INPUT  port="accumulatedBitmask26" width="8"/>
+      <INPUT  port="accumulatedBitmask27" width="8"/>
+      <INPUT  port="accumulatedBitmask28" width="8"/>
+      <INPUT  port="accumulatedBitmask29" width="8"/>
+      <INPUT  port="accumulatedBitmask30" width="8"/>
+      <INPUT  port="accumulatedBitmask31" width="8"/>
+
+       <INPUT  port="startIndex" width="8"/>
+
+
       <OUTPUT port="result" width="16"/>
     </INTERFACE>
 <!--
@@ -128,17 +311,28 @@
       <AVALON port="oready" type="oready"/>
 
       <INPUT  port="inputSelectBitmask" width="8"/>
-      <INPUT  port="inputTransferBlockA0" width="8"/>
-      <INPUT port="inputTransferBlockA1"  width="8"/>
-      <INPUT  port="inputTransferBlockB0" width="8"/>
-      <INPUT  port="inputTransferBlockB1" width="8"/>
-      <INPUT port="currentBufferA0"  width="8"/>
-      <INPUT  port="currentBufferA1" width="8"/>
-      <INPUT  port="currentBufferB0" width="8"/>
-      <INPUT port="currentBufferB1"  width="8"/>
-      <INPUT  port="currentBufferSize" width="8"/>
 
-      <OUTPUT port="result" width="128"/>
+      <INPUT  port="inputTransferBlock0" width="8"/>
+      <INPUT  port="inputTransferBlock1" width="8"/>
+      <INPUT  port="inputTransferBlock2" width="8"/>
+      <INPUT  port="inputTransferBlock3" width="8"/>
+      <INPUT  port="inputTransferBlock4" width="8"/>
+      <INPUT  port="inputTransferBlock5" width="8"/>
+      <INPUT  port="inputTransferBlock6" width="8"/>
+      <INPUT  port="inputTransferBlock7" width="8"/>
+
+      <INPUT port="currentBuffer0"  width="8"/>
+      <INPUT port="currentBuffer1"  width="8"/>
+      <INPUT port="currentBuffer2"  width="8"/>
+      <INPUT port="currentBuffer3"  width="8"/>
+      <INPUT port="currentBuffer4"  width="8"/>
+      <INPUT port="currentBuffer5"  width="8"/>
+      <INPUT port="currentBuffer6"  width="8"/>
+      <INPUT port="currentBuffer7"  width="8"/>
+
+      <INPUT port="currentBufferSize"  width="8"/>
+
+      <OUTPUT port="result" width="256"/>
     </INTERFACE>
 <!--
      <RESOURCES>
