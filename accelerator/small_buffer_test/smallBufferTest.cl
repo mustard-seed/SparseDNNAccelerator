@@ -13,7 +13,6 @@ __kernel void smallBufferTest (
 		__global unsigned char* restrict pNumClusters,
 		__global unsigned char* restrict pValid,
 
-		unsigned char numTransferBlocks,
 		unsigned short bitmask,
 		unsigned short mutualBitmask
 	)
@@ -43,8 +42,9 @@ __kernel void smallBufferTest (
 
 		accumulatedMaskBytes[0] = (unsigned char) accumulateMask.s0;
 		accumulatedMaskBytes[1] = (unsigned char) (accumulateMask.s0 >> 8);
+	}
 
-		*pNumClusters = smallBufferPopCounter (
+	unsigned char numClusters = smallBufferPopCounter (
 				bitmask & 0x0FF,
 				((bitmask & 0xFF00) >> 8),
 				0,
@@ -53,9 +53,10 @@ __kernel void smallBufferTest (
 				0,
 				0,
 				0
-			);
+	);
 
-	}
+	*pNumClusters = numClusters;
+	unsigned char numTransferBlocks = (numClusters == 0) ? 0 : (numClusters - 1) / SMB_TRANSFER_SIZE + 1;
 	/*
 	 Filter blocks
 	*/
@@ -145,7 +146,7 @@ __kernel void smallBufferTest (
 		for (int j=0; j<SMB_BUFFER_SIZE; j++)
 		{
 			macOutput.values[j] = (bufferUpdateBus.s0 >> (j*8)) & 0x0FF;
-			nextBuffer.values[j] = (bufferUpdateBus.s1 >> ((j*8) + 64)) & 0x0FF;
+			nextBuffer.values[j] = (bufferUpdateBus.s1 >> (j*8)) & 0x0FF;
 		}
 
 		pFilteredBlocks[i] = macOutput;

@@ -3119,13 +3119,72 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 	typedef uint2_t t_buffer_size;
 	typedef int5_t t_num_tb;
 	typedef uint1_t t_flag;
-	// 
-	// typedef unsigned char t_instruction;
-	// typedef unsigned char t_bitmask;
-	// typedef unsigned char t_start;
-	// typedef unsigned char t_buffer_size;
-	// typedef char t_num_tb;
-	// typedef unsigned char t_flag;
+	#define NUM_BITMASK_BYTES (COMPRESSION_WINDOW_SIZE / 8)
+	
+
+	/**
+	 * @brief      Extract a bitmask from an input transfer block, and store the bitmask's bytes into the array that is passed in
+	 * 			   TODO: The number of bytes in the bitmask array and the indexing of the tagged block  need to be adjusted if TRANSFER_SIZE or COMPRESSION_WINDOW_SIZE change
+	 *
+	 * @param      bitmaskBytes  Array for storing the bitmask bytes
+	 * @param      taggedBlock   The input transfer block. Type: t_transferblock_tagged
+	 */
+	void convertTransferBlock2PEBitmask(unsigned char bitmaskBytes[], t_transferblock_tagged* taggedBlock)
+	{
+		bitmaskBytes[0] = taggedBlock.values.values[0].cluster_values[0];
+	}
+
+	/**
+	 * @brief      Wrapper to the call to the bitmask accumulation HDL function smallBufferMaskAccumulator
+	 * 			   TODO: The number of bytes in both arrays need to be adjusted if TRANSFER_SIZE or COMPRESSION_WINDOW_SIZE change
+	 *
+	 * @param      accumulatedBitmaskBytes  Array that stores the the accumulated bitmask bytes
+	 * @param      bitmaskBytes             Array that stores the plain bitmask bytes
+	 */
+	void peAccumulateBitmask(unsigned char accumulatedBitmaskBytes[], unsigned char bitmaskBytes[])
+	{
+		ulong4 accumulatedBitmask = smallBufferMaskAccumulator (
+				bitmaskBytes[0],//unsigned char bitmask0,
+				0,//unsigned char bitmask1,
+				0,//unsigned char bitmask2,
+				0,//unsigned char bitmask3,
+				0,//unsigned char bitmask4,
+				0,//unsigned char bitmask5,
+				0,//unsigned char bitmask6,
+				0//unsigned char bitmask7
+			);
+
+		accumulatedBitmaskBytes[0] = (unsigned char) ulong4.s0;
+		accumulatedBitmaskBytes[1] = (unsigned char) ulong4.s0 >> 8;
+			// accumulatedBitmaskBytes[2] = (unsigned char) ulong4.s0 >> 16;
+			// accumulatedBitmaskBytes[2] = (unsigned char) ulong4.s0 >> 16;
+			// accumulatedBitmaskBytes[3] = (unsigned char) ulong4.s0 >> 16;
+	}
+
+	/**
+	 * @brief      Wrapper to the call to the bitmask 1s counting HDL function smallBufferPopCounter
+	 *
+	 * @param      bitmaskBytes  Array that stores the bitmask bytes
+	 *
+	 * @return     Number of ones in the bitmask
+	 */
+	unsigned char pePopCounter (unsigned char bitmaskBytes[])
+	{
+		unsigned char result = 0;
+
+		result = smallBufferPopCounter (
+			bitmaskBytes[0],//unsigned char bitmask0,
+			0,//unsigned char bitmask1,
+			0,//unsigned char bitmask2,
+			0,//unsigned char bitmask3,
+			0,//unsigned char bitmask4,
+			0,//unsigned char bitmask5,
+			0,//unsigned char bitmask6,
+			0//unsigned char bitmask7
+		);
+
+		return result;
+	}
 	
 
 	/**
@@ -3257,8 +3316,8 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 	/**
 	 * @brief      Helper function for matching sparse oeprands
 	 *
-	 * @param[in]  bitmask            Sparse bitmask for this filter
-	 * @param[in]  mutualBitmask      The mutual bitmask
+	 * @param[in]  accumulatedBitmaskBytes           Bytes of the accumulated sparse bitgmask of this filter.
+	 * @param[in]  mutualBitmaskBytes      Bytes of the mutual bitmask
 	 * @param[in]  currentStartIndex  The current start index for scanning this filter's bitmask
 	 * @param[in]  currentBufferSize  The current buffer size
 	 * @param      pCurrentBuffer     Pointer to the current buffer
@@ -3269,9 +3328,10 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 	 * @param[out]      pNextStartIndex    Pointer to the scan start index for the bitmask
 	 * @param[out]      pNextBufferSize    Pointer to the new buffer size
 	 */
+	//TODO: Accomplish this!!!
 	void filterSparseOperand (
-			t_bitmask bitmask,
-			t_bitmask mutualBitmask,
+			unsigned char  accumulatedBitmaskBytes[],
+			unsigned char mutualBitmaskBytes[],
 			t_start currentStartIndex,
 			t_buffer_size currentBufferSize,
 			t_cluster* pCurrentBuffer,

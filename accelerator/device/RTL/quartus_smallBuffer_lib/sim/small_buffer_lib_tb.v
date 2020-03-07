@@ -2,9 +2,9 @@
 
 module small_buffer_lib_tb ();
 	parameter HALF_PERIOD = 5;
-	parameter TRANSFER_SIZE = 4;
-	parameter CLUSTER_BITWIDTH  = 8;
-	parameter COMPRESSION_WINDOW_SIZE = 32;
+	parameter TRANSFER_SIZE = 2;
+	parameter CLUSTER_BITWIDTH  = 16;
+	parameter COMPRESSION_WINDOW_SIZE = 8;
 
 	localparam COUNT_BITWIDTH = $rtoi($clog2(TRANSFER_SIZE) + 1.0); //Number of bits per element in the accumulated bitmask
 	localparam BUFFER_COUNT_WIDTH = COUNT_BITWIDTH;
@@ -32,13 +32,13 @@ module small_buffer_lib_tb ();
 	wire macOutputValid;
 	wire [BUFFER_COUNT_WIDTH-2	:	0] newBufferSize;
 
-	wire [ACCUMULATION_MASK_WIDTH-1	:	0] accumulatedIndex;
+	wire [255	:	0] accumulatedIndex;
 
 	wire [COMPRESSION_WINDOW_INDEX_BITWIDTH - 1	:	0]	newCompressionWindowIndex;
 	reg [COMPRESSION_WINDOW_INDEX_BITWIDTH - 1	:	0]	regCompressionWindowIndex;
 
 	wire [15:0] maskFilterOutput;
-	wire [191:0]	updaterOutput;
+	wire [255:0]	updaterOutput;
 
 	wire [TRANSFER_SIZE-1	:	0] denseBitmask = maskFilterOutput[TRANSFER_SIZE - 1 : 0];
 	assign newCompressionWindowIndex = maskFilterOutput[8 + COMPRESSION_WINDOW_INDEX_BITWIDTH - 1	-:	COMPRESSION_WINDOW_INDEX_BITWIDTH];
@@ -130,17 +130,17 @@ module small_buffer_lib_tb ();
 	 */
 	 initial begin
 	 	clock = 0;
-	 	compressedInputs[0][CLUSTER_BITWIDTH*TRANSFER_SIZE-1 : 0] = 32'h04_03_02_01;
-	 	compressedInputs[1][CLUSTER_BITWIDTH*TRANSFER_SIZE-1 : 0] = 32'h08_07_06_05;
-	 	compressedInputs[2][CLUSTER_BITWIDTH*TRANSFER_SIZE-1 : 0] = 32'h0C_0B_0A_09;
-	 	compressedInputs[3][CLUSTER_BITWIDTH*TRANSFER_SIZE-1 : 0] = 32'h10_0F_0E_0D;
-	 	compressedInputs[4][CLUSTER_BITWIDTH*TRANSFER_SIZE-1 : 0] = 32'h14_13_12_11;
-	 	compressedInputs[5][CLUSTER_BITWIDTH*TRANSFER_SIZE-1 : 0] = 32'h18_17_16_15;
-	 	compressedInputs[6][CLUSTER_BITWIDTH*TRANSFER_SIZE-1 : 0] = 32'h1C_1B_1A_19;
-	 	compressedInputs[7][CLUSTER_BITWIDTH*TRANSFER_SIZE-1 : 0] = 32'h20_1F_1E_1D;
+	 	compressedInputs[0][CLUSTER_BITWIDTH*TRANSFER_SIZE-1 : 0] = 32'h03_02_01_00;
+	 	compressedInputs[1][CLUSTER_BITWIDTH*TRANSFER_SIZE-1 : 0] = 32'h07_06_05_04;
+	 	compressedInputs[2][CLUSTER_BITWIDTH*TRANSFER_SIZE-1 : 0] = 32'h0B_0A_09_08;
+	 	compressedInputs[3][CLUSTER_BITWIDTH*TRANSFER_SIZE-1 : 0] = 32'h0F_0E_0D_0C;
+	 	// compressedInputs[4][CLUSTER_BITWIDTH*TRANSFER_SIZE-1 : 0] = 32'h14_13_12_11;
+	 	// compressedInputs[5][CLUSTER_BITWIDTH*TRANSFER_SIZE-1 : 0] = 32'h18_17_16_15;
+	 	// compressedInputs[6][CLUSTER_BITWIDTH*TRANSFER_SIZE-1 : 0] = 32'h1C_1B_1A_19;
+	 	// compressedInputs[7][CLUSTER_BITWIDTH*TRANSFER_SIZE-1 : 0] = 32'h20_1F_1E_1D;
 
-	 	bitmask = 32'hFF_FF_FF_FF;
-	 	mutualBitmask = 32'hF0_0F_F0_0F;
+	 	bitmask = 32'h00_00_00_F6;
+	 	mutualBitmask = 32'h00_00_00_66;
 	 	transerBlockIndex = 0;
 
 	 	regBufferSize = 0;

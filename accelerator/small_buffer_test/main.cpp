@@ -53,6 +53,7 @@ protected:
        cl_int status = CL_SUCCESS;
 //TODO: CHANGE THE NAME
 #ifdef C5SOC
+        #undef EMULATE
         binaryFile = "smallBufferTest.aocx";
         clPlatform = aocl_utils_cpp::findPlatform("Intel(R) FPGA SDK for OpenCL(TM)");
 #else
@@ -179,9 +180,8 @@ protected:
             kernel.setArg(2, bufferNextBuffer);
             kernel.setArg(3, bufferNumClusters);
             kernel.setArg(4, bufferMacValidFlags);
-            kernel.setArg(5, (cl_uchar) numTransferBlocks);
-            kernel.setArg(6, (cl_ushort) bitmask);
-            kernel.setArg(7, (cl_ushort) mutualBitmask);
+            kernel.setArg(5, (cl_ushort) bitmask);
+            kernel.setArg(6, (cl_ushort) mutualBitmask);
 
         }
 
@@ -308,7 +308,7 @@ protected:
     } //launch
 
 };
-#define PLAY
+//#define PLAY
 #ifdef PLAY
 TEST_F (testFixture, play) {
     //bitmask: 16'b00000000_11110110
@@ -328,17 +328,15 @@ TEST_F (testFixture, play) {
 }
 #else
 TEST_F (testFixture, test0) {
-    //bitmask: 16'b01101111_11110110
-    unsigned short _bitmask = 0x6FF6;
-    //mutual bitmask: 16'b01100110_01100110
-    unsigned short _mutualBitmask = 0x6666;
+    //bitmask: 16'b00000000_11110110
+    unsigned short _bitmask = 0x00F6;
+    //mutual bitmask: 16'b00000000_01100110
+    unsigned short _mutualBitmask = 0x0066;
     std::vector<t_smb_tb> _testTB(6, {0,0,0,0});
     _testTB.at(0) = {0, 1, 2, 3};
     _testTB.at(1) = {4, 5, 6, 7};
     _testTB.at(2) = {8, 9, 10, 11};
     _testTB.at(3) = {12, 13, 14, 15};
-    _testTB.at(4) = {16, 17, 18, 19};
-    _testTB.at(5) = {20, 21, 22, 23};
     launch(
            _bitmask,
            _mutualBitmask,
@@ -347,19 +345,15 @@ TEST_F (testFixture, test0) {
 }
 
 TEST_F (testFixture, test1) {
-    //bitmask: 8'b11111111_11111111
+    //bitmask: 8'b00000000_11111111
     unsigned char _bitmask = 0xFFFF;
-    //mutual bitmask: 16'b01100110_01100110
+    //mutual bitmask: 16'b00000000_01100110
     unsigned char _mutualBitmask = 0x6666;
     std::vector<t_smb_tb> _testTB(4, {0,0,0,0});
     _testTB.at(0) = {0, 1, 2, 3};
     _testTB.at(1) = {4, 5, 6, 7};
     _testTB.at(2) = {8, 9, 10, 11};
     _testTB.at(3) = {12, 13, 14, 15};
-    _testTB.at(4) = {16, 17, 18, 19};
-    _testTB.at(5) = {20, 21, 22, 23};
-    _testTB.at(6) = {24, 25, 26, 27};
-    _testTB.at(7) = {28, 29, 30, 31};
     launch(
            _bitmask,
            _mutualBitmask,

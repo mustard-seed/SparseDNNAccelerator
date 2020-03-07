@@ -1,13 +1,19 @@
 `timescale 1 ns / 1 ps
 
 `define CONST_TRANSFER_SIZE 2
+`define CONST_LOG2_TRANSFER_SIZE 1
 `define CONST_COMPRESSION_WINDOW_SIZE 8
-`define CONST_CLUSTER_BITWIDTH 8
+`define CONST_LOG2_COMPRESSION_WINDOW_SIZE 3
+`define CONST_CLUSTER_BITWIDTH 16
 
 module smallBufferAccumulator 
 	# 	(
 			parameter MAX_NUM_OUTPUT = `CONST_TRANSFER_SIZE,
-			localparam COUNT_BITWIDTH = $rtoi($clog2(MAX_NUM_OUTPUT) + 1.0)
+			parameter LOG2_MAX_NUM_OUTPUT = `CONST_LOG2_TRANSFER_SIZE,
+
+			//DO NOT CHANGLE BELOW
+			//parameter COUNT_BITWIDTH = $rtoi($clog2(MAX_NUM_OUTPUT) + 1.0)
+			parameter COUNT_BITWIDTH = LOG2_MAX_NUM_OUTPUT + 1
 		)
 	(
 		input wire inputBit,
@@ -42,8 +48,12 @@ module smallBufferMaskAccumulator
 	#	(
 			parameter BITMASK_LENGTH = `CONST_COMPRESSION_WINDOW_SIZE, //Number of input bitmask length
 			parameter MAX_NUM_OUTPUT = `CONST_TRANSFER_SIZE,
-			localparam COUNT_BITWIDTH = $rtoi($clog2(MAX_NUM_OUTPUT) + 1.0),
-			localparam ACCUMULATION_MASK_WIDTH = COUNT_BITWIDTH*BITMASK_LENGTH
+			parameter LOG2_MAX_NUM_OUTPUT = `CONST_LOG2_TRANSFER_SIZE,
+
+			//DO NOT CHANGLE BELOW
+			//parameter COUNT_BITWIDTH = $rtoi($clog2(MAX_NUM_OUTPUT) + 1.0),
+			parameter COUNT_BITWIDTH = LOG2_MAX_NUM_OUTPUT + 1,
+			parameter ACCUMULATION_MASK_WIDTH = COUNT_BITWIDTH*BITMASK_LENGTH
 	  	) 
 	(
 		input wire [BITMASK_LENGTH-1 : 0] bitmask,
@@ -62,7 +72,7 @@ module smallBufferMaskAccumulator
 	generate
 		for (i=0; i<BITMASK_LENGTH; i=i+1) begin: FOR_SELECT_GEN
 			wire [COUNT_BITWIDTH-1:0] wireAccum = (i==0) ? 0 : accumulation[i*COUNT_BITWIDTH-1 -: COUNT_BITWIDTH];
-			smallBufferAccumulator #(.MAX_NUM_OUTPUT(MAX_NUM_OUTPUT))
+			smallBufferAccumulator #(.MAX_NUM_OUTPUT(MAX_NUM_OUTPUT), .LOG2_MAX_NUM_OUTPUT(LOG2_MAX_NUM_OUTPUT))
 				accum_inst(.inputBit(bitmask[i]), .previousAccum(wireAccum), .accum(accumulation[(i+1)*COUNT_BITWIDTH-1 -: COUNT_BITWIDTH]));
 		end
 	endgenerate
@@ -71,7 +81,8 @@ endmodule
 //TODO; Need to create the C model for this module
 module clMaskAccumulatorWrapper # (
 		parameter BITMASK_LENGTH = `CONST_COMPRESSION_WINDOW_SIZE,
-		parameter MAX_NUM_OUTPUT = `CONST_TRANSFER_SIZE
+		parameter MAX_NUM_OUTPUT = `CONST_TRANSFER_SIZE,
+		parameter LOG2_MAX_NUM_OUTPUT = `CONST_LOG2_TRANSFER_SIZE
 	)
 	(
 		input   wire clock,
@@ -96,7 +107,7 @@ module clMaskAccumulatorWrapper # (
 	);
 
 	//TODO: Change these parameters if TRANSFER_SIZE changes
-	localparam COUNT_BITWIDTH = $rtoi($clog2(MAX_NUM_OUTPUT) + 1.0);
+	localparam COUNT_BITWIDTH = LOG2_MAX_NUM_OUTPUT + 1;
 
 	assign result[255 -: (256 - BITMASK_LENGTH*COUNT_BITWIDTH)] = {(256 - BITMASK_LENGTH*COUNT_BITWIDTH){1'b0}};
 
@@ -106,7 +117,7 @@ module clMaskAccumulatorWrapper # (
 	wire [63:0] bitmask;
 	assign bitmask = {bitmask7, bitmask6, bitmask5, bitmask4, bitmask3, bitmask2, bitmask1, bitmask0};
 
-	smallBufferMaskAccumulator #(.BITMASK_LENGTH(BITMASK_LENGTH), .MAX_NUM_OUTPUT(MAX_NUM_OUTPUT))
+	smallBufferMaskAccumulator #(.BITMASK_LENGTH(BITMASK_LENGTH), .MAX_NUM_OUTPUT(MAX_NUM_OUTPUT), .LOG2_MAX_NUM_OUTPUT(LOG2_MAX_NUM_OUTPUT))
 		mask_accumulator (.bitmask(bitmask[BITMASK_LENGTH - 1 : 0]), .outAccumulation(result[BITMASK_LENGTH*COUNT_BITWIDTH-1 : 0]));
 endmodule
 
@@ -128,11 +139,16 @@ module inputFilter
 			parameter BITMASK_LENGTH = `CONST_COMPRESSION_WINDOW_SIZE,
 			parameter INPUT_ELEMENT_WIDTH = 1,
 			parameter MAX_NUM_OUTPUT = `CONST_TRANSFER_SIZE,
-			localparam COUNT_BITWIDTH = $rtoi($clog2(MAX_NUM_OUTPUT) + 1.0), //Number of bits per element in the accumulated bitmask
-			localparam INDEX_BITWIDTH = $rtoi($ceil($clog2(BITMASK_LENGTH))) , //Number of bits to encode the bitmask index position
-			localparam INPUT_WIDTH = INPUT_ELEMENT_WIDTH*BITMASK_LENGTH,
-			localparam OUTPUT_WIDTH = INPUT_ELEMENT_WIDTH*MAX_NUM_OUTPUT,
-			localparam ACCUMULATION_MASK_WIDTH = BITMASK_LENGTH * COUNT_BITWIDTH
+			parameter LOG2_BITMASK_LENGTH = `CONST_LOG2_COMPRESSION_WINDOW_SIZE,
+			parameter LOG2_MAX_NUM_OUTPUT = `CONST_LOG2_TRANSFER_SIZE,
+
+			//DO NOT CHANGLE BELOW
+			//parameter COUNT_BITWIDTH = $rtoi($clog2(MAX_NUM_OUTPUT) + 1.0), //Number of bits per element in the accumulated bitmask
+			parameter COUNT_BITWIDTH = LOG2_MAX_NUM_OUTPUT + 1, //Number of bits per element in the accumulated bitmask
+			parameter INDEX_BITWIDTH = LOG2_BITMASK_LENGTH , //Number of bits to encode the bitmask index position
+			parameter INPUT_WIDTH = INPUT_ELEMENT_WIDTH*BITMASK_LENGTH,
+			parameter OUTPUT_WIDTH = INPUT_ELEMENT_WIDTH*MAX_NUM_OUTPUT,
+			parameter ACCUMULATION_MASK_WIDTH = BITMASK_LENGTH * COUNT_BITWIDTH
 		)
 	(
 		input wire [INPUT_WIDTH - 1 : 0] sparseInput,
@@ -196,7 +212,9 @@ endmodule
 //TODO: Change this module if OpenCL code changes
 module clMaskFilter # (
 		parameter COMPRESSION_WINDOW_SIZE = `CONST_COMPRESSION_WINDOW_SIZE, //Bitmask length 
-		parameter TRANSFER_SIZE = `CONST_TRANSFER_SIZE //MAX_NUM_OUTPUT
+		parameter TRANSFER_SIZE = `CONST_TRANSFER_SIZE, //MAX_NUM_OUTPUT,
+		parameter LOG2_COMPRESSION_WINDOW_SIZE = `CONST_LOG2_COMPRESSION_WINDOW_SIZE,
+		parameter LOG2_TRANSFER_SIZE = `CONST_LOG2_TRANSFER_SIZE
     )
 	(
 		input   wire clock,
@@ -260,9 +278,9 @@ module clMaskFilter # (
 		output wire [15:0] result
 	);
 
-	localparam INDEX_BITWIDTH = $rtoi($ceil($clog2(COMPRESSION_WINDOW_SIZE)));
+	localparam INDEX_BITWIDTH = LOG2_COMPRESSION_WINDOW_SIZE;
 
-	localparam COUNT_BITWIDTH = $rtoi($clog2(TRANSFER_SIZE) + 1.0); //Number of bits per element in the accumulated bitmask
+	localparam COUNT_BITWIDTH = LOG2_TRANSFER_SIZE + 1; //Number of bits per element in the accumulated bitmask
 	localparam ACCUMULATION_MASK_WIDTH = COMPRESSION_WINDOW_SIZE * COUNT_BITWIDTH;
 
 	assign ovalid = ivalid;
@@ -322,7 +340,9 @@ module clMaskFilter # (
 	inputFilter #(
 		.BITMASK_LENGTH     (COMPRESSION_WINDOW_SIZE),
 		.INPUT_ELEMENT_WIDTH    (1),
-		.MAX_NUM_OUTPUT     (TRANSFER_SIZE)
+		.MAX_NUM_OUTPUT     (TRANSFER_SIZE),
+		.LOG2_BITMASK_LENGTH 	(LOG2_COMPRESSION_WINDOW_SIZE),
+		.LOG2_MAX_NUM_OUTPUT 	(LOG2_TRANSFER_SIZE)
 		)
 	maskFilter (
 		.sparseInput  (mutualBitmask[COMPRESSION_WINDOW_SIZE - 1 : 0]),
@@ -336,7 +356,8 @@ endmodule
 
 module clSparseMacBufferUpdate # (
 		parameter TRANSFER_SIZE = `CONST_TRANSFER_SIZE,
-		parameter CLUSTER_BITWIDTH = `CONST_CLUSTER_BITWIDTH
+		parameter CLUSTER_BITWIDTH = `CONST_CLUSTER_BITWIDTH,
+		parameter LOG2_TRANSFER_SIZE = `CONST_LOG2_TRANSFER_SIZE
 	)
 	(
 		input   wire clock,
@@ -380,9 +401,9 @@ module clSparseMacBufferUpdate # (
 		output wire [255:0] result
 	);
 
-	localparam INDEX_BITWIDTH = $rtoi($ceil($clog2(TRANSFER_SIZE)));
+	localparam INDEX_BITWIDTH = LOG2_TRANSFER_SIZE;
 
-	localparam COUNT_BITWIDTH = $rtoi($clog2(TRANSFER_SIZE) + 1.0); //Number of bits per element in the accumulated bitmask
+	localparam COUNT_BITWIDTH = LOG2_TRANSFER_SIZE + 1; //Number of bits per element in the accumulated bitmask
 	localparam ACCUMULATION_MASK_WIDTH = TRANSFER_SIZE * COUNT_BITWIDTH;
 	localparam BUFFER_BITWIDTH = CLUSTER_BITWIDTH * TRANSFER_SIZE;
 	localparam BUFFER_COUNT_WIDTH = COUNT_BITWIDTH;
@@ -418,7 +439,8 @@ module clSparseMacBufferUpdate # (
 
 	smallBufferMaskAccumulator #(
 			.BITMASK_LENGTH         (TRANSFER_SIZE),
-			.MAX_NUM_OUTPUT         (TRANSFER_SIZE)
+			.MAX_NUM_OUTPUT         (TRANSFER_SIZE),
+			.LOG2_MAX_NUM_OUTPUT    (LOG2_TRANSFER_SIZE)
 		)
 	inst_maskAccum (
 			.bitmask (inputSelectBitmask[TRANSFER_SIZE  - 1 : 0]),
@@ -428,7 +450,9 @@ module clSparseMacBufferUpdate # (
 	inputFilter #(
 			.BITMASK_LENGTH     (TRANSFER_SIZE),
 			.INPUT_ELEMENT_WIDTH(CLUSTER_BITWIDTH),
-			.MAX_NUM_OUTPUT     (TRANSFER_SIZE)
+			.MAX_NUM_OUTPUT     (TRANSFER_SIZE),
+			.LOG2_BITMASK_LENGTH (LOG2_TRANSFER_SIZE),
+			.LOG2_MAX_NUM_OUTPUT (LOG2_TRANSFER_SIZE)
 		)
 	operandFilter (
 			.sparseInput   (inputTransferBlock [TRANSFER_SIZE*CLUSTER_BITWIDTH-1 : 0]),
@@ -474,7 +498,9 @@ endmodule
 
 module smallBufferPopCount # (
 		parameter BITMASK_LENGTH = `CONST_COMPRESSION_WINDOW_SIZE,
-		localparam COUNT_BITWIDTH = $rtoi($clog2(BITMASK_LENGTH) + 1.0)
+		parameter LOG2_BITMASK_LENGTH = `CONST_LOG2_COMPRESSION_WINDOW_SIZE,
+		//DO NOT CHANGE BELOW
+		parameter COUNT_BITWIDTH = LOG2_BITMASK_LENGTH + 1
 	)
 	(
 		input wire [BITMASK_LENGTH - 1:0] bitmask,
@@ -494,7 +520,8 @@ module smallBufferPopCount # (
 endmodule
 
 module clSmallBufferPopCount #(
-		parameter BITMASK_LENGTH = `CONST_COMPRESSION_WINDOW_SIZE
+		parameter BITMASK_LENGTH = `CONST_COMPRESSION_WINDOW_SIZE,
+		parameter LOG2_BITMASK_LENGTH 	= 	`CONST_LOG2_COMPRESSION_WINDOW_SIZE
 	)
 	(
 		input   wire clock,
@@ -516,7 +543,7 @@ module clSmallBufferPopCount #(
 		output wire [7:0] result
 
 	);
-	localparam COUNT_BITWIDTH = $rtoi($clog2(BITMASK_LENGTH) + 1.0);
+	localparam COUNT_BITWIDTH = LOG2_BITMASK_LENGTH + 1;
 
 	wire [COUNT_BITWIDTH*BITMASK_LENGTH-1 : 0] bitmask = 
 		{bitmask7, bitmask6, bitmask5, bitmask4, bitmask3, bitmask2, bitmask1, bitmask0};
@@ -524,7 +551,8 @@ module clSmallBufferPopCount #(
 	assign result[7 -: (8-COUNT_BITWIDTH)] = 0;
 
 	smallBufferPopCount #(
-			.BITMASK_LENGTH(BITMASK_LENGTH)
+			.BITMASK_LENGTH(BITMASK_LENGTH),
+			.LOG2_BITMASK_LENGTH (LOG2_BITMASK_LENGTH)
 		)
 	inst_pop_counter (.bitmask(bitmask), .sum(result[COUNT_BITWIDTH-1 : 0]));
 endmodule
