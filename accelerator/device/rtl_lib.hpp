@@ -45,6 +45,20 @@ unsigned char leadingZeroCounter (unsigned char bitmask);
 /**
  * Small buffer library
  */
+/**
+ * @brief      Counts the number of 1s inside the bitmask
+ *
+ * @param[in]  bitmask0  Bitmask byte 0
+ * @param[in]  bitmask1  Bitmask byte 1
+ * @param[in]  bitmask2  Bitmask byte 2
+ * @param[in]  bitmask3  Bitmask byte 3
+ * @param[in]  bitmask4  Bitmask byte 4
+ * @param[in]  bitmask5  Bitmask byte 5
+ * @param[in]  bitmask6  Bitmask byte 6
+ * @param[in]  bitmask7  Bitmask byte 7
+ *
+ * @return     The number of 1s inside the bitmask
+ */
 unsigned char smallBufferPopCounter (
 		unsigned char bitmask0,
 		unsigned char bitmask1,
@@ -56,6 +70,20 @@ unsigned char smallBufferPopCounter (
 		unsigned char bitmask7
 	);
 
+/**
+ * @brief      For every bit N in the bitmask, Finds the number of 1s that appeared in bits [N-1:0];
+ *
+ * @param[in]  bitmask0  Bitmask byte 0
+ * @param[in]  bitmask1  Bitmask byte 1
+ * @param[in]  bitmask2  Bitmask byte 2
+ * @param[in]  bitmask3  Bitmask byte 3
+ * @param[in]  bitmask4  Bitmask byte 4
+ * @param[in]  bitmask5  Bitmask byte 5
+ * @param[in]  bitmask6  Bitmask byte 6
+ * @param[in]  bitmask7  Bitmask byte 7
+ *
+ * @return     The accumulated bitmask
+ */
 ulong4 smallBufferMaskAccumulator (
 		unsigned char bitmask0,
 		unsigned char bitmask1,
@@ -67,7 +95,7 @@ ulong4 smallBufferMaskAccumulator (
 		unsigned char bitmask7
 	);
 
-
+//Filters the relevant mutual bitmask bits
 //[7:0] Packed mutual bitmask. Only [TRANSFER_SIZE-1 : 0] are meaningful
 //[15:8] Next start index. Only [8 + INDEX_BITWIDTH - 1 -: INDEX_BITWIDTH] are meanintful
 unsigned short smallBufferMaskFilter (

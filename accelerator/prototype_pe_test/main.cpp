@@ -139,7 +139,7 @@ protected:
 //    EXPECT_TRUE (COMPRESSION_VEC_SIZE == 4);
 //    EXPECT_TRUE(true);
 //}
-#define PLAY
+//#define PLAY
 #ifdef PLAY
 TEST_F (peTestFixture, testPlayfield) {
 /* Test goal: Verify the correctness of the bias loading, dot product and drainage capability
@@ -149,92 +149,32 @@ TEST_F (peTestFixture, testPlayfield) {
 */
 
     //This test won't pass if fracIn > fractOut
-    char fracIn = 4, fracOut = 4, fracW = 4;
-//    float probOne = 1.0;
+    char fracIn = 2, fracOut = 2, fracW = 2;
+    float probOne = 0.1;
 
+    unsigned int numElements = 8;
     float biasFloat = 0.0;
 
-//    std::vector<float> activationRealInput (16, 0.00);
-//    for (int i=0; i<activationRealInput.size(); i++)
-//    {
-//        activationRealInput.at(i) = (i+1)*0.25f;
-//    }
-//    std::vector<float> weightRealInput (16, 0.00);
+    // Generate a block of activations
+    std::vector<float> activationRealInput(numElements, 0.0f);
+    activationRealInput.at(3) = 1.0f;
+    activationRealInput.at(5) = 1.0f;
+    //std::vector<float> activationRealInput = {-3.14f};
 
-//    unsigned char numTests = 100;
+    // Generate a block of activations
+    std::vector<float> weightRealInput(numElements, 0.0f);
+    weightRealInput.at(3) = 1.0f;
+    weightRealInput.at(6) = 1.0f;
 
-//    //activationRealInput.at(12) = 1.0f;
-//    weightRealInput.at(12) = 1.0f;
 
-    std::vector<float> weightRealInput (14*9, 0.00);
-    weightRealInput.at(4*14+7) = 1.0f;
-    std::vector<float> activationRealInput(14*9, 0.0f);
-    unsigned int iChannel = 0, iWidth = 0, iHeight = 0;
-    for (auto &val : activationRealInput)
-    {
-        if ((iWidth >= 1) && (iHeight >= 1))
-        {
-            val = ((iWidth - 1) % 2 == 0) ? 1.5f : -1.5f;
-        }
-        ++iChannel;
-        if (iChannel >= 14)
-        {
-            iChannel = 0;
-            ++iWidth;
-            if (iWidth >= 3)
-            {
-                iWidth = 0;
-                ++iHeight;
-            }
-        }
-    }
 
-    unsigned char numTests = 4;
-
-    //activationRealInput.at(12) = 1.0f;
-    //activationRealInput.at(12) = 1.0f;
-
-//    for (int i=0; i<4; i++)
-//    {
-//        //if (i == 0) {
-//            for (int j=4*i; j < 4*i+4; j++)
-//            {
-//                activationRealInput.at(j) = 0.25*(i+1);
-//                weightRealInput.at(j) = 0.25*(i+1);
-//            }
-//        //}
-//    }
-//    float probOne = 1.0;
-
-//    unsigned int numElements = 32;
-//    float biasFloat = 1.0;
-
-//    // Generate a block of activations
-//    std::vector<float> activationRealInput = initialize_vector(
-//                VECTOR_A_SEED,
-//                numElements,
-//                probOne,
-//                -1.14,
-//                1.14
-//                );
-//    //std::vector<float> activationRealInput = {-3.14f};
-
-//    // Generate a block of activations
-//    std::vector<float> weightRealInput = initialize_vector(
-//                VECTOR_B_SEED,
-//                numElements,
-//                probOne,
-//                -3.14,
-//                3.14
-//                );
     launch (
            activationRealInput,
            weightRealInput,
            biasFloat,
            fracIn,
            fracOut,
-           fracW,
-           numTests
+           fracW
            );
 
 }

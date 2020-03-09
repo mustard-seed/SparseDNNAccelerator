@@ -9,7 +9,7 @@
 
 unsigned char countNumLeadingZeros (unsigned char bitmask);
 
-unsigned char countNumOnes (unsigned char bitmask);
+unsigned char countNumOnes (unsigned int bitmask);
 
 unsigned char countNumLeadingZeros (unsigned char bitmask) {
     unsigned char count = 0;
@@ -20,10 +20,10 @@ unsigned char countNumLeadingZeros (unsigned char bitmask) {
     return count;
 }
 
-unsigned char countNumOnes (unsigned char bitmask)
+unsigned char countNumOnes (unsigned int bitmask)
 {
     unsigned char count = 0;
-    for (int i=0; i<8; i++) {
+    for (int i=0; i<32; i++) {
         if ((bitmask & 0x01) == 0x1) {
             count++;
         }
@@ -418,7 +418,7 @@ FlexibleDirectCompressedTensor::FlexibleDirectCompressedTensor (
                            //First load the bitmask
                            //Assume it is 8 bits
                            transferBlock.values[0].cluster_values[0] = bitmask;
-                           transferBlock.values[SURVIVING_COUNT_TRANSFER_BLOCK_INDEX].cluster_values[SURVIVING_COUNT_CLUSTER_INDEX] = numSurivingClustes;
+                           //transferBlock.values[SURVIVING_COUNT_TRANSFER_BLOCK_INDEX].cluster_values[SURVIVING_COUNT_CLUSTER_INDEX] = numSurivingClustes;
 
                            //std::cout <<"bitmask L: "<<(int)(bitmask & 0xFF)<<std::endl;
 
@@ -565,8 +565,8 @@ void FlexibleDirectCompressedTensor::decodeTensor(
 
             if (updateBitmask) {
                 bitmask = transferBlock.values[0].cluster_values[0];
-                //numNZClustersInCompressionBlock = countNumOnes(bitmask);
-                numNZClustersInCompressionBlock = transferBlock.values[SURVIVING_COUNT_TRANSFER_BLOCK_INDEX].cluster_values[SURVIVING_COUNT_CLUSTER_INDEX];
+                numNZClustersInCompressionBlock = countNumOnes(bitmask);
+                //numNZClustersInCompressionBlock = transferBlock.values[SURVIVING_COUNT_TRANSFER_BLOCK_INDEX].cluster_values[SURVIVING_COUNT_CLUSTER_INDEX];
                 countNZClustersInCompressionBlock = 0;
                 vectorCompressionBlock.resize(0);
                 //std::cout <<"bitmask R: "<<std::bitset<8>(bitmask & 0xFF)<<std::endl;

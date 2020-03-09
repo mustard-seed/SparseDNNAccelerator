@@ -95,6 +95,8 @@
 #define MAX_NUM_OUTPUT TRANSFER_SIZE
 #define BITMASK_ACCUM_COUNT_BITWIDTH 2 //$rtoi($clog2(MAX_NUM_OUTPUT) + 1.0)
 #define BITMASK_INDEX_BITWIDTH 3 //$rtoi($ceil($clog2(COMPRESSION_WINDOW_SIZE)))
+#define NUM_BITMASK_BYTES 1
+#define NUM_ACCUM_BITMASK_BYTES 2
 
 //=========================================
 

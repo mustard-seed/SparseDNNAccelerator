@@ -3114,12 +3114,19 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 #define SPARSE_UTILITY
 	//Define the instruction type
 	typedef uint3_t t_instruction;
-	typedef unsigned char t_bitmask;
+	//typedef unsigned char t_bitmask;
 	typedef uint5_t t_start;
 	typedef uint2_t t_buffer_size;
 	typedef int5_t t_num_tb;
 	typedef uint1_t t_flag;
-	#define NUM_BITMASK_BYTES (COMPRESSION_WINDOW_SIZE / 8)
+
+	typedef struct {
+		unsigned char bytes[NUM_BITMASK_BYTES];
+	} t_bitmask;
+
+	typedef struct {
+		unsigned char bytes[NUM_ACCUM_BITMASK_BYTES];
+	} t_accum_bitmask;
 	
 
 	/**
@@ -3129,9 +3136,9 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 	 * @param      bitmaskBytes  Array for storing the bitmask bytes
 	 * @param      taggedBlock   The input transfer block. Type: t_transferblock_tagged
 	 */
-	void convertTransferBlock2PEBitmask(unsigned char bitmaskBytes[], t_transferblock_tagged* taggedBlock)
+	void convertTransferBlock2PEBitmask(t_bitmask* bitmaskBytes, t_transferblock_tagged* taggedBlock)
 	{
-		bitmaskBytes[0] = taggedBlock.values.values[0].cluster_values[0];
+		(*bitmaskBytes).bytes[0] = (*taggedBlock).values.values[0].cluster_values[0];
 	}
 
 	/**
@@ -3141,24 +3148,153 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 	 * @param      accumulatedBitmaskBytes  Array that stores the the accumulated bitmask bytes
 	 * @param      bitmaskBytes             Array that stores the plain bitmask bytes
 	 */
-	void peAccumulateBitmask(unsigned char accumulatedBitmaskBytes[], unsigned char bitmaskBytes[])
+	void peAccumulateBitmask(t_accum_bitmask* accumulatedBitmaskBytes, t_bitmask* bitmaskBytes)
 	{
 		ulong4 accumulatedBitmask = smallBufferMaskAccumulator (
-				bitmaskBytes[0],//unsigned char bitmask0,
-				0,//unsigned char bitmask1,
-				0,//unsigned char bitmask2,
-				0,//unsigned char bitmask3,
-				0,//unsigned char bitmask4,
-				0,//unsigned char bitmask5,
-				0,//unsigned char bitmask6,
-				0//unsigned char bitmask7
+				(*bitmaskBytes).bytes[0],//unsigned char bitmask0,
+
+				#if (NUM_BITMASK_BYTES > 1)
+					(*bitmaskBytes).bytes[1],
+				#else
+					0,
+				#endif
+
+				#if (NUM_BITMASK_BYTES > 2)
+					(*bitmaskBytes).bytes[2],
+				#else
+					0,
+				#endif
+
+				#if (NUM_BITMASK_BYTES > 3)
+					(*bitmaskBytes).bytes[3],
+				#else
+					0,
+				#endif
+
+				#if (NUM_BITMASK_BYTES > 4)
+					(*bitmaskBytes).bytes[4],
+				#else
+					0,
+				#endif
+
+				#if (NUM_BITMASK_BYTES > 5)
+					(*bitmaskBytes).bytes[5],
+				#else
+					0,
+				#endif
+
+				#if (NUM_BITMASK_BYTES > 6)
+					(*bitmaskBytes).bytes[6],
+				#else
+					0,
+				#endif
+
+				#if (NUM_BITMASK_BYTES > 7)
+					(*bitmaskBytes).bytes[7]
+				#else
+					0
+				#endif
 			);
 
-		accumulatedBitmaskBytes[0] = (unsigned char) ulong4.s0;
-		accumulatedBitmaskBytes[1] = (unsigned char) ulong4.s0 >> 8;
-			// accumulatedBitmaskBytes[2] = (unsigned char) ulong4.s0 >> 16;
-			// accumulatedBitmaskBytes[2] = (unsigned char) ulong4.s0 >> 16;
-			// accumulatedBitmaskBytes[3] = (unsigned char) ulong4.s0 >> 16;
+		{
+			(*accumulatedBitmaskBytes).bytes[0] = (unsigned char) (accumulatedBitmask.s0);
+			#if (NUM_ACCUM_BITMASK_BYTES > 1)
+				(*accumulatedBitmaskBytes).bytes[1] = (unsigned char) (accumulatedBitmask.s0 >> 8);
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 2)
+				(*accumulatedBitmaskBytes).bytes[2] = (unsigned char) (accumulatedBitmask.s0 >> 16);
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 3)
+				(*accumulatedBitmaskBytes).bytes[3] = (unsigned char) (accumulatedBitmask.s0 >> 24);
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 4)
+				(*accumulatedBitmaskBytes).bytes[4] = (unsigned char) (accumulatedBitmask.s0 >> 32);
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 5)
+				(*accumulatedBitmaskBytes).bytes[5] = (unsigned char) (accumulatedBitmask.s0 >> 40);
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 6)
+				(*accumulatedBitmaskBytes).bytes[6] = (unsigned char) (accumulatedBitmask.s0 >> 48);
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 7)
+				(*accumulatedBitmaskBytes).bytes[7] = (unsigned char) (accumulatedBitmask.s0 >> 56);
+			#endif
+
+			#if (NUM_ACCUM_BITMASK_BYTES > 8)
+				(*accumulatedBitmaskBytes).bytes[8] = (unsigned char) (accumulatedBitmask.s1 >> 0);
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 9)
+				(*accumulatedBitmaskBytes).bytes[9] = (unsigned char) (accumulatedBitmask.s1 >> 8);
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 10)
+				(*accumulatedBitmaskBytes).bytes[10] = (unsigned char) (accumulatedBitmask.s1 >> 16);
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 11)
+				(*accumulatedBitmaskBytes).bytes[11] = (unsigned char) (accumulatedBitmask.s1 >> 24);
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 12)
+				(*accumulatedBitmaskBytes).bytes[12] = (unsigned char) (accumulatedBitmask.s1 >> 32);
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 13)
+				(*accumulatedBitmaskBytes).bytes[13] = (unsigned char) (accumulatedBitmask.s1 >> 40);
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 14)
+				(*accumulatedBitmaskBytes).bytes[14] = (unsigned char) (accumulatedBitmask.s1 >> 48);
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 15)
+				(*accumulatedBitmaskBytes).bytes[15] = (unsigned char) (accumulatedBitmask.s1 >> 56);
+			#endif
+
+			#if (NUM_ACCUM_BITMASK_BYTES > 16)
+				(*accumulatedBitmaskBytes).bytes[16] = (unsigned char) (accumulatedBitmask.s2 >> 0);
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 17)
+				(*accumulatedBitmaskBytes).bytes[17] = (unsigned char) (accumulatedBitmask.s2 >> 8);
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 18)
+				(*accumulatedBitmaskBytes).bytes[18] = (unsigned char) (accumulatedBitmask.s2 >> 16);
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 19)
+				(*accumulatedBitmaskBytes).bytes[19] = (unsigned char) (accumulatedBitmask.s2 >> 24);
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 20)
+				(*accumulatedBitmaskBytes).bytes[20] = (unsigned char) (accumulatedBitmask.s2 >> 32);
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 21)
+				(*accumulatedBitmaskBytes).bytes[21] = (unsigned char) (accumulatedBitmask.s2 >> 40);
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 22)
+				(*accumulatedBitmaskBytes).bytes[22] = (unsigned char) (accumulatedBitmask.s2 >> 48);
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 23)
+				(*accumulatedBitmaskBytes).bytes[23] = (unsigned char) (accumulatedBitmask.s2 >> 56);
+			#endif
+
+			#if (NUM_ACCUM_BITMASK_BYTES > 24)
+				(*accumulatedBitmaskBytes).bytes[24] = (unsigned char) (accumulatedBitmask.s3 >> 0);
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 25)
+				(*accumulatedBitmaskBytes).bytes[25] = (unsigned char) (accumulatedBitmask.s3 >> 8);
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 26)
+				(*accumulatedBitmaskBytes).bytes[26] = (unsigned char) (accumulatedBitmask.s3 >> 16);
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 27)
+				(*accumulatedBitmaskBytes).bytes[27] = (unsigned char) (accumulatedBitmask.s3 >> 24);
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 28)
+				(*accumulatedBitmaskBytes).bytes[28] = (unsigned char) (accumulatedBitmask.s3 >> 32);
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 29)
+				(*accumulatedBitmaskBytes).bytes[29] = (unsigned char) (accumulatedBitmask.s3 >> 40);
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 30)
+				(*accumulatedBitmaskBytes).bytes[30] = (unsigned char) (accumulatedBitmask.s3 >> 48);
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 31)
+				(*accumulatedBitmaskBytes).bytes[31] = (unsigned char) (accumulatedBitmask.s3 >> 56);
+			#endif
+		}
 	}
 
 	/**
@@ -3168,19 +3304,54 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 	 *
 	 * @return     Number of ones in the bitmask
 	 */
-	unsigned char pePopCounter (unsigned char bitmaskBytes[])
+	unsigned char pePopCounter (t_bitmask* bitmaskBytes)
 	{
 		unsigned char result = 0;
 
 		result = smallBufferPopCounter (
-			bitmaskBytes[0],//unsigned char bitmask0,
-			0,//unsigned char bitmask1,
-			0,//unsigned char bitmask2,
-			0,//unsigned char bitmask3,
-			0,//unsigned char bitmask4,
-			0,//unsigned char bitmask5,
-			0,//unsigned char bitmask6,
-			0//unsigned char bitmask7
+			(*bitmaskBytes).bytes[0],//unsigned char bitmask0,
+
+			#if (NUM_BITMASK_BYTES > 1)
+				(*bitmaskBytes).bytes[1],
+			#else
+				0,
+			#endif
+
+			#if (NUM_BITMASK_BYTES > 2)
+				(*bitmaskBytes).bytes[2],
+			#else
+				0,
+			#endif
+
+			#if (NUM_BITMASK_BYTES > 3)
+				(*bitmaskBytes).bytes[3],
+			#else
+				0,
+			#endif
+
+			#if (NUM_BITMASK_BYTES > 4)
+				(*bitmaskBytes).bytes[4],
+			#else
+				0,
+			#endif
+
+			#if (NUM_BITMASK_BYTES > 5)
+				(*bitmaskBytes).bytes[5],
+			#else
+				0,
+			#endif
+
+			#if (NUM_BITMASK_BYTES > 6)
+				(*bitmaskBytes).bytes[6],
+			#else
+				0,
+			#endif
+
+			#if (NUM_BITMASK_BYTES > 7)
+				(*bitmaskBytes).bytes[7]
+			#else
+				0
+			#endif
 		);
 
 		return result;
@@ -3328,10 +3499,9 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 	 * @param[out]      pNextStartIndex    Pointer to the scan start index for the bitmask
 	 * @param[out]      pNextBufferSize    Pointer to the new buffer size
 	 */
-	//TODO: Accomplish this!!!
 	void filterSparseOperand (
-			unsigned char  accumulatedBitmaskBytes[],
-			unsigned char mutualBitmaskBytes[],
+			t_accum_bitmask *accumulatedBitmaskBytes,
+			t_bitmask *mutualBitmaskBytes,
 			t_start currentStartIndex,
 			t_buffer_size currentBufferSize,
 			t_cluster* pCurrentBuffer,
@@ -3345,26 +3515,232 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 		)
 	{
 		unsigned short maskFilterOutput = smallBufferMaskFilter (
-				bitmask, //bitmask
-				mutualBitmask, //sparseInput
-				currentStartIndex
+			//Bytes of the mutual mask
+			(*mutualBitmaskBytes).bytes[0],
+			#if (NUM_BITMASK_BYTES > 1)
+				(*mutualBitmaskBytes).bytes[1],
+			#else
+				0,
+			#endif
+			#if (NUM_BITMASK_BYTES > 2)
+				(*mutualBitmaskBytes).bytes[2],
+			#else
+				0,
+			#endif
+			#if (NUM_BITMASK_BYTES > 3)
+				(*mutualBitmaskBytes).bytes[3],
+			#else
+				0,
+			#endif
+			#if (NUM_BITMASK_BYTES > 4)
+				(*mutualBitmaskBytes).bytes[4],
+			#else
+				0,
+			#endif
+			#if (NUM_BITMASK_BYTES > 5)
+				(*mutualBitmaskBytes).bytes[5],
+			#else
+				0,
+			#endif
+			#if (NUM_BITMASK_BYTES > 6)
+				(*mutualBitmaskBytes).bytes[6],
+			#else
+				0,
+			#endif
+			#if (NUM_BITMASK_BYTES > 7)
+				(*mutualBitmaskBytes).bytes[7],
+			#else
+				0,
+			#endif
+
+			//Bytes of the accumulated bitmask
+			//Might not need all of them
+			(*accumulatedBitmaskBytes).bytes[0],
+			#if (NUM_ACCUM_BITMASK_BYTES > 1)
+				(*accumulatedBitmaskBytes).bytes[1],
+			#else
+				0,
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 2)
+				(*accumulatedBitmaskBytes).bytes[2],
+			#else
+				0,
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 3)
+				(*accumulatedBitmaskBytes).bytes[3],
+			#else
+				0,
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 4)
+				(*accumulatedBitmaskBytes).bytes[4],
+			#else
+				0,
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 5)
+				(*accumulatedBitmaskBytes).bytes[5],
+			#else
+				0,
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 6)
+				(*accumulatedBitmaskBytes).bytes[6],
+			#else
+				0,
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 7)
+				(*accumulatedBitmaskBytes).bytes[7],
+			#else
+				0,
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 8)
+				(*accumulatedBitmaskBytes).bytes[8],
+			#else
+				0,
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 9)
+				(*accumulatedBitmaskBytes).bytes[9],
+			#else
+				0,
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 10)
+				(*accumulatedBitmaskBytes).bytes[10],
+			#else
+				0,
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 11)
+				(*accumulatedBitmaskBytes).bytes[11],
+			#else
+				0,
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 12)
+				(*accumulatedBitmaskBytes).bytes[12],
+			#else
+				0,
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 13)
+				(*accumulatedBitmaskBytes).bytes[13],
+			#else
+				0,
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 14)
+				(*accumulatedBitmaskBytes).bytes[14],
+			#else
+				0,
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 15)
+				(*accumulatedBitmaskBytes).bytes[15],
+			#else
+				0,
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 16)
+				(*accumulatedBitmaskBytes).bytes[16],
+			#else
+				0,
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 17)
+				(*accumulatedBitmaskBytes).bytes[17],
+			#else
+				0,
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 18)
+				(*accumulatedBitmaskBytes).bytes[18],
+			#else
+				0,
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 19)
+				(*accumulatedBitmaskBytes).bytes[19],
+			#else
+				0,
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 20)
+				(*accumulatedBitmaskBytes).bytes[20],
+			#else
+				0,
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 21)
+				(*accumulatedBitmaskBytes).bytes[21],
+			#else
+				0,
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 22)
+				(*accumulatedBitmaskBytes).bytes[22],
+			#else
+				0,
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 23)
+				(*accumulatedBitmaskBytes).bytes[23],
+			#else
+				0,
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 24)
+				(*accumulatedBitmaskBytes).bytes[24],
+			#else
+				0,
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 25)
+				(*accumulatedBitmaskBytes).bytes[25],
+			#else
+				0,
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 26)
+				(*accumulatedBitmaskBytes).bytes[26],
+			#else
+				0,
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 27)
+				(*accumulatedBitmaskBytes).bytes[27],
+			#else
+				0,
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 28)
+				(*accumulatedBitmaskBytes).bytes[28],
+			#else
+				0,
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 29)
+				(*accumulatedBitmaskBytes).bytes[29],
+			#else
+				0,
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 30)
+				(*accumulatedBitmaskBytes).bytes[30],
+			#else
+				0,
+			#endif
+			#if (NUM_ACCUM_BITMASK_BYTES > 31)
+				(*accumulatedBitmaskBytes).bytes[31],
+			#else
+				0,
+			#endif
+
+			currentStartIndex//unsigned char startIndex
 			);
 
 		//TODO: Change this if the smallBufferMask implementation changes
-		unsigned char operandSelectMask = ((maskFilterOutput >> 8) & 0x3);
+		unsigned char operandSelectMask = maskFilterOutput & 0x0FF;
+		*pNextStartIndex = ((maskFilterOutput >> 8) & 0x0FF);
 
-		ulong2 bufferUpdateBus = smallBufferMacBufferUpdate(
+		ulong4 bufferUpdateBus = smallBufferMacBufferUpdate(
 				operandSelectMask, //inputSelectBitmask
 
-				pNewBlock[0].values[0].cluster_values[0],
-				pNewBlock[0].values[0].cluster_values[1],
-				pNewBlock[0].values[1].cluster_values[0],
-				pNewBlock[0].values[1].cluster_values[1],
+				//Bytes of the input buffer
+				pNewBlock[0].values[0].cluster_values[0], //unsigned char inputTransferBlock0,
+				pNewBlock[0].values[0].cluster_values[1], //unsigned char inputTransferBlock1,
+				pNewBlock[0].values[1].cluster_values[0], //unsigned char inputTransferBlock2,
+				pNewBlock[0].values[1].cluster_values[1], //unsigned char inputTransferBlock3,
+				0, //unsigned char inputTransferBlock4,
+				0, //unsigned char inputTransferBlock5,
+				0, //unsigned char inputTransferBlock6,
+				0, //unsigned char inputTransferBlock7,
 
-				pCurrentBuffer[0].cluster_values[0],
-				pCurrentBuffer[0].cluster_values[1],
-				pCurrentBuffer[1].cluster_values[0],
-				pCurrentBuffer[1].cluster_values[1],
+				//Bytes of the buffer
+				pCurrentBuffer[0].cluster_values[0], //unsigned char currentBuffer0,
+				pCurrentBuffer[0].cluster_values[1], //unsigned char currentBuffer1,
+				pCurrentBuffer[1].cluster_values[0], //unsigned char currentBuffer2,
+				pCurrentBuffer[1].cluster_values[1], //unsigned char currentBuffer3,
+				0, //unsigned char currentBuffer4,
+				0, //unsigned char currentBuffer5,
+				0, //unsigned char currentBuffer6,
+				0, //unsigned char currentBuffer7,
 
 				(unsigned char) currentBufferSize
 			);
@@ -3373,14 +3749,13 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 		#pragma unroll
 		for (unsigned char j=0; j<(TRANSFER_SIZE*CLUSTER_SIZE); j++)
 		{
-			pMacOutput[j / CLUSTER_SIZE].cluster_values[j % CLUSTER_SIZE] = (bufferUpdateBus.x >> (j*8)) & 0x0FF;
-			pNextBuffer[j / CLUSTER_SIZE].cluster_values[j % CLUSTER_SIZE] = (bufferUpdateBus.x >> ((j*8) + 32)) & 0x0FF;
+			pMacOutput[j / CLUSTER_SIZE].cluster_values[j % CLUSTER_SIZE] = (bufferUpdateBus.s0 >> (j*8)) & 0x0FF;
+			pNextBuffer[j / CLUSTER_SIZE].cluster_values[j % CLUSTER_SIZE] = (bufferUpdateBus.s1 >> (j*8)) & 0x0FF;
 		}
 
 		//Define the following as MASkS!!!!
-		*pMacValid = (bufferUpdateBus.y >> 8) & 0x01;
-		*pNextStartIndex = maskFilterOutput & 0x0F;
-		*pNextBufferSize = bufferUpdateBus.y & 0x03;
+		*pMacValid = ((unsigned char) (bufferUpdateBus.s2 >> 8) ) & 0x01;
+		*pNextBufferSize = (unsigned char) bufferUpdateBus.s2;
 
 	}
 #endif //SPARSE_UTILITY
@@ -3410,7 +3785,18 @@ __kernel void kernelOperandFilter ()
 	//TODO: make the weight buffer size parametrizable
 	t_cluster weightBuffer[TRANSFER_SIZE];
 	t_cluster macWeightBuffer[TRANSFER_SIZE];
-	t_bitmask regWeightBitmask = 0;
+	t_accum_bitmask regWeightAccumulatedBitMaskBytes;
+	#pragma unroll
+	for (int i=0; i<NUM_ACCUM_BITMASK_BYTES; i++)
+	{
+		regWeightAccumulatedBitMaskBytes.bytes[i] = 0x0;
+	}
+	t_bitmask regWeightBitmaskBytes;
+	#pragma unroll
+	for (int i=0; i<NUM_BITMASK_BYTES; i++)
+	{
+		regWeightBitmaskBytes.bytes[i] = 0x0;
+	}
 	t_start regWeightWindowStartIndex = 0;
 	t_buffer_size regWeightBufferSize = 0;
 	t_num_tb regNumWeightClusterLeft = 0;
@@ -3423,7 +3809,12 @@ __kernel void kernelOperandFilter ()
 	t_instruction activationFilterInstruction = OPERAND_FILTER_READ_BIAS;
 	t_cluster activationBuffer[TRANSFER_SIZE];
 	t_cluster macActivationBuffer[TRANSFER_SIZE];
-	t_bitmask regActivationBitmask = 0;
+	t_accum_bitmask regActivationAccumulatedBitMaskBytes;
+	#pragma unroll
+	for (int i=0; i<NUM_ACCUM_BITMASK_BYTES; i++)
+	{
+		regActivationAccumulatedBitMaskBytes.bytes[i] = 0x0;
+	}
 	t_start regActivationWindowStartIndex = 0;
 	t_buffer_size regActivationBufferSize = 0;
 	t_num_tb regNumActivationClusterLeft = 0;
@@ -3431,7 +3822,18 @@ __kernel void kernelOperandFilter ()
 	//====================================
 	
 	//Mutual bitmask
-	t_bitmask regMutualBitmask = 0;
+	t_bitmask regMutualBitmaskBytes;
+	#pragma unroll
+	for (int i=0; i<NUM_BITMASK_BYTES; i++)
+	{
+		regMutualBitmaskBytes.bytes[i] = 0x0;
+	}
+	t_bitmask regActivationBitmaskBytes;
+	#pragma unroll
+	for (int i=0; i<NUM_BITMASK_BYTES; i++)
+	{
+		regActivationBitmaskBytes.bytes[i] = 0x0;
+	}
 
 	//State logic
 	while (1) {
@@ -3461,7 +3863,12 @@ __kernel void kernelOperandFilter ()
 
 		t_flag nextWeightIsLast = regWeightIsLast;
 		t_num_tb nextNumWeightClusterLeft = regNumWeightClusterLeft;
-		t_bitmask nextWeightBitmask = regWeightBitmask;
+	    t_bitmask nextWeightBitmaskBytes;
+	    #pragma unroll
+		for (int i=0; i<NUM_BITMASK_BYTES; i++)
+		{
+			nextWeightBitmaskBytes.bytes[i] = regWeightBitmaskBytes.bytes[i];
+		}
 		t_start nextWeightWindowIndex = regWeightWindowStartIndex;
 		t_buffer_size nextWeightBufferSize = regWeightBufferSize;
 
@@ -3490,11 +3897,16 @@ __kernel void kernelOperandFilter ()
 
 		t_flag nextActivationIsLast = regActivationIsLast;
 		t_num_tb nextNumActivationClusterLeft = regNumActivationClusterLeft;
-		t_bitmask nextActivationBitmask = regActivationBitmask;
+		t_bitmask nextActivationBitmaskBytes;
+		#pragma unroll
+		for (int i=0; i<NUM_BITMASK_BYTES; i++)
+		{
+			nextActivationBitmaskBytes.bytes[i] = regActivationBitmaskBytes.bytes[i];
+		}
 		t_start nextActivationWindowIndex = regActivationWindowStartIndex;
 		t_buffer_size nextActivationBufferSize = regActivationBufferSize;
 
-		t_bitmask nextMutualBitmask = regMutualBitmask;
+		//t_bitmask nextMutualBitmask = regMutualBitmask;
 
 		// #ifdef FULL_SYSTEM
 		// 	EMULATOR_PRINT(("[Op Filter WEIGHT (%d, %d)] LIVE. Current instruction: %#04x \n", idy, idx, (unsigned char) weightFilterInstruction));
@@ -3583,8 +3995,10 @@ __kernel void kernelOperandFilter ()
 		}
 		else if (weightFilterInstruction == OPERAND_FILTER_ACCEPT_MASK)
 		{
-			nextNumWeightClusterLeft = weightBlock.values.values[SURVIVING_COUNT_TRANSFER_BLOCK_INDEX].cluster_values[SURVIVING_COUNT_CLUSTER_INDEX];
-			nextWeightBitmask = weightBlock.values.values[0].cluster_values[0];
+			convertTransferBlock2PEBitmask(&nextWeightBitmaskBytes, &weightBlock);
+			nextNumWeightClusterLeft = pePopCounter(&nextWeightBitmaskBytes);
+			peAccumulateBitmask(&regWeightAccumulatedBitMaskBytes, &nextWeightBitmaskBytes);
+
 			nextWeightWindowIndex = 0x0;
 
 			if (weightTBAvailable == TRUE)
@@ -3610,8 +4024,8 @@ __kernel void kernelOperandFilter ()
 			if (weightTBAvailable == TRUE)
 			{
 				filterSparseOperand (
-						regWeightBitmask, //bitmask
-						regMutualBitmask, //regMutualBitmask
+						&regWeightAccumulatedBitMaskBytes, //bitmask
+						&regMutualBitmaskBytes, //regMutualBitmask
 						regWeightWindowStartIndex,
 						regWeightBufferSize,
 						weightBuffer,
@@ -3660,8 +4074,11 @@ __kernel void kernelOperandFilter ()
 		}
 		else if (activationFilterInstruction == OPERAND_FILTER_ACCEPT_MASK)
 		{
-			nextNumActivationClusterLeft = activationBlock.values.values[SURVIVING_COUNT_TRANSFER_BLOCK_INDEX].cluster_values[SURVIVING_COUNT_CLUSTER_INDEX];
-			nextActivationBitmask = activationBlock.values.values[0].cluster_values[0];
+
+			convertTransferBlock2PEBitmask(&nextActivationBitmaskBytes, &activationBlock);
+			nextNumActivationClusterLeft = pePopCounter(&nextActivationBitmaskBytes);
+			peAccumulateBitmask(&regActivationAccumulatedBitMaskBytes, &nextActivationBitmaskBytes);
+
 			nextActivationWindowIndex = 0x0;
 
 			if (activationTBAvailable == TRUE)
@@ -3688,8 +4105,8 @@ __kernel void kernelOperandFilter ()
 			if (activationTBAvailable == TRUE)
 			{
 				filterSparseOperand (
-						regActivationBitmask, //bitmask
-						regMutualBitmask, //regMutualBitmask
+						&regActivationAccumulatedBitMaskBytes, //bitmask
+						&regMutualBitmaskBytes, //regMutualBitmask
 						regActivationWindowStartIndex,
 						regActivationBufferSize,
 						activationBuffer,
@@ -3731,10 +4148,14 @@ __kernel void kernelOperandFilter ()
 		*/
 		if ((activationMaskNew == TRUE) && (weightMaskNew == TRUE))
 		{
-			nextMutualBitmask = nextActivationBitmask & nextWeightBitmask;
+			#pragma unroll
+			for (int i=0; i<NUM_BITMASK_BYTES; i++)
+			{
+				regMutualBitmaskBytes.bytes[i] = nextActivationBitmaskBytes.bytes[i] & nextWeightBitmaskBytes.bytes[i];
+				EMULATOR_PRINT(("[Op Filter BITMASK(%d, %d)] Byte %d. Activation bitmask byte: %#04x; Weight Bitmask byte: %#04x; Mutual bitmask byte: %#04x, Current ACTIVAION instruction: %#04x \n"
+				,idy, idx, i, (unsigned char) nextActivationBitmaskBytes.bytes[i], (unsigned char) nextWeightBitmaskBytes.bytes[i], (unsigned char) regMutualBitmaskBytes.bytes[i], (unsigned char) activationFilterInstruction));
+			}
 
-			EMULATOR_PRINT(("[Op Filter BITMASK(%d, %d)] Activation bitmask: %#04x; Weight Bitmask: %#04x; Mutual bitmask: %#04x, Current ACTIVAION instruction: %#04x \n"
-				,idy, idx, (unsigned char) nextActivationBitmask, (unsigned char) nextWeightBitmask, (unsigned char) nextMutualBitmask, (unsigned char) activationFilterInstruction));
 		}
 
 		/*
@@ -3817,7 +4238,7 @@ __kernel void kernelOperandFilter ()
 		//==============Update the loop dependent variables====
 		//Weight filter update
         //EMULATOR_PRINT(("[Op Filter WEIGHT (%d, %d)] Current instruction: %#04x. Next instruction: %#04x\n", idy, idx, (unsigned char) weightFilterInstruction, (unsigned char) nextWeightFilterInstruction));
-		regWeightBitmask = nextWeightBitmask;
+		//regWeightBitmask = nextWeightBitmask;
 		regWeightWindowStartIndex = nextWeightWindowIndex;
 		regWeightBufferSize = nextWeightBufferSize;
 		regWeightIsLast = nextWeightIsLast;
@@ -3833,7 +4254,7 @@ __kernel void kernelOperandFilter ()
 
 		//Activation filter update
         //EMULATOR_PRINT(("[Op Filter ACTIVATION (%d, %d)] Current instruction: %#04x. Next instruction: %#04x\n", idy, idx, (unsigned char) activationFilterInstruction, (unsigned char) nextActivationFilterInstruction));
-		regActivationBitmask = nextActivationBitmask;
+		//regActivationBitmask = nextActivationBitmask;
 		regActivationWindowStartIndex = nextActivationWindowIndex;
 		regActivationBufferSize = nextActivationBufferSize;
 		regActivationIsLast = nextActivationIsLast;
@@ -3847,8 +4268,14 @@ __kernel void kernelOperandFilter ()
 			macActivationBuffer[i] = nextMacActivationBuffer[i];
 		}
 
+		#pragma unroll
+		for (int i=0; i<NUM_BITMASK_BYTES; i++)
+		{
+			regWeightBitmaskBytes.bytes[i] = nextWeightBitmaskBytes.bytes[i];
+			regActivationBitmaskBytes.bytes[i] = nextActivationBitmaskBytes.bytes[i];
+		}
 
-		regMutualBitmask = nextMutualBitmask;
+		//regMutualBitmask = nextMutualBitmask;
 		
 		//=====================================================
 	} //while
