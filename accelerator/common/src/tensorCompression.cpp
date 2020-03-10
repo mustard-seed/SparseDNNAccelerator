@@ -7,27 +7,41 @@
 
 #include <bitset> //Print friendly binary number
 
-unsigned char countNumLeadingZeros (unsigned char bitmask);
+unsigned char findFirstNonZero (unsigned char bitmaskBytes[], unsigned char startingIndex);
 
-unsigned char countNumOnes (unsigned int bitmask);
+unsigned char countNumOnes (unsigned char bitmaskBytes[]);
 
-unsigned char countNumLeadingZeros (unsigned char bitmask) {
-    unsigned char count = 0;
-    while ( ( (bitmask & 0x01 )== 0) && count < 8) {
-        count++;
-        bitmask = bitmask >> 0x1;
+unsigned char findFirstNonZero (unsigned char bitmaskBytes[], unsigned char startingIndex) {
+    unsigned char returnIndex = startingIndex;
+    while (returnIndex < COMPRESSION_VEC_SIZE) {
+        unsigned int byteIndex = returnIndex / 8;
+        unsigned int bitIndex = returnIndex % 8;
+        unsigned char mask = 0x01 << bitIndex;
+        unsigned char bit = (bitmaskBytes[byteIndex] & mask) >> bitIndex;
+        if (bit == 0x01)
+        {
+            break;
+        }
+        else
+        {
+           returnIndex++;
+        }
     }
-    return count;
+    return returnIndex;
 }
 
-unsigned char countNumOnes (unsigned int bitmask)
+unsigned char countNumOnes (unsigned char bitmaskBytes[])
 {
     unsigned char count = 0;
-    for (int i=0; i<32; i++) {
-        if ((bitmask & 0x01) == 0x1) {
-            count++;
+    for (int i=0; i<NUM_BITMASK_BYTES; i++)
+    {
+        unsigned char byte = bitmaskBytes[i];
+        for (int j=0; i<8; j++) {
+            if ((byte & 0x01) == 0x1) {
+                count++;
+            }
+            byte >>= 0x1;
         }
-        bitmask >>= 0x1;
     }
     return count;
 }
@@ -398,7 +412,7 @@ FlexibleDirectCompressedTensor::FlexibleDirectCompressedTensor (
                            iScalarInCompressionBlock = 0;
 
                            //Compute the bitmask, and form the blocks
-                           unsigned char bitmask = 0x0;
+                           unsigned char bitmaskBytes[NUM_BITMASK_BYTES] = {0x0};
                            unsigned char numSurivingClustes = 0x0;
                            for (unsigned int i=0; i<=maxClusterIndexInCompressionBlock; i++) {
                                bool preserve = false;
@@ -410,14 +424,19 @@ FlexibleDirectCompressedTensor::FlexibleDirectCompressedTensor (
                                unsigned char bit = (preserve) ?
                                            0x01 : 0x00;
                                numSurivingClustes = (preserve) ? (numSurivingClustes) + 1 : numSurivingClustes;
-                               bitmask |= (bit << i);
+                               unsigned char bitIndex = i % 8;
+                               unsigned char byteIndex = i / 8;
+                               bitmaskBytes[byteIndex] |= (bit << bitIndex);
                            } // for bitmask
 
                            //Populate the value vector
                            t_transfer_block transferBlock;
                            //First load the bitmask
                            //Assume it is 8 bits
-                           transferBlock.values[0].cluster_values[0] = bitmask;
+                           for (int i=0; i<NUM_BITMASK_BYTES; i++)
+                           {
+                               transferBlock.values[i / CLUSTER_SIZE].cluster_values[i % CLUSTER_SIZE] = bitmaskBytes[i];
+                           }
                            //transferBlock.values[SURVIVING_COUNT_TRANSFER_BLOCK_INDEX].cluster_values[SURVIVING_COUNT_CLUSTER_INDEX] = numSurivingClustes;
 
                            //std::cout <<"bitmask L: "<<(int)(bitmask & 0xFF)<<std::endl;
@@ -552,7 +571,7 @@ void FlexibleDirectCompressedTensor::decodeTensor(
         //============Expands a compression block============
         // A assemble vector for the decompression
         std::vector<signed char> vectorCompressionBlock;
-        unsigned char bitmask;
+        unsigned char bitmaskBytes[NUM_BITMASK_BYTES] = {0};
 
         bool updateBitmask = true;
         unsigned char numNZClustersInCompressionBlock;
@@ -564,8 +583,12 @@ void FlexibleDirectCompressedTensor::decodeTensor(
                this->valueVector.at(iCompressVector++);
 
             if (updateBitmask) {
-                bitmask = transferBlock.values[0].cluster_values[0];
-                numNZClustersInCompressionBlock = countNumOnes(bitmask);
+                for (int i=0; i<NUM_BITMASK_BYTES; i++)
+                {
+                    bitmaskBytes[i] = (unsigned char) transferBlock.values[i / CLUSTER_SIZE].cluster_values[i % CLUSTER_SIZE];
+                }
+
+                numNZClustersInCompressionBlock = countNumOnes(bitmaskBytes);
                 //numNZClustersInCompressionBlock = transferBlock.values[SURVIVING_COUNT_TRANSFER_BLOCK_INDEX].cluster_values[SURVIVING_COUNT_CLUSTER_INDEX];
                 countNZClustersInCompressionBlock = 0;
                 vectorCompressionBlock.resize(0);
@@ -601,39 +624,40 @@ void FlexibleDirectCompressedTensor::decodeTensor(
                 //Transfer scalars from the compression block to the dense vector
                 unsigned char positionInCompressionBlock = 0;
                 int iVectorCompressionBlock = 0;
-                while (bitmask != 0)
+                while (positionInCompressionBlock < COMPRESSION_WINDOW_SIZE)
                 {
-                    unsigned char numLeadingZeros = countNumLeadingZeros(bitmask);
-                    unsigned char indexInCompressionBlock = positionInCompressionBlock + numLeadingZeros;
+                    unsigned char indexInCompressionBlock = findFirstNonZero(bitmaskBytes, positionInCompressionBlock);
 
-                    for (int i=0; i<=maxScalarIndexInCluster; i++) {
-                        int iChannelInGroup = iChannelInGroupBase + (int) indexInCompressionBlock*(maxScalarIndexInCluster+1) + i;
+                    if (indexInCompressionBlock < COMPRESSION_VEC_SIZE)
+                    {
+                        for (int i=0; i<=maxScalarIndexInCluster; i++) {
+                            int iChannelInGroup = iChannelInGroupBase + (int) indexInCompressionBlock*(maxScalarIndexInCluster+1) + i;
 
-                        if (iChannelInGroup <= maxScalarIndexInChannelGroup) {
-                            fixedPointNumber fpValue (
-                                (signed char) (vectorCompressionBlock.at(iVectorCompressionBlock++)), _fracWidth, _intWidth );
-//                            int iDenseVector =
-//                                iTensor * height * width * channel
-//                                + iHeight * width * channel
-//                                + iTileWidth * tileSizeWidth * channel
-//                                + iLocalWidth * channel
-//                                + iChannel;
-                            int iDenseVector =
-                                iTensor * height * width * channel
-                                + iHeight * width * channel
-                                + iWidth * channel
-                                + iGroup * (maxScalarIndexInChannelGroup + 1)
-                                + iChannelInGroup;
-                           // std::cout <<"Bitmask, iTensor, iGroup, iHeight, iWidth, iChannelInGroup: "
-                           //    <<std::bitset<8> (bitmask)<<" "<<iTensor<<" "<<iGroup<<" "<<iHeight<<" "<<iWidth<<" "<<iChannelInGroup<<std::endl;
+                            if (iChannelInGroup <= maxScalarIndexInChannelGroup) {
+                                fixedPointNumber fpValue (
+                                    (signed char) (vectorCompressionBlock.at(iVectorCompressionBlock++)), _fracWidth, _intWidth );
+    //                            int iDenseVector =
+    //                                iTensor * height * width * channel
+    //                                + iHeight * width * channel
+    //                                + iTileWidth * tileSizeWidth * channel
+    //                                + iLocalWidth * channel
+    //                                + iChannel;
+                                int iDenseVector =
+                                    iTensor * height * width * channel
+                                    + iHeight * width * channel
+                                    + iWidth * channel
+                                    + iGroup * (maxScalarIndexInChannelGroup + 1)
+                                    + iChannelInGroup;
+                               // std::cout <<"Bitmask, iTensor, iGroup, iHeight, iWidth, iChannelInGroup: "
+                               //    <<std::bitset<8> (bitmask)<<" "<<iTensor<<" "<<iGroup<<" "<<iHeight<<" "<<iWidth<<" "<<iChannelInGroup<<std::endl;
 
-                            _fixedPointVector.at(iDenseVector) = fpValue;
-                        } //if iChannelInGroup <= maxScalarIndexInChannelGroup
-                    } // for from 0 to maxScalarIndexInCluster
+                                _fixedPointVector.at(iDenseVector) = fpValue;
+                            } //if iChannelInGroup <= maxScalarIndexInChannelGroup
+                        } // for from 0 to maxScalarIndexInCluster
 
-                    //Update bitmask
-                    bitmask = bitmask >> (numLeadingZeros + 1);
-                    positionInCompressionBlock = indexInCompressionBlock + 1;
+                        //Update bitmask
+                        positionInCompressionBlock = indexInCompressionBlock + 1;
+                    }
 
                 } // while. decode a compression block;
 
