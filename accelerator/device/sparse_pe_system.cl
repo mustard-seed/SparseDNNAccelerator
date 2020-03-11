@@ -442,13 +442,9 @@ __kernel void kernelMemoryReader (
 									for (unsigned char i=0; i<WIDE_SIZE; i++)
 									{
 										#pragma unroll
-										for (unsigned char j=0; j<TRANSFER_SIZE; j++)
+										for (unsigned char j=0; j<(TRANSFER_SIZE*CLUSTER_SIZE); j++)
 										{
-											#pragma unroll
-											for (unsigned char k=0; k<CLUSTER_SIZE; k++)
-											{
-												dramBlock.transferBlocks[i].values[j].cluster_values[k]=0;
-											}
+											dramBlock.transferBlocks[i].values[j]=0;
 										}
 									}
 								}
@@ -466,13 +462,9 @@ __kernel void kernelMemoryReader (
 								for (unsigned char i=0; i<WIDE_SIZE; i++)
 								{
 									#pragma unroll
-									for (unsigned char j=0; j<TRANSFER_SIZE; j++)
+									for (unsigned char j=0; j<(TRANSFER_SIZE*CLUSTER_SIZE); j++)
 									{
-										#pragma unroll
-										for (unsigned char k=0; k<CLUSTER_SIZE; k++)
-										{
-											dramBlock.transferBlocks[i].values[j].cluster_values[k]=0;
-										}
+										dramBlock.transferBlocks[i].values[j]=0;
 									}
 								}
 							}
@@ -790,10 +782,10 @@ __kernel void kernelIABuffer ()
 					iterAccess++;
 					EMULATOR_PRINT(("[kernelIABuffer %d] Sent TB %d / %d. TB[0-3]: %#04x %#04x %#04x %#04x \n\n",
 					colID, iterAccess, numIAAccess
-					,taggedBlock.values.values[0].cluster_values[0]
-					,taggedBlock.values.values[0].cluster_values[1]
-					,taggedBlock.values.values[1].cluster_values[0]
-					,taggedBlock.values.values[1].cluster_values[1]
+					,taggedBlock.values.values[0]
+					,taggedBlock.values.values[1]
+					,taggedBlock.values.values[2]
+					,taggedBlock.values.values[3]
 					));
 				}
 			}
@@ -1312,6 +1304,7 @@ __kernel void kernelOutputWriter (
 #endif //MEMORY_WRITER 
 
 #ifdef OA_MEMORY
+//TODO: HANDLE MULTI-BYTE BITMASK
 #define OA_BUFFER_STATE_DECODE 0x1
 #define OA_BUFFER_STATE_NUM_ACCESS 0x2
 #define OA_BUFFER_STATE_PADD 0x4 //NOP instructions
@@ -1349,7 +1342,12 @@ __kernel void kernelOABuffer ()
 	unsigned char iClustersInWindowFetched = 0;
 	unsigned short iOutputChannelFetched = 0;
 	unsigned short iClustersFetched = 0;
-	unsigned char mask = 0;
+	t_bitmask mask;
+	#pragma unroll
+	for (int i=0; i<NUM_BITMASK_BYTES; i++)
+	{
+		mask.bytes[i] = 0x0;
+	}
 
 	unsigned short numLoops = 0;
 
@@ -1395,7 +1393,11 @@ __kernel void kernelOABuffer ()
 			iClustersInWindowFetched = 0;
 			iOutputChannelFetched = 0;
 			iClustersFetched = 0;
-			mask = 0;
+			#pragma unroll
+			for (int i=0; i<NUM_BITMASK_BYTES; i++)
+			{
+				mask.bytes[i] = 0x0;
+			}
 
 			//Loop control
 			#if defined(SPARSE_SYSTEM)
@@ -1469,7 +1471,8 @@ __kernel void kernelOABuffer ()
 						if (keep == true)
 						{
 							write_channel_intel(channel_output_buffer_to_compressor_data[colID], cluster);
-							mask |= ((unsigned char) 1) << iClustersInWindowFetched;
+							//mask |= ((unsigned char) 1) << iClustersInWindowFetched;
+							mask.bytes[iClustersInWindowFetched >> 0x3] |= ((unsigned char) 1) << (iClustersInWindowFetched & 0x07);
 							countSurvivingClustersInWindow++;
 						}
 
@@ -1486,14 +1489,18 @@ __kernel void kernelOABuffer ()
 					{
 						//bool writeSuccess = false;
 						t_output_cluster_info info;
-						info.bitmask = mask;
+						#pragma unroll
+						for (int i=0; i<NUM_BITMASK_BYTES; i++)
+						{
+							info.bitmask.bytes[i] = mask.bytes[i];
+							mask.bytes[i] = 0x0;
+						}
 						unsigned char isLastInStrip = (iClustersFetched == numClustersToDrain) ? 0x1 : 0x0;
 						info.statusBits = (countSurvivingClustersInWindow & 0x3F)
 							| ((isLastInStrip & 0x1) << 0x6)
 							| ( (((unsigned char) enableSparsification) & 0x1) << 0x7);
 						
 						write_channel_intel(channel_output_buffer_to_compressor_info[colID], info);
-						mask = 0;
 						countSurvivingClustersInWindow = 0;
 						iClustersInWindowFetched = 0;
 						iLoop++;
@@ -1647,6 +1654,7 @@ __kernel void kernelOATileController (unsigned short numGroupxTiles)
 __attribute__((max_global_work_dim(0)))
 __attribute__((autorun))
 __attribute__((num_compute_units(PE_COLS)))
+//TODO: HANDLE MULTI-BYTE BITMASK
 __kernel void kernelCompressorOranizer()
 {
 	int colID = get_compute_id(0);
@@ -1654,7 +1662,7 @@ __kernel void kernelCompressorOranizer()
 	{
 		//Read the information first
 		t_output_cluster_info info = read_channel_intel(channel_output_buffer_to_compressor_info[colID]);
-		unsigned char bitmask = info.bitmask;
+		t_bitmask bitmask = info.bitmask;
 		unsigned char numSurvivingClusters = info.statusBits & 0x3F;
 		bool isLastWindowInStrip = (((info.statusBits >> 0x6) & 0x1) == 0x1);
 		bool enableSparsification = (((info.statusBits >> 0x7) & 0x1) == 0x1);
@@ -1668,6 +1676,7 @@ __kernel void kernelCompressorOranizer()
 		unsigned char numLoops = 
 			(1 + ((numClustersToSend - 1) >> CLUSTER_TO_TRANSFER_SIZE_SHIFT)) << CLUSTER_TO_TRANSFER_SIZE_SHIFT; //This controls the amount of padding we have to do. Add extra one to send mask
 		unsigned char iClusterSent = 0;
+		unsigned char iBitmaskByte = 0;
 		for (unsigned char iLoop=0; iLoop<numLoops; iLoop++)
 		{
 			bool sendCluster = false;
@@ -1675,22 +1684,21 @@ __kernel void kernelCompressorOranizer()
 			if (iClusterSent < numClustersToSend)
 			{
 				//TODO: Change this if the number of bitmask grows
-				if ((iClusterSent == 0) && enableSparsification)
-				{
-					clusterTagged.cluster.cluster_values[0] = bitmask;
-					//clusterTagged.cluster.cluster_values[1] = numSurvivingClusters;
-				}
-				else if ((iClusterSent < (TRANSFER_SIZE - 1)) && enableSparsification)
+				if ((iClusterSent < TRANSFER_SIZE) && enableSparsification)
 				{
 					#pragma unroll
 					for (int i=0; i<CLUSTER_SIZE; i++)
 					{
-						clusterTagged.cluster.cluster_values[i] = 0x0;
+						if ((iBitmaskByte+i) < NUM_BITMASK_BYTES)
+						{
+							clusterTagged.cluster.cluster_values[i] = bitmask.bytes[iBitmaskByte+i];
+						}
+						else
+						{
+							clusterTagged.cluster.cluster_values[i] = 0x0;
+						}
 					}
-				}
-				else if ((iClusterSent == (TRANSFER_SIZE - 1)) && enableSparsification)
-				{
-					clusterTagged.cluster.cluster_values[SURVIVING_COUNT_CLUSTER_INDEX] = numSurvivingClusters;
+					iBitmaskByte += CLUSTER_SIZE;
 				}
 				else
 				{
@@ -2201,10 +2209,10 @@ __kernel void kernelFilterBuffer ()
                 EMULATOR_PRINT(("[kernelFilterStreamer %d] Sent tb %d: %#04x %#04x %#04x %#04x\n",
 					rowID, 
 					iTransferBlockInFilterRead,
-                    weightBlockTagged.values.values[0].cluster_values[0],
-                    weightBlockTagged.values.values[0].cluster_values[1],
-                    weightBlockTagged.values.values[1].cluster_values[0],
-                    weightBlockTagged.values.values[1].cluster_values[1]));
+                    weightBlockTagged.values.values[0],
+                    weightBlockTagged.values.values[1],
+                    weightBlockTagged.values.values[2],
+                    weightBlockTagged.values.values[3]));
 
 				//Omit plus 1 to send the bias
 				if ((iTransferBlockInFilterRead) >= maxTransferBlockInFilter[(~regWriteSide) & 0x1])
@@ -2240,11 +2248,6 @@ __kernel void kernelFilterBuffer ()
 #endif //WEIGHT_MEMORY
 
 #ifdef PE_SYSTEM
-
-//MAC Operands
-typedef struct __attribute__((packed)) {
-	char values [SIMD_SIZE*CLUSTER_SIZE];
-} t_simd_operand;
 
 
 //__attribute__((task))
@@ -2544,6 +2547,11 @@ __kernel void kernelDrainTransport ()
 // 		state = nextState;
 // 	}
 // }
+// 
+// //MAC Operands
+typedef struct __attribute__((packed)) {
+	char values [NUM_SIMD_WORDS];
+} t_simd_operand;
 
 t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 	t_accumulator output = 0x0;
@@ -3112,6 +3120,7 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 
 #ifndef SPARSE_UTILITY
 #define SPARSE_UTILITY
+	//TODO: Change these if the compression configuration changes
 	//Define the instruction type
 	typedef uint3_t t_instruction;
 	//typedef unsigned char t_bitmask;
@@ -3121,12 +3130,12 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 	typedef uint1_t t_flag;
 
 	typedef struct {
-		unsigned char bytes[NUM_BITMASK_BYTES];
-	} t_bitmask;
-
-	typedef struct {
 		unsigned char bytes[NUM_ACCUM_BITMASK_BYTES];
 	} t_accum_bitmask;
+
+	typedef struct {
+		char values [NUM_SIMD_WORDS];
+	} t_pe_buffer;
 	
 
 	/**
@@ -3138,7 +3147,28 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 	 */
 	void convertTransferBlock2PEBitmask(t_bitmask* bitmaskBytes, t_transferblock_tagged* taggedBlock)
 	{
-		(*bitmaskBytes).bytes[0] = (*taggedBlock).values.values[0].cluster_values[0];
+		(*bitmaskBytes).bytes[0] = (*taggedBlock).values.values[0];
+		#if (NUM_BITMASK_BYTES > 1)
+			(*bitmaskBytes).bytes[1] = (*taggedBlock).values.values[1];
+		#endif
+		#if (NUM_BITMASK_BYTES > 2)
+			(*bitmaskBytes).bytes[2] = (*taggedBlock).values.values[2];
+		#endif
+		#if (NUM_BITMASK_BYTES > 3)
+			(*bitmaskBytes).bytes[3] = (*taggedBlock).values.values[3];
+		#endif
+		#if (NUM_BITMASK_BYTES > 4)
+			(*bitmaskBytes).bytes[4] = (*taggedBlock).values.values[4];
+		#endif
+		#if (NUM_BITMASK_BYTES > 5)
+			(*bitmaskBytes).bytes[5] = (*taggedBlock).values.values[5];
+		#endif
+		#if (NUM_BITMASK_BYTES > 6)
+			(*bitmaskBytes).bytes[6] = (*taggedBlock).values.values[6];
+		#endif
+		#if (NUM_BITMASK_BYTES > 7)
+			(*bitmaskBytes).bytes[7] = (*taggedBlock).values.values[7];
+		#endif
 	}
 
 	/**
@@ -3504,11 +3534,11 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 			t_bitmask *mutualBitmaskBytes,
 			t_start currentStartIndex,
 			t_buffer_size currentBufferSize,
-			t_cluster* pCurrentBuffer,
+			t_pe_buffer* pCurrentBuffer,
 			t_transfer_block* pNewBlock,
 
-			t_cluster* pNextBuffer,
-			t_cluster* pMacOutput,
+			t_pe_buffer* pNextBuffer,
+			t_simd_operand* pMacOutput,
 			t_flag* pMacValid,
 			t_start* pNextStartIndex,
 			t_buffer_size* pNextBufferSize
@@ -3723,24 +3753,96 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 				operandSelectMask, //inputSelectBitmask
 
 				//Bytes of the input buffer
-				pNewBlock[0].values[0].cluster_values[0], //unsigned char inputTransferBlock0,
-				pNewBlock[0].values[0].cluster_values[1], //unsigned char inputTransferBlock1,
-				pNewBlock[0].values[1].cluster_values[0], //unsigned char inputTransferBlock2,
-				pNewBlock[0].values[1].cluster_values[1], //unsigned char inputTransferBlock3,
-				0, //unsigned char inputTransferBlock4,
-				0, //unsigned char inputTransferBlock5,
-				0, //unsigned char inputTransferBlock6,
-				0, //unsigned char inputTransferBlock7,
+				//unsigned char inputTransferBlock0,
+				(*pNewBlock).values[0],
+				//unsigned char inputTransferBlock1,
+				#if (NUM_SIMD_WORDS > 1)
+					(*pNewBlock).values[1],
+				#else
+					0,
+				#endif
+				//unsigned char inputTransferBlock2,
+				#if (NUM_SIMD_WORDS > 2)
+					(*pNewBlock).values[2],
+				#else
+					0,
+				#endif
+				//unsigned char inputTransferBlock3,
+				#if (NUM_SIMD_WORDS > 3)
+					(*pNewBlock).values[3],
+				#else
+					0,
+				#endif
+				//unsigned char inputTransferBlock4,
+				#if (NUM_SIMD_WORDS > 4)
+					(*pNewBlock).values[4],
+				#else
+					0,
+				#endif
+				//unsigned char inputTransferBlock3,
+				#if (NUM_SIMD_WORDS > 5)
+					(*pNewBlock).values[5],
+				#else
+					0,
+				#endif
+				//unsigned char inputTransferBlock3,
+				#if (NUM_SIMD_WORDS > 6)
+					(*pNewBlock).values[6],
+				#else
+					0,
+				#endif
+				//unsigned char inputTransferBlock7,
+				#if (NUM_SIMD_WORDS > 7)
+					(*pNewBlock).values[7],
+				#else
+					0,
+				#endif
 
 				//Bytes of the buffer
-				pCurrentBuffer[0].cluster_values[0], //unsigned char currentBuffer0,
-				pCurrentBuffer[0].cluster_values[1], //unsigned char currentBuffer1,
-				pCurrentBuffer[1].cluster_values[0], //unsigned char currentBuffer2,
-				pCurrentBuffer[1].cluster_values[1], //unsigned char currentBuffer3,
-				0, //unsigned char currentBuffer4,
-				0, //unsigned char currentBuffer5,
-				0, //unsigned char currentBuffer6,
-				0, //unsigned char currentBuffer7,
+				//unsigned char currentBuffer0,
+				(*pCurrentBuffer).values[0],
+				//unsigned char currentBuffer1,
+				#if (NUM_SIMD_WORDS > 1)
+					(*pCurrentBuffer).values[1],
+				#else
+					0,
+				#endif
+				//unsigned char currentBuffer2,
+				#if (NUM_SIMD_WORDS > 2)
+					(*pCurrentBuffer).values[2],
+				#else
+					0,
+				#endif
+				//unsigned char currentBuffer3,
+				#if (NUM_SIMD_WORDS > 3)
+					(*pCurrentBuffer).values[3],
+				#else
+					0,
+				#endif
+				//unsigned char currentBuffer4,
+				#if (NUM_SIMD_WORDS > 4)
+					(*pCurrentBuffer).values[4],
+				#else
+					0,
+				#endif
+				//unsigned char currentBuffer5,
+				#if (NUM_SIMD_WORDS > 5)
+					(*pCurrentBuffer).values[5],
+				#else
+					0,
+				#endif
+				//unsigned char currentBuffer6,
+				#if (NUM_SIMD_WORDS > 6)
+					(*pCurrentBuffer).values[6],
+				#else
+					0,
+				#endif
+				//unsigned char currentBuffer7,
+				#if (NUM_SIMD_WORDS > 7)
+					(*pCurrentBuffer).values[7],
+				#else
+					0,
+				#endif
 
 				(unsigned char) currentBufferSize
 			);
@@ -3749,8 +3851,8 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 		#pragma unroll
 		for (unsigned char j=0; j<(TRANSFER_SIZE*CLUSTER_SIZE); j++)
 		{
-			pMacOutput[j / CLUSTER_SIZE].cluster_values[j % CLUSTER_SIZE] = (bufferUpdateBus.s0 >> (j*8)) & 0x0FF;
-			pNextBuffer[j / CLUSTER_SIZE].cluster_values[j % CLUSTER_SIZE] = (bufferUpdateBus.s1 >> (j*8)) & 0x0FF;
+			(*pMacOutput).values[j] = (bufferUpdateBus.s0 >> (j*8)) & 0x0FF;
+			(*pNextBuffer).values[j] = (bufferUpdateBus.s1 >> (j*8)) & 0x0FF;
 		}
 
 		//Define the following as MASkS!!!!
@@ -3783,8 +3885,8 @@ __kernel void kernelOperandFilter ()
 	//========Weight filter states=========
 	t_instruction weightFilterInstruction = OPERAND_FILTER_READ_BIAS;
 	//TODO: make the weight buffer size parametrizable
-	t_cluster weightBuffer[TRANSFER_SIZE];
-	t_cluster macWeightBuffer[TRANSFER_SIZE];
+	t_pe_buffer weightBuffer;
+	t_simd_operand macWeightBuffer;
 	t_accum_bitmask regWeightAccumulatedBitMaskBytes;
 	#pragma unroll
 	for (int i=0; i<NUM_ACCUM_BITMASK_BYTES; i++)
@@ -3807,8 +3909,8 @@ __kernel void kernelOperandFilter ()
 
 	//=========Activation filter states===
 	t_instruction activationFilterInstruction = OPERAND_FILTER_READ_BIAS;
-	t_cluster activationBuffer[TRANSFER_SIZE];
-	t_cluster macActivationBuffer[TRANSFER_SIZE];
+	t_pe_buffer activationBuffer;
+	t_simd_operand macActivationBuffer;
 	t_accum_bitmask regActivationAccumulatedBitMaskBytes;
 	#pragma unroll
 	for (int i=0; i<NUM_ACCUM_BITMASK_BYTES; i++)
@@ -3846,20 +3948,16 @@ __kernel void kernelOperandFilter ()
 		t_flag weightFilterDone = FALSE; 
 		t_flag weightMaskNew = FALSE;
 
-		t_cluster nextWeightBuffer[TRANSFER_SIZE];
+		t_pe_buffer nextWeightBuffer;
+		t_simd_operand nextMacWeightBuffer;
 		//GOTCHAA!!!!!!
 		#pragma unroll
-		for (unsigned char i=0; i<TRANSFER_SIZE; i++)
+		for (unsigned char i=0; i<NUM_SIMD_WORDS; i++)
 		{
-			nextWeightBuffer[i] = weightBuffer[i];
+			nextWeightBuffer.values[i] = weightBuffer.values[i];
+			nextMacWeightBuffer.values[i] = macWeightBuffer.values[i];
 		}
 
-		t_cluster nextMacWeightBuffer[TRANSFER_SIZE];
-		#pragma unroll
-		for (unsigned char i=0; i<TRANSFER_SIZE; i++)
-		{
-			nextMacWeightBuffer[i] = macWeightBuffer[i];
-		}
 
 		t_flag nextWeightIsLast = regWeightIsLast;
 		t_num_tb nextNumWeightClusterLeft = regNumWeightClusterLeft;
@@ -3880,19 +3978,14 @@ __kernel void kernelOperandFilter ()
 		t_flag activationFilterDone = FALSE;
 		t_flag activationMaskNew = FALSE;
 
-		t_cluster nextActivationBuffer[TRANSFER_SIZE];
-		//GOTCHAA!!!!
+		t_pe_buffer nextActivationBuffer;
+		t_simd_operand nextMacActivationBuffer;
+		//GOTCHAA!!!!!!
 		#pragma unroll
-		for (unsigned char i=0; i<TRANSFER_SIZE; i++)
+		for (unsigned char i=0; i<NUM_SIMD_WORDS; i++)
 		{
-			nextActivationBuffer[i] = activationBuffer[i];
-		}
-
-		t_cluster nextMacActivationBuffer[TRANSFER_SIZE];
-		#pragma unroll
-		for (unsigned char i=0; i<TRANSFER_SIZE; i++)
-		{
-			nextMacActivationBuffer[i] = macActivationBuffer[i];
+			nextActivationBuffer.values[i] = activationBuffer.values[i];
+			nextMacActivationBuffer.values[i] = macActivationBuffer.values[i];
 		}
 
 		t_flag nextActivationIsLast = regActivationIsLast;
@@ -3942,10 +4035,10 @@ __kernel void kernelOperandFilter ()
 
 					EMULATOR_PRINT(("[Op Filter WEIGHT (%d, %d)] Read new weight block. IsLast: %#04x. [0-3]: %#04x %#04x %#04x %#04x Current instruction: %#04x \n\n"
 						,idy, idx, (unsigned char) nextWeightIsLast, 
-						weightBlock.values.values[0].cluster_values[0],
-						weightBlock.values.values[0].cluster_values[1],
-						weightBlock.values.values[1].cluster_values[0],
-						weightBlock.values.values[1].cluster_values[1],
+						weightBlock.values.values[0],
+						weightBlock.values.values[1],
+						weightBlock.values.values[2],
+						weightBlock.values.values[3],
 						(unsigned char) weightFilterInstruction));
 			}
 		}
@@ -3977,10 +4070,10 @@ __kernel void kernelOperandFilter ()
 
 					EMULATOR_PRINT(("[Op Filter ACTIVATION (%d, %d)] Read new activation block. IsLast: %#04x. [0-3]: %#04x %#04x %#04x %#04x Current instruction: %#04x \n\n"
 						,idy, idx, (unsigned char) nextActivationIsLast, 
-						activationBlock.values.values[0].cluster_values[0],
-						activationBlock.values.values[0].cluster_values[1],
-						activationBlock.values.values[1].cluster_values[0],
-						activationBlock.values.values[1].cluster_values[1],
+						activationBlock.values.values[0],
+						activationBlock.values.values[1],
+						activationBlock.values.values[2],
+						activationBlock.values.values[3],
 						(unsigned char) activationFilterInstruction));
 			}
 
@@ -4028,11 +4121,11 @@ __kernel void kernelOperandFilter ()
 						&regMutualBitmaskBytes, //regMutualBitmask
 						regWeightWindowStartIndex,
 						regWeightBufferSize,
-						weightBuffer,
+						&weightBuffer,
 						&(weightBlock.values),
 
-						nextWeightBuffer,
-						nextMacWeightBuffer,
+						&nextWeightBuffer,
+						&nextMacWeightBuffer,
 						&validWeightMac,
 						&nextWeightWindowIndex,
 						&nextWeightBufferSize
@@ -4109,11 +4202,11 @@ __kernel void kernelOperandFilter ()
 						&regMutualBitmaskBytes, //regMutualBitmask
 						regActivationWindowStartIndex,
 						regActivationBufferSize,
-						activationBuffer,
+						&activationBuffer,
 						&(activationBlock.values),
 
-						nextActivationBuffer,
-						nextMacActivationBuffer,
+						&nextActivationBuffer,
+						&nextMacActivationBuffer,
 						&validActivationMac,
 						&nextActivationWindowIndex,
 						&nextActivationBufferSize
@@ -4167,29 +4260,19 @@ __kernel void kernelOperandFilter ()
 		}
 		else if ( (validActivationMac == TRUE) && (validWeightMac == TRUE))
 		{
-			t_simd_operand simdActivations, simdWeights;
-			#pragma unroll
-			for (unsigned char i=0; i<SIMD_SIZE; i++) {
-				#pragma unroll
-				for (unsigned char j=0; j<CLUSTER_SIZE; j++)
-				{
-					simdActivations.values[CLUSTER_SIZE*i + j] = nextMacActivationBuffer[i].cluster_values[j];
-					simdWeights.values[CLUSTER_SIZE*i + j] = nextMacWeightBuffer[i].cluster_values[j];
-				}
-			}
 
 			EMULATOR_PRINT(("[Op Filter (%d,%d)] MAC: weight [0-3]: %#04x %#04x %#04x %#04x. act [0-3]: %#04x %#04x %#04x %#04x \n",
 					idy, idx,
-					simdWeights.values[0] & 0xFF, 
-					simdWeights.values[1] & 0xFF,
-					simdWeights.values[2] & 0xFF,
-					simdWeights.values[3] & 0xFF,
-					simdActivations.values[0] & 0xFF, 
-					simdActivations.values[1] & 0xFF,
-					simdActivations.values[2] & 0xFF,
-					simdActivations.values[3] & 0xFF));
+					nextMacWeightBuffer.values[0] & 0xFF, 
+					nextMacWeightBuffer.values[1] & 0xFF,
+					nextMacWeightBuffer.values[2] & 0xFF,
+					nextMacWeightBuffer.values[3] & 0xFF,
+					nextMacActivationBuffer.values[0] & 0xFF, 
+					nextMacActivationBuffer.values[1] & 0xFF,
+					nextMacActivationBuffer.values[2] & 0xFF,
+					nextMacActivationBuffer.values[3] & 0xFF));
 
-			t_accumulator tempPSum = madd(simdActivations, simdWeights);
+			t_accumulator tempPSum = madd(nextMacActivationBuffer, nextMacWeightBuffer);
 			pSum += tempPSum;
 		}
 
@@ -4246,10 +4329,10 @@ __kernel void kernelOperandFilter ()
 
 		weightFilterInstruction = nextWeightFilterInstruction;
 		#pragma unroll
-		for (unsigned char i=0; i<TRANSFER_SIZE; i++)
+		for (unsigned char i=0; i<NUM_SIMD_WORDS; i++)
 		{
-			weightBuffer[i] = nextWeightBuffer[i];
-			macWeightBuffer[i] = nextMacWeightBuffer[i];
+			weightBuffer.values[i] = nextWeightBuffer.values[i];
+			macWeightBuffer.values[i] = nextMacWeightBuffer.values[i];
 		}
 
 		//Activation filter update
@@ -4262,10 +4345,10 @@ __kernel void kernelOperandFilter ()
 
 		activationFilterInstruction = nextActivationFilterInstruction;
 		#pragma unroll
-		for (unsigned char i=0; i<TRANSFER_SIZE; i++)
+		for (unsigned char i=0; i<NUM_SIMD_WORDS; i++)
 		{
-			activationBuffer[i] = nextActivationBuffer[i];
-			macActivationBuffer[i] = nextMacActivationBuffer[i];
+			activationBuffer.values[i] = nextActivationBuffer.values[i];
+			macActivationBuffer.values[i] = nextMacActivationBuffer.values[i];
 		}
 
 		#pragma unroll
@@ -4449,38 +4532,31 @@ __kernel void kernelDensePE ()
 		if (currentInstruction == DENSE_PE_INSTRUCTION_W_FROM_CH_A_FROM_CH_MAC)
 		{
 			#pragma unroll
-			for (unsigned char i=0; i<SIMD_SIZE; i++) {
-				#pragma unroll
-				for (unsigned char j=0; j<CLUSTER_SIZE; j++)
-				{
-					simdActivations.values[CLUSTER_SIZE*i + j] = tempATBLocal.values.values[i].cluster_values[j];
-					simdWeights.values[CLUSTER_SIZE*i + j] = tempWTBLocal.values.values[i].cluster_values[j];
-				}
+			for (unsigned char i=0; i<NUM_SIMD_WORDS; i++) {
+				
+				simdActivations.values[i] = tempATBLocal.values.values[i];
+				simdWeights.values[i] = tempWTBLocal.values.values[i];
+				
 			}
 			
 		}
 		else if (currentInstruction == DENSE_PE_INSTRUCTION_W_FROM_R_A_FROM_CH_MAC)
 		{
 			#pragma unroll
-			for (unsigned char i=0; i<SIMD_SIZE; i++) {
-				#pragma unroll
-				for (unsigned char j=0; j<CLUSTER_SIZE; j++)
-				{
-					simdActivations.values[CLUSTER_SIZE*i + j] = tempATBLocal.values.values[i].cluster_values[j];
-					simdWeights.values[CLUSTER_SIZE*i + j] = regWeightTB.values[i].cluster_values[j];
-				}
+			for (unsigned char i=0; i<NUM_SIMD_WORDS; i++) {
+				
+				simdActivations.values[i] = tempATBLocal.values.values[i];
+				simdWeights.values[i] = regWeightTB.values[i];
+
 			}
 		}
 		else if (currentInstruction == DENSE_PE_INSTRUCTION_W_FROM_CH_A_FROM_R_MAC)
 		{
 			#pragma unroll
-			for (unsigned char i=0; i<SIMD_SIZE; i++) {
-				#pragma unroll
-				for (unsigned char j=0; j<CLUSTER_SIZE; j++)
-				{
-					simdActivations.values[CLUSTER_SIZE*i + j] = regActivationTB.values[i].cluster_values[j];
-					simdWeights.values[CLUSTER_SIZE*i + j] = tempWTBLocal.values.values[i].cluster_values[j];
-				}
+			for (unsigned char i=0; i<NUM_SIMD_WORDS; i++) {
+
+				simdActivations.values[i] = regActivationTB.values[i];
+				simdWeights.values[i] = tempWTBLocal.values.values[i];
 			}
 		} //Select MAC Operands
 
@@ -4502,10 +4578,10 @@ __kernel void kernelDensePE ()
 			regWeightTB = tempWTBLocal.values;
 			// EMULATOR_PRINT(("[PE (%d %d)] weightTransferBlock [0-4]: %#04x %#04x %#04x %#04x.\n",
 			// 		idy, idx,
-			// 		tempWTBLocal.values.values[0].cluster_values[0] & 0xFF, 
-			// 		tempWTBLocal.values.values[0].cluster_values[1] & 0xFF,
-			// 		tempWTBLocal.values.values[1].cluster_values[0] & 0xFF,
-			// 		tempWTBLocal.values.values[1].cluster_values[1] & 0xFF));
+			// 		tempWTBLocal.values.values[0] & 0xFF, 
+			// 		tempWTBLocal.values.values[1] & 0xFF,
+			// 		tempWTBLocal.values.values[2] & 0xFF,
+			// 		tempWTBLocal.values.values[3] & 0xFF));
 
 		}
 

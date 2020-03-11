@@ -46,8 +46,8 @@ t_operand modifyOutput (
 t_transfer_block bias2TransferBlock (t_accumulator bias)
 {
     t_transfer_block transferBlock;
-    transferBlock.values[0].cluster_values[0] = bias & 0xFF;
-    transferBlock.values[0].cluster_values[1] = (bias >> 8) & 0xFF;
+    transferBlock.values[0] = bias & 0xFF;
+    transferBlock.values[1] = (bias >> 8) & 0xFF;
     //transferBlock.values[1].cluster_values[0] = (bias >> 16) & 0xFF;
     //transferBlock.values[1].cluster_values[1] = (bias >> 24) & 0xFF;
     return transferBlock;
@@ -57,8 +57,8 @@ t_transfer_block bias2TransferBlock (t_accumulator bias)
 t_accumulator transferBlock2Bias (t_transfer_block block)
 {
     t_accumulator bias =
-        ( ((t_accumulator) block.values[0].cluster_values[0]) & 0xFF )
-        | (( ((t_accumulator) block.values[0].cluster_values[1]) & 0xFF ) << 8);
+        ( ((t_accumulator) block.values[0]) & 0xFF )
+        | (( ((t_accumulator) block.values[1]) & 0xFF ) << 8);
         //| (( ((t_accumulator) block.values[1].cluster_values[0]) & 0xFF ) << 16)
         //| (( ((t_accumulator) block.values[1].cluster_values[1]) & 0xFF ) << 24);
 
@@ -71,21 +71,29 @@ t_filter_streamer_control dramBlock2FilterStreamerControl (t_dram_block block)
 {
     t_filter_streamer_control control;
     control.numOutputs =
-        ( ( ( (unsigned short) (block.transferBlocks[0].values[0].cluster_values[0]) ) & 0xFF )
-            | ( (((unsigned short) (block.transferBlocks[0].values[0].cluster_values[1])) & 0xFF) << 8));
+        ( ( ( (unsigned short) (block.transferBlocks[0].values[0]) ) & 0xFF )
+            | ( (((unsigned short) (block.transferBlocks[0].values[1])) & 0xFF) << 8));
 
     //control.destinationRow 
     //    = block.transferBlocks[2].values[0].cluster_values[0];
     control.numTransferBlocks
-        = ( ( ( (short) (block.transferBlocks[0].values[1].cluster_values[0]) ) & 0xFF )
-            | ( (((short) (block.transferBlocks[0].values[1].cluster_values[1])) & 0xFF) << 8));
+        = ( ( ( (short) (block.transferBlocks[0].values[2]) ) & 0xFF )
+            | ( (((short) (block.transferBlocks[0].values[3])) & 0xFF) << 8));
 
     //Recover bias
-    control.bias
-        = ( ( ( (t_accumulator) (block.transferBlocks[1].values[0].cluster_values[0]) ) & 0xFF )
-            | ( (((t_accumulator) (block.transferBlocks[1].values[0].cluster_values[1])) & 0xFF) << 8));
+    #if (NUM_SIMD_WORDS <= 4)
+        control.bias
+            = ( ( ( (t_accumulator) (block.transferBlocks[1].values[0]) ) & 0xFF )
+                | ( (((t_accumulator) (block.transferBlocks[1].values[1])) & 0xFF) << 8));
 
-    control.maxPeCols = (unsigned char) block.transferBlocks[1].values[1].cluster_values[0];
+        control.maxPeCols = (unsigned char) block.transferBlocks[1].values[2];
+    #else
+        control.bias
+            = ( ( ( (t_accumulator) (block.transferBlocks[0].values[4]) ) & 0xFF )
+                | ( (((t_accumulator) (block.transferBlocks[0].values[5])) & 0xFF) << 8));
+
+        control.maxPeCols = (unsigned char) block.transferBlocks[0].values[6];
+    #endif
     
     return control;
 }
@@ -93,16 +101,23 @@ t_filter_streamer_control dramBlock2FilterStreamerControl (t_dram_block block)
 t_dram_block filterStreamerControl2dramBlock (t_filter_streamer_control control)
 {
     t_dram_block block;
-    block.transferBlocks[0].values[0].cluster_values[0] = control.numOutputs & 0xFF;
-    block.transferBlocks[0].values[0].cluster_values[1] = ((control.numOutputs >> 8) & 0xFF);
+    block.transferBlocks[0].values[0] = control.numOutputs & 0xFF;
+    block.transferBlocks[0].values[1] = ((control.numOutputs >> 8) & 0xFF);
 
-    block.transferBlocks[0].values[1].cluster_values[0] = control.numTransferBlocks & 0xFF;
-    block.transferBlocks[0].values[1].cluster_values[1] = ((control.numTransferBlocks >> 8) & 0xFF);
+    block.transferBlocks[0].values[2] = control.numTransferBlocks & 0xFF;
+    block.transferBlocks[0].values[3] = ((control.numTransferBlocks >> 8) & 0xFF);
 
-    block.transferBlocks[1].values[0].cluster_values[0] = control.bias & 0xFF;
-    block.transferBlocks[1].values[0].cluster_values[1] = ((control.bias >> 8) & 0xFF);
-    //block.transferBlocks[2].values[0].cluster_values[0] = control.destinationRow;
-    block.transferBlocks[1].values[1].cluster_values[0] = (char) control.maxPeCols;
+    #if (NUM_SIMD_WORDS <= 4)
+        block.transferBlocks[1].values[0] = control.bias & 0xFF;
+        block.transferBlocks[1].values[1] = ((control.bias >> 8) & 0xFF);
+        //block.transferBlocks[2].values[0].cluster_values[0] = control.destinationRow;
+        block.transferBlocks[1].values[2] = (char) control.maxPeCols;
+    #else
+        block.transferBlocks[0].values[4] = control.bias & 0xFF;
+        block.transferBlocks[0].values[5] = ((control.bias >> 8) & 0xFF);
+        //block.transferBlocks[2].values[0].cluster_values[0] = control.destinationRow;
+        block.transferBlocks[0].values[6] = (char) control.maxPeCols;
+    #endif
 
     return block;
 }
@@ -136,15 +151,15 @@ unsigned char generateOutputModifier (unsigned char numBitsToRightShift, unsigne
 t_dram_block transferBlockCount2DramBlock (t_streamblock_address transferBlockCount)
 {
     t_dram_block dramBlock;
-    dramBlock.transferBlocks[0].values[0].cluster_values[0] = (char) (transferBlockCount & 0xFF);
-    dramBlock.transferBlocks[0].values[0].cluster_values[1] = (char) ((transferBlockCount >> 8) & 0xFF);
+    dramBlock.transferBlocks[0].values[0] = (char) (transferBlockCount & 0xFF);
+    dramBlock.transferBlocks[0].values[1] = (char) ((transferBlockCount >> 8) & 0xFF);
     return dramBlock;
 }
 
 t_streamblock_address dramBlock2TransferBlockCount (t_dram_block dramBlock)
 {
-    char countLow = dramBlock.transferBlocks[0].values[0].cluster_values[0];
-    char countHigh = dramBlock.transferBlocks[0].values[0].cluster_values[1];
+    char countLow = dramBlock.transferBlocks[0].values[0];
+    char countHigh = dramBlock.transferBlocks[0].values[1];
 
     t_streamblock_address count = 
         ((((t_streamblock_address) countHigh) & 0xFF) << 8)

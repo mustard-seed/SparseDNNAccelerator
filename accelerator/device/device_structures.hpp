@@ -28,10 +28,6 @@ typedef cl_char t_operand;
 
 
 #ifdef INTELFPGA_CL
-typedef struct {
-    char values [SIMD_SIZE];
-} t_simdblock_value; //Value in a simdblock
-
 typedef unsigned char t_simdblock_channel_offset; //Relative channel of a simdblock in a streaming block
 
 typedef unsigned short t_streamblock_address; //Address of a streaming block in BRAM
@@ -68,7 +64,7 @@ typedef cl_ushort t_streamblock_address;
 #endif
 
 typedef struct {
-    t_cluster values [TRANSFER_SIZE];
+    char values [TRANSFER_SIZE*CLUSTER_SIZE];
 } t_transfer_block;
 
 typedef struct {
@@ -85,6 +81,10 @@ typedef struct __attribute__((packed)){
     t_accumulator value;
     unsigned char isLast;
 } t_conv_drain_tagged;
+
+typedef struct {
+        unsigned char bytes[NUM_BITMASK_BYTES];
+} t_bitmask;
 
 // typedef struct __attribute__((packed)){
 //     t_transfer_block values;
@@ -226,7 +226,8 @@ Data structures that travel on the output activation bus system
 ===================================================================
 */
 typedef struct __attribute__((packed)) {
-    unsigned char bitmask;
+    //TODO: HANDLE MULTI-BYTE MASK
+    t_bitmask bitmask;
     //unsigned char numSurvivingClusters;  //Number of surviving data cluster (not including the bitmask) in the window
     //bool isLastWindowInStrip; //Whether this is the last window in a strip
 

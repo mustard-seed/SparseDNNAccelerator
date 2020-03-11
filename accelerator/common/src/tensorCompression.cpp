@@ -36,7 +36,7 @@ unsigned char countNumOnes (unsigned char bitmaskBytes[])
     for (int i=0; i<NUM_BITMASK_BYTES; i++)
     {
         unsigned char byte = bitmaskBytes[i];
-        for (int j=0; i<8; j++) {
+        for (int j=0; j<8; j++) {
             if ((byte & 0x01) == 0x1) {
                 count++;
             }
@@ -172,7 +172,7 @@ AlignedTensor::AlignedTensor(
                                     value = 0x0;
                                 }
 
-                                transferBlock.values[iClusterInTB].cluster_values[iScalarInCluster] = value;
+                                transferBlock.values[iClusterInTB*TRANSFER_SIZE+iScalarInCluster] = value;
                             }
                         } //over one TB
 
@@ -246,7 +246,7 @@ void AlignedTensor::decodeTensor(
                             {
                                 if (iChannel <= (this->maxScalarIndexInChannelGroup))
                                 {
-                                    signed char value = transferBlock.values[iClusterInTB].cluster_values[iScalarInCluster];
+                                    signed char value = transferBlock.values[iClusterInTB*TRANSFER_SIZE + iScalarInCluster];
                                     _fixedPointVector.at(iFullVector) = fixedPointNumber((signed char) value, _fracWidth, _intWidth);
 
                                     iFullVector++;
@@ -435,7 +435,7 @@ FlexibleDirectCompressedTensor::FlexibleDirectCompressedTensor (
                            //Assume it is 8 bits
                            for (int i=0; i<NUM_BITMASK_BYTES; i++)
                            {
-                               transferBlock.values[i / CLUSTER_SIZE].cluster_values[i % CLUSTER_SIZE] = bitmaskBytes[i];
+                               transferBlock.values[i] = bitmaskBytes[i];
                            }
                            //transferBlock.values[SURVIVING_COUNT_TRANSFER_BLOCK_INDEX].cluster_values[SURVIVING_COUNT_CLUSTER_INDEX] = numSurivingClustes;
 
@@ -458,7 +458,11 @@ FlexibleDirectCompressedTensor::FlexibleDirectCompressedTensor (
                                     cluster.cluster_values[j] = fpValue;
                                }
                                if (preserve) {
-                                   transferBlock.values[iTransferBlock++] = cluster;
+                                   for (int i=0; i<CLUSTER_SIZE; i++)
+                                   {
+                                       transferBlock.values[iTransferBlock*CLUSTER_SIZE+i] = cluster.cluster_values[i];
+                                   }
+                                   iTransferBlock++;
                                    //std::cout <<"Preserved i = "<<i<<std::endl;
                                }
 
@@ -585,7 +589,7 @@ void FlexibleDirectCompressedTensor::decodeTensor(
             if (updateBitmask) {
                 for (int i=0; i<NUM_BITMASK_BYTES; i++)
                 {
-                    bitmaskBytes[i] = (unsigned char) transferBlock.values[i / CLUSTER_SIZE].cluster_values[i % CLUSTER_SIZE];
+                    bitmaskBytes[i] = (unsigned char) transferBlock.values[i];
                 }
 
                 numNZClustersInCompressionBlock = countNumOnes(bitmaskBytes);
@@ -605,12 +609,9 @@ void FlexibleDirectCompressedTensor::decodeTensor(
                  //countNZClustersInCompressionBlock += (maxClusterIndexInTransferBlock);
             }
             else {
-                for (int i=0; i<=maxClusterIndexInTransferBlock; i++)
+                for (int i=0; i<((maxClusterIndexInTransferBlock+1)*(maxScalarIndexInCluster+1)); i++)
                 {
-                    for (int j=0; j<=maxScalarIndexInCluster; j++)
-                    {
-                        vectorCompressionBlock.push_back(transferBlock.values[i].cluster_values[j]);
-                    }
+                    vectorCompressionBlock.push_back(transferBlock.values[i]);
                 }
                 countNZClustersInCompressionBlock += (maxClusterIndexInTransferBlock + 1);
             }
@@ -628,7 +629,7 @@ void FlexibleDirectCompressedTensor::decodeTensor(
                 {
                     unsigned char indexInCompressionBlock = findFirstNonZero(bitmaskBytes, positionInCompressionBlock);
 
-                    if (indexInCompressionBlock < COMPRESSION_VEC_SIZE)
+                    if (indexInCompressionBlock < COMPRESSION_WINDOW_SIZE)
                     {
                         for (int i=0; i<=maxScalarIndexInCluster; i++) {
                             int iChannelInGroup = iChannelInGroupBase + (int) indexInCompressionBlock*(maxScalarIndexInCluster+1) + i;
@@ -654,10 +655,10 @@ void FlexibleDirectCompressedTensor::decodeTensor(
                                 _fixedPointVector.at(iDenseVector) = fpValue;
                             } //if iChannelInGroup <= maxScalarIndexInChannelGroup
                         } // for from 0 to maxScalarIndexInCluster
-
-                        //Update bitmask
-                        positionInCompressionBlock = indexInCompressionBlock + 1;
                     }
+
+                    //Update bitmask
+                    positionInCompressionBlock = indexInCompressionBlock + 1;
 
                 } // while. decode a compression block;
 
