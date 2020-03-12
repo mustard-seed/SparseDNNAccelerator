@@ -34,7 +34,7 @@
 //#define MAX_DATA_LENGTH 1024
 
 #define EMULATE
-//#define PLAY
+#define PLAY
 typedef
 std::vector<cl_ushort, boost::alignment::aligned_allocator<cl_ushort, aocl_utils_cpp::AOCL_ALIGNMENT>>
 //std::vector<cl_ushort>
@@ -136,10 +136,8 @@ protected:
 //TEST_F (peTestFixture, testFixture) 0, //tilingSizeWidth
 //{
 //    launch(IDX,IDY,0,0, false);
-//    EXPECT_TRUE (COMPRESSION_VEC_SIZE == 4);
 //    EXPECT_TRUE(true);
 //}
-//#define PLAY
 #ifdef PLAY
 TEST_F (peTestFixture, testPlayfield) {
 /* Test goal: Verify the correctness of the bias loading, dot product and drainage capability
@@ -147,24 +145,43 @@ TEST_F (peTestFixture, testPlayfield) {
  * different fixed-point width
  *
 */
-
     //This test won't pass if fracIn > fractOut
-    char fracIn = 2, fracOut = 2, fracW = 2;
-    float probOne = 0.1;
+    char fracIn = 2, fracOut = 3, fracW = 2;
+//    float probOne = 1.0;
 
-    unsigned int numElements = 8;
+    unsigned int numElements = 32;
     float biasFloat = 0.0;
 
-    // Generate a block of activations
-    std::vector<float> activationRealInput(numElements, 0.0f);
-    activationRealInput.at(3) = 1.0f;
-    activationRealInput.at(5) = 1.0f;
-    //std::vector<float> activationRealInput = {-3.14f};
+//    // Generate a block of activations
+//    std::vector<float> activationRealInput = initialize_vector(
+//                VECTOR_A_SEED,
+//                numElements,
+//                probOne,
+//                -1.14,
+//                1.14
+//                );
+//    //std::vector<float> activationRealInput = {-3.14f};
 
-    // Generate a block of activations
+//    // Generate a block of activations
+//    std::vector<float> weightRealInput = initialize_vector(
+//                VECTOR_B_SEED,
+//                numElements,
+//                probOne,
+//                -1.14,
+//                1.14
+//                );
+
+    std::vector<float> activationRealInput(numElements, 0.0f);
+    activationRealInput.at(4) = 1.0f;
+    activationRealInput.at(5) = 1.0f;
+    activationRealInput.at(6) = 1.0f;
+    activationRealInput.at(8) = 1.0f;
     std::vector<float> weightRealInput(numElements, 0.0f);
-    weightRealInput.at(3) = 1.0f;
+    weightRealInput.at(4) = 1.0f;
+    weightRealInput.at(5) = 1.0f;
     weightRealInput.at(6) = 1.0f;
+    weightRealInput.at(7) = 1.0f;
+    weightRealInput.at(8) = 1.0f;
 
 
 
@@ -176,7 +193,6 @@ TEST_F (peTestFixture, testPlayfield) {
            fracOut,
            fracW
            );
-
 }
 #else
 TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageZero) {
@@ -228,7 +244,6 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageHalfLong) {
  * different fixed-point width
  *
 */
-    EXPECT_TRUE (COMPRESSION_VEC_SIZE == 4);
 
     //This test won't pass if fracIn > fractOut
     char fracIn = 2, fracOut = 3, fracW = 2;
@@ -316,7 +331,6 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainageOneLong) {
  * different fixed-point width
  *
 */
-    EXPECT_TRUE (COMPRESSION_VEC_SIZE == 4);
 
     //This test won't pass if fracIn > fractOut
     char fracIn = 2, fracOut = 3, fracW = 2;
@@ -406,7 +420,6 @@ TEST_F (peTestFixture, testLoadBiasDotProductAndDrainage025Short) {
  * different fixed-point width
  *
 */
-    EXPECT_TRUE (COMPRESSION_VEC_SIZE == 4);
 
     //This test won't pass if fracIn > fractOut
     char fracIn = 2, fracOut = 3, fracW = 2;

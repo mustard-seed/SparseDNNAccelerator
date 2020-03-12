@@ -44,7 +44,7 @@
 #define INPUT_SEED   7653
 
 //#define PROFILE
-//#define PLAY
+#define PLAY
 //#define SPARSE_LEVEL_TEST
 #define TEST_TYPE TEST
 #define REPEAT 1
@@ -487,7 +487,7 @@ protected:
                std::cout <<"Sparsity level is "<<(1.0f - denseProb)<<std::endl;
         }
         unsigned short maxScalarIndexInChannelGroup = _numInputChannel - 1;
-        unsigned short maxClusterIndexInCompressionBlock = COMPRESSION_VEC_SIZE*TRANSFER_SIZE-1;
+        unsigned short maxClusterIndexInCompressionBlock = COMPRESSION_WINDOW_SIZE*TRANSFER_SIZE-1;
         unsigned short maxClusterIndexInTransferBlock = TRANSFER_SIZE-1;
         unsigned short maxScalarIndexInCluster = CLUSTER_SIZE-1;
 
@@ -847,7 +847,7 @@ protected:
             kernelOutputWriter.setArg(1 , numWideCountPerOAStrip);
 #endif
 
-            //unsigned int strideExterrnalMemoryOA, //In terms of output dram block
+            //unsigned int strideExternalMemoryOA, //In terms of output dram block
             kernelOutputWriter.setArg(2 , strideExternalMemoryOA);
             /*
             Output width tiling parameters
@@ -1222,10 +1222,10 @@ protected:
 #ifdef PLAY
 TEST_F (testFixture, play) {
 
-    unsigned char inputWidth = 1;
-    unsigned char inputHeight = 1;
-    unsigned char numInputChannel = 8;
-    unsigned char widthBlockSize = 3;
+    unsigned char inputWidth = 5;
+    unsigned char inputHeight = 5;
+    unsigned char numInputChannel = 4;
+    unsigned char widthBlockSize = 1;
     unsigned char sizeOutputTileWidthPerColFul = 2;
     unsigned char sizeOutputTileHeightFull = 2;
     bool flagEnableRelu = true;

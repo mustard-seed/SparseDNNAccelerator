@@ -13,7 +13,7 @@ unsigned char countNumOnes (unsigned char bitmaskBytes[]);
 
 unsigned char findFirstNonZero (unsigned char bitmaskBytes[], unsigned char startingIndex) {
     unsigned char returnIndex = startingIndex;
-    while (returnIndex < COMPRESSION_VEC_SIZE) {
+    while (returnIndex < COMPRESSION_WINDOW_SIZE) {
         unsigned int byteIndex = returnIndex / 8;
         unsigned int bitIndex = returnIndex % 8;
         unsigned char mask = 0x01 << bitIndex;

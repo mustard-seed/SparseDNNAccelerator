@@ -1,10 +1,10 @@
 `timescale 1 ns / 1 ps
 
-`define CONST_TRANSFER_SIZE 2
-`define CONST_LOG2_TRANSFER_SIZE 1
-`define CONST_COMPRESSION_WINDOW_SIZE 8
-`define CONST_LOG2_COMPRESSION_WINDOW_SIZE 3
-`define CONST_CLUSTER_BITWIDTH 16
+`define CONST_TRANSFER_SIZE 8
+`define CONST_LOG2_TRANSFER_SIZE 3
+`define CONST_COMPRESSION_WINDOW_SIZE 32
+`define CONST_LOG2_COMPRESSION_WINDOW_SIZE 5
+`define CONST_CLUSTER_BITWIDTH 8
 
 module smallBufferAccumulator 
 	# 	(
@@ -109,7 +109,11 @@ module clMaskAccumulatorWrapper # (
 	//TODO: Change these parameters if TRANSFER_SIZE changes
 	localparam COUNT_BITWIDTH = LOG2_MAX_NUM_OUTPUT + 1;
 
-	assign result[255 -: (256 - BITMASK_LENGTH*COUNT_BITWIDTH)] = {(256 - BITMASK_LENGTH*COUNT_BITWIDTH){1'b0}};
+	generate 
+		if ((BITMASK_LENGTH*COUNT_BITWIDTH) < 256) begin
+			assign result[255 -: (256 - BITMASK_LENGTH*COUNT_BITWIDTH)] = {(256 - BITMASK_LENGTH*COUNT_BITWIDTH){1'b0}};
+		end
+	endgenerate
 
 	assign ovalid = ivalid;
 	assign oready = 1'b1;
@@ -287,7 +291,14 @@ module clMaskFilter # (
 	assign oready = 1'b1;
 
 	//Make sure to zero out the unused values
-	assign {result[7 -: (8 - TRANSFER_SIZE)], result[15 -: (8 - INDEX_BITWIDTH)]} = 0;
+	generate 
+		if (TRANSFER_SIZE < 8) begin
+			assign result[7 -: (8 - TRANSFER_SIZE)] = 0;
+		end
+		if (INDEX_BITWIDTH < 8) begin
+			assign result[15 -: (8 - INDEX_BITWIDTH)] = 0;
+		end
+	endgenerate
 
 	wire [255 : 0] accumulatedBitmask
 		= {
@@ -548,7 +559,11 @@ module clSmallBufferPopCount #(
 	wire [COUNT_BITWIDTH*BITMASK_LENGTH-1 : 0] bitmask = 
 		{bitmask7, bitmask6, bitmask5, bitmask4, bitmask3, bitmask2, bitmask1, bitmask0};
 
-	assign result[7 -: (8-COUNT_BITWIDTH)] = 0;
+	generate 
+		if (COUNT_BITWIDTH < 8) begin
+			assign result[7 -: (8-COUNT_BITWIDTH)] = 0;
+		end
+	endgenerate
 
 	smallBufferPopCount #(
 			.BITMASK_LENGTH(BITMASK_LENGTH),

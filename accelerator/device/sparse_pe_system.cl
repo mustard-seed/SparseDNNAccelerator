@@ -1041,7 +1041,7 @@ __kernel void kernelOutputWriter (
 	unsigned short numWideCountPerOAStrip,
 	#endif
 
-	unsigned int strideExterrnalMemoryOA, //In terms of output dram block
+	unsigned int strideExternalMemoryOA, //In terms of output dram block
 
 	/*
 	Output width tiling parameters
@@ -1166,7 +1166,7 @@ __kernel void kernelOutputWriter (
 
 			unsigned short iActivationGlobal =
 				(unsigned int) (iOutputGroup*numOutputHxW + iHeightGlobal*outputWidth + iWidthGlobal + iCol*maxTQ_A)
-				* (unsigned int) strideExterrnalMemoryOA; //iCol*maxTQ_A is zero
+				* (unsigned int) strideExternalMemoryOA; //iCol*maxTQ_A is zero
 
 			unsigned short iAddressCache = 
 				(iOutputGroup*maxTP + iOutputHeightInTile)*maxTQ + (unsigned short) iOutputWidthInTile + (unsigned short) iCol * (unsigned short) maxTQ_A;
@@ -1663,6 +1663,7 @@ __kernel void kernelCompressorOranizer()
 		//Read the information first
 		t_output_cluster_info info = read_channel_intel(channel_output_buffer_to_compressor_info[colID]);
 		t_bitmask bitmask = info.bitmask;
+		//TODO: What if the compression window size is greater than 32?
 		unsigned char numSurvivingClusters = info.statusBits & 0x3F;
 		bool isLastWindowInStrip = (((info.statusBits >> 0x6) & 0x1) == 0x1);
 		bool enableSparsification = (((info.statusBits >> 0x7) & 0x1) == 0x1);
@@ -2558,7 +2559,7 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 
 	//#ifdef DIRECT_COMPRESSION_SIMD
 		#pragma unroll
-		for(int i=0; i<SIMD_SIZE*CLUSTER_SIZE/4; i++){
+		for(int i=0; i<TRANSFER_SIZE*CLUSTER_SIZE/4; i++){
 			//output += input.data[i]*weights.data[i];
 			// use packed DSP blocks to improve efficiency
 			#if defined (ARRIA10)
@@ -3124,9 +3125,9 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 	//Define the instruction type
 	typedef uint3_t t_instruction;
 	//typedef unsigned char t_bitmask;
-	typedef uint5_t t_start;
-	typedef uint2_t t_buffer_size;
-	typedef int5_t t_num_tb;
+	typedef uint6_t t_start;
+	typedef uint4_t t_buffer_size;
+	typedef int7_t t_num_tb;
 	typedef uint1_t t_flag;
 
 	typedef struct {

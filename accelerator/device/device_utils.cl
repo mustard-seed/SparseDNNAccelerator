@@ -153,6 +153,7 @@ t_dram_block transferBlockCount2DramBlock (t_streamblock_address transferBlockCo
     t_dram_block dramBlock;
     dramBlock.transferBlocks[0].values[0] = (char) (transferBlockCount & 0xFF);
     dramBlock.transferBlocks[0].values[1] = (char) ((transferBlockCount >> 8) & 0xFF);
+
     return dramBlock;
 }
 
@@ -172,14 +173,22 @@ t_output_dram_block clusterCount2OutputDramBlock (unsigned short clusterCount)
 {
     t_output_dram_block outputDramBlock;
     outputDramBlock.clusters[0].cluster_values[0] = (char) (clusterCount & 0xFF);
-    outputDramBlock.clusters[0].cluster_values[1] = (char) ((clusterCount >> 8) & 0xFF);
+    #if (CLUSTER_SIZE > 1)
+        outputDramBlock.clusters[0].cluster_values[1] = (char) ((clusterCount >> 8) & 0xFF);
+    #else
+        outputDramBlock.clusters[1].cluster_values[0] = (char) ((clusterCount >> 8) & 0xFF);
+    #endif
     return outputDramBlock;
 }
 
 unsigned short outputDramBlock2ClusterCount (t_output_dram_block outputDramBlock)
 {
     char countLow = outputDramBlock.clusters[0].cluster_values[0];
-    char countHigh = outputDramBlock.clusters[0].cluster_values[1];
+    #if (CLUSTER_SIZE > 1)
+        char countHigh = outputDramBlock.clusters[0].cluster_values[1];
+    #else
+        char countHigh = outputDramBlock.clusters[1].cluster_values[0];
+    #endif
 
     unsigned short count = 
         ((((t_streamblock_address) countHigh) & 0xFF) << 8)
