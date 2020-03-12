@@ -3125,9 +3125,9 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 	//Define the instruction type
 	typedef uint3_t t_instruction;
 	//typedef unsigned char t_bitmask;
-	typedef uint6_t t_start;
-	typedef uint4_t t_buffer_size;
-	typedef int7_t t_num_tb;
+	typedef uint5_t t_start;
+	typedef uint3_t t_buffer_size;
+	typedef int6_t t_num_tb;
 	typedef uint1_t t_flag;
 
 	typedef struct {

@@ -44,7 +44,7 @@
 #define INPUT_SEED   7653
 
 //#define PROFILE
-#define PLAY
+//#define PLAY
 //#define SPARSE_LEVEL_TEST
 #define TEST_TYPE TEST
 #define REPEAT 1
@@ -487,7 +487,7 @@ protected:
                std::cout <<"Sparsity level is "<<(1.0f - denseProb)<<std::endl;
         }
         unsigned short maxScalarIndexInChannelGroup = _numInputChannel - 1;
-        unsigned short maxClusterIndexInCompressionBlock = COMPRESSION_WINDOW_SIZE*TRANSFER_SIZE-1;
+        unsigned short maxClusterIndexInCompressionBlock = COMPRESSION_WINDOW_SIZE-1;
         unsigned short maxClusterIndexInTransferBlock = TRANSFER_SIZE-1;
         unsigned short maxScalarIndexInCluster = CLUSTER_SIZE-1;
 
@@ -1222,12 +1222,12 @@ protected:
 #ifdef PLAY
 TEST_F (testFixture, play) {
 
-    unsigned char inputWidth = 5;
-    unsigned char inputHeight = 5;
-    unsigned char numInputChannel = 4;
+    unsigned char inputWidth = 1;
+    unsigned char inputHeight = 1;
+    unsigned char numInputChannel = 32;
     unsigned char widthBlockSize = 1;
-    unsigned char sizeOutputTileWidthPerColFul = 2;
-    unsigned char sizeOutputTileHeightFull = 2;
+    unsigned char sizeOutputTileWidthPerColFul = 1;
+    unsigned char sizeOutputTileHeightFull = 1;
     bool flagEnableRelu = true;
 
     launch(
