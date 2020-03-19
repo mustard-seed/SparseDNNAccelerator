@@ -2346,80 +2346,80 @@ __kernel void kernelActivationTransport ()
 			unsigned char isLastDrain = TRUE;
 #endif
 
-			write_channel_intel(channel_drain_token[idy][idx], isLastDrain);
+			//write_channel_intel(channel_drain_token[idy][idx], isLastDrain);
 		}
 	} //while
 }
 
-#define STATE_DRAIN_TRANSPORT_DRAIN_SELF 0X1
-#define STATE_DRAIN_TRANSPORT_DRAIN_OTHERS 0x2
-__attribute__((max_global_work_dim(0)))
-#ifdef FULL_SYSTEM
-__attribute__((num_compute_units(PE_ROWS, PE_COLS)))
-#endif
-__attribute__ ((autorun))
-__kernel void kernelDrainTransport ()
-{
-	#ifdef FULL_SYSTEM
-		int idx = get_compute_id(1);
-		int idy = get_compute_id(0);
-	#else
-		int idx = 0;
-		int idy = 0;
-	#endif
+// #define STATE_DRAIN_TRANSPORT_DRAIN_SELF 0X1
+// #define STATE_DRAIN_TRANSPORT_DRAIN_OTHERS 0x2
+// __attribute__((max_global_work_dim(0)))
+// #ifdef FULL_SYSTEM
+// __attribute__((num_compute_units(PE_ROWS, PE_COLS)))
+// #endif
+// __attribute__ ((autorun))
+// __kernel void kernelDrainTransport ()
+// {
+// 	#ifdef FULL_SYSTEM
+// 		int idx = get_compute_id(1);
+// 		int idy = get_compute_id(0);
+// 	#else
+// 		int idx = 0;
+// 		int idy = 0;
+// 	#endif
 
-	typedef uint2_t t_drain_state;
+// 	typedef uint2_t t_drain_state;
 
-	t_drain_state drainState = STATE_DRAIN_TRANSPORT_DRAIN_SELF;
+// 	t_drain_state drainState = STATE_DRAIN_TRANSPORT_DRAIN_SELF;
 
-	while (true)
-	{
-		t_conv_drain_tagged drainTransportBlock;
-		t_drain_state tempState = drainState;
+// 	while (true)
+// 	{
+// 		t_conv_drain_tagged drainTransportBlock;
+// 		t_drain_state tempState = drainState;
 
-		//Drain from PE and get the initialization
-		if (drainState == STATE_DRAIN_TRANSPORT_DRAIN_SELF)
-		{
-			//Read the drain token and the PE output
-			t_accumulator peResult = read_channel_intel(channel_peDrainOutput[idy][idx]);
-			unsigned char isLastDrain = read_channel_intel(channel_drain_token[idy][idx]);
-			drainTransportBlock.isLast = isLastDrain;
-			drainTransportBlock.value = peResult;
+// 		//Drain from PE and get the initialization
+// 		if (drainState == STATE_DRAIN_TRANSPORT_DRAIN_SELF)
+// 		{
+// 			//Read the drain token and the PE output
+// 			t_accumulator peResult = read_channel_intel(channel_peDrainOutput[idy][idx]);
+// 			unsigned char isLastDrain = read_channel_intel(channel_drain_token[idy][idx]);
+// 			drainTransportBlock.isLast = isLastDrain;
+// 			drainTransportBlock.value = peResult;
 
-			EMULATOR_PRINT(("[DRAIN TRANSPORT (%d, %d)] Drained PSum.\n\n", idy, idx));
+// 			EMULATOR_PRINT(("[DRAIN TRANSPORT (%d, %d)] Drained PSum.\n\n", idy, idx));
 
-#if defined(FULL_SYSTEM)
-			if ((isLastDrain == FALSE) && (idy < (PE_ROWS - 1) ))
-			{
-				tempState = STATE_DRAIN_TRANSPORT_DRAIN_OTHERS;
-			}
-			else
-			{
-				tempState = STATE_DRAIN_TRANSPORT_DRAIN_SELF;
-			}
-#else
-				tempState = STATE_DRAIN_TRANSPORT_DRAIN_SELF;
-#endif
-		}
-#if defined(FULL_SYSTEM)
-		else if (drainState == STATE_DRAIN_TRANSPORT_DRAIN_OTHERS)
-		{
-			if (idy < (PE_ROWS - 1))
-			{
-				drainTransportBlock = read_channel_intel(channel_drain[idy+1][idx]);
-				if (drainTransportBlock.isLast == TRUE)
-				{
-					tempState = STATE_DRAIN_TRANSPORT_DRAIN_SELF;
-				}
+// #if defined(FULL_SYSTEM)
+// 			if ((isLastDrain == FALSE) && (idy < (PE_ROWS - 1) ))
+// 			{
+// 				tempState = STATE_DRAIN_TRANSPORT_DRAIN_OTHERS;
+// 			}
+// 			else
+// 			{
+// 				tempState = STATE_DRAIN_TRANSPORT_DRAIN_SELF;
+// 			}
+// #else
+// 				tempState = STATE_DRAIN_TRANSPORT_DRAIN_SELF;
+// #endif
+// 		}
+// #if defined(FULL_SYSTEM)
+// 		else if (drainState == STATE_DRAIN_TRANSPORT_DRAIN_OTHERS)
+// 		{
+// 			if (idy < (PE_ROWS - 1))
+// 			{
+// 				drainTransportBlock = read_channel_intel(channel_drain[idy+1][idx]);
+// 				if (drainTransportBlock.isLast == TRUE)
+// 				{
+// 					tempState = STATE_DRAIN_TRANSPORT_DRAIN_SELF;
+// 				}
 
-			}
-		}
-#endif
-		//Will generated "unitialized usage warning", but it is actually ok
-		write_channel_intel(channel_drain[idy][idx], drainTransportBlock);
-		drainState = tempState;
-	}
-}
+// 			}
+// 		}
+// #endif
+// 		//Will generated "unitialized usage warning", but it is actually ok
+// 		write_channel_intel(channel_drain[idy][idx], drainTransportBlock);
+// 		drainState = tempState;
+// 	}
+// }
 
 
 
@@ -3118,6 +3118,7 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 #define OPERAND_FILTER_FILTER 0x3
 #define OPERAND_FILTER_MAC_SYNC 0x4
 #define OPERAND_FILTER_FILTER_SYNC 0x5
+#define OPERAND_FILTER_DRAIN_OTHERS 0x6
 
 #ifndef SPARSE_UTILITY
 #define SPARSE_UTILITY
@@ -3126,8 +3127,8 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 	typedef uint3_t t_instruction;
 	//typedef unsigned char t_bitmask;
 	typedef uint5_t t_start;
-	typedef uint3_t t_buffer_size;
-	typedef int6_t t_num_tb;
+	typedef uint2_t t_buffer_size;
+	typedef int5_t t_num_tb;
 	typedef uint1_t t_flag;
 
 	typedef struct {
@@ -3413,7 +3414,8 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 			t_flag thisLastTB,
 			t_flag otherIsLast,
 			t_flag thisMacAvailable,
-			t_flag otherMacAvailable
+			t_flag otherMacAvailable,
+			t_flag drainDone
 		)
 	{
 		t_instruction nextInstruction = currentInstruction;
@@ -3503,6 +3505,18 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 
 			case (OPERAND_FILTER_FILTER_SYNC) :{
 				if (otherIsLast == TRUE)
+				{
+					nextInstruction = OPERAND_FILTER_DRAIN_OTHERS;
+					if (drainDone == TRUE)
+					{
+						nextInstruction = OPERAND_FILTER_READ_BIAS;
+					}
+				}
+			}
+			break; //OPERAND_FILTER_WIN_SYNC
+
+			case (OPERAND_FILTER_DRAIN_OTHERS) :{
+				if (drainDone == TRUE)
 				{
 					nextInstruction = OPERAND_FILTER_READ_BIAS;
 				}
@@ -3883,6 +3897,8 @@ __kernel void kernelOperandFilter ()
 	//Psum
 	t_accumulator pSum = 0;
 
+	unsigned char regMaxTransportID = 0;
+
 	//========Weight filter states=========
 	t_instruction weightFilterInstruction = OPERAND_FILTER_READ_BIAS;
 	//TODO: make the weight buffer size parametrizable
@@ -4000,6 +4016,9 @@ __kernel void kernelOperandFilter ()
 		t_start nextActivationWindowIndex = regActivationWindowStartIndex;
 		t_buffer_size nextActivationBufferSize = regActivationBufferSize;
 
+		t_flag drainIsDone = FALSE;
+		unsigned char nextMaxTransportID = regMaxTransportID;
+
 		//t_bitmask nextMutualBitmask = regMutualBitmask;
 
 		// #ifdef FULL_SYSTEM
@@ -4064,6 +4083,7 @@ __kernel void kernelOperandFilter ()
 			if (readSuccess == true)
 			{
 				nextActivationIsLast = getIsLast(activationBlock);
+				nextMaxTransportID = getMaxTransferID(activationBlock);
 				// if (nextActivationIsLast == TRUE)
 				// {
 				// 	activationFilterDone = TRUE;
@@ -4282,10 +4302,45 @@ __kernel void kernelOperandFilter ()
 		/*
 			Writting the output
 		*/
-		if ( (weightFilterInstruction == OPERAND_FILTER_FILTER_SYNC) && (activationFilterInstruction == OPERAND_FILTER_FILTER_SYNC))
+		if ( ((weightFilterInstruction == OPERAND_FILTER_FILTER_SYNC) && (activationFilterInstruction == OPERAND_FILTER_FILTER_SYNC))
+				|| (activationFilterInstruction == OPERAND_FILTER_DRAIN_OTHERS) 
+			)
 		{
-			EMULATOR_PRINT(("[Op Filter (%d, %d)] Commit. pSum value: %#04x \n", idy, idx, pSum));
-			write_channel_intel(channel_peDrainOutput[idy][idx], pSum);
+			#if defined(FULL_SYSTEM)
+				drainIsDone = (nextMaxTransportID == idy) ? TRUE : FALSE;
+			#else
+				drainIsDone = TRUE;
+			#endif
+
+			t_conv_drain_tagged drainTransportBlock;
+			drainTransportBlock.value = pSum;
+			drainTransportBlock.isLast = (unsigned char) drainIsDone;
+			bool writePSum = true;
+			if (activationFilterInstruction == OPERAND_FILTER_DRAIN_OTHERS)
+			{
+				if (idy < (PE_ROWS - 1))
+				{
+					drainIsDone = FALSE;
+					drainTransportBlock = read_channel_nb_intel(channel_drain[idy+1][idx], &writePSum);
+					if (writePSum == true)
+					{
+						EMULATOR_PRINT(("[Op Filter (%d, %d)] Drained others.\n", idy, idx));
+						if (drainTransportBlock.isLast == TRUE)
+						{
+							drainIsDone = TRUE;
+						}
+					}
+				}
+			}
+			else
+			{
+				EMULATOR_PRINT(("[Op Filter (%d, %d)] Commit. pSum value: %#04x \n", idy, idx, pSum));
+			}
+			
+			if (writePSum == true)
+			{
+				write_channel_intel(channel_drain[idy][idx], drainTransportBlock);
+			}
 		}
 
 		//=========Next state update==============
@@ -4300,7 +4355,8 @@ __kernel void kernelOperandFilter ()
 				nextWeightIsLast, //thisLastTB
 				activationFilterDone,
 				validWeightMac,
-				validActivationMac
+				validActivationMac,
+				drainIsDone
 			);
 
 		nextActivationFilterInstruction = sparseOperandFilterStateUpdate (
@@ -4314,7 +4370,8 @@ __kernel void kernelOperandFilter ()
 				nextActivationIsLast, //thisLastTB
 				weightFilterDone,
 				validActivationMac,
-				validWeightMac
+				validWeightMac,
+				drainIsDone
 			);
 		//========================================
 		
@@ -4358,6 +4415,8 @@ __kernel void kernelOperandFilter ()
 			regWeightBitmaskBytes.bytes[i] = nextWeightBitmaskBytes.bytes[i];
 			regActivationBitmaskBytes.bytes[i] = nextActivationBitmaskBytes.bytes[i];
 		}
+
+		regMaxTransportID = nextMaxTransportID;
 
 		//regMutualBitmask = nextMutualBitmask;
 		
