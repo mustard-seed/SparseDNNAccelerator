@@ -456,7 +456,7 @@ protected:
             unsigned char _sizeOutputTileHeight,
             bool _flagEnableRelu,
             e_tensor_type eTensorType,
-            float _bias = 2.0f,
+            float _bias = 0.0f,
             bool _flagCompressionOutput = true,
             float denseProb = 1.0f
             )

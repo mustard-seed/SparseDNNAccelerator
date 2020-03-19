@@ -3118,7 +3118,12 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 #define OPERAND_FILTER_FILTER 0x3
 #define OPERAND_FILTER_MAC_SYNC 0x4
 #define OPERAND_FILTER_FILTER_SYNC 0x5
-#define OPERAND_FILTER_DRAIN_OTHERS 0x6
+#define OPERAND_FILTER_COMMIT 0x6
+
+#define STATE_DRAIN_TRANSPORT_SYNC 0x0
+#define STATE_DRAIN_TRANSPORT_DRAIN_SELF 0X1
+#define STATE_DRAIN_TRANSPORT_DRAIN_OTHERS 0x2
+typedef uint2_t t_drain_instruction;
 
 #ifndef SPARSE_UTILITY
 #define SPARSE_UTILITY
@@ -3415,7 +3420,7 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 			t_flag otherIsLast,
 			t_flag thisMacAvailable,
 			t_flag otherMacAvailable,
-			t_flag drainDone
+			t_flag swap
 		)
 	{
 		t_instruction nextInstruction = currentInstruction;
@@ -3501,27 +3506,23 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 						}
 					}
 				}
-			} //OPERAND_FILTER_MAC_SYNC
-
+			} 
+			break;//OPERAND_FILTER_MAC_SYNC
 			case (OPERAND_FILTER_FILTER_SYNC) :{
 				if (otherIsLast == TRUE)
 				{
-					nextInstruction = OPERAND_FILTER_DRAIN_OTHERS;
-					if (drainDone == TRUE)
-					{
-						nextInstruction = OPERAND_FILTER_READ_BIAS;
-					}
+					nextInstruction = OPERAND_FILTER_COMMIT;
 				}
 			}
-			break; //OPERAND_FILTER_WIN_SYNC
-
-			case (OPERAND_FILTER_DRAIN_OTHERS) :{
-				if (drainDone == TRUE)
+			break; //OPERAND_FILTER_FILTER_SYNC
+			case (OPERAND_FILTER_COMMIT) :{
+				if (swap == TRUE)
 				{
 					nextInstruction = OPERAND_FILTER_READ_BIAS;
 				}
 			}
-			break; //OPERAND_FILTER_WIN_SYNC
+			break; //OPERAND_FILTER_COMMIT
+
 			default:
 			break;
 		} //end of switch. weight FilterInstruction
@@ -3894,10 +3895,17 @@ __kernel void kernelOperandFilter ()
 		int idy = 0;
 	#endif	
 
-	//Psum
-	t_accumulator pSum = 0;
-
-	unsigned char regMaxTransportID = 0;
+	//Psum and drain parameters
+	t_accumulator pSum[2];
+	unsigned char regMaxTransportID[2];
+	#pragma unroll
+	for (int i=0; i<2; i++)
+	{
+		pSum[i] = 0;
+		regMaxTransportID[i] = 0;
+	}
+	uint1_t drainSide = 0;
+	t_drain_instruction drainInstruction = STATE_DRAIN_TRANSPORT_SYNC;
 
 	//========Weight filter states=========
 	t_instruction weightFilterInstruction = OPERAND_FILTER_READ_BIAS;
@@ -4016,8 +4024,10 @@ __kernel void kernelOperandFilter ()
 		t_start nextActivationWindowIndex = regActivationWindowStartIndex;
 		t_buffer_size nextActivationBufferSize = regActivationBufferSize;
 
-		t_flag drainIsDone = FALSE;
-		unsigned char nextMaxTransportID = regMaxTransportID;
+		t_flag swap = FALSE;
+		//GOTTCHA: MUST APPLY THE AND MASK AFTER NEGATION !!!
+		unsigned char nextMaxTransportID = regMaxTransportID[(~drainSide) & 0x01];
+		t_drain_instruction nextDrainInstruction = drainInstruction;
 
 		//t_bitmask nextMutualBitmask = regMutualBitmask;
 
@@ -4277,7 +4287,8 @@ __kernel void kernelOperandFilter ()
 		*/
 		if ( (weightFilterInstruction == OPERAND_FILTER_READ_BIAS) && (weightTBAvailable == TRUE) )
 		{
-			pSum = transferBlock2Bias(weightBlock.values);
+			//GOTTCHA: MUST APPLY THE AND MASK AFTER NEGATION !!!
+			pSum[(~drainSide) & 0x01] = transferBlock2Bias(weightBlock.values);
 		}
 		else if ( (validActivationMac == TRUE) && (validWeightMac == TRUE))
 		{
@@ -4294,40 +4305,42 @@ __kernel void kernelOperandFilter ()
 					nextMacActivationBuffer.values[3] & 0xFF));
 
 			t_accumulator tempPSum = madd(nextMacActivationBuffer, nextMacWeightBuffer);
-			pSum += tempPSum;
+			//GOTTCHA: MUST APPLY THE AND MASK AFTER NEGATION !!!
+			pSum[(~drainSide) & 0x01] += tempPSum;
 		}
 
 		//=====================================
 		
 		/*
-			Writting the output
+			Drain output
 		*/
-		if ( ((weightFilterInstruction == OPERAND_FILTER_FILTER_SYNC) && (activationFilterInstruction == OPERAND_FILTER_FILTER_SYNC))
-				|| (activationFilterInstruction == OPERAND_FILTER_DRAIN_OTHERS) 
-			)
+		if ( (drainInstruction == STATE_DRAIN_TRANSPORT_DRAIN_SELF) 
+				||
+			 (drainInstruction == STATE_DRAIN_TRANSPORT_DRAIN_OTHERS) 
+		   )
 		{
 			#if defined(FULL_SYSTEM)
-				drainIsDone = (nextMaxTransportID == idy) ? TRUE : FALSE;
+				//GOTTCHA: MUST APPLY THE AND MASK AFTER NEGATION !!!
+				t_flag drainedLast = (regMaxTransportID[drainSide & 0x01] == idy) ? TRUE : FALSE;
 			#else
-				drainIsDone = TRUE;
+				t_flag drainedLast = TRUE;
 			#endif
-
 			t_conv_drain_tagged drainTransportBlock;
-			drainTransportBlock.value = pSum;
-			drainTransportBlock.isLast = (unsigned char) drainIsDone;
+			//GOTTCHA: MUST APPLY THE AND MASK AFTER NEGATION !!!
+			drainTransportBlock.value = pSum[drainSide & 0x01];
+			drainTransportBlock.isLast = (unsigned char) drainedLast;
 			bool writePSum = true;
-			if (activationFilterInstruction == OPERAND_FILTER_DRAIN_OTHERS)
+			if (drainInstruction == STATE_DRAIN_TRANSPORT_DRAIN_OTHERS)
 			{
 				if (idy < (PE_ROWS - 1))
 				{
-					drainIsDone = FALSE;
 					drainTransportBlock = read_channel_nb_intel(channel_drain[idy+1][idx], &writePSum);
 					if (writePSum == true)
 					{
 						EMULATOR_PRINT(("[Op Filter (%d, %d)] Drained others.\n", idy, idx));
 						if (drainTransportBlock.isLast == TRUE)
 						{
-							drainIsDone = TRUE;
+							nextDrainInstruction = STATE_DRAIN_TRANSPORT_SYNC;
 						}
 					}
 				}
@@ -4335,12 +4348,33 @@ __kernel void kernelOperandFilter ()
 			else
 			{
 				EMULATOR_PRINT(("[Op Filter (%d, %d)] Commit. pSum value: %#04x \n", idy, idx, pSum));
+				if (drainTransportBlock.isLast == TRUE)
+				{
+					nextDrainInstruction = STATE_DRAIN_TRANSPORT_SYNC;
+				}
+				else
+				{
+					nextDrainInstruction = STATE_DRAIN_TRANSPORT_DRAIN_OTHERS;
+				}
 			}
 			
 			if (writePSum == true)
 			{
 				write_channel_intel(channel_drain[idy][idx], drainTransportBlock);
 			}
+		}
+
+		//GOTTCHA: MUST APPLY THE AND MASK AFTER NEGATION !!!
+		regMaxTransportID[(~drainSide) & 0x01] = nextMaxTransportID;
+
+		if ( (weightFilterInstruction == OPERAND_FILTER_COMMIT) && (activationFilterInstruction == OPERAND_FILTER_COMMIT)
+				&& (drainInstruction == STATE_DRAIN_TRANSPORT_SYNC) 
+			)
+		{
+			swap = TRUE;
+			//GOTTCHA: MUST APPLY THE AND MASK AFTER NEGATION !!!
+			drainSide = (~drainSide) & 0x01;	
+			nextDrainInstruction = STATE_DRAIN_TRANSPORT_DRAIN_SELF;	
 		}
 
 		//=========Next state update==============
@@ -4356,7 +4390,7 @@ __kernel void kernelOperandFilter ()
 				activationFilterDone,
 				validWeightMac,
 				validActivationMac,
-				drainIsDone
+				swap
 			);
 
 		nextActivationFilterInstruction = sparseOperandFilterStateUpdate (
@@ -4371,7 +4405,7 @@ __kernel void kernelOperandFilter ()
 				weightFilterDone,
 				validActivationMac,
 				validWeightMac,
-				drainIsDone
+				swap
 			);
 		//========================================
 		
@@ -4416,7 +4450,7 @@ __kernel void kernelOperandFilter ()
 			regActivationBitmaskBytes.bytes[i] = nextActivationBitmaskBytes.bytes[i];
 		}
 
-		regMaxTransportID = nextMaxTransportID;
+		drainInstruction = nextDrainInstruction;
 
 		//regMutualBitmask = nextMutualBitmask;
 		
