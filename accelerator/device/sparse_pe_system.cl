@@ -3132,8 +3132,8 @@ typedef uint2_t t_drain_instruction;
 	typedef uint3_t t_instruction;
 	//typedef unsigned char t_bitmask;
 	typedef uint5_t t_start;
-	typedef uint2_t t_buffer_size;
-	typedef int5_t t_num_tb;
+	typedef uint3_t t_buffer_size;
+	typedef int6_t t_num_tb;
 	typedef uint1_t t_flag;
 
 	typedef struct {

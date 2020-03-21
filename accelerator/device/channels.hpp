@@ -24,8 +24,8 @@ channel unsigned char channel_drain_token[PE_ROWS][PE_COLS] __attribute__((depth
 #ifdef PE_SYSTEM
 
 
-channel t_transferblock_tagged channel_dpWeightInput[PE_ROWS][PE_COLS] __attribute__((depth(0)));
-channel t_transferblock_tagged channel_dpActivationInput[PE_ROWS][PE_COLS] __attribute__((depth(0)));
+channel t_transferblock_tagged channel_dpWeightInput[PE_ROWS][PE_COLS] __attribute__((depth(CHANNEL_DEPTH)));
+channel t_transferblock_tagged channel_dpActivationInput[PE_ROWS][PE_COLS] __attribute__((depth(CHANNEL_DEPTH)));
 
 channel t_accumulator channel_peDrainOutput[PE_ROWS][PE_COLS] __attribute__((depth(0)));
 
