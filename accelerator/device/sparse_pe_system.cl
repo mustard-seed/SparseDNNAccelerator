@@ -3131,9 +3131,9 @@ typedef uint2_t t_drain_instruction;
 	//Define the instruction type
 	typedef uint3_t t_instruction;
 	//typedef unsigned char t_bitmask;
-	typedef uint5_t t_start;
-	typedef uint3_t t_buffer_size;
-	typedef int6_t t_num_tb;
+	typedef uint6_t t_start;
+	typedef uint2_t t_buffer_size;
+	typedef int7_t t_num_tb;
 	typedef uint1_t t_flag;
 
 	typedef struct {
@@ -3760,10 +3760,16 @@ typedef uint2_t t_drain_instruction;
 
 			currentStartIndex//unsigned char startIndex
 			);
+	
+		#if defined(ARRIA10)
+			unsigned short tempRegMaskFilterOutput = __fpga_reg(maskFilterOutput);
+		#else
+			unsigned short tempRegMaskFilterOutput = maskFilterOutput;
+		#endif
 
 		//TODO: Change this if the smallBufferMask implementation changes
-		unsigned char operandSelectMask = maskFilterOutput & 0x0FF;
-		*pNextStartIndex = ((maskFilterOutput >> 8) & 0x0FF);
+		unsigned char operandSelectMask = tempRegMaskFilterOutput & 0x0FF;
+		*pNextStartIndex = ((tempRegMaskFilterOutput >> 8) & 0x0FF);
 
 		ulong4 bufferUpdateBus = smallBufferMacBufferUpdate(
 				operandSelectMask, //inputSelectBitmask

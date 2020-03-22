@@ -68,7 +68,7 @@
 	#define PE_COLS 2
 #endif
 
-#define CHANNEL_DEPTH 0
+#define CHANNEL_DEPTH 2
 
 //Encoding weight length
 #define ENCODING_LENGTH 64
@@ -80,9 +80,9 @@
 #define MAX_SIMD_BLOCK_INDEX 0x0FF
 
 //TODO: Change COMPRESSION_WINDOW_SIZE, TRANSFER_SIZE, CLUSTER_SIZE, and related offsets and masks if compression configuration changes
-#define COMPRESSION_WINDOW_SIZE 16 //compression window size in terms of clusters
-#define CLUSTER_TO_WINDOW_SHIFT 0X4
-#define CLUSTER_TO_WINDOW_REMAINDER_MASK 0x0F
+#define COMPRESSION_WINDOW_SIZE 32 //compression window size in terms of clusters
+#define CLUSTER_TO_WINDOW_SHIFT 0X5
+#define CLUSTER_TO_WINDOW_REMAINDER_MASK 0x01F
 #define TRANSFER_SIZE 2 //transfer block size in terms of clusters
 #define CLUSTER_TO_TRANSFER_SIZE_SHIFT 0X1
 #define CLUSTER_TO_TRANSEFER_SIZE_REMAINDER 0X1
@@ -97,9 +97,9 @@
 #define BITMASK_LENGTH COMPRESSION_WINDOW_SIZE
 #define MAX_NUM_OUTPUT TRANSFER_SIZE
 #define BITMASK_ACCUM_COUNT_BITWIDTH 2 //$rtoi($clog2(MAX_NUM_OUTPUT) + 1.0)
-#define BITMASK_INDEX_BITWIDTH 3 //$rtoi($ceil($clog2(COMPRESSION_WINDOW_SIZE)))
-#define NUM_BITMASK_BYTES 2
-#define NUM_ACCUM_BITMASK_BYTES 4
+#define BITMASK_INDEX_BITWIDTH 5 //$rtoi($ceil($clog2(COMPRESSION_WINDOW_SIZE)))
+#define NUM_BITMASK_BYTES 4
+#define NUM_ACCUM_BITMASK_BYTES 8
 #define NUM_SIMD_WORDS (CLUSTER_SIZE*TRANSFER_SIZE)
 
 //=========================================

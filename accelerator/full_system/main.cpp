@@ -45,7 +45,7 @@
 
 //#define PROFILE
 //#define PLAY
-//#define SPARSE_LEVEL_TEST
+#define SPARSE_LEVEL_TEST
 #define TEST_TYPE TEST
 #define REPEAT 1
 #define EMULATE
