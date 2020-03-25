@@ -45,10 +45,10 @@
 
 //#define PROFILE
 //#define PLAY
-#define SPARSE_LEVEL_TEST
+//#define SPARSE_LEVEL_TEST
 #define TEST_TYPE TEST
 #define REPEAT 1
-//#define EMULATE
+#define EMULATE
 
 #if defined(C5SOC) //Hack for ARMv7, otherwise chrono won't work
 __asm__(".symver _ZNSt6chrono3_V212system_clock3nowEv,_ZNSt6chrono12system_clock3nowEv@GLIBCXX_3.4.11");
@@ -129,7 +129,7 @@ protected:
         status = clPlatform.getDevices(CL_DEVICE_TYPE_ALL, &devices);
         aocl_utils_cpp::checkError(status, "Failed to query the devices");
         clDevice = devices[0];
-        clContext = cl::Context(clDevice
+        clContext = cl::Context({clDevice}
                                 ,NULL
                                 ,&aocl_utils_cpp::oclContextCallback
                                 ,NULL
