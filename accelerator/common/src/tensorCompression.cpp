@@ -172,7 +172,7 @@ AlignedTensor::AlignedTensor(
                                     value = 0x0;
                                 }
 
-                                transferBlock.values[iClusterInTB*TRANSFER_SIZE+iScalarInCluster] = value;
+                                transferBlock.values[iClusterInTB*CLUSTER_SIZE+iScalarInCluster] = value;
                             }
                         } //over one TB
 
@@ -246,7 +246,7 @@ void AlignedTensor::decodeTensor(
                             {
                                 if (iChannel <= (this->maxScalarIndexInChannelGroup))
                                 {
-                                    signed char value = transferBlock.values[iClusterInTB*TRANSFER_SIZE + iScalarInCluster];
+                                    signed char value = transferBlock.values[iClusterInTB*CLUSTER_SIZE + iScalarInCluster];
                                     _fixedPointVector.at(iFullVector) = fixedPointNumber((signed char) value, _fracWidth, _intWidth);
 
                                     iFullVector++;

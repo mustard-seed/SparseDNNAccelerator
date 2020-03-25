@@ -2351,204 +2351,6 @@ __kernel void kernelActivationTransport ()
 	} //while
 }
 
-// #define STATE_DRAIN_TRANSPORT_DRAIN_SELF 0X1
-// #define STATE_DRAIN_TRANSPORT_DRAIN_OTHERS 0x2
-// __attribute__((max_global_work_dim(0)))
-// #ifdef FULL_SYSTEM
-// __attribute__((num_compute_units(PE_ROWS, PE_COLS)))
-// #endif
-// __attribute__ ((autorun))
-// __kernel void kernelDrainTransport ()
-// {
-// 	#ifdef FULL_SYSTEM
-// 		int idx = get_compute_id(1);
-// 		int idy = get_compute_id(0);
-// 	#else
-// 		int idx = 0;
-// 		int idy = 0;
-// 	#endif
-
-// 	typedef uint2_t t_drain_state;
-
-// 	t_drain_state drainState = STATE_DRAIN_TRANSPORT_DRAIN_SELF;
-
-// 	while (true)
-// 	{
-// 		t_conv_drain_tagged drainTransportBlock;
-// 		t_drain_state tempState = drainState;
-
-// 		//Drain from PE and get the initialization
-// 		if (drainState == STATE_DRAIN_TRANSPORT_DRAIN_SELF)
-// 		{
-// 			//Read the drain token and the PE output
-// 			t_accumulator peResult = read_channel_intel(channel_peDrainOutput[idy][idx]);
-// 			unsigned char isLastDrain = read_channel_intel(channel_drain_token[idy][idx]);
-// 			drainTransportBlock.isLast = isLastDrain;
-// 			drainTransportBlock.value = peResult;
-
-// 			EMULATOR_PRINT(("[DRAIN TRANSPORT (%d, %d)] Drained PSum.\n\n", idy, idx));
-
-// #if defined(FULL_SYSTEM)
-// 			if ((isLastDrain == FALSE) && (idy < (PE_ROWS - 1) ))
-// 			{
-// 				tempState = STATE_DRAIN_TRANSPORT_DRAIN_OTHERS;
-// 			}
-// 			else
-// 			{
-// 				tempState = STATE_DRAIN_TRANSPORT_DRAIN_SELF;
-// 			}
-// #else
-// 				tempState = STATE_DRAIN_TRANSPORT_DRAIN_SELF;
-// #endif
-// 		}
-// #if defined(FULL_SYSTEM)
-// 		else if (drainState == STATE_DRAIN_TRANSPORT_DRAIN_OTHERS)
-// 		{
-// 			if (idy < (PE_ROWS - 1))
-// 			{
-// 				drainTransportBlock = read_channel_intel(channel_drain[idy+1][idx]);
-// 				if (drainTransportBlock.isLast == TRUE)
-// 				{
-// 					tempState = STATE_DRAIN_TRANSPORT_DRAIN_SELF;
-// 				}
-
-// 			}
-// 		}
-// #endif
-// 		//Will generated "unitialized usage warning", but it is actually ok
-// 		write_channel_intel(channel_drain[idy][idx], drainTransportBlock);
-// 		drainState = tempState;
-// 	}
-// }
-
-
-
-// #define STATE_ACTIVATION_TRANSPORT_READ 0X1
-// #define STATE_ACTIVATION_TRANSPORT_DRAIN_SELF 0x2
-// #define STATE_ACTIVATION_TRANSPORT_DRAIN_OTHERS 0x4
-
-// __attribute__((max_global_work_dim(0)))
-// #ifdef FULL_SYSTEM
-// __attribute__((num_compute_units(PE_ROWS, PE_COLS)))
-// #endif
-// __attribute__ ((autorun))
-// __kernel void kernelActivationTransport ()
-// {
-// 	typedef uint3_t t_state;
-
-// #ifdef FULL_SYSTEM
-// 	int idx = get_compute_id(1);
-// 	int idy = get_compute_id(0);
-// #else
-// 	int idx = IDX;
-// 	int idy = IDY;
-// #endif
-
-// 	t_state state = STATE_ACTIVATION_TRANSPORT_READ;
-// 	unsigned char numOtherPSumToDrain;
-// 	unsigned char countOtherPSum;
-
-// 	while (true)
-// 	{
-// 		t_state nextState = state;
-// 		t_accumulator pSum;
-// 		if (state == STATE_ACTIVATION_TRANSPORT_READ)
-// 		{
-// 			t_transferblock_tagged block;
-// #ifdef FULL_SYSTEM
-// 			block = read_channel_intel(channel_activation[idy][idx]);
-// #else
-// 			block = read_channel_intel(channel_activation[0][0]);
-// #endif
-
-// 			unsigned char maxTransportID = getMaxTransferID(block);
-
-// 			if (idy < (PE_ROWS - 1)){
-// 				if ( idy < maxTransportID ) {
-// 					//EMULATOR_PRINT ( ("[kernelWeightTransport]: Waiting to pass an activation block to the output\n") );
-// #ifdef FULL_SYSTEM
-// 			write_channel_intel(channel_activation[idy+1][idx], block);
-// #else
-// 			write_channel_intel(channel_activation[0][1], block);
-// #endif
-// 				}
-// 			}
-
-// 			unsigned char isLastTemp = getIsLast(block);
-
-// 			if (isLastTemp == TRUE)
-// 			{
-// #ifdef FULL_SYSTEM
-// 			EMULATOR_PRINT(("[ACTIVATION TRANSPORT (%d, %d)] End of activation compression window detected.\n\n", idy, idx));
-// #else
-// 			EMULATOR_PRINT(("[ACTIVATION TRANSPORT] End of activation compression window detected.\n\n"));
-// #endif
-// 				nextState = STATE_ACTIVATION_TRANSPORT_DRAIN_SELF;	
-// 				numOtherPSumToDrain = getMaxTransferID(block) - (unsigned char) idy;
-// 				countOtherPSum = 0;
-// 			}
-
-// #ifdef FULL_SYSTEM
-// 			write_channel_intel(channel_dpActivationInput[idy][idx], block);
-// #else
-// 			write_channel_intel(channel_dpActivationInput[0][0], block);
-// #endif
-			 
-
-// 		} //STATE_ACTIVATION_TRANSPORT_READ
-// 		else if (state == STATE_ACTIVATION_TRANSPORT_DRAIN_SELF)
-// 		{
-// #ifdef FULL_SYSTEM
-// 			pSum = read_channel_intel(channel_peDrainOutput[idy][idx]);
-// 			EMULATOR_PRINT(("[ACTIVATION TRANSPORT (%d, %d)] Drained from PE\n\n", idy, idx));
-// #else
-// 			pSum = read_channel_intel(channel_peDrainOutput[0][0]);
-// 			EMULATOR_PRINT(("[ACTIVATION TRANSPORT] Drained from PE\n\n"));
-// #endif
-// 			if (countOtherPSum == numOtherPSumToDrain)
-// 			{
-// 				nextState = STATE_ACTIVATION_TRANSPORT_READ;
-// 			}
-// 			else
-// 			{
-// 				nextState = STATE_ACTIVATION_TRANSPORT_DRAIN_OTHERS;
-// 			}
-// 		} //STATE_ACTIVATION_TRANSPORT_DRAIN_SELF
-// 		else if (state == STATE_ACTIVATION_TRANSPORT_DRAIN_OTHERS)
-// 		{
-// 			//TODO: change the following in deply
-// #ifdef FULL_SYSTEM
-// 			if (idy < PE_ROWS - 1)
-// 			{
-// 				pSum = read_channel_intel(channel_drain[idy+1][idx]);
-// 				EMULATOR_PRINT(("[ACTIVATION TRANSPORT (%d, %d)] Drained from others. %d more to drain\n\n", idy, idx, numOtherPSumToDrain-countOtherPSum-1));
-// 			}
-// #else
-// 				pSum = read_channel_intel(channel_drain[1][0]);
-// 				EMULATOR_PRINT(("[ACTIVATION TRANSPORT] Drained from others. %d more to drain\n\n", idy, idx, numOtherPSumToDrain-countOtherPSum-1));
-// #endif
-// 			countOtherPSum++;
-// 			if (countOtherPSum == numOtherPSumToDrain)
-// 			{
-// 				nextState = STATE_ACTIVATION_TRANSPORT_READ;
-// 			} 
-// 		} //STATE_ACTIVATION_TRANSPORT_DRAIN_OTHERS
-
-// 		if ((state == STATE_ACTIVATION_TRANSPORT_DRAIN_OTHERS) 
-// 			|| 
-// 			(state == STATE_ACTIVATION_TRANSPORT_DRAIN_SELF))
-// 		{
-// #ifdef FULL_SYSTEM
-// 			write_channel_intel(channel_drain[idy][idx], pSum);
-// #else
-// 			write_channel_intel(channel_drain[0][0], pSum);
-// #endif
-// 		}
-
-// 		state = nextState;
-// 	}
-// }
-// 
 // //MAC Operands
 typedef struct __attribute__((packed)) {
 	char values [NUM_SIMD_WORDS];
@@ -2588,529 +2390,12 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 			#error Unsupported FPGA type!
 			#endif
 		}
-	//#endif
-	//#ifdef FLEXIBLE_BITMASK_COMPRESSION
-	/*
-		#pragma unroll
-		for(int i=0; i<SIMD_SIZE/2; i++){
-			//output += input.data[i]*weights.data[i];
-			// use packed DSP blocks to improve efficiency
-			#if defined (ARRIA10)
-				output += a10_mac_8bitx2(
-					activations.values[i*2],
-					weights.values[i*2],
-					activations.values[i*2+1],
-					weights.values[i*2+1]
-					);
-			#elif defined (C5SOC)
-				output += c5_mac_8bitx2(
-						activations.values[i*2],
-						weights.values[i*2],
-						activations.values[i*2+1],
-						weights.values[i*2+1]
-					);
-			#else
-			#error Unsupported FPGA type!
-			#endif
-		}
-		*/
-	//#endif
 
 	return output;
 }
 
 #if defined (SPARSE_SYSTEM)
-// #define ASSEMBLER_STATE_LOAD_BITMASK 0X0
-// #define ASSEMBLER_STATE_LOAD_VALUE 0X1
-// //#define ASSEMBLER_STATE_ALIGN 0x2
-// #define ASSEMBLER_STATE_WAIT 0x2
-// #define ASSEMBLER_STATE_LOAD_BIAS 0x3
 
-// #define BITWIDTH_COMPRESSION_WINDOW_INDEX 3
-// #define MASK_COMPRESSION_WINDOW_INDEX 0x7
-
-// #define MAC_STATE_WAIT 0x0
-// #define MAC_STATE_ALIGN 0x1
-// #define MAC_STATE_PROCESS_WINDOW 0x2
-// #define MAC_STATE_WRITE_PSUM 0x3
-// #define MAC_STATE_LOAD_BIAS 0x4
-
-// //DENSE TODO; Replace it with a dense PE
-// __attribute__((task))
-// __attribute__((max_global_work_dim(0)))
-// #ifdef FULL_SYSTEM
-// __attribute__((num_compute_units(PE_ROWS, PE_COLS)))
-// #endif
-// __attribute__((autorun))
-// __kernel void kernelPE ()
-// {
-	
-// #ifdef FULL_SYSTEM
-// 	int idx = get_compute_id(1);
-// 	int idy = get_compute_id(0);
-// #endif
-
-// 	//================Ping-ponged registers========================
-// 	//BRAM for storing the compression windows
-// 	// t_cluster activationWindow[COMPRESSION_WINDOW_SIZE+1][2]  __attribute__((numbanks(1))); 
-// 	// t_cluster weightWindow[COMPRESSION_WINDOW_SIZE+1][2]  __attribute__((numbanks(1))); 
-// 	t_cluster activationWindow[COMPRESSION_WINDOW_SIZE+1][2]; 
-// 	t_cluster weightWindow[COMPRESSION_WINDOW_SIZE+1][2]; 
-
-// 	//Flags that indicates whether we are at the last window
-// 	uint1_t isLast[2] = {FALSE, TRUE};
-// 	unsigned char bitmaskA[2];
-// 	unsigned char bitmaskW[2];
-// 	t_accumulator bias[2];
-
-// 	uint1_t regLoadSide = 0x0;
-
-// 	//========Assembler side registers====================
-// 	unsigned char countActivation;
-// 	unsigned char countWeight;
-// 	unsigned char numActivation;
-// 	unsigned char numWeight;
-// 	uint2_t stateActivation = ASSEMBLER_STATE_LOAD_BIAS;
-// 	uint2_t stateWeight = ASSEMBLER_STATE_LOAD_BIAS;
-// 	//unsigned long alignmentData;
-
-
-// 	//=========MAC side logic========================
-// 	uint3_t stateMac = MAC_STATE_WAIT;
-// 	t_accumulator pSum = 0;
-// 	unsigned char countOperands;
-// 	unsigned char numOperands;
-// 	unsigned int indicesW;
-// 	unsigned int indicesA;
-
-// 	//================Debug====================
-// 	//unsigned short debugCount = 0;
-
-// 	//#pragma ivdep array(activationWindow)
-// 	//#pragma ivdep array(weightWindow)
-// 	//#pragma ivdep safelen(7)
-// 	#pragma ivdep
-// 	while (true)
-// 	{
-
-// 		//================ACTIVATION========================
-		
-// 		uint2_t nextStateActivation = stateActivation;
-// 		{ 
-// 			if (stateActivation == ASSEMBLER_STATE_LOAD_BITMASK
-// 				|| stateActivation == ASSEMBLER_STATE_LOAD_VALUE)
-// 			{
-// 				t_transferblock_tagged activationTransferBlock;
-// 				bool activationReadSuccess;
-
-// #ifdef FULL_SYSTEM
-// 				activationTransferBlock = read_channel_nb_intel (
-// 							channel_dpActivationInput[idy][idx],
-// 							&activationReadSuccess
-// 						);
-// #else
-// 				activationTransferBlock = read_channel_nb_intel (
-// 							channel_dpActivationInput[0][0],
-// 							&activationReadSuccess
-// 						);
-// #endif
-// 				if (activationReadSuccess)
-// 				{
-// 					//isLastActivation = activationTransferBlock.isLast;
-// 					//DEBUG_PRINT(("[Assembler] Activation read!\n"));
-
-// 					if (stateActivation == ASSEMBLER_STATE_LOAD_BITMASK)
-// 					{
-// 						unsigned char bitmask = activationTransferBlock.values.values[0].cluster_values[0];
-// 						bitmaskA[regLoadSide & 0x01] = bitmask;
-// 						//numActivation = popCounter(bitmask);
-// 						numActivation = activationTransferBlock.values.values[SURVIVING_COUNT_TRANSFER_BLOCK_INDEX].cluster_values[SURVIVING_COUNT_CLUSTER_INDEX];
-// 						countActivation = 0;
-// #ifdef FULL_SYSTEM
-// 							//EMULATOR_PRINT(("[PE (%d, %d)] bitmaskA: %#04x \n", idy, idx, bitmask));
-// #else
-// 							//EMULATOR_PRINT(("[PE] bitmaskA: %#04x \n", bitmask));
-// #endif
-// 					}
-// 					else
-// 					{
-
-// 						//uint3_t offset = (stateActivation == ASSEMBLER_STATE_LOAD_BITMASK) ?
-// 						//	0X1 : 0X0; 
-
-// 						#pragma unroll
-// 						for (uint3_t i=0; i<TRANSFER_SIZE; i++)
-// 						{
-// 							//if (i >= offset)
-// 							//{
-// 								activationWindow[countActivation+i][regLoadSide & 0x01]
-// 									= activationTransferBlock.values.values[i];
-// 								//EMULATOR_PRINT(("[assembler] activation value: %#04x %#04x \n"
-// 								//	, activationTransferBlock.values.values[i].cluster_values[0] & 0xFF
-// 								//	, activationTransferBlock.values.values[i].cluster_values[1] & 0xFF));
-// 								//EMULATOR_PRINT(("[assembler] activation offset, countActivation: %#04x %#04x\n"
-// 								//	, offset, countActivation));
-// 							//}
-// 						} // for. Transfer the values in the transfer block to the compression window
-
-// 						//if (debugCount < maxDebugCount)
-// 						//{
-// // #ifdef FULL_SYSTEM
-// // 							EMULATOR_PRINT(("[PE (%d %d)] ActivationTransferBlock [0-4]: %#04x %#04x %#04x %#04x\n",
-// // 								idy, idx,
-// // 								activationTransferBlock.values.values[0].cluster_values[0] & 0xFF, 
-// // 								activationTransferBlock.values.values[0].cluster_values[1] & 0xFF,
-// // 								activationTransferBlock.values.values[1].cluster_values[0] & 0xFF,
-// // 								activationTransferBlock.values.values[1].cluster_values[1] & 0xFF));
-// // #else
-// // 							EMULATOR_PRINT(("[PE] ActivationTransferBlock [0-4]: %#04x %#04x %#04x %#04x\n",
-// // 								activationTransferBlock.values.values[0].cluster_values[0] & 0xFF, 
-// // 								activationTransferBlock.values.values[0].cluster_values[1] & 0xFF,
-// // 								activationTransferBlock.values.values[1].cluster_values[0] & 0xFF,
-// // 								activationTransferBlock.values.values[1].cluster_values[1] & 0xFF));
-// // #endif
-// 						//}
-
-// 						countActivation += (unsigned char)(TRANSFER_SIZE);
-// 					}
-
-// 					//State update
-// 					if (countActivation >= numActivation)
-// 					{
-// 						nextStateActivation = ASSEMBLER_STATE_WAIT;
-// 					}
-// 					else {
-// 						nextStateActivation = ASSEMBLER_STATE_LOAD_VALUE;
-// 					}
-
-// 				} // if activationReadSuccess
-// 			} // ASSEMBLER_STATE_LOAD_BITMASK || ASSEMBLER_STATE_LOAD_VALUE 
-// 			else if (stateActivation == ASSEMBLER_STATE_LOAD_BIAS)
-// 			{
-// #ifdef FULL_SYSTEM
-// 				//EMULATOR_PRINT(("[PE (%d %d)] Wait for bias\n", idy, idx));
-// #else
-// 				//EMULATOR_PRINT(("[PE] Wait for bias\n"));
-// #endif
-				
-// 				nextStateActivation = ASSEMBLER_STATE_WAIT;
-// 			}
-// 		}
-// 		//===================================================
-
-// 		//================WEIGHT========================
-		
-// 		uint2_t nextStateWeight = stateWeight;
-// 		{
-// 			bool weightReadSuccess;
-// 			t_transferblock_tagged weightTransferBlock;
-
-// 			if (stateWeight == ASSEMBLER_STATE_LOAD_BITMASK
-// 				|| stateWeight == ASSEMBLER_STATE_LOAD_VALUE
-// 				|| stateWeight == ASSEMBLER_STATE_LOAD_BIAS) 
-// 			{
-// #ifdef FULL_SYSTEM
-// 				weightTransferBlock = read_channel_nb_intel (
-// 							channel_dpWeightInput[idy][idx],
-// 							&weightReadSuccess
-// 						);
-// #else
-// 				weightTransferBlock = read_channel_nb_intel (
-// 							channel_dpWeightInput[0][0],
-// 							&weightReadSuccess
-// 						);
-// #endif
-// 			}
-
-// 			if (stateWeight == ASSEMBLER_STATE_LOAD_BITMASK
-// 				|| stateWeight == ASSEMBLER_STATE_LOAD_VALUE)
-// 			{
-// 				if (weightReadSuccess)
-// 				{
-// 					isLast[regLoadSide & 0x01] = (uint1_t) getIsLast(weightTransferBlock);
-// 					//DEBUG_PRINT(("[Assembler] Weight read!\n"));
-
-// 					if (stateWeight == ASSEMBLER_STATE_LOAD_BITMASK)
-// 					{
-// 						unsigned char bitmask =  weightTransferBlock.values.values[0].cluster_values[0];
-// 						bitmaskW[regLoadSide & 0x01] = bitmask; 
-// 						numWeight = weightTransferBlock.values.values[SURVIVING_COUNT_TRANSFER_BLOCK_INDEX].cluster_values[SURVIVING_COUNT_CLUSTER_INDEX];
-// 						//numWeight = popCounter(bitmask);
-// 						countWeight = 0;
-// #ifdef FULL_SYSTEM
-// 						//EMULATOR_PRINT(("[PE (%d %d)] bitmaskW: %#04x \n", idy, idx, bitmask));
-// #else
-// 						//EMULATOR_PRINT(("[PE] bitmaskW: %#04x \n", bitmask));
-// #endif
-// 					}
-// 					else
-// 					{
-
-// 						//uint3_t offset = (stateWeight == ASSEMBLER_STATE_LOAD_BITMASK) ?
-// 						//	0X1 : 0X0; 
-
-// 						#pragma unroll
-// 						for (uint3_t i=0; i<TRANSFER_SIZE; i++)
-// 						{
-// 							//if (i >= offset)
-// 							//{
-// 								weightWindow[countWeight+i][regLoadSide & 0x01]
-// 									= weightTransferBlock.values.values[i];
-// 								//EMULATOR_PRINT(("[assembler] weight value: %#04x %#04x \n"
-// 								//	, weightTransferBlock.values.values[i].cluster_values[0] & 0xFF
-// 								//	, weightTransferBlock.values.values[i].cluster_values[1] & 0xFF));
-// 							//}
-// 						} // for. Transfer the values in the transfer block to the compression window
-
-// 						//if (debugCount < maxDebugCount)
-// 						//{
-// // #ifdef FULL_SYSTEM
-// // 						EMULATOR_PRINT(("[PE (%d %d)] weightTransferBlock [0-4]: %#04x %#04x %#04x %#04x\n",
-// // 								idy, idx,
-// // 								weightTransferBlock.values.values[0].cluster_values[0] & 0xFF, 
-// // 								weightTransferBlock.values.values[0].cluster_values[1] & 0xFF,
-// // 								weightTransferBlock.values.values[1].cluster_values[0] & 0xFF,
-// // 								weightTransferBlock.values.values[1].cluster_values[1] & 0xFF));
-// // #else
-// // 						EMULATOR_PRINT(("[PE] weightTransferBlock [0-4]: %#04x %#04x %#04x %#04x\n",
-// // 								weightTransferBlock.values.values[0].cluster_values[0] & 0xFF, 
-// // 								weightTransferBlock.values.values[0].cluster_values[1] & 0xFF,
-// // 								weightTransferBlock.values.values[1].cluster_values[0] & 0xFF,
-// // 								weightTransferBlock.values.values[1].cluster_values[1] & 0xFF));
-// // #endif
-// 						//}
-
-// 						countWeight += (unsigned char)(TRANSFER_SIZE);
-// 					}
-
-// 					//State update
-// 					if (countWeight >= numWeight)
-// 					{
-// 						nextStateWeight = ASSEMBLER_STATE_WAIT;
-// 					}
-// 					else 
-// 					{
-// 						nextStateWeight = ASSEMBLER_STATE_LOAD_VALUE;
-// 					}
-
-// 				} // if weightReadSuccess
-// 			} //ASSEMBLER_STATE_LOAD_BITMASK || ASSEMBLER_STATE_LOAD_VALUE
-// 			else if (stateWeight == ASSEMBLER_STATE_LOAD_BIAS)
-// 			{
-// 				if (weightReadSuccess)
-// 				{
-// #ifdef FULL_SYSTEM
-// 					//EMULATOR_PRINT(("[PE (%d %d)] Wait for bias\n", idy, idx));
-// #else
-// 					//EMULATOR_PRINT(("[PE] Wait for bias\n"));
-// #endif
-// 					bias[regLoadSide & 0x01] = transferBlock2Bias(weightTransferBlock.values);
-// 					nextStateWeight = ASSEMBLER_STATE_WAIT;
-// 				}
-// 			}
-// 		}
-// 		//===================================================
-
-// 		//==================MAC states===================
-// 		uint3_t nextStateMac = stateMac;
-
-// 		if (stateMac == MAC_STATE_ALIGN)
-// 		{
-			
-// 			unsigned long alignmentData = operandMatcher8(
-// 				bitmaskW [(~regLoadSide) & 0x1],
-// 				bitmaskA [(~regLoadSide) & 0x1]
-// 			);
-			
-			
-// 			//unsigned long alignmentData = 0;
-// 			numOperands = (alignmentData >> 48) & 0xFF;
-// 			indicesW = (alignmentData >> 24) & 0xFFFFFF;
-// 			indicesA = (alignmentData) & 0xFFFFFF;
-// 			countOperands = 0; 
-// 			//EMULATOR_PRINT ( ("[aligner]: indicesW: %#06x indicesA: %#06x numOperands: %#04x \n"
-// 			//		, indicesW, indicesA,  numOperands) );
-
-// 			/*
-// 			if (countOperands >= numOperands)
-// 			{
-// 				if (isLast[(~regLoadSide) & 0x1])
-// 				{
-// 					nextStateMac = MAC_STATE_WRITE_PSUM;
-// 				}
-// 				else
-// 				{
-// 					nextStateMac = MAC_STATE_WAIT;
-// 				}
-// 			}
-// 			else
-// 			{
-// 				nextStateMac = MAC_STATE_PROCESS_WINDOW;
-// 			}
-// 			*/
-// 			nextStateMac = MAC_STATE_PROCESS_WINDOW;
-// 		}
-// 		else if (stateMac == MAC_STATE_PROCESS_WINDOW)
-// 		{
-
-// 			t_simd_operand simdActivations;
-// 			t_simd_operand simdWeights;
-// 			t_cluster zeros;
-// 			#pragma unroll
-// 			for (int i=0; i<CLUSTER_SIZE; i++)
-// 			{
-// 				zeros.cluster_values[i] = 0x0;
-// 			}
-
-
-// 			#pragma unroll
-// 			for (unsigned char i=0; i<SIMD_SIZE; i++)
-// 			{
-// 				unsigned char indexW = 
-// 					(indicesW >> (i*BITWIDTH_COMPRESSION_WINDOW_INDEX))
-// 					& MASK_COMPRESSION_WINDOW_INDEX;
-// 				t_cluster w = ((countOperands + i) < numOperands) ?
-// 					weightWindow[indexW][(~regLoadSide) & 0x01] : zeros;
-// 				//char w = weightWindow[i][(~regLoadSide) & 0x1];
-// 				//simdWeights.values[i] = w;
-
-// 				unsigned char indexA = 
-// 					(indicesA >> (i*BITWIDTH_COMPRESSION_WINDOW_INDEX))
-// 					& MASK_COMPRESSION_WINDOW_INDEX;
-// 				t_cluster a = ((countOperands + i) < numOperands) ?
-// 					activationWindow[indexA][(~regLoadSide) & 0x01] : zeros;
-// 				//char a = activationWindow[i][(~regLoadSide) & 0x1];
-
-// 				#pragma unroll
-// 				for (unsigned char j=0; j<CLUSTER_SIZE; j++)
-// 				{
-// 					simdActivations.values[CLUSTER_SIZE*i + j] = a.cluster_values[j];
-// 					simdWeights.values[CLUSTER_SIZE*i + j] = w.cluster_values[j];
-// 				}
-
-// 				//EMULATOR_PRINT ( ("[dispatcher]: w0: %#04x w1: %#04x a0: %#04x a1: %#04x \n"
-// 				//	, w.cluster_values[0] & 0xFF, w.cluster_values[1] & 0xFF,  a.cluster_values[0] & 0xFF, a.cluster_values[1] & 0xFF) );
-// 				//EMULATOR_PRINT ( ("[dispatcher]: wIndex: %u aIndex :%u \n", (indexW) & 0xFF, (indexA) & 0xFF));
-// 			}
-
-
-// 			t_accumulator tempPSum = madd(simdActivations, simdWeights);
-// 			pSum += tempPSum;
-// 			//if (debugCount < maxDebugCount)
-// 			//	{
-// 			//		DEBUG_PRINT(("[PE Dispatcher] a0, a1, a1, a2: %#04x %#04x %#04x %#04x\n",
-// 			//			simdActivations.values[0] & 0xFF, 
-// 			//			simdActivations.values[1] & 0xFF,
-// 			//			simdActivations.values[2] & 0xFF,
-// 			//			simdActivations.values[3] & 0xFF));
-
-// 			//		DEBUG_PRINT(("[PE Dispatcher] w0, w1, w2, w3: %#04x %#04x %#04x %#04x\n",
-// 			//			simdWeights.values[0] & 0xFF, 
-// 			//			simdWeights.values[1] & 0xFF,
-// 			//			simdWeights.values[2] & 0xFF,
-// 			//			simdWeights.values[3] & 0xFF));
-
-// 			//		DEBUG_PRINT(("[PE Madd] Psum %#04x\n", pSum));
-
-// 			//	}		
-// 			countOperands += SIMD_SIZE;
-// 			indicesW = indicesW >> (SIMD_SIZE*BITWIDTH_COMPRESSION_WINDOW_INDEX);
-// 			indicesA = indicesA >> (SIMD_SIZE*BITWIDTH_COMPRESSION_WINDOW_INDEX);
-
-// 			if (countOperands >= numOperands)
-// 			{
-// 				if (isLast[(~regLoadSide) & 0x1] == TRUE)
-// 				{
-// 					nextStateMac = MAC_STATE_WRITE_PSUM;
-// 				}
-// 				else
-// 				{
-// 					nextStateMac = MAC_STATE_WAIT;
-// 				}
-// 			}
-// 		} // if state == MAC_STATE_PROCESS_WINDOW
-// 		else if (stateMac == MAC_STATE_WRITE_PSUM)
-// 		{
-// 			bool writeSuccess;
-// #ifdef FULL_SYSTEM
-// 			writeSuccess = write_channel_nb_intel(channel_peDrainOutput[idy][idx], pSum);
-// #else
-// 			writeSuccess = write_channel_nb_intel(channel_peDrainOutput[0][0], pSum);
-// #endif
-			
-
-// 			//write_channel_intel(channel_peDrainOutput, pSum);
-// 			if (writeSuccess)
-// 			{
-// 				//DEBUG_PRINT(("[MAC] Sending!\n"));
-// #ifdef FULL_SYSTEM
-// 				EMULATOR_PRINT(("[PE (%d, %d)] Commit. pSum value: %#04x \n", idy, idx, pSum));
-// #else
-// 				EMULATOR_PRINT(("[PE] Commit. pSum value: %#04x \n", pSum));
-// #endif
-// 				//DEBUG_PRINT(("[PE Psum] Commit. %#04x\n", pSum));
-// 				//pSum = 0;
-// 				nextStateMac = MAC_STATE_WAIT;
-// 				//pSum = 0;
-// 			}
-// 		}
-// 		else if (stateMac == MAC_STATE_LOAD_BIAS)
-// 		{
-// #ifdef FULL_SYSTEM
-// 			EMULATOR_PRINT(("[PE (%d, %d)] Load Bias.\n", idy, idx));
-// #else
-// 			EMULATOR_PRINT(("[PE] Load Bias\n"));
-// #endif
-// 			pSum = bias[(~regLoadSide) & 0x1];
-// 			nextStateMac = MAC_STATE_WAIT;
-// 		}
-
-
-// 	//===================SWAP===========================
-// 	//Take an extra iteration for swapping, otherwise Fmax is low
-// 		if ( (stateActivation == ASSEMBLER_STATE_WAIT)
-// 			&& (stateWeight == ASSEMBLER_STATE_WAIT)
-// 			&& (stateMac == MAC_STATE_WAIT) )
-// 		{
-// 			nextStateWeight = (isLast[(regLoadSide) & 0x1] == TRUE) ? 
-// 				ASSEMBLER_STATE_LOAD_BIAS : ASSEMBLER_STATE_LOAD_BITMASK;
-// 			nextStateActivation = (isLast[(regLoadSide) & 0x1] == TRUE) ? 
-// 				ASSEMBLER_STATE_LOAD_BIAS : ASSEMBLER_STATE_LOAD_BITMASK;
-// 			nextStateMac = (isLast[(~regLoadSide) & 0x1] == TRUE) ?
-// 				MAC_STATE_LOAD_BIAS: MAC_STATE_ALIGN;
-
-// 			regLoadSide = ~regLoadSide;
-
-// #ifdef FULL_SYSTEM
-// 				EMULATOR_PRINT(("[PE (%d, %d)] Swap. \n", idy, idx));
-// #else
-// 				EMULATOR_PRINT(("[PE] Swap. \n"));
-// #endif
-// 			//countActivation = 0;
-// 			//countWeight = 0;
-
-// 		}
-
-// 		//================DEBUG==============================
-// 		//if (debugCount < maxDebugCount)
-// 		//{
-// 		//	DEBUG_PRINT(("[PE] countWeight, %#03x\n", countWeight));
-// 		//	DEBUG_PRINT(("[PE] countActivation: %#03x\n", countActivation));
-// 		//	DEBUG_PRINT(("[PE] countOperands: %#03x\n", countOperands));
-// 		//	DEBUG_PRINT(("[PE] indicesW: %#03x\n", indicesW));
-// 		//	DEBUG_PRINT(("[PE] indicesA: %#03x\n", indicesA));
-// 		//	debugCount++;
-// 		//}
-		
-// 		//===================================================
-
-// 		//================Next state update==================
-// 		stateWeight = nextStateWeight;
-// 		stateActivation = nextStateActivation;
-// 		stateMac = nextStateMac;
-// 		//===================================================
-// 	} // while true
-// } // end of kernel
 
 #define OPERAND_FILTER_READ_BIAS 0x0
 #define OPERAND_FILTER_ACCEPT_MASK 0x1
@@ -4466,11 +3751,78 @@ __kernel void kernelOperandFilter ()
 }
 #else //SPARSE_SYSTEM
 
-#define DENSE_PE_INSTRUCTION_BIAS_FROM_CH 0x1
-#define DENSE_PE_INSTRUCTION_W_FROM_CH_A_FROM_CH_MAC 0X2
-#define DENSE_PE_INSTRUCTION_W_FROM_R_A_FROM_CH_MAC 0X4
-#define DENSE_PE_INSTRUCTION_W_FROM_CH_A_FROM_R_MAC 0X8
-#define DENSE_PE_INSTRUCTION_COMMIT 0X10
+#define DENSE_PE_INSTRUCTION_READ_BIAS 0X0
+#define DENSE_PE_INSTRUCTION_MAC 0X1
+#define DENSE_PE_INSTRUCTION_MAC_SYNC 0X2
+#define DENSE_PE_INSTRUCTION_COMMIT 0x3
+
+#define STATE_DRAIN_TRANSPORT_SYNC 0x0
+#define STATE_DRAIN_TRANSPORT_DRAIN_SELF 0X1
+#define STATE_DRAIN_TRANSPORT_DRAIN_OTHERS 0x2
+
+typedef uint2_t t_drain_instruction;
+typedef uint2_t t_dense_pe_instruction;
+typedef uint1_t t_dense_pe_flag;
+
+t_dense_pe_instruction densePEInstructionUpdate (
+		t_dense_pe_instruction currentInstruction,
+		t_dense_pe_flag thisTBAvailable,
+		t_dense_pe_flag otherTBAvailable,
+		t_dense_pe_flag thisIsLast,
+		t_dense_pe_flag otherIsLast,
+		t_dense_pe_flag swap
+	)
+{
+	t_dense_pe_instruction nextInstruction = currentInstruction;
+
+	switch (currentInstruction) {
+		case (DENSE_PE_INSTRUCTION_READ_BIAS): {
+			if ((thisTBAvailable == TRUE) && (otherTBAvailable == TRUE)) {
+					nextInstruction = DENSE_PE_INSTRUCTION_MAC;
+			}
+		}
+		break;
+
+		case (DENSE_PE_INSTRUCTION_MAC): {
+			if (thisTBAvailable == TRUE && (otherTBAvailable == FALSE))
+			{
+				nextInstruction = DENSE_PE_INSTRUCTION_MAC_SYNC;
+			}
+			else
+			{
+				if (thisTBAvailable == TRUE && (thisIsLast == TRUE)) {
+					nextInstruction = DENSE_PE_INSTRUCTION_COMMIT;
+				}
+			}
+		}
+		break;
+
+		case (DENSE_PE_INSTRUCTION_MAC_SYNC): {
+			if (otherTBAvailable == TRUE)
+			{
+				nextInstruction = DENSE_PE_INSTRUCTION_MAC;
+				if (thisIsLast == TRUE)
+				{
+					nextInstruction = DENSE_PE_INSTRUCTION_COMMIT;
+				}
+			}
+		}
+		break;
+
+		case (DENSE_PE_INSTRUCTION_COMMIT): {
+			if (swap == TRUE)
+			{
+				nextInstruction = DENSE_PE_INSTRUCTION_READ_BIAS;
+			}
+		}
+		break;
+
+		default:
+		break;
+	}
+	return nextInstruction;
+}
+
 
 __attribute__((task))
 __attribute__((max_global_work_dim(0)))
@@ -4488,243 +3840,280 @@ __kernel void kernelDensePE ()
 	int idx = 0;
 	int idy = 0;
 #endif
-	typedef uint5_t instruction_t;
 	//====================registers===============
-	t_transfer_block regActivationTB;
-	t_transfer_block regWeightTB;
-	t_accumulator pSum;
-	uint1_t regIsLast;
+	//Psum and drain parameters
+	t_accumulator pSum[2];
+	unsigned char regMaxTransportID[2];
+	#pragma unroll
+	for (int i=0; i<2; i++)
+	{
+		pSum[i] = 0;
+		regMaxTransportID[i] = 0;
+	}
+	uint1_t drainSide = 0;
+	t_drain_instruction drainInstruction = STATE_DRAIN_TRANSPORT_SYNC;
 
-	instruction_t currentInstruction = DENSE_PE_INSTRUCTION_BIAS_FROM_CH;
+	//=============Weight side instruction============
+	t_dense_pe_instruction regWeightInstruction= DENSE_PE_INSTRUCTION_READ_BIAS;
+	t_transfer_block regWeightTB;
+	t_dense_pe_flag regWeightIsLast = FALSE;
+
+	//============Activation side instruction================
+	t_dense_pe_instruction regActivationInstruction = DENSE_PE_INSTRUCTION_READ_BIAS;
+	t_transfer_block regActivationTB;
+	t_dense_pe_flag regActivationIsLast = FALSE;
 
 	while (1) {
 		//Declare temp variables
-		instruction_t tempInstruction = currentInstruction;
-		bool readASuccess = false;
-		bool readWSuccess = false;
-		t_transferblock_tagged tempATBLocal, tempWTBLocal;
+		t_dense_pe_instruction nextWeightInstruction = regWeightInstruction;
+		t_transfer_block nextWeightTB = regWeightTB;
+		t_dense_pe_flag weightTBAvailable = FALSE;
+		t_dense_pe_flag nextWeightIsLast = regWeightIsLast;
+		t_dense_pe_flag validWeightMac = FALSE;
 
-		t_simd_operand simdActivations;
-		t_simd_operand simdWeights;
+		t_dense_pe_instruction nextActivationInstruction = regActivationInstruction;
+		t_transfer_block nextActivationTB = regActivationTB;
+		t_dense_pe_flag activationTBAvailable = FALSE;
+		t_dense_pe_flag nextActivationIsLast = regActivationIsLast;
+		t_dense_pe_flag validActivationMac = FALSE;
 
-		bool performMAC = false;
-		bool loadAFromCh = false;
-		bool loadWFromCh = false;
-		bool updateRegA = false;
-		bool updateRegW = false;
-		bool updateRegIsLast = false;
+		t_dense_pe_flag swap = FALSE;
+		unsigned char nextMaxTransportID = regMaxTransportID[(~drainSide) & 0x01];
+		t_drain_instruction nextDrainInstruction = drainInstruction;
 
 		//Handling reading from the W channel
-		if ( (currentInstruction == DENSE_PE_INSTRUCTION_BIAS_FROM_CH)
-			|| (currentInstruction == DENSE_PE_INSTRUCTION_W_FROM_CH_A_FROM_R_MAC)
-			|| (currentInstruction == DENSE_PE_INSTRUCTION_W_FROM_CH_A_FROM_CH_MAC))
+		if ( (regWeightInstruction == DENSE_PE_INSTRUCTION_READ_BIAS)
+			|| (regWeightInstruction == DENSE_PE_INSTRUCTION_MAC) )
 		{
-            tempWTBLocal = read_channel_nb_intel (
+			bool readSuccess = false;
+			t_transferblock_tagged taggedBlock;
+			#if defined (FULL_SYSTEM)
+				taggedBlock = read_channel_nb_intel(
 					channel_dpWeightInput[idy][idx],
-					&readWSuccess
-				);
+					&readSuccess);
+			#else
+				taggedBlock = read_channel_nb_intel(
+					channel_dpWeightInput[0][0],
+					&readSuccess);
+			#endif
+            
+            weightTBAvailable = (readSuccess == true) ? TRUE : FALSE;
+            nextWeightIsLast = FALSE;
+
+            if (readSuccess == true)
+            {
+            	nextWeightIsLast = getIsLast(taggedBlock);
+
+            	nextWeightTB = taggedBlock.values;
+
+            	EMULATOR_PRINT(("[DENSE PE WEIGHT (%d, %d)] Read new weight block. IsLast: %#04x. [0-3]: %#04x %#04x %#04x %#04x Current instruction: %#04x \n\n"
+						,idy, idx, (unsigned char) nextWeightIsLast, 
+						taggedBlock.values.values[0],
+						taggedBlock.values.values[1],
+						taggedBlock.values.values[2],
+						taggedBlock.values.values[3],
+						(unsigned char) regWeightInstruction));
+
+            }
 		}
 
 		//Handling reading from the A channel
-		if ( (currentInstruction == DENSE_PE_INSTRUCTION_W_FROM_R_A_FROM_CH_MAC)
-			|| (currentInstruction == DENSE_PE_INSTRUCTION_W_FROM_CH_A_FROM_CH_MAC))
+		if (regActivationInstruction == DENSE_PE_INSTRUCTION_MAC)
 		{
-            tempATBLocal = read_channel_nb_intel (
+			bool readSuccess = false;
+			t_transferblock_tagged taggedBlock;
+			#if defined (FULL_SYSTEM)
+				taggedBlock = read_channel_nb_intel(
 					channel_dpActivationInput[idy][idx],
-					&readASuccess
-					);
+					&readSuccess);
+			#else
+				taggedBlock = read_channel_nb_intel(
+					channel_dpActivationInput[0][0],
+					&readSuccess);
+			#endif
+            
+            activationTBAvailable = (readSuccess == true) ? TRUE : FALSE;
+            nextActivationIsLast = FALSE;
+
+            if (readSuccess == true)
+            {
+            	nextActivationIsLast = getIsLast(taggedBlock);
+            	nextMaxTransportID = getMaxTransferID(taggedBlock);
+
+            	nextActivationTB = taggedBlock.values;
+
+            	EMULATOR_PRINT(("[DENSE PE ACTIVATION (%d, %d)] Read new activation block. IsLast: %#04x. [0-3]: %#04x %#04x %#04x %#04x Current instruction: %#04x \n\n"
+						,idy, idx, (unsigned char) nextActivationIsLast, 
+						taggedBlock.values.values[0],
+						taggedBlock.values.values[1],
+						taggedBlock.values.values[2],
+						taggedBlock.values.values[3],
+						(unsigned char) regActivationInstruction));
+
+            }
 		}
 
-		unsigned char isLastW = getIsLast(tempWTBLocal); //Predication
-
-		//Control signal generation and next state update;
-		switch (currentInstruction) {
-
-			case (DENSE_PE_INSTRUCTION_BIAS_FROM_CH):{
-				// if ((idx == 0) && (idy == 0))
-				// {
-				// 	#ifdef FULL_SYSTEM
-				// 		EMULATOR_PRINT(("[PE (%d, %d)] Attempting to load bias.\n", idy, idx));
-				// 	#else
-				// 		EMULATOR_PRINT(("[PE] Attempting to load bias.\n"));
-				// 	#endif
-				// }
-				if (readWSuccess == true) {
-					pSum = transferBlock2Bias(tempWTBLocal.values);
-
-					tempInstruction = DENSE_PE_INSTRUCTION_W_FROM_CH_A_FROM_CH_MAC;
-
-					#ifdef FULL_SYSTEM
-						EMULATOR_PRINT(("[PE (%d, %d)] Loaded bias.\n", idy, idx));
-					#else
-						EMULATOR_PRINT(("[PE] Loaded bias.\n"));
-					#endif
-				}
-			} //DENSE_PE_INSTRUCTION_BIAS_FROM_CH
-			break;
-			case (DENSE_PE_INSTRUCTION_W_FROM_CH_A_FROM_CH_MAC):{
-				if (readWSuccess && readASuccess) {
-					performMAC = true;
-					updateRegA = true;
-					updateRegW = true;
-					updateRegIsLast = true;
-
-					if (isLastW == TRUE) {
-						tempInstruction = DENSE_PE_INSTRUCTION_COMMIT;
-					}
-				}
-				else if (readWSuccess == true) {
-					performMAC = false;
-					updateRegW = true;
-					updateRegIsLast = true;
-
-					tempInstruction = DENSE_PE_INSTRUCTION_W_FROM_R_A_FROM_CH_MAC;
-				}
-				else if (readASuccess) {
-					performMAC = false;
-					updateRegA = true;
-
-					tempInstruction = DENSE_PE_INSTRUCTION_W_FROM_CH_A_FROM_R_MAC;
-				}
-			} // DENSE_PE_INSTRUCTION_W_FROM_CH_A_FROM_CH_MAC
-			break;
-			case (DENSE_PE_INSTRUCTION_W_FROM_R_A_FROM_CH_MAC):{
-				if (readASuccess)
-				{
-					performMAC = true;
-					updateRegA = true;
-
-					if (regIsLast == TRUE) {
-						tempInstruction = DENSE_PE_INSTRUCTION_COMMIT;
-					}
-					else
-					{
-						tempInstruction = DENSE_PE_INSTRUCTION_W_FROM_CH_A_FROM_CH_MAC;
-					}
-				}
-				
-			} //DENSE_PE_INSTRUCTION_W_FROM_R_A_FROM_CH_MAC
-			break;
-			case (DENSE_PE_INSTRUCTION_W_FROM_CH_A_FROM_R_MAC):{
-				if (readWSuccess == true) {
-					performMAC = true;
-					updateRegW = true;
-					updateRegIsLast = true;
-
-					if (isLastW == TRUE) {
-						tempInstruction = DENSE_PE_INSTRUCTION_COMMIT;
-					}
-					else
-					{
-						tempInstruction = DENSE_PE_INSTRUCTION_W_FROM_CH_A_FROM_CH_MAC;
-					}
-				}
-			} //DENSE_PE_INSTRUCTION_W_FROM_CH_A_FROM_R_MAC
-			break;
-			case (DENSE_PE_INSTRUCTION_COMMIT): {
-			} //DENSE_PE_INSTRUCTION_COMMIT
-			break;
-			default:
-			break;
-		} ////Control signal generation and next state update;
-
-		//Select MAC operands
-		if (currentInstruction == DENSE_PE_INSTRUCTION_W_FROM_CH_A_FROM_CH_MAC)
+		if (regWeightInstruction == DENSE_PE_INSTRUCTION_MAC)
 		{
+			if (weightTBAvailable == TRUE)
+			{
+				validWeightMac = TRUE;
+			}
+		}
+		else if (regWeightInstruction == DENSE_PE_INSTRUCTION_MAC_SYNC)
+		{
+			weightTBAvailable = TRUE;
+			validWeightMac = TRUE;
+		}
+
+
+		if (regActivationInstruction == DENSE_PE_INSTRUCTION_READ_BIAS)
+		{
+			activationTBAvailable = TRUE;
+		}
+		else if (regActivationInstruction == DENSE_PE_INSTRUCTION_MAC)
+		{
+			if (activationTBAvailable == TRUE)
+			{
+				validActivationMac = TRUE;
+			}
+		}
+		else if (regActivationInstruction == DENSE_PE_INSTRUCTION_MAC_SYNC)
+		{
+			activationTBAvailable = TRUE;
+			validActivationMac = TRUE;
+		}
+
+		/**
+		 * PSum update
+		 */
+		if ( (regWeightInstruction == DENSE_PE_INSTRUCTION_READ_BIAS) 
+			 && (weightTBAvailable == TRUE))
+		{
+			//GOTTCHA: MUST APPLY THE AND MASK AFTER NEGATION !!!
+			pSum[(~drainSide) & 0x01] = transferBlock2Bias(nextWeightTB);
+		}
+		else if ( (validActivationMac == TRUE) && (validWeightMac == TRUE))
+		{
+
+			EMULATOR_PRINT(("[DENSE PE (%d,%d)] MAC: weight [0-3]: %#04x %#04x %#04x %#04x. act [0-3]: %#04x %#04x %#04x %#04x \n",
+					idy, idx,
+					nextWeightTB.values[0] & 0xFF, 
+					nextWeightTB.values[1] & 0xFF,
+					nextWeightTB.values[2] & 0xFF,
+					nextWeightTB.values[3] & 0xFF,
+					nextActivationTB.values[0] & 0xFF, 
+					nextActivationTB.values[1] & 0xFF,
+					nextActivationTB.values[2] & 0xFF,
+					nextActivationTB.values[3] & 0xFF));
+
+			t_simd_operand simdActivation, simdWeight;
+
 			#pragma unroll
-			for (unsigned char i=0; i<NUM_SIMD_WORDS; i++) {
-				
-				simdActivations.values[i] = tempATBLocal.values.values[i];
-				simdWeights.values[i] = tempWTBLocal.values.values[i];
-				
+			for (unsigned int i=0; i<NUM_SIMD_WORDS; i++)
+			{
+				simdActivation.values[i] = nextActivationTB.values[i];
+				simdWeight.values[i] = nextWeightTB.values[i];
+			}
+
+			t_accumulator tempPSum = madd(simdActivation, simdWeight);
+			//GOTTCHA: MUST APPLY THE AND MASK AFTER NEGATION !!!
+			pSum[(~drainSide) & 0x01] += tempPSum;
+		}
+
+		/**
+		 * Drain output
+		 */
+		if ( (drainInstruction == STATE_DRAIN_TRANSPORT_DRAIN_SELF) 
+				||
+		 		(drainInstruction == STATE_DRAIN_TRANSPORT_DRAIN_OTHERS) 
+		   )
+		{
+			#if defined(FULL_SYSTEM)
+				//GOTTCHA: MUST APPLY THE AND MASK AFTER NEGATION !!!
+				t_dense_pe_flag drainedLast = (regMaxTransportID[drainSide & 0x01] == idy) ? TRUE : FALSE;
+			#else
+				t_dense_pe_flag drainedLast = TRUE;
+			#endif
+			t_conv_drain_tagged drainTransportBlock;
+			//GOTTCHA: MUST APPLY THE AND MASK AFTER NEGATION !!!
+			drainTransportBlock.value = pSum[drainSide & 0x01];
+			drainTransportBlock.isLast = (unsigned char) drainedLast;
+			bool writePSum = true;
+			if (drainInstruction == STATE_DRAIN_TRANSPORT_DRAIN_OTHERS)
+			{
+				if (idy < (PE_ROWS - 1))
+				{
+					drainTransportBlock = read_channel_nb_intel(channel_drain[idy+1][idx], &writePSum);
+					if (writePSum == true)
+					{
+						EMULATOR_PRINT(("[DENSE PE(%d, %d)] Drained others.\n", idy, idx));
+						if (drainTransportBlock.isLast == TRUE)
+						{
+							nextDrainInstruction = STATE_DRAIN_TRANSPORT_SYNC;
+						}
+					}
+				}
+			}
+			else
+			{
+				EMULATOR_PRINT(("[DENSE PE (%d, %d)] Commit. pSum value: %#04x \n", idy, idx, pSum));
+				if (drainTransportBlock.isLast == TRUE)
+				{
+					nextDrainInstruction = STATE_DRAIN_TRANSPORT_SYNC;
+				}
+				else
+				{
+					nextDrainInstruction = STATE_DRAIN_TRANSPORT_DRAIN_OTHERS;
+				}
 			}
 			
-		}
-		else if (currentInstruction == DENSE_PE_INSTRUCTION_W_FROM_R_A_FROM_CH_MAC)
-		{
-			#pragma unroll
-			for (unsigned char i=0; i<NUM_SIMD_WORDS; i++) {
-				
-				simdActivations.values[i] = tempATBLocal.values.values[i];
-				simdWeights.values[i] = regWeightTB.values[i];
-
-			}
-		}
-		else if (currentInstruction == DENSE_PE_INSTRUCTION_W_FROM_CH_A_FROM_R_MAC)
-		{
-			#pragma unroll
-			for (unsigned char i=0; i<NUM_SIMD_WORDS; i++) {
-
-				simdActivations.values[i] = regActivationTB.values[i];
-				simdWeights.values[i] = tempWTBLocal.values.values[i];
-			}
-		} //Select MAC Operands
-
-		//Regs
-		if (updateRegIsLast == true)
-		{
-			regIsLast = isLastW;
-			// EMULATOR_PRINT(("[PE (%d, %d)] Update regIsLast to %d.\n", idy, idx, regIsLast));
-		}
-
-		if (updateRegA)
-		{
-			regActivationTB = tempATBLocal.values;
-			// EMULATOR_PRINT(("[PE (%d, %d)] Read activation transfer block.\n\n", idy, idx));
-		}
-
-		if (updateRegW == true)
-		{
-			regWeightTB = tempWTBLocal.values;
-			// EMULATOR_PRINT(("[PE (%d %d)] weightTransferBlock [0-4]: %#04x %#04x %#04x %#04x.\n",
-			// 		idy, idx,
-			// 		tempWTBLocal.values.values[0] & 0xFF, 
-			// 		tempWTBLocal.values.values[1] & 0xFF,
-			// 		tempWTBLocal.values.values[2] & 0xFF,
-			// 		tempWTBLocal.values.values[3] & 0xFF));
-
-		}
-
-		//MAC
-		if (performMAC == true)
-		{
-			EMULATOR_PRINT(("[PE (%d,%d)] MAC: weight [0-3]: %#04x %#04x %#04x %#04x. act [0-3]: %#04x %#04x %#04x %#04x \n",
-					idy, idx,
-					simdWeights.values[0] & 0xFF, 
-					simdWeights.values[1] & 0xFF,
-					simdWeights.values[2] & 0xFF,
-					simdWeights.values[3] & 0xFF,
-					simdActivations.values[0] & 0xFF, 
-					simdActivations.values[1] & 0xFF,
-					simdActivations.values[2] & 0xFF,
-					simdActivations.values[3] & 0xFF));
-			t_accumulator tempPSum = madd(simdActivations, simdWeights);
-			pSum += tempPSum;
-		}
-
-		//Write output
-		if (currentInstruction == DENSE_PE_INSTRUCTION_COMMIT)
-		{
-			bool writeSuccess = false;
-			#ifdef FULL_SYSTEM
-				writeSuccess = write_channel_nb_intel(channel_peDrainOutput[idy][idx], pSum);
-			#else
-				writeSuccess = write_channel_nb_intel(channel_peDrainOutput[0][0], pSum);
-			#endif
-
-			if (writeSuccess)
+			if (writePSum == true)
 			{
-				//DEBUG_PRINT(("[MAC] Sending!\n"));
-				EMULATOR_PRINT(("[PE (%d, %d)] Commit. pSum value: %#04x \n", idy, idx, pSum));
-				//DEBUG_PRINT(("[PE Psum] Commit. %#04x\n", pSum));
-				//pSum = 0;
-				tempInstruction = DENSE_PE_INSTRUCTION_BIAS_FROM_CH;
-				//pSum = 0;
+				write_channel_intel(channel_drain[idy][idx], drainTransportBlock);
 			}
 		}
 
-		//EMULATOR_PRINT(("[PE (%d, %d)] Instruction: %d\n", idy, idx, currentInstruction));
-		currentInstruction = tempInstruction;
+		//Update registers
+		regMaxTransportID[(~drainSide) & 0x01] = nextMaxTransportID;
+
+		if ( (regWeightInstruction == DENSE_PE_INSTRUCTION_COMMIT) && (regActivationInstruction == DENSE_PE_INSTRUCTION_COMMIT)
+				&& (drainInstruction == STATE_DRAIN_TRANSPORT_SYNC) 
+			)
+		{
+			swap = TRUE;
+			//GOTTCHA: MUST APPLY THE AND MASK AFTER NEGATION !!!
+			drainSide = (~drainSide) & 0x01;	
+			nextDrainInstruction = STATE_DRAIN_TRANSPORT_DRAIN_SELF;	
+		}
+
+		nextWeightInstruction = densePEInstructionUpdate (
+				regWeightInstruction, //current Instruction
+				weightTBAvailable, //thisTBAvailable,
+				activationTBAvailable, //otherTBAvailable,
+				nextWeightIsLast, //thisIsLast
+				nextActivationIsLast, //otherIsLast
+				swap
+			);
+
+		nextActivationInstruction = densePEInstructionUpdate (
+				regActivationInstruction, //current Instruction
+				activationTBAvailable, //thisTBAvailable,
+				weightTBAvailable, //otherTBAvailable,
+				nextActivationIsLast, //thisIsLast
+				nextWeightIsLast, //otherIsLast
+				swap
+			);
+
+		regWeightInstruction = nextWeightInstruction;
+		regWeightIsLast = nextWeightIsLast;
+		regWeightTB = nextWeightTB;
+
+		regActivationInstruction = nextActivationInstruction;
+		regActivationIsLast = nextActivationIsLast;
+		regActivationTB = nextActivationTB;
+
+		drainInstruction = nextDrainInstruction;		
 	} // while-loop
 
 }
