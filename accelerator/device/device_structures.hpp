@@ -133,6 +133,7 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
     t_short memTBCountRowStride;
 #endif
 
+
     //Problem parameter: memory input tile stretched padded height
     t_uchar tileSPHeight;
     //Problem parameter: memory input tile stretched padded width
