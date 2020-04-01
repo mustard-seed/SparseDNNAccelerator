@@ -14,6 +14,22 @@
 #define FALSE 0X0
 
 #ifdef INTELFPGA_CL
+typedef unsigned char t_uchar;
+typedef char t_char;
+typedef unsigned short t_ushort;
+typedef short t_short;
+typedef unsigned int t_uint;
+typedef int t_int;
+#else
+typedef cl_uchar t_uchar;
+typedef cl_char t_char;
+typedef cl_ushort t_ushort;
+typedef cl_short t_short;
+typedef cl_uint t_uint;
+typedef cl_int t_int;
+#endif
+
+#ifdef INTELFPGA_CL
 //typedef short t_spValueAndZCount;
 typedef unsigned short t_spOffset;
 
@@ -86,14 +102,195 @@ typedef struct {
         unsigned char bytes[NUM_BITMASK_BYTES];
 } t_bitmask;
 
-// typedef struct __attribute__((packed)){
-//     t_transfer_block values;
-// #ifdef INTELFPGA_CL
-//     uint1_t isLast;
-// #else
-//     bool isLast;
-// #endif
-// } t_transferblock_local;
+/*!
+   ==================================================
+   Data mover and tile controller instructions
+   ==================================================
+*/
+typedef struct __attribute__((packed)) __attribute__((aligned(32))) 
+{
+    //Concatenation of three signals
+    //Bits [3:0] Number of active columns
+    //Bit [4]: Flag for synchornization. 1 if there is a need to wait for the synchornization from OA
+    //Bit [5] Flag for the compute engine. 0 for convolution, 1 for misc.
+    //Bit [6] Flag for sparse input. 0 for dense, 1 for sparse.
+    //Bit [7]: Flag for selecting the memory region to read from
+    t_uchar memRegionCatSparseFlagCatDestinationCatSyncCatNumActiveCols;
+
+    //Arch parameter: Starting index of the input dram block in the input memory region
+    t_int memBlockStart;
+    //Arch parameter: Column stride of input activation strips in dram block in the input memory region
+    t_short memBlockColStripStride;
+    //Arch parameter: Row stride of input activation strips in dram block in the input memory region
+    t_short memBlockRowStripStride;
+
+#if defined(SPARSE_SYSTEM)
+    //Arch parameter: Starting index of the strip TB count in the memory
+    t_int memTBCountStart;
+    //Arch parameter: Column stride of input activation strip TB count in the memory
+    t_short memTBCountColStride;
+    //Arch parameter: Row stride of input activation strip TB count in the memory
+    t_short memTBCountRowStride;
+#endif
+
+    //Problem parameter: memory input tile stretched padded height
+    t_uchar tileSPHeight;
+    //Problem parameter: memory input tile stretched padded width
+    t_uchar tileSPWidth;
+
+    //Problem parameter: input tile paddings
+    //[1:0]: Left padding
+    //[3:2]: Right padding
+    //[5:4]: Top padding
+    //[7:6]: Bottom padding
+    t_uchar concatPadding;
+
+    //Problem parameter: number of compression windows in an input group. Used for sending padding
+    t_uchar numCWInGroup; 
+
+
+    //Problem parameter: memory input tile stretched unit size
+    //[3:0] horizontal stretched unit size
+    //[7:4]: vertical stretched unit size
+    t_uchar concatSPSize;
+
+    //Problem parameter: compute column input width stride
+    t_uchar columnWidthStride;
+    //Problem parameter: compute column strided padded input width
+    t_uchar columnSPWidth;
+
+    //Auxillary parameter: total number of strips to send in this transfer
+    t_ushort columnSPWidthxTileSPHeightxNumActiveCols; 
+} t_ia_mover_instruction;
+
+typedef struct __attribute__((packed)) __attribute__((aligned(32)))
+{
+    //Arch. parameters.
+    //[3:0]: Number of active compute columns
+    //[4]: Sync Flag. 1 if there is a need to send sync. signal to the IA mover.
+    //[6]: Flag for whether the output is sparse. 1 for YES, 0 for NO
+    //[7]: Flag for selecting the memory region to write to
+    t_uchar memSelectCatSparseFlagCatSyncFlagCatNumActiveCols;
+
+    //Arch. parameter: Index of the first dram block of this transfer in memory
+    t_int memOAStart;
+    //Arch. parameter: Group stride in terms of dram block in the output memory region
+    t_int memOAGroupStride;
+    //Arch. parameter: tile stride in terms of dram block in the output memory region
+    t_short memOATileStride;
+    //Arch. parameter: column stride in terms of dram block in the output memory region
+    t_short memOAColStride;
+    //Arch. parameter: row stride in terms of dram block in the output memory region
+    t_short memOARowStride;
+
+#if defined(SPARSE_SYSTEM)
+    //Arch. parameter: Index of the first TB count element of this transfer in memory
+    t_int memTBStart;
+    //Arch. parameter: group stride in terms of TB count in the TB memory
+    t_short memTBGroupStride;
+    //Arch. parameter: tile stride in terms of TB count in the TB memory.
+    t_short memTBTileStride;
+    //Arch. parameter: column stride in terms of TB count in the TB memory.
+    t_short memTBColStride;
+    //Arch. parameter: row stride in terms of TB count in the TB memory.
+    t_short memTBRowStride;
+#endif
+
+    //Problem parameter: Output tile group to drain from   
+    t_uchar numOAGroup; 
+    //Problem parameter: Output tile height per compute column 
+    t_uchar tileHeight; 
+    //Problem parameter: Output tile width per compute column
+    t_uchar columnTileWidth; 
+    //Auxillary parameter: Total number of strips to drain.
+    t_ushort numOAGroupxColumnTileWidthxTileHeightxNumActiveCols;
+
+} t_oa_mover_instruction;
+
+typedef struct __attribute__((packed)) __attribute__((aligned(32)))
+{
+    //Arch. parameter: number of folds
+    t_ushort numFilterFold;
+    //Arch. parameter: number of full folds
+    t_ushort numFullFilterFold;
+    //Arch. parameter: number of filter in the partial fold
+    t_uchar numFiltersInPartialFold;
+    //Arch. parameter: number of filter reuse
+    t_ushort filterReuse;
+
+    //Arch. parameter: Start of the transfer in the bias memory region
+    t_int memBiasStart;
+    //Arch. parameter: Start of the transfer in the weight dram_block region
+    t_int memWeightStart;
+    //Arch. parameter: filter stride in the weight dram block region.
+    t_int memWeightFilterStride;
+
+#if defined(SPARSE_SYSTEM)
+    //Arch. parameter: Start of the transfer in the weight TB count region
+    t_int memTBCountStart;
+    //Arch. parameter: Filter stride in the weight TB count region.
+    t_int memTBCountFilterStride;
+#endif
+} t_weight_mover_instruction;
+
+//====================================================================
+//Instructions for the input tile controller
+typedef struct __attribute__((packed)) __attribute__((aligned(16)))
+{
+    //Input tile width per compute column
+    t_uchar localTileWidth;
+    //Input tile height per compute column
+    t_uchar localTileHeight;
+    //Filter planar stride
+    t_uchar kernelStride;
+    //Filter planar kernel size
+    t_uchar kernelSize;
+    //Number of streaming instruction for this tile
+    t_ushort numOutputInstructions;
+    //Column stride of strip in IA cache in terms of dram block
+    t_ushort cacheStripStride;
+
+    #if !defined(SPARSE_SYSTEM)
+        //If dense, then we also need the number of TB count per IA strip
+        t_ushort numTBCountIAStrip;
+    #endif
+} t_ia_tile_controller_instruction;
+
+//Instructions for the output tile controller
+typedef struct __attribute__((packed)) __attribute__((aligned(16)))
+{
+    //Number of planar indices in the output tile
+    t_uchar numLocalTileHxW;
+    //Number of channels in the tile
+    t_uchar numLocalChannels;
+    //Number of compute drain instructions
+    t_ushort numDrainInstructions;
+    //Number of memory transfer instructions
+    t_ushort numMemInstructions;
+
+    //Number of folds required per group to drain the current tile
+    t_uchar numFoldsInGroupCurrentLayer;
+    //Number of full folds required to drian the current tile
+    t_uchar numFullFoldsInCurrentLayer;
+    //Number of elements per planar index to drain in the partial fold
+    t_uchar numActiveElementsInPartialFold;
+    //Number of elements par planar index to drain the full fold
+    t_uchar numActiveElementsInFullFold;
+
+    //Number of channels per group in the next layer
+    t_ushort numLocalChannelsPerNextGroup;
+
+    //Number of active compute columns
+    t_uchar numActiveCols;
+
+    //Concatenated signal
+    //[3:0] Number of bits to right-shift the output
+    //[4] Source of the output. 1 for convolution engine, 0 for misc.
+    //[5] Enable Relu. 1 for TRUE, 0 for false
+    //[6] Enable sparsification. 1 for TRUE, 0 for otherwise
+    t_uchar flagSparseCatFlagReluCatFlagSourceCatRShift;
+    
+} t_oa_tile_controller_instruction;
 
 #ifdef INTELFPGA_CL
 /*
