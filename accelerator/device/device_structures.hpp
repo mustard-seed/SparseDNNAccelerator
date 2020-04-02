@@ -148,6 +148,11 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
     //[7:6]: Bottom padding
     t_uchar concatPadding;
 
+    //SP-unit indicies of the upper-left planar position in the tile, not counting the padding
+    //[3:0] Column index
+    //[7:4]: Row index
+    t_uchar concatInitSPIndices;
+
     //Problem parameter: number of compression windows in an input group. Used for sending padding
     t_uchar numCWInGroup; 
 
