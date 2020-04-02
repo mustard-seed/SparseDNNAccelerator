@@ -131,6 +131,8 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
     t_short memTBCountColStride;
     //Arch parameter: Row stride of input activation strip TB count in the memory
     t_short memTBCountRowStride;
+#else
+    t_int numTBPerStrip;
 #endif
 
 
@@ -195,6 +197,8 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
     t_short memTBColStride;
     //Arch. parameter: row stride in terms of TB count in the TB memory.
     t_short memTBRowStride;
+#else
+    t_int numTBPerStrip;
 #endif
 
     //Problem parameter: Output tile group to drain from   
@@ -231,6 +235,8 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
     t_int memTBCountStart;
     //Arch. parameter: Filter stride in the weight TB count region.
     t_int memTBCountFilterStride;
+#else
+    t_int numTBPerFilter;
 #endif
 } t_weight_mover_instruction;
 
@@ -251,10 +257,7 @@ typedef struct __attribute__((packed)) __attribute__((aligned(16)))
     //Column stride of strip in IA cache in terms of dram block
     t_ushort cacheStripStride;
 
-    #if !defined(SPARSE_SYSTEM)
-        //If dense, then we also need the number of TB count per IA strip
-        t_ushort numTBCountIAStrip;
-    #endif
+    t_ushort numTBPerStrip;
 } t_ia_tile_controller_instruction;
 
 //Instructions for the output tile controller
