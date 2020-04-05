@@ -16,4 +16,24 @@ t_aligned_transfer_block_vector;
 typedef
 std::vector<t_dram_block, boost::alignment::aligned_allocator<t_dram_block, aocl_utils_cpp::AOCL_ALIGNMENT>>
 t_aligned_dram_block_vector;
+
+typedef
+std::vector<t_ia_mover_instruction, boost::alignment::aligned_allocator<t_ia_mover_instruction, aocl_utils_cpp::AOCL_ALIGNMENT>>
+t_aligned_ia_mover_instruction_vector;
+
+typedef
+std::vector<t_oa_mover_instruction, boost::alignment::aligned_allocator<t_oa_mover_instruction, aocl_utils_cpp::AOCL_ALIGNMENT>>
+t_aligned_oa_mover_instruction_vector;
+
+typedef
+std::vector<t_weight_mover_instruction, boost::alignment::aligned_allocator<t_weight_mover_instruction, aocl_utils_cpp::AOCL_ALIGNMENT>>
+t_aligned_weight_mover_instruction_vector;
+
+typedef
+std::vector<t_ia_tile_controller_instruction, boost::alignment::aligned_allocator<t_ia_tile_controller_instruction, aocl_utils_cpp::AOCL_ALIGNMENT>>
+t_aligned_ia_tile_controller_instruction_vector;
+
+typedef
+std::vector<t_oa_tile_controller_instruction, boost::alignment::aligned_allocator<t_oa_tile_controller_instruction, aocl_utils_cpp::AOCL_ALIGNMENT>>
+t_aligned_oa_tile_controller_instruction_vector;
 #endif

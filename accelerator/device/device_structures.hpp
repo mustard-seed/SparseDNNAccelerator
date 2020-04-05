@@ -120,19 +120,19 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
     //Arch parameter: Starting index of the input dram block in the input memory region
     t_int memBlockStart;
     //Arch parameter: Column stride of input activation strips in dram block in the input memory region
-    t_short memBlockColStripStride;
+    t_ushort memBlockColStripStride;
     //Arch parameter: Row stride of input activation strips in dram block in the input memory region
-    t_short memBlockRowStripStride;
+    t_ushort memBlockRowStripStride;
 
 #if defined(SPARSE_SYSTEM)
     //Arch parameter: Starting index of the strip TB count in the memory
     t_int memTBCountStart;
     //Arch parameter: Column stride of input activation strip TB count in the memory
-    t_short memTBCountColStride;
+    t_ushort memTBCountColStride;
     //Arch parameter: Row stride of input activation strip TB count in the memory
-    t_short memTBCountRowStride;
+    t_ushort memTBCountRowStride;
 #else
-    t_int numTBPerStrip;
+    t_uint numTBPerStrip;
 #endif
 
 
@@ -168,7 +168,7 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
     t_uchar columnSPWidth;
 
     //Auxillary parameter: total number of strips to send in this transfer
-    t_ushort columnSPWidthxTileSPHeightxNumActiveCols; 
+    t_ushort tileSPWidthxTileSPHeight; 
 } t_ia_mover_instruction;
 
 typedef struct __attribute__((packed)) __attribute__((aligned(32)))
@@ -183,27 +183,27 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
     //Arch. parameter: Index of the first dram block of this transfer in memory
     t_int memOAStart;
     //Arch. parameter: Group stride in terms of dram block in the output memory region
-    t_int memOAGroupStride;
+    t_uint memOAGroupStride;
     //Arch. parameter: tile stride in terms of dram block in the output memory region
-    t_short memOATileStride;
+    t_uint memOATileStride;
     //Arch. parameter: column stride in terms of dram block in the output memory region
-    t_short memOAColStride;
+    t_ushort memOAColStride;
     //Arch. parameter: row stride in terms of dram block in the output memory region
-    t_short memOARowStride;
+    t_ushort memOARowStride;
 
 #if defined(SPARSE_SYSTEM)
     //Arch. parameter: Index of the first TB count element of this transfer in memory
     t_int memTBStart;
     //Arch. parameter: group stride in terms of TB count in the TB memory
-    t_short memTBGroupStride;
+    t_ushort memTBGroupStride;
     //Arch. parameter: tile stride in terms of TB count in the TB memory.
-    t_short memTBTileStride;
+    t_ushort memTBTileStride;
     //Arch. parameter: column stride in terms of TB count in the TB memory.
-    t_short memTBColStride;
-    //Arch. parameter: row stride in terms of TB count in the TB memory.
-    t_short memTBRowStride;
+    t_ushort memTBColStride;
+    //Arch. parameter: row stride in terms of TB count in the TB moveremory.
+    t_ushort memTBRowStride;
 #else
-    t_int numTBPerStrip;
+    t_uint numTBPerStrip;
 #endif
 
     //Problem parameter: Output tile group to drain from   
@@ -241,7 +241,7 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
     //Arch. parameter: Filter stride in the weight TB count region.
     t_int memTBCountFilterStride;
 #else
-    t_int numTBPerFilter;
+    t_uint numTBPerFilter;
 #endif
 } t_weight_mover_instruction;
 
@@ -262,14 +262,16 @@ typedef struct __attribute__((packed)) __attribute__((aligned(16)))
     //Column stride of strip in IA cache in terms of dram block
     t_ushort cacheStripStride;
 
+#if !defined(SPARSE_SYSTEM)
     t_ushort numTBPerStrip;
+#endif
 } t_ia_tile_controller_instruction;
 
 //Instructions for the output tile controller
 typedef struct __attribute__((packed)) __attribute__((aligned(16)))
 {
     //Number of planar indices in the output tile
-    t_uchar numLocalTileHxW;
+    t_uchar numLocalTilePerColHxW;
     //Number of channels in the tile
     t_uchar numLocalChannels;
     //Number of compute drain instructions
@@ -283,8 +285,6 @@ typedef struct __attribute__((packed)) __attribute__((aligned(16)))
     t_uchar numFullFoldsInCurrentLayer;
     //Number of elements per planar index to drain in the partial fold
     t_uchar numActiveElementsInPartialFold;
-    //Number of elements par planar index to drain the full fold
-    t_uchar numActiveElementsInFullFold;
 
     //Number of channels per group in the next layer
     t_ushort numLocalChannelsPerNextGroup;
