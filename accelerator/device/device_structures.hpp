@@ -131,14 +131,18 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
     t_ushort memTBCountColStride;
     //Arch parameter: Row stride of input activation strip TB count in the memory
     t_ushort memTBCountRowStride;
+    //Problem parameter: 
+    //When sending sparse data, this is the number of compression windows in an input group. Used for sending padding
+    //When sending dense data, this is the number of valid TB in a strip
+    t_ushort numCWOrTBInGroup; 
 #else
-    t_uint numTBPerStrip;
+    t_ushort numTBPerStrip;
 #endif
 
 
-    //Problem parameter: memory input tile stretched padded height
+    //Problem parameter: memory input tile stretched padded height. Includes padding.
     t_uchar tileSPHeight;
-    //Problem parameter: memory input tile stretched padded width
+    //Problem parameter: memory input tile stretched padded width. Includes padding.
     t_uchar tileSPWidth;
 
     //Problem parameter: input tile paddings
@@ -152,9 +156,6 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
     //[3:0] Column index
     //[7:4]: Row index
     t_uchar concatInitSPIndices;
-
-    //Problem parameter: number of compression windows in an input group. Used for sending padding
-    t_uchar numCWInGroup; 
 
 
     //Problem parameter: memory input tile stretched unit size
@@ -302,6 +303,7 @@ typedef struct __attribute__((packed)) __attribute__((aligned(16)))
 } t_oa_tile_controller_instruction;
 
 #ifdef INTELFPGA_CL
+typedef uint1_t t_flag;
 /*
 =======================================================================
 Datatypes relevant to the filter transportation system
@@ -330,9 +332,12 @@ Data structures that travel on the input activation bus system
 //Raw data packet travelling on the input activation buffer bus
 typedef struct __attribute__((packed)){
     t_dram_block dramBlock;
-    unsigned char destinationCol;
-    //If true, then this packet is for an input buffer. 
-    //Otherwise, it is fur all the output buffers less or equal to the detinationCol
+
+    //Bit[7]: Is last in strip
+    //Bit[6]: Flag for going to misc engine
+    //Bit[5:0] Destination col 
+    unsigned char route;
+
     //bool toInputBuffer; 
 } t_dram_block_ia_tagged;
 

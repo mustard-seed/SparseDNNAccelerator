@@ -169,6 +169,37 @@ t_streamblock_address dramBlock2TransferBlockCount (t_dram_block dramBlock)
     return count;
 }
 
+t_dram_block iaMetadata2DramBlock (unsigned short tbCount, unsigned char colSPWidth, unsigned char colSPStride)
+{
+    t_dram_block dramBlock;
+    dramBlock.transferBlocks[0].values[0] = (char) (tbCount & 0xFF);
+    dramBlock.transferBlocks[0].values[1] = (char) ((tbCount >> 8) & 0x0FF);
+    dramBlock.transferBlocks[0].values[2] = (char) colSPWidth;
+    dramBlock.transferBlocks[0].values[3] = (char) colSPStride;
+}
+
+unsigned char getColSPWidth(t_dram_block block)
+{
+    return block.transferBlocks[0].values[2];
+}
+
+unsigned char getColSPStride(t_dram_block block)
+{
+    return block.transferBlocks[0].values[3];
+}
+
+unsigned short getTBCount(t_dram_block block)
+{
+    char countLow = block.transferBlocks[0].values[0];
+    char countHigh = block.transferBlocks[0].values[1];
+
+    t_streamblock_address count = 
+        ((((unsigned short) countHigh) & 0xFF) << 8)
+        | ((((unsigned short) countLow) & 0xFF));
+
+    return count;
+}
+
 t_output_dram_block clusterCount2OutputDramBlock (unsigned short clusterCount)
 {
     t_output_dram_block outputDramBlock;

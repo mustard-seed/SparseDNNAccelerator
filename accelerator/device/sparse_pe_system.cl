@@ -613,10 +613,194 @@ __kernel void kernelMemoryReader (
 	} // end of the loop over the output width and height tiles
 }
 
+__attribute__((max_global_work_dim(0)))
+__kernel void kernelIAMover (
+		volatile __global t_dram_block* restrict pIA1,
+		volatile __global t_dram_block* restrict pIA2,
+
+		#if defined(SPARSE_SYSTEM)
+			volatile __global t_streamblock_address* restrict pTBCount1,
+			volatile __global t_streamblock_address* restrict pTBCount2,
+		#endif
+
+		volatile __global t_ia_mover_instruction* restrict pInstruction,
+		unsigned int numInstruction
+	)
+{
+	for (unsigned int iInst=0; iInst<numInstruction; iInst++)
+	{
+		//Read the instruction
+		t_ia_mover_instruction inst = pInstruction[iInst];
+
+		/*! Unpacked the concatenated fields of the instruction */
+		unsigned char numActiveCols = inst.memRegionCatSparseFlagCatDestinationCatSyncCatNumActiveCols & 0x0F;
+		t_flag syncWithOA = (inst.memRegionCatSparseFlagCatDestinationCatSyncCatNumActiveCols >> 0x04) & 0x01;
+		t_flag destinationMisc.memRegionCatSparseFlagCatDestinationCatSyncCatNumActiveCols = (inst >> 0x05) & 0x01;
+		t_flag sparseInput = (inst.memRegionCatSparseFlagCatDestinationCatSyncCatNumActiveCols >> 0x06) & 0x01;
+		t_flag memRegion = (inst.memRegionCatSparseFlagCatDestinationCatSyncCatNumActiveCols >> 0x07) & 0x01;
+		uint2_t tileLeftPadding = inst.concatPadding & 0x03;
+		uint2_t tileRightPadding = (inst.concatPadding >> 0x02) & 0x03;
+		uint2_t tileTopPadding = (inst.concatPadding >> 0x04) & 0x03;
+		uint2_t tileBottomPadding = (inst.concatPadding >> 0x06) & 0x03;
+		uint4_t hInitSPIndex = inst.concatInitSPIndices & 0x0F;
+		uint4_t vInitSPIndex = (inst.concatInitSPIndices >> 0x04) & 0x0F;
+		uint4_t colSPSize = inst.concatSPSize & 0x0F;
+		uint4_t rowSPSize = (inst.concatSPSize >> 0x04) & 0x0F;
+
+		/*! Setup the iterators for the tile transfer*/
+		uint4_t iColSPUnitIndex = hInitSPIndex;
+		uint4_t iRowSPUnitIndex = vInitSPIndex;
+
+		//Iterator of the column and row index of the strip inside the tile
+		signed char iColInSPTile = 0;
+		signed char iRowInSPTile = 0;
+
+		//Address offset contribution from tile and column in the tile
+		signed int offsetIADramBlockRow = 0;
+		signed int offsetIADramBlockCol = 0;
+		#if defined(SPARSE_SYSTEM)
+			signed int offsetTBCountRow = 0;
+			signed int offsetTBCountCol = 0;
+		#endif
+
+		//iterate over all IA strips in tile
+		for (unsigned short iter=0; iter < inst.tileSPWidthxTileSPHeight; iter++)
+		{
+			//Setup the strip transfer parameters
+			bool colIsDense = (iColInSPTile >= ((signed char) tileLeftPadding))
+				&& (iColInSPTile < (inst.tileSPWidth - ((unsigned char) tileRightPadding)) )
+				&& (iColSPUnitIndex == 0);
+			bool rowIsDense = (iRowInSPTile >= ((signed char) tileTopPadding))
+				&& (iRowInSPTile < (inst.tileSPHeight - ((unsigned char) tileBottomPadding)) )
+				&& (iRowSPUnitIndex == 0);
+
+			bool realStrip = colsIsDense && rowIsDense;
+
+			int addressIADramBlockDDR = ((t_int) inst.memBlockStart) + offsetIADramBlockCol + offsetIADramBlockRow;
+
+			#if defined(SPARSE_SYSTEM)
+				//For the sparse case, we need to consider whether the input is actually sparse,
+				//whether the input is padding
+				int addressTBCountDDR = ((t_int) inst.memTBCountStart) + offsetTBCountCol + offsetTBCountRow;
+				unsigned short numTBInStrip;
+				if (realStrip == true)
+				{
+					if (sparseInput == 0x1)
+					{
+						if (memRegion == 0x0)
+						{
+							numTBInStrip = pTBCount1[addressTBCountDDR];
+						}
+						else
+						{
+							numTBInStrip = pTBCount2[addressTBCountDDR];
+						}
+					}
+					else
+					{
+						numTBInStrip = inst.numCWOrTBInGroup
+					}
+				}
+				else
+				{
+					numTBInStrip = inst.numCWOrTBInGroup;
+				}
+			#else
+				unsigned short numTBInStrip = (t_ushort) numTBPerStip;
+			#endif
+
+			//dramBlockCount = ceil(numTBInStrip / WIDE_SIZE)
+			unsigned short dramBlockCount = 1 + ( (numTBInStrip-1) >> WIDE_SIZE_OFFSET );
+			unsigned short numTransferActions = dramBlockCount + 1;
+
+			for (unsigned short iterTransfer=0; iterTransfer<numTransferActions; iterTransfer++)
+			{
+				t_dram_block_ia_tagged iaBlock;
+				if (iterTransfer==0)
+				{
+					iaBlock.dramBlock = iaMetadata2DramBlock(
+							numTBInStrip, //tbCount
+							inst.columnSPWidth, //colSPWidth
+							inst.columnWidthStride //colSPStride			
+						);
+				}
+				else
+				{
+					if (realStrip == true)
+					{
+						iaBlock.dramBlock = (memRegion == 0x0) ? 
+							pIA1[addressIADramBlockDDR] : pIA2[addressIADramBlockDDR];
+						addressIADramBlockDDR++;
+					}
+					else
+					{
+						//Prepare a DRAM block with 0
+						#pragma unroll
+						for (unsigned char i=0; i<WIDE_SIZE; i++)
+						{
+							#pragma unroll
+							for (unsigned char j=0; j<(TRANSFER_SIZE*CLUSTER_SIZE); j++)
+							{
+								iaBlock.dramBlock.transferBlocks[i].values[j]=0;
+							}
+						}
+					}
+				}
+
+				unsigned char isLastField = ((iterTransfer+1) == numTransferActions) ?
+					0x80 : 0x00;
+				unsigned char isMiscField = (destinationMisc == 0x1) ?
+					0x40 : 0x00;
+				iaBlock.route = isLastField | isMiscField | (numActiveCols & 0x3F);
+				write_channel_intel(channel_ia_wide[0], iaBlock);
+			}
+
+			/*! Loop carried variable updates*/
+			iColInSPTile++;
+			if ( (iColInSPTile >= ((signed char) tileLeftPadding)) 
+				&& (iColInSPTile < (inst.tileSPWidth - ((unsigned char) tileRightPadding))) )
+			{
+				iColSPUnitIndex++;
+				if (iColSPUnitIndex >= ((unsigned char) colSPSize))
+				{
+					iColSPUnitIndex = 0;
+					offsetIADramBlockCol += ((t_int) inst.memBlockColStripStride);
+					#if defined(SPARSE_SYSTEM)
+						offsetTBCountCol +=(t_int) inst.memTBCountColStride;
+					#endif
+				}
+			}
+			
+			if (iColInSPTile == ((signed char) inst.tileSPWidth))
+			{
+				iColInSPTile = 0;
+				iColSPUnitIndex = hInitSPIndex;
+				offsetIADramBlockCol = 0;
+
+				iRowInSPTile++;
+				if ( (iRowInSPTile >= ((signed char) tileTopPadding)) 
+					&& (iRowInSPTile < (inst.tileSPHeight - ((unsigned char) tileBottomPadding)) ) )
+				{
+					iRowSPUnitIndex++;
+					if (iRowSPUnitIndex >= ((unsigned char) rowSPSize))
+					{
+						iRowSPUnitIndex = 0;
+						offsetIADramBlockRow += ((t_int) inst.memBlockRowStripStride);
+						#if defined(SPARSE_SYSTEM)
+							offsetTBCountRow += (t_int) inst.memTBCountRowStride;
+						#endif
+					}
+				}
+			}
+		} //for. iter
+	} // for. iInst
+}
+
 
 #endif //MEMORY_READER
 
 #ifdef IA_MEMORY
+//TODO: Change this to handle the new IA data packet
 #define IA_BUFFER_STATE_DECODE 0x1
 #define IA_BUFFER_STATE_COMPUTE_NUM_ACCESS 0x2
 #define IA_BUFFER_STATE_ACCESS 0x4

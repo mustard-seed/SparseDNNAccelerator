@@ -49,6 +49,14 @@ t_dram_block transferBlockCount2DramBlock (t_streamblock_address transferBlockCo
 
 t_streamblock_address dramBlock2TransferBlockCount (t_dram_block dramBlock);
 
+t_dram_block iaMetadata2DramBlock (unsigned short tbCount, unsigned char colSPWidth, unsigned char colSPStride);
+
+unsigned char getColSPWidth(t_dram_block block);
+
+unsigned char getColSPStride(t_dram_block block);
+
+unsigned short getTBCount(t_dram_block block);
+
 t_output_dram_block clusterCount2OutputDramBlock (unsigned short clusterCount);
 
 unsigned short outputDramBlock2ClusterCount (t_output_dram_block outputDramBlock);

@@ -252,7 +252,7 @@ void convolution_instruction_generator(
                                  + inputStripStartIndex * memIATBCountStripStride);
                         instructionIA.memTBCountColStride = (t_ushort) memIATBCountStripStride;
                         instructionIA.memTBCountRowStride = (t_ushort) (memIATBCountStripStride * inputDenseWidth);
-                        instructionIA.numCWInGroup = (t_uchar) (
+                        instructionIA.numCWOrTBInGroup = (t_uchar) (
                                         1 + (inputChannels-1) / COMPRESSION_WINDOW_SIZE / CLUSTER_SIZE
                                     );
                     #else
