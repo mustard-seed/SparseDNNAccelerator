@@ -29,7 +29,6 @@ void convolution_instruction_generator(
             unsigned int memOATBCountStripStride,
 
             signed int memWeightTBCountStart,
-            unsigned int memWeightTBCountFilterStride,
         #else
             unsigned int numTBPerIAStrip,
             unsigned int numTBPerOAStrip,
@@ -39,6 +38,7 @@ void convolution_instruction_generator(
         unsigned char pingPongRegionIA,
         unsigned char pingPongRegionOA,
         unsigned char flagSparseOutput,
+        unsigned char flagSparseInput,
         unsigned char flagInputSync,
         unsigned char flagOutputSync,
         unsigned char flagRelu,

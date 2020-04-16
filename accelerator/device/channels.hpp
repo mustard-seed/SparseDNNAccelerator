@@ -17,8 +17,14 @@ channel t_transferblock_tagged channel_weight[PE_ROWS][PE_COLS]  __attribute__((
 //channel t_accumulator channel_drainInput __attribute__((depth(1)));
 //channel t_accumulator channel_drainOutput __attribute__((depth(1)));
 
-channel t_conv_drain_tagged channel_drain[PE_ROWS][PE_COLS] __attribute__((depth(0)));
+channel t_conv_drain_tagged channel_drain_conv[PE_ROWS][PE_COLS] __attribute__((depth(0)));
 channel unsigned char channel_drain_token[PE_ROWS][PE_COLS] __attribute__((depth(1)));
+
+#if defined(MISC_ENGINE)
+channel t_conv_drain_tagged channel_drain_misc[PE_COLS] __attribute__((depth(0)));
+channel t_dram_block channel_ia_wide_misc[PE_COLS] __attribute__((depth(0))); 
+channel t_misc_instruction channel_misc_instruction[PE_COLS]  __attribute__((depth(0)));
+#endif
 
 //#endif
 #ifdef PE_SYSTEM
@@ -95,6 +101,13 @@ channel t_output_cluster_tagged channel_compressor_to_tee[PE_COLS] __attribute__
 channel t_output_cluster_tagged channel_oa_buffer_to_oa_tee[PE_COLS] __attribute__((depth(0)));
 #endif
 channel t_output_dram_block_tagged channel_output_wide[PE_COLS] __attribute__((depth(0)));
+
+/*
+ *=========================================================
+  Synchornization channel from the OA mover to IA mover
+  =========================================================
+*/
+channel unsigned char channel_activation_sync __attribute__((depth(0)));
 #endif //ACTIVATION_MEMORY_INTERCONNECT
 
 #endif

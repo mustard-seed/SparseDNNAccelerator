@@ -169,13 +169,14 @@ t_streamblock_address dramBlock2TransferBlockCount (t_dram_block dramBlock)
     return count;
 }
 
-t_dram_block iaMetadata2DramBlock (unsigned short tbCount, unsigned char colSPWidth, unsigned char colSPStride)
+t_dram_block iaMetadata2DramBlock (unsigned short tbCount, unsigned char colSPWidth, unsigned char colSPStride, signed char iColInSPTile)
 {
     t_dram_block dramBlock;
-    dramBlock.transferBlocks[0].values[0] = (char) (tbCount & 0xFF);
-    dramBlock.transferBlocks[0].values[1] = (char) ((tbCount >> 8) & 0x0FF);
-    dramBlock.transferBlocks[0].values[2] = (char) colSPWidth;
-    dramBlock.transferBlocks[0].values[3] = (char) colSPStride;
+    dramBlock.transferBlocks[0].values[0] = (signed char) (tbCount & 0xFF);
+    dramBlock.transferBlocks[0].values[1] = (signed char) ((tbCount >> 8) & 0x0FF);
+    dramBlock.transferBlocks[0].values[2] = (signed char) colSPWidth;
+    dramBlock.transferBlocks[0].values[3] = (signed char) colSPStride;
+    dramBlock.transferBlocks[1].values[0] = (signed char) iColInSPTile;
 }
 
 unsigned char getColSPWidth(t_dram_block block)
@@ -198,6 +199,11 @@ unsigned short getTBCount(t_dram_block block)
         | ((((unsigned short) countLow) & 0xFF));
 
     return count;
+}
+
+signed char getColSPIndex(t_dram_block block)
+{
+    return block.transferBlocks[1].values[0];
 }
 
 t_output_dram_block clusterCount2OutputDramBlock (unsigned short clusterCount)

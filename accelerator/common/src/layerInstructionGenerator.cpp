@@ -26,7 +26,6 @@ void convolution_instruction_generator(
             unsigned int memOATBCountStripStride,
 
             signed int memWeightTBCountStart,
-            unsigned int memWeightTBCountFilterStride,
         #else
             unsigned int numTBPerIAStrip,
             unsigned int numTBPerOAStrip,
@@ -35,6 +34,7 @@ void convolution_instruction_generator(
 
         unsigned char pingPongRegionIA,
         unsigned char pingPongRegionOA,
+        unsigned char flagSparseInput,
         unsigned char flagSparseOutput,
         unsigned char flagInputSync,
         unsigned char flagOutputSync,
@@ -162,7 +162,7 @@ void convolution_instruction_generator(
                             * numGroupsNextLayer * memOADramBlockStripStride);
 
                 instructionOA.memOAGroupStride = (t_uint)((unsigned int) outputWidth * outputHeight * memOADramBlockStripStride);
-                instructionOA.memOATileStride = (t_uint)((unsigned int) outputWidth * outputHeight * numGroupsNextLayer * memOADramBlockStripStride);
+                instructionOA.memOAPEColStride = (t_uint)((unsigned int) maxTQPerCol * memOADramBlockStripStride);
                 instructionOA.memOARowStride = (t_ushort)((unsigned int) outputWidth * memOADramBlockStripStride);
                 instructionOA.memOAColStride = (t_ushort) memOADramBlockStripStride;
 
@@ -173,11 +173,11 @@ void convolution_instruction_generator(
                                 * numGroupsNextLayer * memOATBCountStripStride);
 
                 instructionOA.memTBGroupStride = (t_uint)((unsigned int) outputWidth * outputHeight * memOATBCountStripStride);
-                instructionOA.memTBTileStride = (t_uint)((unsigned int) outputWidth * outputHeight * numGroupsNextLayer * memOATBCountStripStride);
+                instructionOA.memTBPEColStride = (t_uint)((unsigned int) maxTQPerCol * memOATBCountStripStride);
                 instructionOA.memTBRowStride = (t_ushort)((unsigned int) outputWidth * memOATBCountStripStride);
                 instructionOA.memTBColStride = (t_ushort) memOATBCountStripStride;
     #else
-                instructionOA.numTBPerStrip = (t_uint) numTBPerOAStrip;
+                instructionOA.numDramBlockPerStrip = (t_uint) (numTBPerOAStrip >> WIDE_SIZE_OFFSET);
     #endif
                 instructionOA.numOAGroup = (t_uchar) numGroupsNextLayer;
                 instructionOA.tileHeight = (t_uchar) maxTP;
@@ -201,6 +201,7 @@ void convolution_instruction_generator(
                 instructionOAControl.numFoldsInGroupCurrentLayer = (t_uchar) numRowFoldPerGroup;
                 instructionOAControl.numFullFoldsInCurrentLayer = (t_uchar) numFullRowFoldPerGroup;
                 instructionOAControl.numActiveElementsInPartialFold = (t_uchar) numFiltersInPartialRowFold;
+                instructionOAControl.numLocalChannelsPerCurrentGroup = (t_ushort) numOutputChannelsPerGroupCurrentLayer;
                 instructionOAControl.numLocalChannelsPerNextGroup = (t_ushort) numOutputChannelsPerGroupNextLayer;
                 instructionOAControl.numActiveCols = (t_uchar) numActiveCols;
                 instructionOAControl.flagSparseCatFlagReluCatFlagSourceCatRShift = (t_uchar)
@@ -252,7 +253,7 @@ void convolution_instruction_generator(
                                  + inputStripStartIndex * memIATBCountStripStride);
                         instructionIA.memTBCountColStride = (t_ushort) memIATBCountStripStride;
                         instructionIA.memTBCountRowStride = (t_ushort) (memIATBCountStripStride * inputDenseWidth);
-                        instructionIA.numCWInGroup = (t_uchar) (
+                        instructionIA.numCWOrTBInGroup = (t_uchar) (
                                         1 + (inputChannels-1) / COMPRESSION_WINDOW_SIZE / CLUSTER_SIZE
                                     );
                     #else
@@ -298,10 +299,14 @@ void convolution_instruction_generator(
                     instructionIAControl.kernelStride = (t_uchar) kernelStride;
                     instructionIAControl.kernelSize = (t_uchar) kernelSize;
                     instructionIAControl.numOutputInstructions = (t_ushort)
-                            ((t_ushort) maxTP * (t_ushort) maxTQPerCol * (t_ushort) kernelSize * numRowFoldPerGroup);
-                    instructionIAControl.cacheStripStride = (t_ushort) memIADramBlockStripStride;
+                            ((t_ushort) maxTP * (t_ushort) maxTQPerCol * numRowFoldPerGroup);
+                    instructionIAControl.cacheIAStripColStride = (t_ushort) memIADramBlockStripStride;
+                    instructionIAControl.numOutputChannelsInGroup = (t_ushort) numOutputChannelsPerGroupCurrentLayer;
+                    instructionIAControl.flagPadBitmaskCatNumActiveCols = (t_uchar) numActiveCols;
 #if !defined(SPARSE_SYSTEM)
                     instructionIAControl.numTBPerStrip = (t_ushort) numTBPerIAStrip;
+                    instructionIAControl.flagPadBitmaskCatNumActiveCols = (flagSparseInput == 0x1) ?
+                              (t_uchar) numActiveCols : (t_uchar) (0x80 | (0x07F & numActiveCols));
 #endif
                     vecIATileControlInstruction.push_back(instructionIAControl);
                 } // generate the ia controller instruction
@@ -310,16 +315,16 @@ void convolution_instruction_generator(
                 {
                     unsigned int filterIndex = iterInputGroup * numOutputChannelsPerGroupCurrentLayer;
                     t_weight_mover_instruction instructionWMover;
-                    instructionWMover.numFilterFold = (t_ushort) numRowFoldPerGroup;
+                    instructionWMover.numFiltersInGroup = (t_ushort) numOutputChannelsPerGroupCurrentLayer;
                     instructionWMover.numFullFilterFold = (t_ushort) numFullRowFoldPerGroup;
                     instructionWMover.numFiltersInPartialFold = (t_uchar) numFiltersInPartialRowFold;
                     instructionWMover.filterReuse = (t_ushort) maxTNPerCol * (t_ushort) maxTM;
+                    instructionWMover.numActivePeCols = (t_uchar) numActiveCols;
                     instructionWMover.memBiasStart = (t_int)(memBiasStartIndex + filterIndex);
                     instructionWMover.memWeightStart = (t_int) memWeightDramBlockStartIndex +(t_int) filterIndex * memWeightDramBlockFilterStride;
                     instructionWMover.memWeightFilterStride = (t_int) memWeightDramBlockFilterStride;
 #if defined(SPARSE_SYSTEM)
-                    instructionWMover.memTBCountStart = (t_int) memWeightTBCountStart + (t_int) filterIndex * memWeightTBCountFilterStride;
-                    instructionWMover.memTBCountFilterStride = (t_int) memWeightTBCountFilterStride;
+                    instructionWMover.memTBCountStart = (t_int) memWeightTBCountStart + (t_int) filterIndex;
 #else
                     instructionWMover.numTBPerFilter = (t_uint) numTBPerWeightFilter;
 #endif

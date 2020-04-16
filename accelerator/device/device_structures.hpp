@@ -185,8 +185,8 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
     t_int memOAStart;
     //Arch. parameter: Group stride in terms of dram block in the output memory region
     t_uint memOAGroupStride;
-    //Arch. parameter: tile stride in terms of dram block in the output memory region
-    t_uint memOATileStride;
+    //Arch. parameter: PE column stride in terms of dram block in the output memory region
+    t_uint memOAPEColStride;
     //Arch. parameter: column stride in terms of dram block in the output memory region
     t_ushort memOAColStride;
     //Arch. parameter: row stride in terms of dram block in the output memory region
@@ -198,13 +198,13 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
     //Arch. parameter: group stride in terms of TB count in the TB memory
     t_ushort memTBGroupStride;
     //Arch. parameter: tile stride in terms of TB count in the TB memory.
-    t_ushort memTBTileStride;
+    t_ushort memTBPEColStride;
     //Arch. parameter: column stride in terms of TB count in the TB memory.
     t_ushort memTBColStride;
     //Arch. parameter: row stride in terms of TB count in the TB moveremory.
     t_ushort memTBRowStride;
 #else
-    t_uint numTBPerStrip;
+    t_uint numDramBlockPerStrip;
 #endif
 
     //Problem parameter: Output tile group to drain from   
@@ -220,14 +220,16 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
 
 typedef struct __attribute__((packed)) __attribute__((aligned(32)))
 {
-    //Arch. parameter: number of folds
-    t_ushort numFilterFold;
+    //Problem. Number of output channels in the group
+    t_ushort numFiltersInGroup;
     //Arch. parameter: number of full folds
     t_ushort numFullFilterFold;
     //Arch. parameter: number of filter in the partial fold
     t_uchar numFiltersInPartialFold;
     //Arch. parameter: number of filter reuse
     t_ushort filterReuse;
+    //Arch. Number of active pe cols
+    t_uchar numActivePeCols;
 
     //Arch. parameter: Start of the transfer in the bias memory region
     t_int memBiasStart;
@@ -239,8 +241,6 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
 #if defined(SPARSE_SYSTEM)
     //Arch. parameter: Start of the transfer in the weight TB count region
     t_int memTBCountStart;
-    //Arch. parameter: Filter stride in the weight TB count region.
-    t_int memTBCountFilterStride;
 #else
     t_uint numTBPerFilter;
 #endif
@@ -260,12 +260,13 @@ typedef struct __attribute__((packed)) __attribute__((aligned(16)))
     t_uchar kernelSize;
     //Number of streaming instruction for this tile
     t_ushort numOutputInstructions;
-    //Column stride of strip in IA cache in terms of dram block
-    t_ushort cacheStripStride;
-
-#if !defined(SPARSE_SYSTEM)
-    t_ushort numTBPerStrip;
-#endif
+    //Column stride of IA strip in IA cache in terms of dram block
+    t_ushort cacheIAStripColStride;
+    //Number of output channels in the output group
+    t_ushort numOutputChannelsInGroup;
+    //Bit[6:0] Number of active PE columns
+    //Bit[7] For sparse engine use only. Whether the input activation tensor is dense and hence need bitmask padding.
+    t_uchar flagPadBitmaskCatNumActiveCols;
 } t_ia_tile_controller_instruction;
 
 //Instructions for the output tile controller
@@ -288,6 +289,9 @@ typedef struct __attribute__((packed)) __attribute__((aligned(16)))
     t_uchar numActiveElementsInPartialFold;
 
     //Number of channels per group in the next layer
+    t_ushort numLocalChannelsPerCurrentGroup;
+
+    //Number of channels per group in the next layer
     t_ushort numLocalChannelsPerNextGroup;
 
     //Number of active compute columns
@@ -301,6 +305,23 @@ typedef struct __attribute__((packed)) __attribute__((aligned(16)))
     t_uchar flagSparseCatFlagReluCatFlagSourceCatRShift;
     
 } t_oa_tile_controller_instruction;
+
+/**
+ * Instruction for the misc module
+ */
+typedef struct __attribute__((aligned(16)))
+{
+    //Bit[0]: Add/Max flag. 1 for add, 0 for pool
+    //Bit[7:1]: Number of active PE columns
+    t_uchar controlBits;
+
+    //Number of strips to reduce
+    t_uchar numStrips;
+
+    //Number of output to drain from the reduction strip
+    t_uchar numDrain
+
+} t_misc_instruction;
 
 #ifdef INTELFPGA_CL
 typedef uint1_t t_flag;
@@ -357,26 +378,28 @@ typedef struct __attribute__((packed))
 
 typedef struct __attribute__((packed))
 {
-    unsigned short iActivationDramBlockAddressBase;
-    unsigned short strideActivationDramBlock;
+    unsigned short iaDramBlockAddressBase;
+    unsigned short iaDramBlockColStride;
+    unsigned short iaDramBlockRowStride;
     #if defined(SPARSE_SYSTEM)
-    unsigned char iAddressCache;
+        unsigned char tbAddressBase;
+        unsigned char tbAddressRowStride;
     #endif
     unsigned char maxPeRowID; //Only relevant for sending
 
-    #if !defined (SPARSE_SYSTEM)
-    unsigned short numTBCountPerStrip;
-    #endif
 
     //Bit 1:0: 
     // - 00: NOP for some fixed cycles. 
     // - 01: Update the buffer.
-    // - 10: Stream from the buffer, not the last strip. 
-    // - 11: Stream from the buffer, is the last strip
-    //Bit 7:2: Max PE Cols to send to; 
+    // - 10: Stream from the buffer
+    //Bit 2: Only useful for sparse case. Flag for whether the tile require sparse bitmask padding. 1 for true, 0 for false
+    //Bit 7:3: Max PE Cols to send to; 
     unsigned char controlBits; 
 
-    unsigned char numStripInRow; //Number of strips in the row concerned by the instruction.
+    //Number of columns in the transfer command
+    unsigned char numStripsCol;
+    //Number of rows in the transfer command
+    unsigned char numStripsRow;
 } t_input_buffer_tile_buffer_packet;
 
 
