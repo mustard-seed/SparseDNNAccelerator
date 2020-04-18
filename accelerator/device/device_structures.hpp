@@ -297,7 +297,7 @@ typedef struct __attribute__((packed)) __attribute__((aligned(16)))
     t_uchar numActiveCols;
 
     //Concatenated signal
-    //[3:0] Number of bits to right-shift the output
+    //[3:0] Shift direciton and number of bits to shift the convolution output
     //[4] Enable sparsification. 1 for TRUE, 0 for otherwise
     //[5] Source of the output. 1 for convolution engine, 0 for misc.
     //[6] Enable Relu. 1 for TRUE, 0 for false
@@ -310,15 +310,16 @@ typedef struct __attribute__((packed)) __attribute__((aligned(16)))
  */
 typedef struct __attribute__((aligned(16)))
 {
-    //Bit[0]: Add/Max flag. 1 for add, 0 for pool
-    //Bit[7:1]: Number of active PE columns
+    //Bit[3:0]: Number of active PE columns
+    //Bit[5:4]: OpCode. 00: Add; 01: Max Pooling; 10: Stream
     t_uchar controlBits;
 
-    //Number of strips to reduce
-    t_uchar numStrips;
+    //Number of dram blocks to reduce
+    t_uchar numDramBlocksToReduce;
 
-    //Number of output to drain from the reduction strip
-    t_uchar numDrain
+    //Bit [6:0] Shift amount
+    //Bit [7] Flag for left/right shift. 0 for right, 1 for left
+    t_uchar flagLeftShiftCatShiftAmount;
 
 } t_misc_instruction;
 
@@ -438,7 +439,7 @@ typedef struct __attribute__((packed))
 
     /*
         Control bits
-        Bit 3:0: Number of bits to right shift the accumulator value from the PE array. Only relevant for loading
+        Bit 3:0: Shift direciton and the number of bits to shift the accumulator value from the convolution PE array. Only relevant for loading
         Bit 4: Enable sparsification. Only relevant for the convolutional kernel during ending
         Bit 5: Drainage source. 1: from the MISC kernel. 0: from the convolution kernel.
         Bit 6: Enable Relu. Only relevant for loading
@@ -463,6 +464,21 @@ typedef struct __attribute__((packed))
     //Bit [5] Flag for draining from the MISC kernel (1), or the conv engine (0)
     unsigned char flagSourceCatFlagSparseFlagMaxColID;
 } t_output_tile_tee_packet;
+
+typedef struct __attribute__((packed))
+{
+    //Bit[3:0]: Number of active PE columns
+    //Bit[5:4]: OpCode. 00: Add; 01: Max Pooling; 10: Stream
+    t_uchar controlBits;
+
+    //Number of dram blocks to reduce
+    t_uchar numDramBlocksToReduce;
+
+    //Bit [6:0] Shift amount
+    //Bit [7] Flag for left/right shift. 0 for right, 1 for left
+    t_uchar flagLeftShiftCatShiftAmount;
+
+} t_misc_control_packet;
 
 /*
 ===================================================================

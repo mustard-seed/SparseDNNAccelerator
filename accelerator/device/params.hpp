@@ -89,6 +89,7 @@
 #define CLUSTER_SIZE 1 //cluster size in terms of values
 #define VALUE_TO_CLUSTER_SHIFT 0 //amount of right shift required to convert a value index into cluster index
 #define VALUE_DIVIDED_BY_CLUSTER_SIZE_REMAINDER_MASK 0x0;
+#define VALUE_DIVIDED_BY_SIMD_SIZE_REMAINDER_MASK ((1 << (VALUE_TO_CLUSTER_SHIFT + CLUSTER_TO_TRANSFER_SIZE_SHIFT)) - 1)
 #define CLUSTER_TO_TRANSFER_BLOCK_SHIFT CLUSTER_TO_TRANSFER_SIZE_SHIFT //amount of right shift required to convert a cluster count into transfer block count
 
 /**

@@ -23,8 +23,17 @@ printf enabled on HW if -HW_DEBUG flag is set
 
 t_operand modifyOutput (
 		t_accumulator accumulator,
-		unsigned char rightShift,
+		//Bit [6:0] Shift amount
+		//Bit [7] Flag for left/right shift. 0 for right, 1 for left
+		unsigned char shiftDirectionCatShiftAmount,
 		uint1_t enableRelu
+		);
+
+signed char modifyCharOutput (
+		signed char input,
+		//Bit [6:0] Shift amount
+		//Bit [7] Flag for left/right shift. 0 for right, 1 for left
+		unsigned char shiftDirectionCatShiftAmount
 		);
 
 #ifdef INTELFPGA_CL

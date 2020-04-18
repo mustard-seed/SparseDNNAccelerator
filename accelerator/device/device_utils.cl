@@ -1,45 +1,112 @@
 #include "device_structures.hpp"
 
+//TODO: review this
 t_operand modifyOutput (
 		t_accumulator accumulator,
-		unsigned char rightShift,
+        //Bit [6:0] Shift amount
+        //Bit [7] Flag for left/right shift. 0 for right, 1 for left
+        unsigned char shiftDirectionCatShiftAmount,
 		uint1_t enableRelu
 		)
 {
+    uint1_t shiftLeft = (shiftDirectionCatShiftAmount & 0x80) >> 0x7;
+    unsigned char shiftAmount = shiftDirectionCatShiftAmount & 0x7F;
+    uint1_t preShiftIsPositive;
+
+
 	t_accumulator comparedAccumulator;
-	unsigned char rndRightShift = rightShift - 1;
 	if (enableRelu == TRUE)
 	{
 		comparedAccumulator = (accumulator > 0x0) ? accumulator : 0x0;
+        preShiftIsPositive = TRUE;
 	}
 	else
 	{
 		comparedAccumulator = accumulator;
+        preShiftIsPositive = (accumulator > 0x0) ? TRUE : FALSE;
 	}
 
-	t_accumulator signExtensionMask = (comparedAccumulator>=0) ?
+    //Handle the right shift case
+    unsigned char rndRightShift = shiftAmount - 1;
+	t_accumulator signExtensionMask = (preShiftIsPositive == TRUE) ?
 		0x00 : ~(0xFFFF >> rndRightShift);
 
-	t_accumulator shiftedAccumulator = comparedAccumulator >> rndRightShift;
+	t_accumulator rightShiftAccumulatorWithRndBit = signExtensionMask | ((t_accumulator) (comparedAccumulator >> rndRightShift));
 
-	t_accumulator accumulatorWithRndBit = signExtensionMask | shiftedAccumulator;
-
-	t_accumulator accumulatorBiased;
-	if(accumulatorWithRndBit >= ((t_accumulator) 256))
+	t_accumulator rightShiftAccumulatorBiased;
+	if(rightShiftAccumulatorWithRndBit >= ((t_accumulator) 256))
 	{
-		accumulatorBiased = 0x0FF; //=255
+		rightShiftAccumulatorBiased = 0x0FF; //=255
 	}
-	else if(accumulatorWithRndBit <((t_accumulator) -256))
+	else if(rightShiftAccumulatorWithRndBit <((t_accumulator) -256))
 	{
-		accumulatorBiased = 0x0100; //=-256
+		rightShiftAccumulatorBiased = 0x0100; //=-256
 	}
 	else
 	{
-		accumulatorBiased = (t_accumulator) ((0x1FF & accumulatorWithRndBit)+ (t_accumulator) 0x01);
+		rightShiftAccumulatorBiased = (t_accumulator) ((0x1FF & rightShiftAccumulatorWithRndBit)+ (t_accumulator) 0x01);
 	}
-	// final truncation
-	t_operand result = 0xFF & (accumulatorBiased>>0x01);  // remove the last rounding bit
-	return result;
+	// final truncation for the right shift
+	t_operand rightShiftResult = 0xFF & (rightShiftAccumulatorBiased>>0x01);  // remove the last rounding bit
+	
+
+    //Handle the left shift case
+    t_accumulator leftShiftTemp = comparedAccumulator << shiftAmount;
+    t_accumulator leftShiftPreTrunc;
+    if (preShiftIsPositive == TRUE)
+    {   
+        leftShiftPreTrunc = (leftShiftTemp < 0) ? 0x07F : (
+                                    (leftShiftTemp <= 0x07F) ? leftShiftTemp : 0x07F
+                                );
+
+    }
+    else
+    {
+        leftShiftPreTrunc = (leftShiftTemp >= 0) ? 0x080 : (
+                                    (leftShiftTemp >= 0x080) ? leftShiftTemp : 0x080
+                                );
+    }
+
+    t_operand leftShiftResult = 0xFF & leftShiftPreTrunc;
+
+    t_operand result = (shiftLeft == TRUE) ? leftShiftResult : rightShiftResult;
+    return result;
+}
+
+//TODO: review this
+signed char modifyCharOutput (
+        signed char input,
+        //Bit [6:0] Shift amount
+        //Bit [7] Flag for left/right shift. 0 for right, 1 for left
+        unsigned char shiftDirectionCatShiftAmount
+        )
+{
+    uint1_t shiftLeft = (shiftDirectionCatShiftAmount & 0x80) >> 0x7;
+    unsigned char shiftAmount = shiftDirectionCatShiftAmount & 0x7F;
+    uint1_t originalIsPositive = (input >= 0) ? TRUE : FALSE;
+
+    //Handle the right shift
+    unsigned char rndRightShift = shiftAmount - 1;
+    signed char signExtensionMask = (originalIsPositive == TRUE) ? 0x00 : ~(0xFF >> rndRightShift);
+    signed char rightShiftOutputWithRndBit = signExtensionMask | ((signed char) (input >> rndRightShift));
+    signed char rightShiftOutputBiased = rightShiftOutputWithRndBit + 0x01;
+    signed char rightShiftinal = 0xFF & (rightShiftOutputBiased >> 0x1);
+
+    //Handle the left shift
+    signed char leftShiftTemp = input << shiftAmount;
+    signed char leftShiftFinal;
+    if (originalIsPositive == TRUE)
+    {
+        leftShiftFinal = (leftShiftTemp < 0) ? 0x7F : leftShiftTemp;
+    }
+    else
+    {
+        leftShiftFinal = (leftShiftTemp >= 0) ? 0x80 : leftShiftTemp;
+    }
+
+    signed char output = (shiftLeft == TRUE) ? leftShiftFinal : rightShiftFinal;
+
+    return output;
 }
 
 #ifdef INTELFPGA_CL
