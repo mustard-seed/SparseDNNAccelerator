@@ -184,7 +184,7 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
     //Arch. parameter: Index of the first dram block of this transfer in memory
     t_int memOAStart;
     //Arch. parameter: Group stride in terms of dram block in the output memory region
-    t_uint memOAGroupStride;
+    //t_uint memOAGroupStride;
     //Arch. parameter: PE column stride in terms of dram block in the output memory region
     t_uint memOAPEColStride;
     //Arch. parameter: column stride in terms of dram block in the output memory region
@@ -196,25 +196,24 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
     //Arch. parameter: Index of the first TB count element of this transfer in memory
     t_int memTBStart;
     //Arch. parameter: group stride in terms of TB count in the TB memory
-    t_ushort memTBGroupStride;
+    //t_ushort memTBGroupStride;
     //Arch. parameter: tile stride in terms of TB count in the TB memory.
     t_ushort memTBPEColStride;
     //Arch. parameter: column stride in terms of TB count in the TB memory.
     t_ushort memTBColStride;
     //Arch. parameter: row stride in terms of TB count in the TB moveremory.
     t_ushort memTBRowStride;
-#else
-    t_uint numDramBlockPerStrip;
 #endif
+    t_uint numDramBlockPerStrip;
 
     //Problem parameter: Output tile group to drain from   
-    t_uchar numOAGroup; 
+    //t_uchar numOAGroup; 
     //Problem parameter: Output tile height per compute column 
     t_uchar tileHeight; 
     //Problem parameter: Output tile width per compute column
     t_uchar columnTileWidth; 
     //Auxillary parameter: Total number of strips to drain.
-    t_ushort numOAGroupxColumnTileWidthxTileHeightxNumActiveCols;
+    t_ushort numColumnTileWidthxTileHeightxNumActiveCols;
 
 } t_oa_mover_instruction;
 
@@ -299,9 +298,9 @@ typedef struct __attribute__((packed)) __attribute__((aligned(16)))
 
     //Concatenated signal
     //[3:0] Number of bits to right-shift the output
-    //[4] Source of the output. 1 for convolution engine, 0 for misc.
-    //[5] Enable Relu. 1 for TRUE, 0 for false
-    //[6] Enable sparsification. 1 for TRUE, 0 for otherwise
+    //[4] Enable sparsification. 1 for TRUE, 0 for otherwise
+    //[5] Source of the output. 1 for convolution engine, 0 for misc.
+    //[6] Enable Relu. 1 for TRUE, 0 for false
     t_uchar flagSparseCatFlagReluCatFlagSourceCatRShift;
     
 } t_oa_tile_controller_instruction;
@@ -428,15 +427,22 @@ typedef struct __attribute__((packed))
     //Assume the layout of the output is HWC
     unsigned short startOutputIndex; 
 
-    //Number of output values to load into or to stream from the cache during this instruction cycle.
-    unsigned short numOutputToAccess; 
+    //Number of output values in a strip that is to load into or to stream from the cache during this instruction cycle.
+    unsigned short numOutputsPerStrip; 
+
+    //Number of strips to access
+    unsigned short numStripsToAccess;
+
+    //Stride between successive strip
+    unsigned short iaStridePerCol;
 
     /*
         Control bits
         Bit 3:0: Number of bits to right shift the accumulator value from the PE array. Only relevant for loading
-        Bit 4: Enable Relu. Only relevant for loading
-        Bit 5: Enable sparsification. Only relevant for sending
-        Bit 6: Load from array (0) or send to drainer
+        Bit 4: Enable sparsification. Only relevant for the convolutional kernel during ending
+        Bit 5: Drainage source. 1: from the MISC kernel. 0: from the convolution kernel.
+        Bit 6: Enable Relu. Only relevant for loading
+        Bit 7: Load from engine (0) or drain the buffer (1)
     */
     unsigned char controlBits;
 
@@ -450,8 +456,12 @@ typedef struct __attribute__((packed))
 
 typedef struct __attribute__((packed))
 {
-    unsigned short numOutputGroupxTileHeightxTileWidth;
-    unsigned char maxColID;
+    unsigned short numLocalTileHeightxLocalTileWidth;
+
+    //Bit [3:0] Maximum column ID
+    //Bit [4] Flag for sparse draining sparse input (1 for true)
+    //Bit [5] Flag for draining from the MISC kernel (1), or the conv engine (0)
+    unsigned char flagSourceCatFlagSparseFlagMaxColID;
 } t_output_tile_tee_packet;
 
 /*

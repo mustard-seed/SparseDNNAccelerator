@@ -207,9 +207,9 @@ void convolution_instruction_generator(
                 instructionOAControl.flagSparseCatFlagReluCatFlagSourceCatRShift = (t_uchar)
                         (
                             ((t_uchar)(inputFracBits+weightFracBits-outputFracBits) & 0x0F)
-                            | (t_uchar)(0x01 << 0x4)
-                            | (t_uchar)((flagRelu & 0x01) << 0x5)
-                            | (t_uchar)((flagSparseOutput & 0x01) << 0x06)
+                            | (t_uchar)((flagRelu & 0x01) << 0x6)
+                            | (t_uchar)((flagSparseOutput & 0x01) << 0x054)
+                            | (t_uchar)(0x00 << 0x5) //Source
                         );
                 vecOATileControlInstruction.push_back(instructionOAControl);
             }

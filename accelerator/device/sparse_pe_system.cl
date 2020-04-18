@@ -1736,35 +1736,46 @@ __kernel void kernelOAMover (
 		signed int addrOAPeColContribution = 0;
 		signed int addrOAColContribution = 0;
 		signed int addrOARowContribution = 0;
-		signed int addrOAGroupContribution = 0;
+		//signed int addrOAGroupContribution = 0;
 		#if defined(SPARSE_SYSTEM)
 			signed int addrTBPeColContribution = 0;
 			signed int addrTBColContribution = 0;
 			signed int addrTBRowContribution = 0;
-			signed int addrTBGroupContribution = 0;
+			//signed int addrTBGroupContribution = 0;
 		#endif
-		for (unsigned short iter=0; iter<inst.numOAGroupxColumnTileWidthxTileHeightxNumActiveCols; iter++)
+		for (unsigned short iter=0; iter<inst.numColumnTileWidthxTileHeightxNumActiveCols; iter++)
 		{
 
-			int addrOA = inst.memOAStart + addrOAGroupContribution + addrOARowContribution + addrOAColContribution + addrOAPeColContribution;
+			//int addrOA = inst.memOAStart + addrOAGroupContribution + addrOARowContribution + addrOAColContribution + addrOAPeColContribution;
+			int addrOA = inst.memOAStart + addrOARowContribution + addrOAColContribution + addrOAPeColContribution;
 			#if defined(SPARSE_SYSTEM)
-				int addrTB = inst.memTBStart + addrTBGroupContribution + addrTBRowContribution + addrTBColContribution + addrTBPeColContribution;
+				//int addrTB = inst.memTBStart + addrTBGroupContribution + addrTBRowContribution + addrTBColContribution + addrTBPeColContribution;
+				int addrTB = inst.memTBStart + addrTBRowContribution + addrTBColContribution + addrTBPeColContribution;
 				bool proceed = true;
 				unsigned short clusterCount = 0;
 				while (proceed)
 				{
 					t_output_dram_block_tagged receivedBlock = read_channel_intel(channel_output_wide[0]);
-					if ((receivedBlock.isLastFlag & 0x1) == 0x1)
+					if ((receivedBlock.isLastFlag & 0x1) == TRUE)
 					{
 						proceed = false;
-						clusterCount = outputDramBlock2ClusterCount(receivedBlock.block);
 					}
-					else 
+						clusterCount = outputDramBlock2ClusterCount(receivedBlock.block);
+					
+					if (((receivedBlock.isLastFlag & 0x1) == FALSE) || (enableSparsification == FALSE))
 					{
-						//Store the dram count
+						//Store the dram block
 						pOA[addrOA++] = receivedBlock.block;
 					}
 				} //while
+
+				t_streamblock_address tbBlockCount = clusterCount >> CLUSTER_TO_TRANSFER_BLOCK_SHIFT;
+				
+				if (enableSparsification == TRUE)
+				{
+					//Store the cluster count
+					pTB[addrTB++] = tbBlockCount;
+				}
 			#else
 				for (unsigned int i=0; i<inst.numDramBlockPerStrip; i++)
 				{
@@ -1774,9 +1785,7 @@ __kernel void kernelOAMover (
 			#endif
 
 			#if defined(SPARSE_SYSTEM)
-				t_streamblock_address tbBlockCount = clusterCount >> CLUSTER_TO_TRANSFER_BLOCK_SHIFT;
-				//Store the cluster count
-				pTB[addrTB++] = tbBlockCount;
+				
 			#endif
 
 			/*
@@ -1813,23 +1822,30 @@ __kernel void kernelOAMover (
 					#if defined(SPARSE_SYSTEM)
 						addrTBRowContribution += (signed int) inst.memTBRowStride;
 					#endif
-					if (iOutputHeightInColTile==inst.tileHeight)
-					{
-						iOutputHeightInColTile = 0;
-						addrOARowContribution = 0;
-						#if defined(SPARSE_SYSTEM)
-							addrTBRowContribution = 0;
-						#endif
+					// if (iOutputHeightInColTile==inst.tileHeight)
+					// {
+					// 	iOutputHeightInColTile = 0;
+					// 	addrOARowContribution = 0;
+					// 	#if defined(SPARSE_SYSTEM)
+					// 		addrTBRowContribution = 0;
+					// 	#endif
 
-						iOutputGroup++;
-						addrOAGroupContribution += (signed int) inst.memOAGroupStride;
-						#if defined(SPARSE_SYSTEM)
-							addrTBGroupContribution += (signed int) inst.memTBGroupStride;
-						#endif
-					}
+					// 	iOutputGroup++;
+					// 	addrOAGroupContribution += (signed int) inst.memOAGroupStride;
+					// 	#if defined(SPARSE_SYSTEM)
+					// 		addrTBGroupContribution += (signed int) inst.memTBGroupStride;
+					// 	#endif
+					// }
 				}
 			}
 		} //for. strip inside the OA tile
+
+		//Send the activation sync if needed
+		if (enableSendSync == TRUE)
+		{
+			mem_fence(CLK_GLOBAL_MEM_FENCE | CLK_CHANNEL_MEM_FENCE);
+			write_channel_intel(0x0, channel_activation_sync);
+		}
 	} //for. over instruction
 } //kernelOAMover
 #endif //MEMORY_WRITER 
@@ -1838,8 +1854,9 @@ __kernel void kernelOAMover (
 //TODO: HANDLE MULTI-BYTE BITMASK
 #define OA_BUFFER_STATE_DECODE 0x1
 #define OA_BUFFER_STATE_NUM_ACCESS 0x2
+#define OA_BUFFER_UPDATE_STRIP 0x3
 #define OA_BUFFER_STATE_PADD 0x4 //NOP instructions
-#define OA_BUFFER_STATE_ACCESS 0x8
+#define OA_BUFFER_STATE_ACCESS 0x5
 #define OA_BUFFER_PAD_COUNT	 2
 //#define OA_BUFFER_PAD_COUNT	 20
 __attribute__((max_global_work_dim(0)))
@@ -1847,7 +1864,7 @@ __attribute__((autorun))
 __attribute__((num_compute_units(PE_COLS)))
 __kernel void kernelOABuffer ()
 {
-	typedef uint4_t t_state;
+	typedef uint3_t t_state;
 
 	int colID = get_compute_id(0);
 	char cacheOutputActivations[OA_CACHE_SIZE] __attribute__((numbanks(1)));
@@ -1858,14 +1875,15 @@ __kernel void kernelOABuffer ()
 	t_state currentState = OA_BUFFER_STATE_DECODE;
 
 	unsigned short startOutputIndex = 0X0;
-	unsigned short numOutputToAccess = 0X0;
+	unsigned short numOutputsPerStrip = 0X0;
+	unsigned short numStripsToAccess = 0x0;
+	unsigned short iaStridePerCol = 0x0;
 	uint1_t isDrainBuffer = FALSE;
 
 	//Information relevant for loading the cache only
 	unsigned char numAccumulatorBitsToRightShift = 0x0;
 	uint1_t enableRelu = FALSE;
 	uint1_t enableSparsification = FALSE;
-	uint1_t drainFromConv = 0X1; //Flag for draining from the convolution engine
 	unsigned short numClustersToDrain = 0;
 	unsigned short numWindowsToDrain = 0;
 
@@ -1881,10 +1899,11 @@ __kernel void kernelOABuffer ()
 		mask.bytes[i] = 0x0;
 	}
 
-	unsigned short numLoops = 0;
+	unsigned short iStrip = 0;
+	unsigned short numLoopsPerStip = 0;
 
 	unsigned char delayCount = 0;
-	unsigned short iLoop = 0;
+	unsigned short iLoopPerStip = 0;
 	unsigned short indexOutput = 0;
 
 
@@ -1903,14 +1922,17 @@ __kernel void kernelOABuffer ()
 			if (readSuccess)
 			{
 				startOutputIndex = controlPacket.startOutputIndex;
-				numOutputToAccess = controlPacket.numOutputToAccess;
-                isDrainBuffer = (controlPacket.controlBits >> 6) & 0x1;
+				numOutputsPerStrip = controlPacket.numOutputsPerStrip;
+				numStripsToAccess = controlPacket.numStripsToAccess;
+				iaStridePerCol = controlPacket.iaStridePerCol;
+                isDrainBuffer = (controlPacket.controlBits >> 7) & 0x1;
 
 				//Information relevant for loading the cache only
                 numAccumulatorBitsToRightShift = controlPacket.controlBits & 0xF;
-                drainFromConv = (controlBits >> 4) & 0x01;
-                enableRelu = (controlPacket.controlBits >> 5) & 0x1;
-                enableSparsification = ( controlPacket.controlBits >> 6) & 0x1;
+                enableRelu = (controlPacket.controlBits >> 4) & 0x1;
+                enableSparsification = ( controlPacket.controlBits >> 5) & 0x1;
+
+                iStrip = 0;
 				
 				nextState = OA_BUFFER_STATE_NUM_ACCESS;
 			}
@@ -1918,7 +1940,7 @@ __kernel void kernelOABuffer ()
 		}
 		else if (currentState == OA_BUFFER_STATE_NUM_ACCESS)
 		{
-			numClustersToDrain = 1 + ((numOutputToAccess - 1) >> VALUE_TO_CLUSTER_SHIFT);
+			numClustersToDrain = 1 + ((numOutputsPerStrip - 1) >> VALUE_TO_CLUSTER_SHIFT);
 			numWindowsToDrain = 1 + ((numClustersToDrain - 1) >> CLUSTER_TO_WINDOW_SHIFT);
 
 			//Loop-carried variables 
@@ -1934,30 +1956,29 @@ __kernel void kernelOABuffer ()
 
 			//Loop control
 			#if defined(SPARSE_SYSTEM)
-				numLoops = (isDrainBuffer == TRUE) ?
+				numLoopsPerStip = (isDrainBuffer == TRUE) ?
 					(numClustersToDrain + numWindowsToDrain) 
-					: numOutputToAccess;
+					: numOutputsPerStrip;
 			#else
-                numLoops = (isDrainBuffer == TRUE) ?
+                numLoopsPerStip = (isDrainBuffer == TRUE) ?
                     (numClustersToDrain)
-                    : numOutputToAccess;
+                    : numOutputsPerStrip;
 			#endif
 
-			delayCount = 0;
-			iLoop = 0;
+			iLoopPerStip = 0;
 			indexOutput = startOutputIndex;
 
-			nextState = OA_BUFFER_STATE_PADD;
+			nextState = OA_BUFFER_STATE_ACCESS;
 
-			EMULATOR_PRINT(("[kernelOABuffer %d] START processing instruction. Type=%d, startOutputIndex=%d, numOutputToAccess %d\n\n", 
-			colID, (unsigned char) isDrainBuffer, startOutputIndex, numOutputToAccess));
+			EMULATOR_PRINT(("[kernelOABuffer %d] START processing instruction. Type=%d, startOutputIndex=%d, numOutputsPerStrip %d\n\n", 
+			colID, (unsigned char) isDrainBuffer, startOutputIndex, numOutputsPerStrip));
 		}
 		else if (currentState == OA_BUFFER_STATE_PADD)
 		{
 			delayCount++;
 			if (delayCount >= OA_BUFFER_PAD_COUNT)
 			{
-				nextState = OA_BUFFER_STATE_ACCESS;
+				nextState = OA_BUFFER_STATE_DECODE;
 			}
 		}
 		else if (currentState == OA_BUFFER_STATE_ACCESS)
@@ -1966,14 +1987,9 @@ __kernel void kernelOABuffer ()
 			{
 				bool readSuccess = false;
 				t_conv_drain_tagged wideOutputTagged;
-				if (drainFromConv == 0x01) //Drain from convolution
-				{
-					wideOutputTagged = = read_channel_nb_intel(channel_drain_conv[0][colID], &readSuccess);
-				}
-				else //Drain from MISC: eltwise add or max pooling
-				{
-					wideOutputTagged = = read_channel_nb_intel(channel_drain_misc[0][colID], &readSuccess);
-				}
+
+				wideOutputTagged = = read_channel_nb_intel(channel_drain_conv[0][colID], &readSuccess);
+
 				t_accumulator wideOutput = wideOutputTagged.value;
 				
 				if (readSuccess == true) {
@@ -1981,10 +1997,10 @@ __kernel void kernelOABuffer ()
 					cacheOutputActivations[indexOutput] = shortOutput;
 
 					EMULATOR_PRINT(("[kernelOABuffer %d] Read and processed value from PE. Value: %#04x, %d out of %d values read.\n\n", 
-					colID, shortOutput, indexOutput, numOutputToAccess));
+					colID, shortOutput, indexOutput, numOutputsPerStrip));
 					//Loop variable updates
 					indexOutput++;
-					iLoop++;
+					iLoopPerStip++;
 
 				}
 			} //Case: draining the array
@@ -2003,7 +2019,7 @@ __kernel void kernelOABuffer ()
 						for (unsigned char i=0; i<CLUSTER_SIZE; i++)
 						{
 							unsigned short tempOC = iOutputChannelFetched + i;
-							char tempValue = (tempOC >= numOutputToAccess) ?
+							char tempValue = (tempOC >= numOutputsPerStrip) ?
 								0x0 : cacheOutputActivations[indexOutput+i];
 							cluster.cluster_values[i] = tempValue;
 							keep = keep || (tempValue != 0x0);
@@ -2023,7 +2039,7 @@ __kernel void kernelOABuffer ()
 						//Gotcha
 						iOutputChannelFetched += CLUSTER_SIZE;
 						indexOutput += CLUSTER_SIZE;
-						iLoop++;
+						iLoopPerStip++;
 
 					}
 					else //Send mask along with other informatin
@@ -2044,7 +2060,7 @@ __kernel void kernelOABuffer ()
 						write_channel_intel(channel_output_buffer_to_compressor_info[colID], info);
 						countSurvivingClustersInWindow = 0;
 						iClustersInWindowFetched = 0;
-						iLoop++;
+						iLoopPerStip++;
 					}
 				#else //SPARSE_SYSTEM
 					t_output_cluster_tagged taggedCluster;
@@ -2052,7 +2068,7 @@ __kernel void kernelOABuffer ()
 					for (unsigned char i=0; i<CLUSTER_SIZE; i++)
 					{
 						unsigned short tempOC = iOutputChannelFetched + i;
-						char tempValue = (tempOC >= numOutputToAccess) ?
+						char tempValue = (tempOC >= numOutputsPerStrip) ?
 							0x0 : cacheOutputActivations[indexOutput+i];
 						taggedCluster.cluster.cluster_values[i] = tempValue;
 					}
@@ -2067,17 +2083,26 @@ __kernel void kernelOABuffer ()
 
 					iOutputChannelFetched += CLUSTER_SIZE;
 					indexOutput += CLUSTER_SIZE;
-					iLoop++;
+					iLoopPerStip++;
 
 				#endif //SPARSE_SYSTEM
 			} //Case: Stream the buffered output to the cache
 
-            if (iLoop == numLoops)
+            if (iLoopPerStip == numLoopsPerStip)
             {
-                nextState = OA_BUFFER_STATE_DECODE;
-                    EMULATOR_PRINT(("[kernelOABuffer %d] FINISHED processing instruction. Type=%d, startOutputIndex=%d, numOutputToAccess %d\n\n",
-                colID, (unsigned char) isDrainBuffer, startOutputIndex, numOutputToAccess));
+                nextState = OA_BUFFER_UPDATE_STRIP;
             }
+		}
+		else if (currentState == OA_BUFFER_UPDATE_STRIP)
+		{
+			nextState = OA_BUFFER_STATE_NUM_ACCESS;
+			iStrip++;
+			startOutputIndex += iaStridePerCol;
+			if (iStrip == numStripsToAccess)
+			{
+				delayCount = 0;
+				nextState = OA_BUFFER_STATE_PADD;
+			}
 		}
 
 		currentState = nextState;
@@ -2116,41 +2141,40 @@ __kernel void kernelOATileController (
 	    unsigned short iChannelCurrentLayer = 0;
 	    unsigned short iChannelInGroup = 0;
 	    unsigned short iFoldInGroup = 0;
-	    unsigned short iOutputTileHxWDrain = 0;
+	    //unsigned short iOutputTileHxWDrain = 0;
 
 	   	EMULATOR_PRINT(("[kernelOATileController] START sending the drain-from-array instruction for tile %d\n\n", 
 				iInst));
+	   	//TODO: Make sure to chagne how numDrainInstructions is calculated on the host
 	    for  (unsigned short i=0; i < inst.numDrainInstructions; i++)
 	    {
 	    	unsigned char numActivePeRows = (iFoldInGroup < numFullFoldsInGroupCurrentLayer) ?
 	    		PE_ROWS : numActiveRowsInPartialFolds;
-	    	unsigned short startOutputIndex = iOutputTileHxWDrain*numOutputChannels + iChannelCurrentLayer+iChannelInGroup;
+	    	unsigned short startOutputIndex = iChannelCurrentLayer+iChannelInGroup;
 
 	    	t_output_tile_buffer_packet_tagged bufferPacketTagged;
 	    	bufferPacketTagged.bufferPacket.startOutputIndex = startOutputIndex;
-	    	bufferPacketTagged.bufferPacket.numOutputToAccess = numActivePeRows;
+	    	bufferPacketTagged.bufferPacket.numOutputsPerStrip = numActivePeRows;
+	    	bufferPacketTagged.bufferPacket.numStripsToAccess = numOutputTileHeightxWidth;
+	    	bufferPacketTagged.bufferPacket.iaStridePerCol = numOutputChannels;
 	    	bufferPacketTagged.bufferPacket.controlBits = outputModifierBits & 0x7F;
 	    	bufferPacketTagged.maxColID = (numActivePeCols - 1);
 
-	    	write_channel_intel(channel_control_to_oa_buffer[0], bufferPacketTagged);
+	    	write_channel_intel(channel_oa_noc_control[0], bufferPacketTagged);
 
 	    	/*
 	    	Parameter updates
 	    	*/
-	    	iOutputTileHxWDrain++;
-	    	if (iOutputTileHxWDrain == numOutputTileHeightxWidth)
-	    	{
-	    		iOutputTileHxWDrain = 0;
+    		iOutputTileHxWDrain = 0;
 
-	    		iFoldInGroup++;
-	    		iChannelInGroup += numActivePeRows;
-	    		if (iFoldInGroup == numFoldsInGroupCurrentLayer)
-	    		{
-	    			iFoldInGroup = 0;
-	    			iChannelCurrentLayer += numChannelsInGroupCurrentLayer; 
-	    			iChannelInGroup = 0;
-	    		}
-	    	}
+    		iFoldInGroup++;
+    		iChannelInGroup += numActivePeRows;
+    		if (iFoldInGroup == numFoldsInGroupCurrentLayer)
+    		{
+    			iFoldInGroup = 0;
+    			iChannelCurrentLayer += numChannelsInGroupCurrentLayer; 
+    			iChannelInGroup = 0;
+    		}
 	    } //while-loop.  Send instruction to drain from the PE array
 	    EMULATOR_PRINT(("[kernelOATileController] FINISHED sending the drain-from-array instruction for tile%d\n\n", 
 				iInst));
@@ -2161,26 +2185,21 @@ __kernel void kernelOATileController (
 	   	EMULATOR_PRINT(("[kernelOATileController] START sending the write-to-memory instruction for tile %d\n\n", 
 				iInst));
 	    unsigned short iChannelNextLayer = 0;
-	    unsigned short iOutputTileHxWSend = 0;
+	    //TODO: make sure to change how numMemInstructions are calculated on the host.
 	    for  (unsigned short i=0; i<inst.numMemInstructions; i++)
 	    {
+	    	unsigned short startOutputIndex = iChannelNextLayer;
 	    	t_output_tile_buffer_packet_tagged bufferPacketTagged;
-	    	bufferPacketTagged.bufferPacket.startOutputIndex = iOutputTileHxWSend*numOutputChannels + iChannelNextLayer;
-	    	bufferPacketTagged.bufferPacket.numOutputToAccess = numChannelsInGroupNextLayer;
+	    	bufferPacketTagged.bufferPacket.startOutputIndex = startOutputIndex;
+			bufferPacketTagged.bufferPacket.numOutputsPerStrip = numChannelsInGroupNextLayer;
+	    	bufferPacketTagged.bufferPacket.numStripsToAccess = numOutputTileHeightxWidth;
+	    	bufferPacketTagged.bufferPacket.iaStridePerCol = numOutputChannels;
 	    	bufferPacketTagged.bufferPacket.controlBits = (((unsigned char) 0x1) << 0x7 ) | (outputModifierBits & 0x7F);
 	    	bufferPacketTagged.maxColID = (numActivePeCols - 1);
 
-	    	write_channel_intel(channel_control_to_oa_buffer[0], bufferPacketTagged);
+	    	write_channel_intel(channel_oa_noc_control[0], bufferPacketTagged);
 
-	    	if ((iOutputTileHxWSend+1) == numOutputTileHeightxWidth)
-	    	{
-	    		iOutputTileHxWSend = 0;
-	    		iChannelNextLayer += numChannelsInGroupNextLayer;
-	    	}
-	    	else
-	    	{
-	    		iOutputTileHxWSend++;
-	    	}
+	    	iChannelNextLayer += numChannelsInGroupNextLayer;
 	    } //while-loop. Send instructions to stream cached data
 	    EMULATOR_PRINT(("[kernelOATileController] FINISH sending the write-to-memory instruction for tile %d\n\n", 
 				iInst));
@@ -2272,55 +2291,79 @@ __kernel void kernelOAControlTee ()
 
 	while (true)
 	{
-		t_output_tile_buffer_packet_tagged controlPacketTagged = read_channel_intel(channel_control_to_oa_buffer[colID]);
+		t_output_tile_buffer_packet_tagged controlPacketTagged = read_channel_intel(channel_oa_noc_control[colID]);
 
 		unsigned char maxColID = controlPacketTagged.maxColID;
 
 		write_channel_intel(channel_control_to_oa_buffer_local[colID], controlPacketTagged.bufferPacket);
 
+		//Send instruction to the OA tee, if this is a drain command
+		t_output_tile_tee_packet teePacket;
+		teePacket.numLocalTileHeightxLocalTileWidth = controlPacketTagged.bufferPacket.numStripsToAccess;
+		teePacket.flagSourceCatFlagSparseFlagMaxColID = (
+				((unsigned char) (maxColID & 0x0F))
+				| (controlPacketTagged.bufferPacket.controlBits & 0x30));
+		uint1_t drainBuffer = (controlPacketTagged.bufferPacket.controlBits & 0x80) >> 7;
+		if (drainBuffer == TRUE)
+		{
+			write_channel_intel(channel_oa_tee_local[colID], teePacket);
+		}
+
 		if (colID < (PE_COLS - 1) )
 		{
 			if (maxColID > (unsigned char) colID )
 			{
-				write_channel_intel(channel_control_to_oa_buffer[colID+1], controlPacketTagged);
+				write_channel_intel(channel_oa_noc_control[colID+1], controlPacketTagged);
 			}
 		}
 	}
 }
 
 
-#define OA_TEE_INSTRUCTION_DRAIN_SELF 0X1
-#define OA_TEE_INSTRUCTION_DRAIN_PADD 0X2
-#define OA_TEE_INSTRUCTION_SEND_SELF 0x4
-#define OA_TEE_INSTRUCTION_DRAIN_OTHERS 0X8
-#define OA_TEE_INSTRUCTION_DECODE_COMMAND 0X10
-#define OA_TEE_INSTRUCTION_SEND_COUNT 0x20
-#define OA_TEE_INSTRUCTION_LOOP_UPDATE0 0x40
-#define OA_TEE_INSTRUCTION_LOOP_UPDATE1 0X80
+#define OA_TEE_INSTRUCTION_DRAIN_CONV 0X0
+#define OA_TEE_INSTRUCTION_DRAIN_PADD 0X1
+#define OA_TEE_INSTRUCTION_SEND_SELF 0x2
+#define OA_TEE_INSTRUCTION_DRAIN_OTHERS 0X3
+#define OA_TEE_INSTRUCTION_DECODE_COMMAND 0X4
+#define OA_TEE_INSTRUCTION_SEND_COUNT 0x5
+#define OA_TEE_INSTRUCTION_LOOP_UPDATE 0x6
+#define OA_TEE_INSTRUCTION_DRAIN_MISC 0x7
 __attribute__((max_global_work_dim(0)))
 __attribute__((autorun))
 __attribute__((num_compute_units(PE_COLS)))
 __kernel void kernelOATee ()
 {
-	typedef uint8_t t_instruction;
+	typedef uint3_t t_instruction;
 	int colID = get_compute_id(0);
 
 	//Registers
-	unsigned short regNumOutputGroupxTileHeightxTileWidth;
-	unsigned short iOutputGroupxTileHeightxTileWidth;
-	unsigned char regIsLastTee = FALSE;
+	//Register of the number of strips that we need to drain from this computing column
+	unsigned short regStripsInTile = 0;
+	//Iterator that keeps track of the number of strips that we have drained from the computing column
+	unsigned short iStripsInTile = 0;
+	//Flag that indicates whether this computing column is the right-most in this drain transfer
+	uint1_t regIsLastTee = FALSE;
+	//State
 	t_instruction regInstruction = OA_TEE_INSTRUCTION_DECODE_COMMAND;
-	unsigned short iClusters = 0;
-	unsigned char iClusterInDram = 0;
 
-	//Shift register
-	t_output_dram_block_tagged regDramBlockTagged;
-	regDramBlockTagged.isLastFlag = 0x0;
+	//Iterator that keeps track of the numbers of clusters that we have drained from a strip
+	unsigned short iClustersInStrip = 0;
+	//Iterator that keeps track of the number of clusters that we have drained from a dram block 
+	unsigned char iClusterInDramBlock = 0;
+
+	//Flag that indicates whether the tee should drain from the MISC kernel or from the convolution engine
+	uint1_t regFlagDrainMisc = FALSE;
+	//Flag that indicates whether the clusters drained from the CONV kernel are sparsified.
+	uint1_t regFlagSparse = FALSE;
+
+	//Shift register that keeps track of the convolution clusters within the same dram block
+	t_output_dram_block regConvDramBlock;
+	//Flag the keeps track of whether the dram block is the last in the convolution strip that is currently being drained.
+	uint1_t regFlagLastDramBlockInStrip = FALSE;
 
 
 	while (true)
 	{
-		bool sendInstructionNextEnable = false;
 		bool sendDramBlockPreviousEnable = false;
 
 		bool shiftInNewCluster = false;
@@ -2330,22 +2373,18 @@ __kernel void kernelOATee ()
 		t_output_tile_tee_packet tempTeeControl;
 		t_output_dram_block_tagged tempDramBlockTagged;
 
-		uint1_t transferIsLast = regDramBlockTagged.isLastFlag & 0x01;
+		//uint1_t transferIsLast = regDramBlockTagged.isLastFlag & 0x01;
 
 		bool readSuccess = false;
 
 		//Select the output instruction to read
-		if ( regInstruction == OA_TEE_INSTRUCTION_DECODE_COMMAND )
+		if (regInstruction == OA_TEE_INSTRUCTION_DECODE_COMMAND)
 		{
-			tempTeeControl = read_channel_nb_intel(channel_output_writer_to_tee[colID], &readSuccess);
-			if (readSuccess == true)
-			{
-				sendInstructionNextEnable = true;
-			}
+			tempTeeControl = read_channel_nb_intel(channel_oa_tee_local[colID], &readSuccess);
 		}
 
 		//Select the output cluster to read
-		if (regInstruction == OA_TEE_INSTRUCTION_DRAIN_SELF)
+		if (regInstruction == OA_TEE_INSTRUCTION_DRAIN_CONV)
 		{
 			#if defined(SPARSE_SYSTEM)
 				tempClusterTagged = read_channel_nb_intel(channel_compressor_to_tee[colID], &readSuccess);
@@ -2377,33 +2416,37 @@ __kernel void kernelOATee ()
 		}
 		else if (regInstruction == OA_TEE_INSTRUCTION_SEND_SELF)
 		{
-			transferIsLast = (regDramBlockTagged.isLastFlag & 0x1);
+			//transferIsLast = (regDramBlockTagged.isLastFlag & 0x1);
             #if defined(SPARSE_SYSTEM)
-                tempDramBlockTagged.isLastFlag = ((regIsLastTee & 0x1) << 0x1);
+                tempDramBlockTagged.isLastFlag = (regFlagSparse == TRUE) ?
+                	 ( ( (unsigned char) regIsLastTee) << 0x1 ):
+                	 ( ( (unsigned char) regIsLastTee) << 0x1 ) | ((unsigned char) regFlagLastDramBlockInStrip);
             #else
-				tempDramBlockTagged.isLastFlag = regDramBlockTagged.isLastFlag;
+				tempDramBlockTagged.isLastFlag = ( ( (unsigned char) regIsLastTee) << 0x1 ) | ((unsigned char) regFlagLastDramBlockInStrip);
             #endif
-			tempDramBlockTagged.block = regDramBlockTagged.block;
+			tempDramBlockTagged.block = regConvDramBlock;
 			sendDramBlockPreviousEnable = true;
+		}
+		else if (regInstruction == OA_TEE_INSTRUCTION_DRAIN_MISC)
+		{
+			t_output_dram_block miscOutput = read_chanel_nb_intel(channel_drain_misc[colID], &readSuccess);
+			if (readSuccess)
+			{
+				tempDramBlockTagged.block = miscOutput;
+				tempDramBlockTagged.isLastFlag = ((regIsLastTee & 0x1) << 0x1) | 0x1;
+				sendDramBlockPreviousEnable = true;
+			}
 		}
 		#if defined(SPARSE_SYSTEM)
 			else if (regInstruction == OA_TEE_INSTRUCTION_SEND_COUNT)
 			{
 				tempDramBlockTagged.isLastFlag = ((regIsLastTee & 0x1) << 0x1) | 0x01;
-				t_output_dram_block countDramBlock = clusterCount2OutputDramBlock(iClusters);
+				t_output_dram_block countDramBlock = clusterCount2OutputDramBlock(iClustersInStrip);
 				tempDramBlockTagged.block = countDramBlock;
 				sendDramBlockPreviousEnable = true;
             }
 		#endif
 
-		//Write channels: instruction passing
-		if ( sendInstructionNextEnable == true )
-		{
-			if ( (colID < (PE_COLS-1)) && (colID < tempTeeControl.maxColID ) )
-			{
-				write_channel_intel(channel_output_writer_to_tee[colID+1], tempTeeControl);
-			}
-		}
 
 		//Write channels: output dram block passing
 		if ( sendDramBlockPreviousEnable == true)
@@ -2414,16 +2457,16 @@ __kernel void kernelOATee ()
 		//State and register update (excluding the shift register)
 
 		switch (regInstruction) {
-			case (OA_TEE_INSTRUCTION_DRAIN_SELF) :
+			case (OA_TEE_INSTRUCTION_DRAIN_CONV) :
 			{
 				if (readSuccess == true)
 				{
 					shiftInNewCluster = true;
-					iClusters++;
-					iClusterInDram++;
-					regDramBlockTagged.isLastFlag = ((regIsLastTee & 0x1) << 0x1) | (tempClusterTagged.isLastInStrip & 0x01);
+					iClustersInStrip++;
+					iClusterInDramBlock++;
+					regFlagLastDramBlockInStrip = tempClusterTagged.isLastInStrip ? TRUE : FALSE;
 
-					if ( iClusterInDram == NUM_CLUSTER_IN_DRAM_SIZE )
+					if ( iClusterInDramBlock == NUM_CLUSTER_IN_DRAM_SIZE )
 					{
 						tempInstruction = OA_TEE_INSTRUCTION_SEND_SELF;
 					}
@@ -2432,14 +2475,14 @@ __kernel void kernelOATee ()
 						tempInstruction = OA_TEE_INSTRUCTION_DRAIN_PADD;
 					}
 				}
-			} //OA_TEE_INSTRUCTION_DRAIN_SELF
+			} //OA_TEE_INSTRUCTION_DRAIN_CONV
 			break;
 			case (OA_TEE_INSTRUCTION_DRAIN_PADD) :
 			{
 				shiftInNewCluster = true;	
-				iClusterInDram++;
+				iClusterInDramBlock++;
 
-				if ( iClusterInDram == NUM_CLUSTER_IN_DRAM_SIZE )
+				if ( iClusterInDramBlock == NUM_CLUSTER_IN_DRAM_SIZE )
 				{
 					tempInstruction = OA_TEE_INSTRUCTION_SEND_SELF;
 				}
@@ -2447,84 +2490,111 @@ __kernel void kernelOATee ()
 			break;
 			case (OA_TEE_INSTRUCTION_SEND_SELF) :
 			{
-				iClusterInDram = 0;
-				if (transferIsLast == TRUE)
+				iClusterInDramBlock = 0;
+				if (regFlagLastDramBlockInStrip == TRUE)
 				{
 					#if defined(SPARSE_SYSTEM)
-						tempInstruction = OA_TEE_INSTRUCTION_SEND_COUNT;
-					#else
-						if (regIsLastTee == FALSE)
+						if (regFlagSparse == TRUE)
 						{
-							tempInstruction = OA_TEE_INSTRUCTION_DRAIN_OTHERS;
+							tempInstruction = OA_TEE_INSTRUCTION_SEND_COUNT;
 						}
 						else
 						{
-							tempInstruction = OA_TEE_INSTRUCTION_LOOP_UPDATE0;
+							tempInstruction = OA_TEE_INSTRUCTION_DRAIN_OTHERS;
 						}
+					#else
+						tempInstruction = OA_TEE_INSTRUCTION_DRAIN_OTHERS;
 					#endif
 				}
 				else 
 				{
-					tempInstruction = OA_TEE_INSTRUCTION_DRAIN_SELF;
+					tempInstruction = OA_TEE_INSTRUCTION_DRAIN_CONV;
 				}
 			} //OA_TEE_INSTRUCTION_SEND_SELF
 			break;
 			case (OA_TEE_INSTRUCTION_DRAIN_OTHERS) :
 			{
-				if (readSuccess == true)
+				if (regIsLastTee == TRUE)
+				{
+					tempInstruction = OA_TEE_INSTRUCTION_LOOP_UPDATE;
+				}
+				else if (readSuccess == true)
 				{
 					if ((tempDramBlockTagged.isLastFlag & 0x3) == 0x3)
 					{
-						tempInstruction = OA_TEE_INSTRUCTION_LOOP_UPDATE0;
+						tempInstruction = OA_TEE_INSTRUCTION_LOOP_UPDATE;
 					}
 				}
 			} //OA_TEE_INSTRUCTION_DRAIN_OTHERS
+			// break;
+			case (OA_TEE_INSTRUCTION_DRAIN_MISC) :
+			{
+				if (readSuccess == true)
+				{
+					tempInstruction = OA_TEE_INSTRUCTION_DRAIN_OTHERS;
+				}
+			} //OA_TEE_INSTRUCTION_DRAIN_MISC
 			break;
 			case (OA_TEE_INSTRUCTION_DECODE_COMMAND) :
 			{
 				if (readSuccess == true)
 				{
 					regIsLastTee = (tempTeeControl.maxColID > colID) ? FALSE: TRUE;
-					regNumOutputGroupxTileHeightxTileWidth = tempTeeControl.numOutputGroupxTileHeightxTileWidth;
-					iOutputGroupxTileHeightxTileWidth = 0;
+					regStripsInTile = tempTeeControl.numLocalTileHeightxLocalTileWidth;
+					iStripsInTile = 0;
+					regFlagSparse = tempTeeControl.flagSourceCatFlagSparseFlagMaxColID >> 4;
+					uint1_t tempFlagDrainMisc = tempTeeControl.flagSourceCatFlagSparseFlagMaxColID >> 5;
 
-					tempInstruction = OA_TEE_INSTRUCTION_DRAIN_SELF;
+					if (tempFlagDrainMisc == TRUE)
+					{
+						tempInstruction = OA_TEE_INSTRUCTION_DRAIN_MISC;
+					}
+					else
+					{
+						tempInstruction = OA_TEE_INSTRUCTION_DRAIN_CONV;
+					}
+					regFlagDrainMisc = tempFlagDrainMisc;
 				}
-			}
+			} //OA_TEE_INSTRUCTION_DECODE_COMMAND
 			break;
-			case (OA_TEE_INSTRUCTION_LOOP_UPDATE0) :
+			case (OA_TEE_INSTRUCTION_LOOP_UPDATE) :
 			{
-				iClusters = 0;
+				iClustersInStrip = 0;
 				//iColDrained = 0;
-				iOutputGroupxTileHeightxTileWidth++;
-				tempInstruction = OA_TEE_INSTRUCTION_LOOP_UPDATE1;
-				
-			}
-			break;
-			case (OA_TEE_INSTRUCTION_LOOP_UPDATE1) :
-			{
-				regDramBlockTagged.isLastFlag = 0x0;
-				if (iOutputGroupxTileHeightxTileWidth == regNumOutputGroupxTileHeightxTileWidth)
+				iStripsInTile++;
+				if (iStripsInTile == regStripsInTile)
 				{
 					tempInstruction = OA_TEE_INSTRUCTION_DECODE_COMMAND;
 				}
 				else
 				{
-					tempInstruction = OA_TEE_INSTRUCTION_DRAIN_SELF;
+
+					if (regFlagDrainMisc == TRUE)
+					{
+						tempInstruction = OA_TEE_INSTRUCTION_DRAIN_MISC;
+					}
+					else
+					{
+						tempInstruction = OA_TEE_INSTRUCTION_DRAIN_CONV;
+					}
 				}
-			}
+				
+			} //OA_TEE_INSTRUCTION_LOOP_UPDATE
 			break;
 			#if defined(SPARSE_SYSTEM)
 				case (OA_TEE_INSTRUCTION_SEND_COUNT) :
 				{
-					if (regIsLastTee == FALSE)
+					if (regIsLastTee == TRUE)
 					{
-						tempInstruction = OA_TEE_INSTRUCTION_DRAIN_OTHERS;
+						tempInstruction = OA_TEE_INSTRUCTION_LOOP_UPDATE;
 						//iColDrained++;
 					}
 					else
 					{
-						tempInstruction = OA_TEE_INSTRUCTION_LOOP_UPDATE0;
+						if ((tempDramBlockTagged.isLastFlag & 0x3) == 0x3)
+						{
+							tempInstruction = OA_TEE_INSTRUCTION_LOOP_UPDATE;
+						}
 					}
 				}
 				break;

@@ -21,7 +21,7 @@ channel t_conv_drain_tagged channel_drain_conv[PE_ROWS][PE_COLS] __attribute__((
 channel unsigned char channel_drain_token[PE_ROWS][PE_COLS] __attribute__((depth(1)));
 
 #if defined(MISC_ENGINE)
-channel t_conv_drain_tagged channel_drain_misc[PE_COLS] __attribute__((depth(0)));
+channel t_output_dram_block channel_drain_misc[PE_COLS] __attribute__((depth(0)));
 channel t_dram_block channel_ia_wide_misc[PE_COLS] __attribute__((depth(0))); 
 channel t_misc_instruction channel_misc_instruction[PE_COLS]  __attribute__((depth(0)));
 #endif
@@ -81,8 +81,8 @@ Channels for passing output controls
 ===================================================================
 */
 channel t_output_tile_controller_packet channel_output_writer_to_oa_controller __attribute__((depth(0)));
-channel t_output_tile_tee_packet channel_output_writer_to_tee [PE_COLS] __attribute__((depth(0)));
-channel t_output_tile_buffer_packet_tagged channel_control_to_oa_buffer [PE_COLS] __attribute__((depth(0)));
+channel t_output_tile_tee_packet channel_oa_tee_local [PE_COLS] __attribute__((depth(0)));
+channel t_output_tile_buffer_packet_tagged channel_oa_noc_control [PE_COLS] __attribute__((depth(0)));
 channel t_output_tile_buffer_packet channel_control_to_oa_buffer_local [PE_COLS] __attribute__((depth(0)));
 /*
 =========================================================================
