@@ -55,15 +55,15 @@ t_operand modifyOutput (
     t_accumulator leftShiftPreTrunc;
     if (preShiftIsPositive == TRUE)
     {   
-        leftShiftPreTrunc = (leftShiftTemp < 0) ? 0x07F : (
-                                    (leftShiftTemp <= 0x07F) ? leftShiftTemp : 0x07F
+        leftShiftPreTrunc = (leftShiftTemp < accumulator) ? 0x07F : (
+                                    (leftShiftTemp <= ((t_accumulator) 255)) ? leftShiftTemp : 0x07F
                                 );
 
     }
     else
     {
-        leftShiftPreTrunc = (leftShiftTemp >= 0) ? 0x080 : (
-                                    (leftShiftTemp >= 0x080) ? leftShiftTemp : 0x080
+        leftShiftPreTrunc = (leftShiftTemp > accumulator) ? 0x080 : (
+                                    (leftShiftTemp >= ((t_accumulator) -256)) ? leftShiftTemp : 0x080
                                 );
     }
 
@@ -81,7 +81,7 @@ signed char modifyCharOutput (
         unsigned char shiftDirectionCatShiftAmount
         )
 {
-    uint1_t shiftLeft = (shiftDirectionCatShiftAmount & 0x80) >> 0x7;
+    uint1_t shiftLeft = (shiftDirectionCatShiftAmount >> 0x7) & 0x01;
     unsigned char shiftAmount = shiftDirectionCatShiftAmount & 0x7F;
     uint1_t originalIsPositive = (input >= 0) ? TRUE : FALSE;
 
@@ -90,18 +90,18 @@ signed char modifyCharOutput (
     signed char signExtensionMask = (originalIsPositive == TRUE) ? 0x00 : ~(0xFF >> rndRightShift);
     signed char rightShiftOutputWithRndBit = signExtensionMask | ((signed char) (input >> rndRightShift));
     signed char rightShiftOutputBiased = rightShiftOutputWithRndBit + 0x01;
-    signed char rightShiftinal = 0xFF & (rightShiftOutputBiased >> 0x1);
+    signed char rightShiftFinal = rightShiftOutputBiased >> 0x1;
 
     //Handle the left shift
     signed char leftShiftTemp = input << shiftAmount;
     signed char leftShiftFinal;
     if (originalIsPositive == TRUE)
     {
-        leftShiftFinal = (leftShiftTemp < 0) ? 0x7F : leftShiftTemp;
+        leftShiftFinal = (leftShiftTemp < input) ? 0x7F : leftShiftTemp;
     }
     else
     {
-        leftShiftFinal = (leftShiftTemp >= 0) ? 0x80 : leftShiftTemp;
+        leftShiftFinal = (leftShiftTemp > input) ? 0x80 : leftShiftTemp;
     }
 
     signed char output = (shiftLeft == TRUE) ? leftShiftFinal : rightShiftFinal;
@@ -244,6 +244,8 @@ t_dram_block iaMetadata2DramBlock (unsigned short tbCount, unsigned char colSPWi
     dramBlock.transferBlocks[0].values[2] = (signed char) colSPWidth;
     dramBlock.transferBlocks[0].values[3] = (signed char) colSPStride;
     dramBlock.transferBlocks[1].values[0] = (signed char) iColInSPTile;
+
+    return dramBlock;
 }
 
 unsigned char getColSPWidth(t_dram_block block)

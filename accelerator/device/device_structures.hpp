@@ -362,19 +362,6 @@ typedef struct __attribute__((packed)){
     //bool toInputBuffer; 
 } t_dram_block_ia_tagged;
 
-//Input buffer control packet data structure
-typedef struct __attribute__((packed)) 
-{
-    unsigned char inputTileWidth;
-    unsigned char inputTileHeight;
-    unsigned char strideConcatKernelSize; //Bit 7:4 stride, 3:0 KernelSize
-    unsigned int numOutputInstructions;
-    #if !defined (SPARSE_SYSTEM)
-    unsigned short numTBCountPerStrip;
-    #endif
-    unsigned short numActivePeColsConcatNumOutputChannelsInGroup; //15:12: Number of Active PeCols, 11:0: Number of output channels in group
-    unsigned short strideStripIACache; //Stride in terms of dram block
-} t_input_buffer_tile_controller_packet;
 
 typedef struct __attribute__((packed))
 {
@@ -402,25 +389,6 @@ typedef struct __attribute__((packed))
     unsigned char numStripsRow;
 } t_input_buffer_tile_buffer_packet;
 
-
-typedef struct __attribute__((packed))
-{
-    unsigned char numOutputTileHeightxWidth;
-    unsigned char numFoldsInGroupCurrentLayer;
-    unsigned char numFullFoldsInGroupCurrentLayer;
-    unsigned char numActiveRowsInPartialFolds;
-    unsigned char numActivePeCols;
-
-    unsigned short numGroupsNextLayer;
-    unsigned short numChannelsInGroupCurrentLayer;
-    unsigned short numChannelsInGroupNextLayer;
-    //3:0: number of accumulator bits to right shift
-    //4: enableRelu
-    //5: enable sparsification 
-    unsigned char outputModifierBits;
-
-
-} t_output_tile_controller_packet;
 
 typedef struct __attribute__((packed))
 {

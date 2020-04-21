@@ -15,6 +15,7 @@ set (PREPROCESSOR_DEFS
         -DIA_MEMORY
         -DOA_MEMORY
         -DFULL_SYSTEM
+        -DMISC_ENGINE
         )
 
 add_definitions(
@@ -29,6 +30,7 @@ add_definitions(
     -DIA_MEMORY
     -DOA_MEMORY
     -DFULL_SYSTEM
+    -DMISC_ENGINE
     )
 
 ############################################
