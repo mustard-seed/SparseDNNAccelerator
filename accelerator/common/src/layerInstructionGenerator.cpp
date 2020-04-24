@@ -16,16 +16,18 @@ void instruction_generator(
         //Starting location of activation tensors in the OpenCL Buffer
         //IA and OA occupies the same OpenCL buffer
 
-        //Starting location of the input tensros.
+        //Starting location of the input tensor dram blocks.
         //Support up to 2 input activation tensors
+        //Assuming GHWC layout. Strips are at aligned memory location
         signed int memIA0DramBlockStartIndex,
         signed int memIA1DramBlockStartIndex,
 
-        //Starting location of the output tensor
+        //Starting location of the output tensor dram blocks
         //Supports only one output tensor
+        //Assuming GHWC layout. Strips are at aligned memory location
         signed int memOADramBlockStartIndex,
 
-        //Starting location of the weight tensor
+        //Starting location of the weight tensor dram blocks
         signed int memWeightDramBlockStartIndex,
         //Starting location of bias
         signed int memBiasStartIndex,
@@ -47,12 +49,7 @@ void instruction_generator(
         //Output activation blob stride in terms of DRAM block
         //Assuming GHWC layout
         signed int memOADramBlockColStride,
-
         signed int memWeightDramBlockFilterStride,
-
-        //Input activation 0 and 1 TB count if no sparsification happens
-        unsigned int numTBPerDenseIA0Strip,
-        unsigned int numTBPerDenseIA1Strip,
 
         //TB count memory information. Only one input blob is supported for sparse operation
         #if defined(SPARSE_SYSTEM)
@@ -128,8 +125,10 @@ void instruction_generator(
                 _numActiveColsPartialOutputTile : (outputWidth % PE_COLS);
 
     //Input height and width before stretch and padding
-    unsigned int inputDenseHeight = inputSPHeight / inputSPHeightUnit;
-    unsigned int inputDenseWidth = inputSPWidth / inputSPWidthUnit;
+    assert ((inputSPHeightUnit == 1) || ((inputSPHeight-1) % inputSPHeightUnit == 0));
+    assert ((inputSPWidthUnit == 1) || ((inputSPWidth-1) % inputSPWidthUnit == 0));
+    unsigned int inputDenseHeight = 1 + (inputSPHeight-1) / inputSPHeightUnit;
+    unsigned int inputDenseWidth = 1 + (inputSPWidth-1) / inputSPWidthUnit;
 
     unsigned int numFullOutputTileY =
             ((unsigned int) outputHeight) / ((unsigned int) sizeOutputTileFullHeight);
@@ -172,7 +171,7 @@ void instruction_generator(
     //Number of input channels per group as seen by the IA mover
     unsigned int numIAMoverInputChannelsPerGroup0;
     unsigned int numIAMoverInputChannelsPerGroup1;
-    //Number of input channel group as seen by the IA mover
+    //Number of input channel groups as seen by the IA mover
     unsigned int numIAMoverGroup0;
     unsigned int numIAMoverGroup1;
     //Group stride in terms of DRAM BLOCK as seen by the IA Mover
@@ -265,7 +264,7 @@ void instruction_generator(
             numOutputChannelsBlob0MK = numInputChannels0;
             numOutputChannelsBlob1MK = 0;
             numFoldMK = 1+ (numOutputChannelsBlob0MK-1) / BURST_SIZE_BYTE;
-            numDramBlocksToReduceMK = 1;
+            numDramBlocksToReduceMK = 2;
         }
         break;
         default:
@@ -278,8 +277,9 @@ void instruction_generator(
 
     unsigned int numComputeFoldPerGroup = (numOutputChannelsPerGroupCurrentLayer-1) / numActiveElementsInFullComputeFold + 1;
     unsigned int numFullComputeFoldPerGroup = numOutputChannelsPerGroupCurrentLayer / numActiveElementsInFullComputeFold;
-    unsigned int numActiveElementsInPartialComputeFold = numOutputChannelsPerGroupCurrentLayer % PE_ROWS;
+    unsigned int numActiveElementsInPartialComputeFold = numOutputChannelsPerGroupCurrentLayer % numActiveElementsInFullComputeFold;
 
+    //x & y planar coordinates in the input planar dimension
     unsigned int iterPGlobal = 0;
     unsigned int iterMGlobal = 0;
     for (unsigned int iterPTile=0; iterPTile < numOutputTileY; iterPTile++)
@@ -415,10 +415,12 @@ void instruction_generator(
                     unsigned char actualFlagInputSync = (flagInputSync == 0x01) ?
                                 ((isFirstInputTile == true) ? 0x1 : 0x0)
                                 : 0x0;
+                    //Set the transport target. 0x0 means convolution, 0x1 means MISC
+                    unsigned char flagTarget= (op == CONVOLUTION) ?  0x00 : 0x01;
                     instructionIA.memRegionCatSparseFlagCatDestinationCatSyncCatNumActiveCols = (t_uchar)
                             ( ( ((t_uchar) numActiveCols)& 0x0F)
                              | ((((t_uchar) actualFlagInputSync) & 0x01) << 0x04)
-                             | ((((t_uchar) 0x00) & 0x01) << 0x05) //Compute engine is CONV
+                             | ((((t_uchar) flagTarget) & 0x01) << 0x05)
                              | ((((t_uchar) flagSparseInput) & 0x01) << 0x06) //Sparse flag for the input tensor
                             );
                     instructionIA.memBlockStart = (t_int) (
@@ -426,8 +428,8 @@ void instruction_generator(
                                 + memIA0DramBlockGroupStride * iterInputGroup0
                                 + memIA0DramBlockRowStride * iterMDense
                                 + memIA0DramBlockColStride * iterNDense);
-                    instructionIA.memBlockColStripStride = (t_ushort)(memIA0DramBlockColStride);
-                    instructionIA.memBlockRowStripStride = (t_ushort)(memIA0DramBlockRowStride);
+                    instructionIA.memBlockColStripStride = (t_ushort)memIA0DramBlockColStride;
+                    instructionIA.memBlockRowStripStride = (t_ushort)memIA0DramBlockRowStride;
 
                     #if defined(SPARSE_SYSTEM)
                         instructionIA.memTBCountStart = (t_int)
@@ -504,7 +506,7 @@ void instruction_generator(
 
                     /*! Generate the weight mover instruction*/
                     {
-                        unsigned int filterIndex = iterInputGroup * numOutputChannelsPerGroupCurrentLayer;
+                        unsigned int filterIndex = iterInputGroup0 * numOutputChannelsPerGroupCurrentLayer;
                         t_weight_mover_instruction instructionWMover;
                         instructionWMover.numFiltersInGroup = (t_ushort) numOutputChannelsPerGroupCurrentLayer;
                         instructionWMover.numFullFilterFold = (t_ushort) numFullComputeFoldPerGroup;
@@ -537,8 +539,8 @@ void instruction_generator(
                         instructionIA.memRegionCatSparseFlagCatDestinationCatSyncCatNumActiveCols = (t_uchar)
                                 ( ( ((t_uchar) numActiveCols)& 0x0F)
                                  | ((((t_uchar) 0x0) & 0x01) << 0x04) //Not going to wait for sync
-                                 | ((((t_uchar) 0x00) & 0x01) << 0x05) //Compute engine is CONV
-                                 | ((((t_uchar) flagSparseInput) & 0x01) << 0x06) //Sparse flag for the input tensor
+                                 | ((((t_uchar) 0x01) & 0x01) << 0x05) //Compute engine is MISC
+                                 | ((((t_uchar) 0x0) & 0x01) << 0x06) //Sparse flag for the input tensor. Will be dense
                                 );
                         instructionIA.memBlockStart = (t_int) (
                                     memIA1DramBlockStartIndex
@@ -549,11 +551,7 @@ void instruction_generator(
                         instructionIA.memBlockRowStripStride = (t_ushort)(memIA1DramBlockRowStride);
 
                         #if defined(SPARSE_SYSTEM)
-                            instructionIA.numCWOrTBInGroup = (flagSparseInput == 0x1) ?
-                                                (t_ushort) (
-                                                    1 + (numIAMoverInputChannelsPerGroup1-1) / COMPRESSION_WINDOW_SIZE / CLUSTER_SIZE
-                                                    )
-                                                : (t_ushort) (1 + (numIAMoverInputChannelsPerGroup1-1) / TRANSFER_SIZE / CLUSTER_SIZE);
+                            instructionIA.numCWOrTBInGroup = (t_ushort) (1 + (numIAMoverInputChannelsPerGroup1-1) / TRANSFER_SIZE / CLUSTER_SIZE);
                         #else
                             instructionIA.numTBPerStrip = (t_ushort) (1 + (numIAMoverInputChannelsPerGroup1-1) / TRANSFER_SIZE / CLUSTER_SIZE);
                         #endif
@@ -597,6 +595,7 @@ void instruction_generator(
                     for (unsigned int iMiscFold=0; iMiscFold < numFoldMK; iMiscFold++)
                     {
                         unsigned int numEffectiveOutputs = BURST_SIZE_BYTE;
+                        //Handle transfers from Blob 0
                         if (iBlob == 0)
                         {
                            numEffectiveOutputs = ((numOutputChannelsBlob0MK - iMiscChannel) < BURST_SIZE_BYTE) ?
@@ -608,6 +607,7 @@ void instruction_generator(
                                iBlob++;
                            }
                         }
+                        //Handle transfers from Blob 1
                         else
                         {
                             numEffectiveOutputs = ((numOutputChannelsBlob1MK - iMiscChannel) < BURST_SIZE_BYTE) ?
