@@ -203,8 +203,9 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
     t_ushort memTBColStride;
     //Arch. parameter: row stride in terms of TB count in the TB moveremory.
     t_ushort memTBRowStride;
-#endif
+#else
     t_uint numDramBlockPerStrip;
+#endif
 
     //Problem parameter: Output tile group to drain from   
     //t_uchar numOAGroup; 
@@ -284,6 +285,8 @@ typedef struct __attribute__((packed)) __attribute__((aligned(16)))
     t_uchar numFoldsInGroupCurrentLayer;
     //Number of full folds required to drian the current tile
     t_uchar numFullFoldsInCurrentLayer;
+    //Number of elements per planar index to drain in the full fold
+    t_uchar numActiveElementsInFullFold;
     //Number of elements per planar index to drain in the partial fold
     t_uchar numActiveElementsInPartialFold;
 
@@ -297,11 +300,12 @@ typedef struct __attribute__((packed)) __attribute__((aligned(16)))
     t_uchar numActiveCols;
 
     //Concatenated signal
-    //[3:0] Shift direciton and number of bits to shift the convolution output
+    //[2:0] number of bits to shift the convolution output
+    //[3] Shift direction. 1 for left shift, 0 for right shift
     //[4] Enable sparsification. 1 for TRUE, 0 for otherwise
-    //[5] Source of the output. 1 for convolution engine, 0 for misc.
+    //[5] Source of the output. 0 for convolution engine, 1 for misc.
     //[6] Enable Relu. 1 for TRUE, 0 for false
-    t_uchar flagSparseCatFlagReluCatFlagSourceCatRShift;
+    t_uchar flagSparseCatFlagReluCatFlagSourceCatShift;
     
 } t_oa_tile_controller_instruction;
 
@@ -317,9 +321,12 @@ typedef struct __attribute__((aligned(16)))
     //Number of dram blocks to reduce
     t_uchar numDramBlocksToReduce;
 
-    //Bit [6:0] Shift amount
-    //Bit [7] Flag for left/right shift. 0 for right, 1 for left
-    t_uchar flagLeftShiftCatShiftAmount;
+    //Bit [2:0] Shift amount
+    //Bit [3] Flag for left/right shift. 0 for right, 1 for left
+    //t_uchar flagLeftShiftCatShiftAmount;
+
+    ////Number of effective values in the final dram block
+    t_uchar numEffectiveValues;
 
 } t_misc_instruction;
 
@@ -442,9 +449,12 @@ typedef struct __attribute__((packed))
     //Number of dram blocks to reduce
     t_uchar numDramBlocksToReduce;
 
-    //Bit [6:0] Shift amount
-    //Bit [7] Flag for left/right shift. 0 for right, 1 for left
-    t_uchar flagLeftShiftCatShiftAmount;
+    //Bit [2:0] Shift amount
+    //Bit [3] Flag for left/right shift. 0 for right, 1 for left
+    //t_uchar flagLeftShiftCatShiftAmount;
+
+    //Number of effective values in the final dram block
+    t_uchar numEffectiveValues;
 
 } t_misc_control_packet;
 

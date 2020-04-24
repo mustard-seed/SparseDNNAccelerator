@@ -36,4 +36,8 @@ t_aligned_ia_tile_controller_instruction_vector;
 typedef
 std::vector<t_oa_tile_controller_instruction, boost::alignment::aligned_allocator<t_oa_tile_controller_instruction, aocl_utils_cpp::AOCL_ALIGNMENT>>
 t_aligned_oa_tile_controller_instruction_vector;
+
+typedef
+std::vector<t_misc_instruction, boost::alignment::aligned_allocator<t_misc_instruction, aocl_utils_cpp::AOCL_ALIGNMENT>>
+t_aligned_misc_instruction_vector;
 #endif

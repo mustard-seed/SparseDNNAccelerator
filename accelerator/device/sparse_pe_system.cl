@@ -166,7 +166,7 @@ __kernel void kernelIAMover (
 					numTBInStrip = (t_ushort) inst.numCWOrTBInGroup;
 				}
 			#else
-				unsigned short numTBInStrip = (t_ushort) inst.numCWOrTBInGroup;
+				unsigned short numTBInStrip = (t_ushort) inst.numTBPerStrip;
 			#endif
 
 			//dramBlockCount = ceil(numTBInStrip / WIDE_SIZE)
@@ -1003,7 +1003,7 @@ __kernel void kernelMiscControlMover (
 		t_misc_control_packet packet;
 		packet.controlBits = instruction.controlBits;
 		packet.numDramBlocksToReduce = instruction.numDramBlocksToReduce;
-		packet.flagLeftShiftCatShiftAmount = instruction.flagLeftShiftCatShiftAmount;
+		packet.numEffectiveValues = instruction.numEffectiveValues;
 		write_channel_intel(channel_misc_instruction[0], packet);
 		EMULATOR_PRINT(("[kernelMiscControlMover] Sent instruction %d ",
 						i));
@@ -1018,7 +1018,7 @@ __kernel void kernelMisc ()
 	int colID = get_compute_id(0);
 	while (true)
 	{
-		t_output_dram_block reductionBlock;
+		signed char reductionBlock[BURST_SIZE_BYTE];
 
 		t_misc_control_packet controlPacket = read_channel_intel(channel_misc_instruction[colID]);
 
@@ -1036,21 +1036,21 @@ __kernel void kernelMisc ()
 		//OpCode. 00: Add; 01: Max Pooling; 10: Stream
 		uint2_t opcode = (controlPacket.controlBits >> 4) & 0x03;
 		unsigned char numDramBlocksToReduce = controlPacket.numDramBlocksToReduce;
-		unsigned char outputModifyBits = controlPacket.flagLeftShiftCatShiftAmount;
+		unsigned char numEffectiveValues = controlPacket.numEffectiveValues;
 
 		EMULATOR_PRINT(("[kernelMisc %d] Received command "
-						"opcode=%#04x, numDramBlocksToReduce=%d, outputModifyBits=%d \n",
-						i, ((unsigned char)opcode), numDramBlocksToReduce, outputModifyBits));
+						"opcode=%#04x, numDramBlocksToReduce=%d, numEffectiveValues=%d \n",
+						i, ((unsigned char)opcode), numDramBlocksToReduce, numEffectiveValues));
 
 		//Initialize the reductionBlock
 		#pragma unroll
 		for (int iCluster=0; iCluster<NUM_CLUSTER_IN_DRAM_SIZE; iCluster++)
 		{
 			#pragma unroll
-			for (int iVal=0; iVal < CLUSTER_SIZE; iVal++)
+			for (int iVal=0; iVal < BURST_SIZE_BYTE; iVal++)
 			{
 				//If max pooling, then intialize the values to the minimum, else zero
-				reductionBlock.clusters[iCluster].cluster_values[iVal] = (opcode == 0x01) ? 
+				reductionBlock[iVal] = (opcode == 0x01) ? 
 					0x80 : 0x00;
 			}
 		}
@@ -1060,15 +1060,13 @@ __kernel void kernelMisc ()
 		{
 			t_dram_block inputDramBlock = read_channel_intel(channel_ia_wide_misc[colID]);
 			#pragma unroll
-			for (int iValue=0; iValue < WIDE_SIZE*NUM_SIMD_WORDS; iValue++)
+			for (int iValue=0; iValue < BURST_SIZE_BYTE; iValue++)
 			{
 				signed char inputValue = inputDramBlock
 					.transferBlocks[iValue >> (VALUE_TO_CLUSTER_SHIFT + CLUSTER_TO_TRANSFER_SIZE_SHIFT)]
 					.values[iValue & VALUE_DIVIDED_BY_SIMD_SIZE_REMAINDER_MASK];
 
-				signed char currentValue = reductionBlock
-					.clusters[iValue >> (VALUE_TO_CLUSTER_SHIFT)]
-					.cluster_values[iValue & VALUE_DIVIDED_BY_CLUSTER_SIZE_REMAINDER_MASK];
+				signed char currentValue = reductionBlock[iValue];
 
 				signed char newValue;
 				if (opcode == 0x00)
@@ -1084,32 +1082,19 @@ __kernel void kernelMisc ()
 					newValue = inputValue;
 				}
 
-				reductionBlock
-					.clusters[iValue >> (VALUE_TO_CLUSTER_SHIFT)]
-					.cluster_values[iValue & VALUE_DIVIDED_BY_CLUSTER_SIZE_REMAINDER_MASK]
+				reductionBlock[iValue]
 					= newValue;
 			}
 		}
 
-		//Final output shift
-		t_output_dram_block outputBlock;
-		#pragma unroll
-		for (int iValue=0; iValue < WIDE_SIZE*NUM_SIMD_WORDS; iValue++)
-		{
-			signed char currentValue = reductionBlock
-				.clusters[iValue >> (VALUE_TO_CLUSTER_SHIFT)]
-				.cluster_values[iValue & VALUE_DIVIDED_BY_CLUSTER_SIZE_REMAINDER_MASK];
-
-			signed char newValue = modifyCharOutput(currentValue, outputModifyBits);
-
-			outputBlock
-				.clusters[iValue >> (VALUE_TO_CLUSTER_SHIFT)]
-				.cluster_values[iValue & VALUE_DIVIDED_BY_CLUSTER_SIZE_REMAINDER_MASK]
-				= newValue;
-		}
-
 		//Drain the output
-		write_channel_intel(channel_drain_misc[colID], outputBlock);
+		for (unsigned char iVal=0; iVal < BURST_SIZE_BYTE; iVal++)
+		{
+			if (iVal<numEffectiveValues)
+			{
+				write_channel_intel(channel_drain_misc[colID], reductionBlock[iVal]);
+			}
+		}
 
 		EMULATOR_PRINT(("[kernelMisc %d] Finished processing a command\n"));
 	}
@@ -1195,6 +1180,7 @@ __kernel void kernelOAMover (
 					}
 						clusterCount = outputDramBlock2ClusterCount(receivedBlock.block);
 					
+					//When output sparsification is disabled, no TB count is transferred
 					if (((receivedBlock.isLastFlag & 0x1) == FALSE) || (enableSparsification == FALSE))
 					{
 						//Store the dram block
@@ -1302,7 +1288,9 @@ __kernel void kernelOABuffer ()
 	unsigned short numStripsToAccess = 0x0;
 	//Stride between the start of successive strips in the cache
 	unsigned short oaStridePerCol = 0x0;
+	
 	uint1_t isDrainBuffer = FALSE;
+	uint1_t flagSourceIsMisc = FALSE; 
 
 	//Information relevant for loading the cache only
 	unsigned char accumulatorShiftDirCatShiftAmount = 0x0;
@@ -1355,6 +1343,7 @@ __kernel void kernelOABuffer ()
                 accumulatorShiftDirCatShiftAmount = controlPacket.controlBits & 0xF;
                 enableRelu = (controlPacket.controlBits >> 6) & 0x1;
                 enableSparsification = ( controlPacket.controlBits >> 4) & 0x1;
+                flagSourceIsMisc = (controlPacket.controlBits >> 5) & 0x1;
 
                 iStrip = 0;
 				
@@ -1362,9 +1351,9 @@ __kernel void kernelOABuffer ()
 
 				EMULATOR_PRINT(("[kernelOABuffer %d] START processing instruction. "
 						"isDrainBuffer=%#03x, stripStartOutputIndex=%d, numOutputsPerStrip=%d, "
-						"numStripsToAccess=%d, enableRelu=%#03x, enableSparsification=%#03x \n\n", 
+						"numStripsToAccess=%d, enableRelu=%#03x, enableSparsification=%#03x, flagSourceIsMisc=%#03x \n\n", 
 						colID, (unsigned char) isDrainBuffer, stripStartOutputIndex, numOutputsPerStrip,
-						numStripsToAccess, ((unsigned char) enableRelu), ((unsigned char)enableSparsification)));
+						numStripsToAccess, ((unsigned char) enableRelu), ((unsigned char)enableSparsification), ((unsigned char) flagSourceIsMisc)));
 			}
 
 		}
@@ -1413,11 +1402,21 @@ __kernel void kernelOABuffer ()
 			if (isDrainBuffer == FALSE) //Case: draining the array
 			{
 				bool readSuccess = false;
-				t_conv_drain_tagged wideOutputTagged;
+				t_accumulator wideOutput;
 
-				wideOutputTagged = read_channel_nb_intel(channel_drain_conv[0][colID], &readSuccess);
-
-				t_accumulator wideOutput = wideOutputTagged.value;
+				if (flagSourceIsMisc == FALSE)
+				{
+					t_conv_drain_tagged wideOutputTagged;
+					wideOutputTagged = read_channel_nb_intel(channel_drain_conv[0][colID], &readSuccess);
+					wideOutput = wideOutputTagged.value;
+				}
+				else
+				{
+					signed char miscOutput = read_channel_nb_intel(channel_drain_misc[colID], &readSuccess);
+					//OpenCL should handle sign extension
+					wideOutput = (t_accumulator) miscOutput;
+				}
+				
 				
 				if (readSuccess == true) {
 					t_operand shortOutput = modifyOutput(wideOutput, accumulatorShiftDirCatShiftAmount, enableRelu);
@@ -1556,11 +1555,12 @@ __kernel void kernelOATileController (
 		unsigned char numOutputTileHeightxWidth = inst.numLocalTilePerColHxW;
 		unsigned char numFoldsInGroupCurrentLayer = inst.numFoldsInGroupCurrentLayer;
 	    unsigned char numFullFoldsInGroupCurrentLayer = inst.numFullFoldsInCurrentLayer;
+	    unsigned char numActiveElementsInFullFold = inst.numActiveElementsInFullFold;
 	    unsigned char numActiveRowsInPartialFolds = inst.numActiveElementsInPartialFold;
 
 	    unsigned short numChannelsInGroupCurrentLayer = inst.numLocalChannelsPerCurrentGroup;
 	    unsigned short numChannelsInGroupNextLayer = inst.numLocalChannelsPerNextGroup;
-	    unsigned char outputModifierBits = inst.flagSparseCatFlagReluCatFlagSourceCatRShift;
+	    unsigned char outputModifierBits = inst.flagSparseCatFlagReluCatFlagSourceCatShift;
 	    unsigned char numActivePeCols = inst.numActiveCols;
 
 	    unsigned short numOutputChannels = inst.numLocalChannels;
@@ -1579,7 +1579,7 @@ __kernel void kernelOATileController (
 	    for  (unsigned short i=0; i < inst.numDrainInstructions; i++)
 	    {
 	    	unsigned char numActivePeRows = (iFoldInGroup < numFullFoldsInGroupCurrentLayer) ?
-	    		PE_ROWS : numActiveRowsInPartialFolds;
+	    		numActiveElementsInFullFold : numActiveRowsInPartialFolds;
 	    	unsigned short startOutputIndex = iChannelCurrentLayer+iChannelInGroup;
 
 	    	t_output_tile_buffer_packet_tagged bufferPacketTagged;
@@ -1757,7 +1757,7 @@ __kernel void kernelOAControlTee ()
 #define OA_TEE_INSTRUCTION_DECODE_COMMAND 0X4
 #define OA_TEE_INSTRUCTION_SEND_COUNT 0x5
 #define OA_TEE_INSTRUCTION_LOOP_UPDATE 0x6
-#define OA_TEE_INSTRUCTION_DRAIN_MISC 0x7
+//#define OA_TEE_INSTRUCTION_DRAIN_MISC 0x7
 __attribute__((max_global_work_dim(0)))
 __attribute__((autorun))
 __attribute__((num_compute_units(PE_COLS)))
@@ -1858,16 +1858,16 @@ __kernel void kernelOATee ()
 			tempDramBlockTagged.block = regConvDramBlock;
 			sendDramBlockEnable = true;
 		}
-		else if (regInstruction == OA_TEE_INSTRUCTION_DRAIN_MISC)
-		{
-			t_output_dram_block miscOutput = read_channel_nb_intel(channel_drain_misc[colID], &readSuccess);
-			if (readSuccess)
-			{
-				tempDramBlockTagged.block = miscOutput;
-				tempDramBlockTagged.isLastFlag = ((regIsLastTee & 0x1) << 0x1) | 0x1;
-				sendDramBlockEnable = true;
-			}
-		}
+		// else if (regInstruction == OA_TEE_INSTRUCTION_DRAIN_MISC)
+		// {
+		// 	t_output_dram_block miscOutput = read_channel_nb_intel(channel_drain_misc[colID], &readSuccess);
+		// 	if (readSuccess)
+		// 	{
+		// 		tempDramBlockTagged.block = miscOutput;
+		// 		tempDramBlockTagged.isLastFlag = ((regIsLastTee & 0x1) << 0x1) | 0x1;
+		// 		sendDramBlockEnable = true;
+		// 	}
+		// }
 		#if defined(SPARSE_SYSTEM)
 			else if (regInstruction == OA_TEE_INSTRUCTION_SEND_COUNT)
 			{
@@ -1958,14 +1958,14 @@ __kernel void kernelOATee ()
 				}
 			} //OA_TEE_INSTRUCTION_DRAIN_OTHERS
 			break;
-			case (OA_TEE_INSTRUCTION_DRAIN_MISC) :
-			{
-				if (readSuccess == true)
-				{
-					tempInstruction = OA_TEE_INSTRUCTION_DRAIN_OTHERS;
-				}
-			} //OA_TEE_INSTRUCTION_DRAIN_MISC
-			break;
+			// case (OA_TEE_INSTRUCTION_DRAIN_MISC) :
+			// {
+			// 	if (readSuccess == true)
+			// 	{
+			// 		tempInstruction = OA_TEE_INSTRUCTION_DRAIN_OTHERS;
+			// 	}
+			// } //OA_TEE_INSTRUCTION_DRAIN_MISC
+			// break;
 			case (OA_TEE_INSTRUCTION_DECODE_COMMAND) :
 			{
 				if (readSuccess == true)
@@ -1974,17 +1974,18 @@ __kernel void kernelOATee ()
 					regStripsInTile = tempTeeControl.numLocalTileHeightxLocalTileWidth;
 					iStripsInTile = 0;
 					regFlagSparse = tempTeeControl.flagSourceCatFlagSparseFlagMaxColID >> 4;
-					uint1_t tempFlagDrainMisc = tempTeeControl.flagSourceCatFlagSparseFlagMaxColID >> 5;
+					//uint1_t tempFlagDrainMisc = tempTeeControl.flagSourceCatFlagSparseFlagMaxColID >> 5;
 
-					if (tempFlagDrainMisc == TRUE)
-					{
-						tempInstruction = OA_TEE_INSTRUCTION_DRAIN_MISC;
-					}
-					else
-					{
-						tempInstruction = OA_TEE_INSTRUCTION_DRAIN_CONV;
-					}
-					regFlagDrainMisc = tempFlagDrainMisc;
+					// if (tempFlagDrainMisc == TRUE)
+					// {
+					// 	tempInstruction = OA_TEE_INSTRUCTION_DRAIN_MISC;
+					// }
+					// else
+					// {
+					// 	tempInstruction = OA_TEE_INSTRUCTION_DRAIN_CONV;
+					// }
+					tempInstruction = OA_TEE_INSTRUCTION_DRAIN_CONV;
+					//regFlagDrainMisc = tempFlagDrainMisc;
 				}
 			} //OA_TEE_INSTRUCTION_DECODE_COMMAND
 			break;
@@ -2000,14 +2001,15 @@ __kernel void kernelOATee ()
 				else
 				{
 
-					if (regFlagDrainMisc == TRUE)
-					{
-						tempInstruction = OA_TEE_INSTRUCTION_DRAIN_MISC;
-					}
-					else
-					{
-						tempInstruction = OA_TEE_INSTRUCTION_DRAIN_CONV;
-					}
+					// if (regFlagDrainMisc == TRUE)
+					// {
+					// 	tempInstruction = OA_TEE_INSTRUCTION_DRAIN_MISC;
+					// }
+					// else
+					// {
+					// 	tempInstruction = OA_TEE_INSTRUCTION_DRAIN_CONV;
+					// }
+					tempInstruction = OA_TEE_INSTRUCTION_DRAIN_CONV;
 				}
 				
 			} //OA_TEE_INSTRUCTION_LOOP_UPDATE

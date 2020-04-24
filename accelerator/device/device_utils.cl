@@ -3,14 +3,14 @@
 //TODO: review this
 t_operand modifyOutput (
 		t_accumulator accumulator,
-        //Bit [6:0] Shift amount
-        //Bit [7] Flag for left/right shift. 0 for right, 1 for left
+        //Bit [2:0] Shift amount
+        //Bit [3] Flag for left/right shift. 0 for right, 1 for left
         unsigned char shiftDirectionCatShiftAmount,
 		uint1_t enableRelu
 		)
 {
-    uint1_t shiftLeft = (shiftDirectionCatShiftAmount & 0x80) >> 0x7;
-    unsigned char shiftAmount = shiftDirectionCatShiftAmount & 0x7F;
+    uint1_t shiftLeft = (shiftDirectionCatShiftAmount & 0x08) >> 0x3;
+    unsigned char shiftAmount = shiftDirectionCatShiftAmount & 0x07;
     uint1_t preShiftIsPositive;
 
 
@@ -76,13 +76,13 @@ t_operand modifyOutput (
 //TODO: review this
 signed char modifyCharOutput (
         signed char input,
-        //Bit [6:0] Shift amount
-        //Bit [7] Flag for left/right shift. 0 for right, 1 for left
+        //Bit [2:0] Shift amount
+        //Bit [3] Flag for left/right shift. 0 for right, 1 for left
         unsigned char shiftDirectionCatShiftAmount
         )
 {
-    uint1_t shiftLeft = (shiftDirectionCatShiftAmount >> 0x7) & 0x01;
-    unsigned char shiftAmount = shiftDirectionCatShiftAmount & 0x7F;
+    uint1_t shiftLeft = (shiftDirectionCatShiftAmount >> 0x3) & 0x01;
+    unsigned char shiftAmount = shiftDirectionCatShiftAmount & 0x07;
     uint1_t originalIsPositive = (input >= 0) ? TRUE : FALSE;
 
     //Handle the right shift
