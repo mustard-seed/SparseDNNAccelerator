@@ -23,18 +23,25 @@
 #include "floatFixedPointConversion.hpp"
 #include "tensorCompression.hpp"
 #include "vectorType.hpp"
+#include "layerInstructionGenerator.hpp"
 
 /*Limits on the buffer sizes
  * Assume the biggest test convolves a 32x32x64 tensor with a 128*32*32*64 tensor
- * Add a safety factor of 2
+ * Add a safety factor of 4
  * */
-#define MAX_DRAM_BYTE_INPUT_ACTIVATION 131072
+#define MAX_DRAM_BYTE_INPUT_ACTIVATION 262144
 #define MAX_DRAM_BYTE_INPUT_ACTIVATION_SB_COUNT 8192
 #define MAX_DRAM_BYTE_INPUT_WEIGHT 16777216
 #define MAX_DRAM_BYTE_INPUT_WEIGHT_SB_COUNT 2048
 #define MAX_DRAM_BYTE_INPUT_BIAS 2048
-#define MAX_DRAM_BYTE_OUTPUT_ACTIVATION 262144
+#define MAX_DRAM_BYTE_OUTPUT_ACTIVATION 1048576
 #define MAX_DRAM_BYTE_OUTPUT_ACTIVATION_SB_COUNT 8192
+#define MAX_DRAM_BYTE_INPUT_MOVER_INSTRUCTION (1 << 20)
+#define MAX_DRAM_BYTE_INPUT_TILE_CONTROLLER_INSTRUCTION (1 << 20)
+#define MAX_DRAM_BYTE_OUTPUT_MOVER_INSTRUCTION (1 << 20)
+#define MAX_DRAM_BYTE_WEIGHT_MOVER_INSTRUCTION (1 << 20)
+#define MAX_DRAM_BYTE_OUTPUT_TILE_CONTROLLER_INSTRUCTION (1 << 20)
+#define MAX_DRAM_BYTE_MISC_CONTROLLER_INSTRUCTION (1 << 20)
 
 #define FRAC_WIDTH 4
 #define INT_WIDTH 3
@@ -55,22 +62,9 @@ __asm__(".symver _ZNSt6chrono3_V212system_clock3nowEv,_ZNSt6chrono12system_clock
 #endif
 
 typedef
-std::vector<cl_float, boost::alignment::aligned_allocator<cl_float, aocl_utils_cpp::AOCL_ALIGNMENT>>
-//std::vector<cl_ushort>
-t_aligned_float_vector;
-
-typedef
 std::vector<cl_short, boost::alignment::aligned_allocator<cl_short, aocl_utils_cpp::AOCL_ALIGNMENT>>
 //std::vector<cl_short>
 t_aligned_short_vector;
-
-typedef struct {
-    unsigned int sequenceId;
-    unsigned char targetFilterRow;
-} t_filter_coordinates;
-
-typedef enum {TEST, FULL, ZERO, DENSE, SPARSE} e_tensor_type;
-
 
 class testFixture : public ::testing::Test {
 protected:
@@ -81,33 +75,51 @@ protected:
     cl::Device clDevice;
 
     //Command queues
-    cl::CommandQueue clCQMemoryReader;
-    cl::CommandQueue clCQOutputWriter;
+    cl::CommandQueue clCQIAMover;
+    cl::CommandQueue clCQOAMover;
+    cl::CommandQueue clCQWMover;
     cl::CommandQueue clCQIATileController;
     cl::CommandQueue clCQOATileController;
+    cl::CommandQueue clMKController;
 
     //The kernels
-    cl::Kernel kernelMemoryReader;
-    cl::Kernel kernelOutputWriter;
+    cl::Kernel kernelIAMover;
+    cl::Kernel kernelOAMover;
+    cl::Kernel kernelWMover;
+    cl::Kernel kernelMKInstructionMover;
     cl::Kernel kernelIATileController;
     cl::Kernel KernelOATileController;
 
-    //Buffer members associated with the memory reader kernel
-    cl::Buffer bufferMemoryReaderWideWeights;
+    //Buffer members associated with the IA Mover kernel
+    cl::Buffer bufferIAMoverInstructions;
+    cl::Buffer bufferIAMoverIADramBlocks;
 #if defined(SPARSE_SYSTEM)
-    cl::Buffer bufferMemoryReaderWeightSBCount;
+    cl::Buffer bufferIAMoverIATBCounts;
 #endif
-    cl::Buffer bufferMemoryReaderWideInput;
-#if defined(SPARSE_SYSTEM)
-    cl::Buffer bufferMemoryReaderInputSBCount;
-#endif
-    cl::Buffer bufferMemoryReaderBias;
 
-    //Buffer members associated withthe output writer kernel
-    cl::Buffer bufferMemoryWriterWideOutput;
+    //Buffer members associated with the IA tile controller
+    cl::Buffer bufferIATileControllerInstructions;
+
+    //Buffer members associated with the OA Mover kernel
+    cl::Buffer bufferOAMoverInstructions;
+    cl::Buffer bufferOAMoverOADramBlocks;
 #if defined(SPARSE_SYSTEM)
-    cl::Buffer bufferMemoryWriterOutputSBCount;
+    cl::Buffer bufferOAMoverOATBCounts;
 #endif
+
+    //Buffer members associated with the OA tile controller
+    cl::Buffer bufferOATileControllerInstructions;
+
+    //Buffer members associated with the W Mover kernel
+    cl::Buffer bufferWMoverInstructions;
+    cl::Buffer bufferWMoverWDramBlocks;
+    cl::Buffer bufferWMoverBias;
+#if defined(SPARSE_SYSTEM)
+    cl::Buffer bufferWMoverWTBCounts;
+#endif
+
+    //Buffer members associated with the MK instruction kernel
+    cl::Buffer bufferMKInstructions;
 
     void SetUp() override
     {
@@ -146,10 +158,13 @@ protected:
         aocl_utils_cpp::checkError(status, "Failed to build program");
 
         //Instantiate the host-side kernel objects
-        kernelMemoryReader = cl::Kernel(program, "kernelMemoryReader", &status);
-        aocl_utils_cpp::checkError(status, "Failed to create the memory reader kernel!");
+        kernelIAMover = cl::Kernel(program, "kernelIAMover", &status);
+        aocl_utils_cpp::checkError(status, "Failed to create kernelIAMover!");
 
-        kernelOutputWriter = cl::Kernel(program, "kernelOutputWriter", &status);
+        kernelWMover = cl::Kernel(program, "kernelWMover", &status);
+        aocl_utils_cpp::checkError(status, "Failed to create kernelWMover!");
+
+        kernelOAMover = cl::Kernel(program, "kernelOAMover", &status);
         aocl_utils_cpp::checkError(status, "Failed to create kernelOutputWriter!");
 
         kernelIATileController = cl::Kernel(program, "kernelIATileController", &status);
@@ -158,22 +173,33 @@ protected:
         KernelOATileController = cl::Kernel(program, "kernelOATileController", &status);
         aocl_utils_cpp::checkError(status, "Failed to create kernelOATileController!");
 
-        //Instantiate the command queues
-        clCQMemoryReader = cl::CommandQueue(
-                    clContext,
-                    clDevice,
-                    CL_QUEUE_PROFILING_ENABLE,
-                    &status
-                    );
-        aocl_utils_cpp::checkError(status, "Failed to setup the command queue clCQMemoryReader!");
+        kernelMKInstructionMover = cl::Kernel(program, "kernelMiscControlMover", &status);
+        aocl_utils_cpp::checkError(status, "Failed to create kernelMiscControlMover!");
 
-        clCQOutputWriter = cl::CommandQueue(
+        //Instantiate the command queues
+        clCQIAMover = cl::CommandQueue(
                     clContext,
                     clDevice,
                     CL_QUEUE_PROFILING_ENABLE,
                     &status
                     );
-        aocl_utils_cpp::checkError(status, "Failed to setup the command queue clCQOutputWriter!");
+        aocl_utils_cpp::checkError(status, "Failed to setup the command queue clCQIAMover!");
+
+        clCQOAMover = cl::CommandQueue(
+                    clContext,
+                    clDevice,
+                    CL_QUEUE_PROFILING_ENABLE,
+                    &status
+                    );
+        aocl_utils_cpp::checkError(status, "Failed to setup the command queue clCQOAMover!");
+
+        clCQWMover = cl::CommandQueue(
+                    clContext,
+                    clDevice,
+                    CL_QUEUE_PROFILING_ENABLE,
+                    &status
+                    );
+        aocl_utils_cpp::checkError(status, "Failed to setup the command queue clCQWMover!");
 
         clCQIATileController = cl::CommandQueue(
                     clContext,
@@ -191,88 +217,81 @@ protected:
                     );
         aocl_utils_cpp::checkError(status, "Failed to setup the command queue clCQOATileController!");
 
+        clMKController = cl::CommandQueue(
+                    clContext,
+                    clDevice,
+                    CL_QUEUE_PROFILING_ENABLE,
+                    &status
+                    );
+        aocl_utils_cpp::checkError(status, "Failed to setup the command queue clMKController!");
+
         //Instantiate the buffers
         cl_ulong maxBufferSizeByte = clDevice.getInfo<CL_DEVICE_MAX_MEM_ALLOC_SIZE> (&status);
         aocl_utils_cpp::checkError(status, "Failed to query the maximum buffer size in bytes!");
 
+        typedef struct {
+            cl_ulong bufferSizeByte;
+            cl::Buffer& bufferObject;
+            cl_mem_flags memFlag;
+            std::string bufferName;
+        } t_buffer_setup_info;
+
+        std::vector<t_buffer_setup_info> vecBufferInfo;
+
+        cl_ulong weightMoverInstructionBufferSize = maxBufferSizeByte < MAX_DRAM_BYTE_WEIGHT_MOVER_INSTRUCTION ? maxBufferSizeByte : MAX_DRAM_BYTE_WEIGHT_MOVER_INSTRUCTION;
+        vecBufferInfo.push_back({weightMoverInstructionBufferSize, bufferWMoverInstructions, CL_MEM_READ_ONLY, "bufferWMoverInstructions"});
+
         cl_ulong inputWeightBufferSize = maxBufferSizeByte < MAX_DRAM_BYTE_INPUT_WEIGHT ? maxBufferSizeByte : MAX_DRAM_BYTE_INPUT_WEIGHT;
-        std::cout <<"Setting the bufferMemoryReaderWideWeights buffer. Size: "<<inputWeightBufferSize<<" bytes."<<std::endl;
-        bufferMemoryReaderWideWeights = cl::Buffer (
-                        clContext,
-                        CL_MEM_READ_ONLY,
-                        inputWeightBufferSize,
-                        NULL,
-                        &status
-                    );
-        aocl_utils_cpp::checkError(status, "Failed to setup the buffer bufferMemoryReaderWideWeights!");
+        vecBufferInfo.push_back(({inputWeightBufferSize, bufferWMoverWDramBlocks, CL_MEM_READ_ONLY, "bufferWMoverWDramBlocks"}));
+
+        cl_ulong inputBiasSize = maxBufferSizeByte < MAX_DRAM_BYTE_INPUT_BIAS ? maxBufferSizeByte : MAX_DRAM_BYTE_INPUT_BIAS;
+        vecBufferInfo.push_back(({inputBiasSize, bufferWMoverBias, CL_MEM_READ_ONLY, "bufferWMoverBias"}));
+
+        cl_ulong inputActivationSize = maxBufferSizeByte < MAX_DRAM_BYTE_INPUT_ACTIVATION ? maxBufferSizeByte : MAX_DRAM_BYTE_INPUT_ACTIVATION;
+        vecBufferInfo.push_back(({inputActivationSize, bufferIAMoverIADramBlocks, CL_MEM_READ_WRITE, "bufferIAMoverIADramBlocks"}));
+
+        cl_ulong inputIAMoverInstructionSize = maxBufferSizeByte < MAX_DRAM_BYTE_INPUT_MOVER_INSTRUCTION ? maxBufferSizeByte : MAX_DRAM_BYTE_INPUT_MOVER_INSTRUCTION;
+        vecBufferInfo.push_back(({inputIAMoverInstructionSize, bufferIAMoverInstructions, CL_MEM_READ_ONLY, "bufferIAMoverInstructions"}));
+
+        cl_ulong inputIATileControllerInstructionSize = maxBufferSizeByte < MAX_DRAM_BYTE_INPUT_TILE_CONTROLLER_INSTRUCTION ? maxBufferSizeByte : MAX_DRAM_BYTE_INPUT_TILE_CONTROLLER_INSTRUCTION;
+        vecBufferInfo.push_back(({inputIATileControllerInstructionSize, bufferIATileControllerInstructions, CL_MEM_READ_ONLY, "bufferIATileControllerInstructions"}));
+
+        cl_ulong outputActivationSize = maxBufferSizeByte < MAX_DRAM_BYTE_OUTPUT_ACTIVATION ? maxBufferSizeByte : MAX_DRAM_BYTE_OUTPUT_ACTIVATION;
+        vecBufferInfo.push_back(({outputActivationSize, bufferOAMoverOADramBlocks, CL_MEM_READ_WRITE, "bufferOAMoverOADramBlocks"}));
+
+        cl_ulong outputOAMoverInstructionSize = maxBufferSizeByte < MAX_DRAM_BYTE_OUTPUT_MOVER_INSTRUCTION ? maxBufferSizeByte : MAX_DRAM_BYTE_OUTPUT_MOVER_INSTRUCTION;
+        vecBufferInfo.push_back(({outputOAMoverInstructionSize, bufferOAMoverInstructions, CL_MEM_READ_ONLY, "bufferOAMoverInstructions"}));
+
+        cl_ulong outoutOATileControllerInstructionSize = maxBufferSizeByte < MAX_DRAM_BYTE_OUTPUT_TILE_CONTROLLER_INSTRUCTION ? maxBufferSizeByte : MAX_DRAM_BYTE_OUTPUT_TILE_CONTROLLER_INSTRUCTION;
+        vecBufferInfo.push_back(({outoutOATileControllerInstructionSize, bufferOATileControllerInstructions, CL_MEM_READ_ONLY, "bufferOATileControllerInstructions"}));
+
+        cl_ulong mkInstructionSize = maxBufferSizeByte < MAX_DRAM_BYTE_MISC_CONTROLLER_INSTRUCTION ? maxBufferSizeByte : MAX_DRAM_BYTE_MISC_CONTROLLER_INSTRUCTION;
+        vecBufferInfo.push_back(({mkInstructionSize, bufferMKInstructions, CL_MEM_READ_ONLY, "bufferMKInstructions"}));
 
 #if defined(SPARSE_SYSTEM)
         cl_ulong inputWeightSBSize = maxBufferSizeByte < MAX_DRAM_BYTE_INPUT_WEIGHT_SB_COUNT ? maxBufferSizeByte : MAX_DRAM_BYTE_INPUT_WEIGHT_SB_COUNT;
-        std::cout <<"Setting the bufferMemoryReaderWeightSBCount buffer. Size: "<<inputWeightSBSize<<" bytes."<<std::endl;
-        bufferMemoryReaderWeightSBCount = cl::Buffer (
-                        clContext,
-                        CL_MEM_READ_ONLY,
-                        inputWeightSBSize,
-                        NULL,
-                        &status
-                    );
-        aocl_utils_cpp::checkError(status, "Failed to setup the buffer bufferMemoryReaderWeightSBCount!");
-#endif
-        cl_ulong inputActivationSize = maxBufferSizeByte < MAX_DRAM_BYTE_INPUT_ACTIVATION ? maxBufferSizeByte : MAX_DRAM_BYTE_INPUT_ACTIVATION;
-        std::cout <<"Setting the bufferMemoryReaderWideInput buffer. Size: "<<inputActivationSize<<" bytes."<<std::endl;
-        bufferMemoryReaderWideInput = cl::Buffer (
-                        clContext,
-                        CL_MEM_READ_ONLY,
-                        inputActivationSize,
-                        NULL,
-                        &status
-                    );
-        aocl_utils_cpp::checkError(status, "Failed to setup the buffer bufferMemoryReaderWideInput!");
-#if defined(SPARSE_SYSTEM)
-        cl_ulong inputActivationSBSize = maxBufferSizeByte < MAX_DRAM_BYTE_INPUT_ACTIVATION_SB_COUNT ? maxBufferSizeByte : MAX_DRAM_BYTE_INPUT_ACTIVATION_SB_COUNT;
-        std::cout <<"Setting the bufferMemoryReaderInputSBCount buffer. Size: "<<inputActivationSBSize<<" bytes."<<std::endl;
-        bufferMemoryReaderInputSBCount = cl::Buffer (
-                        clContext,
-                        CL_MEM_READ_ONLY,
-                        inputActivationSBSize,
-                        NULL,
-                        &status
-                    );
-        aocl_utils_cpp::checkError(status, "Failed to setup the buffer bufferMemoryReaderInputSBCount!");
-#endif
-        cl_ulong inputBiasSize = maxBufferSizeByte < MAX_DRAM_BYTE_INPUT_BIAS ? maxBufferSizeByte : MAX_DRAM_BYTE_INPUT_BIAS;
-        std::cout <<"Setting the bufferMemoryReaderBias buffer. Size: "<<inputBiasSize<<" bytes."<<std::endl;
-        bufferMemoryReaderBias = cl::Buffer (
-                        clContext,
-                        CL_MEM_READ_ONLY,
-                        inputBiasSize,
-                        NULL,
-                        &status
-                    );
-        aocl_utils_cpp::checkError(status, "Failed to setup the buffer bufferMemoryReaderBias!");
+        vecBufferInfo.push_back(({inputWeightSBSize, bufferWMoverWTBCounts, CL_MEM_READ_ONLY, "bufferWMoverWTBCounts"}));
 
-        cl_ulong outputActivationSize = maxBufferSizeByte < MAX_DRAM_BYTE_OUTPUT_ACTIVATION ? maxBufferSizeByte : MAX_DRAM_BYTE_OUTPUT_ACTIVATION;
-        std::cout <<"Setting the bufferMemoryWriterWideOutput buffer. Size: "<<outputActivationSize<<" bytes."<<std::endl;
-        bufferMemoryWriterWideOutput = cl::Buffer (
-                        clContext,
-                        CL_MEM_WRITE_ONLY,
-                        outputActivationSize,
-                        NULL,
-                        &status
-                    );
-        aocl_utils_cpp::checkError(status, "Failed to setup the buffer bufferMemoryWriterWideOutput!");
-#if defined(SPARSE_SYSTEM)
-        cl_ulong outputActivtionSBSize = maxBufferSizeByte < MAX_DRAM_BYTE_OUTPUT_ACTIVATION_SB_COUNT ? maxBufferSizeByte : MAX_DRAM_BYTE_OUTPUT_ACTIVATION_SB_COUNT;
-        std::cout <<"Setting the bufferMemoryWriterOutputSBCount buffer. Size: "<<outputActivtionSBSize<<" bytes."<<std::endl;
-        bufferMemoryWriterOutputSBCount = cl::Buffer (
-                        clContext,
-                        CL_MEM_WRITE_ONLY,
-                        outputActivtionSBSize,
-                        NULL,
-                        &status
-                    );
-        aocl_utils_cpp::checkError(status, "Failed to setup the buffer bufferMemoryWriterOutputSBCount!");
+        cl_ulong inputIATBCountSize = maxBufferSizeByte < MAX_DRAM_BYTE_INPUT_ACTIVATION_SB_COUNT ? maxBufferSizeByte : MAX_DRAM_BYTE_INPUT_ACTIVATION_SB_COUNT;
+        vecBufferInfo.push_back(({inputIATBCountSize, bufferIAMoverIATBCounts, CL_MEM_READ_ONLY, "bufferIAMoverIATBCounts"}));
+
+        cl_ulong outputOATBCountSize = maxBufferSizeByte < MAX_DRAM_BYTE_OUTPUT_ACTIVATION_SB_COUNT ? maxBufferSizeByte : MAX_DRAM_BYTE_OUTPUT_ACTIVATION_SB_COUNT;
+        vecBufferInfo.push_back(({outputOATBCountSize, bufferOAMoverOATBCounts, CL_MEM_READ_ONLY, "bufferOAMoverOATBCounts"}));
 #endif
+
+        for (auto& info : vecBufferInfo)
+        {
+            cl_int localStatus = CL_SUCCESS;
+            std::cout <<"Setting the buffer "<<info.bufferName<<". Size (bytes): "<<info.bufferSizeByte<<std::endl;
+            info.bufferObject = cl::Buffer (
+                        clContext,
+                        info.memFlag,
+                        info.bufferSizeByte,
+                        NULL,
+                        &localStatus
+                    );
+            aocl_utils_cpp::checkError(status, "Failed to setup the buffer!");
+        }
         std::cout <<"AOCL setup compelete"<<std::endl;
     }
 
@@ -1241,903 +1260,7 @@ TEST_F (testFixture, play) {
         TEST_TYPE);
 }
 #else
-#if defined(SPARSE_LEVEL_TEST)
-TEST_F (testFixture, sparse_16x16x127_0p) {
 
-    unsigned char inputWidth = 16;
-    unsigned char inputHeight = 16;
-    unsigned char numInputChannel = 127;
-    unsigned char widthBlockSize = 1;
-    unsigned char sizeOutputTileWidthPerColFul = 8;
-    unsigned char sizeOutputTileHeightFull = 8;
-    bool flagEnableRelu = true;
-    float bias = 0.0;
-    e_tensor_type tensorType = SPARSE;
-    bool flagCompression = false;
-    float sparseProb = 0.0f;
-
-    launch(
-        inputWidth,
-        inputHeight,
-        numInputChannel,
-        widthBlockSize,
-        sizeOutputTileWidthPerColFul,
-        sizeOutputTileHeightFull,
-        flagEnableRelu,
-        tensorType,
-        bias,
-        flagCompression,
-        1.0f - sparseProb);
-}
-TEST_F (testFixture, sparse_16x16x127_0p1) {
-
-    unsigned char inputWidth = 16;
-    unsigned char inputHeight = 16;
-    unsigned char numInputChannel = 127;
-    unsigned char widthBlockSize = 1;
-    unsigned char sizeOutputTileWidthPerColFul = 8;
-    unsigned char sizeOutputTileHeightFull = 8;
-    bool flagEnableRelu = true;
-    float bias = 0.0;
-    e_tensor_type tensorType = SPARSE;
-    bool flagCompression = false;
-    float sparseProb = 0.1f;
-
-    launch(
-        inputWidth,
-        inputHeight,
-        numInputChannel,
-        widthBlockSize,
-        sizeOutputTileWidthPerColFul,
-        sizeOutputTileHeightFull,
-        flagEnableRelu,
-        tensorType,
-        bias,
-        flagCompression,
-        1.0f - sparseProb);
-}
-TEST_F (testFixture, sparse_16x16x127_0p2) {
-
-    unsigned char inputWidth = 16;
-    unsigned char inputHeight = 16;
-    unsigned char numInputChannel = 127;
-    unsigned char widthBlockSize = 1;
-    unsigned char sizeOutputTileWidthPerColFul = 8;
-    unsigned char sizeOutputTileHeightFull = 8;
-    bool flagEnableRelu = true;
-    float bias = 0.0;
-    e_tensor_type tensorType = SPARSE;
-    bool flagCompression = false;
-    float sparseProb = 0.2f;
-
-    launch(
-        inputWidth,
-        inputHeight,
-        numInputChannel,
-        widthBlockSize,
-        sizeOutputTileWidthPerColFul,
-        sizeOutputTileHeightFull,
-        flagEnableRelu,
-        tensorType,
-        bias,
-        flagCompression,
-        1.0f - sparseProb);
-}
-TEST_F (testFixture, sparse_16x16x127_0p3) {
-
-    unsigned char inputWidth = 16;
-    unsigned char inputHeight = 16;
-    unsigned char numInputChannel = 127;
-    unsigned char widthBlockSize = 1;
-    unsigned char sizeOutputTileWidthPerColFul = 8;
-    unsigned char sizeOutputTileHeightFull = 8;
-    bool flagEnableRelu = true;
-    float bias = 0.0;
-    e_tensor_type tensorType = SPARSE;
-    bool flagCompression = false;
-    float sparseProb = 0.3f;
-
-    launch(
-        inputWidth,
-        inputHeight,
-        numInputChannel,
-        widthBlockSize,
-        sizeOutputTileWidthPerColFul,
-        sizeOutputTileHeightFull,
-        flagEnableRelu,
-        tensorType,
-        bias,
-        flagCompression,
-        1.0f - sparseProb);
-}
-TEST_F (testFixture, sparse_16x16x127_0p4) {
-
-    unsigned char inputWidth = 16;
-    unsigned char inputHeight = 16;
-    unsigned char numInputChannel = 127;
-    unsigned char widthBlockSize = 1;
-    unsigned char sizeOutputTileWidthPerColFul = 8;
-    unsigned char sizeOutputTileHeightFull = 8;
-    bool flagEnableRelu = true;
-    float bias = 0.0;
-    e_tensor_type tensorType = SPARSE;
-    bool flagCompression = false;
-    float sparseProb = 0.4f;
-
-    launch(
-        inputWidth,
-        inputHeight,
-        numInputChannel,
-        widthBlockSize,
-        sizeOutputTileWidthPerColFul,
-        sizeOutputTileHeightFull,
-        flagEnableRelu,
-        tensorType,
-        bias,
-        flagCompression,
-        1.0f - sparseProb);
-}
-TEST_F (testFixture, sparse_16x16x127_0p5) {
-
-    unsigned char inputWidth = 16;
-    unsigned char inputHeight = 16;
-    unsigned char numInputChannel = 127;
-    unsigned char widthBlockSize = 1;
-    unsigned char sizeOutputTileWidthPerColFul = 8;
-    unsigned char sizeOutputTileHeightFull = 8;
-    bool flagEnableRelu = true;
-    float bias = 0.0;
-    e_tensor_type tensorType = SPARSE;
-    bool flagCompression = false;
-    float sparseProb = 0.5f;
-
-    launch(
-        inputWidth,
-        inputHeight,
-        numInputChannel,
-        widthBlockSize,
-        sizeOutputTileWidthPerColFul,
-        sizeOutputTileHeightFull,
-        flagEnableRelu,
-        tensorType,
-        bias,
-        flagCompression,
-        1.0f - sparseProb);
-}
-TEST_F (testFixture, sparse_16x16x127_0p6) {
-
-    unsigned char inputWidth = 16;
-    unsigned char inputHeight = 16;
-    unsigned char numInputChannel = 127;
-    unsigned char widthBlockSize = 1;
-    unsigned char sizeOutputTileWidthPerColFul = 8;
-    unsigned char sizeOutputTileHeightFull = 8;
-    bool flagEnableRelu = true;
-    float bias = 0.0;
-    e_tensor_type tensorType = SPARSE;
-    bool flagCompression = false;
-    float sparseProb = 0.6f;
-
-    launch(
-        inputWidth,
-        inputHeight,
-        numInputChannel,
-        widthBlockSize,
-        sizeOutputTileWidthPerColFul,
-        sizeOutputTileHeightFull,
-        flagEnableRelu,
-        tensorType,
-        bias,
-        flagCompression,
-        1.0f - sparseProb);
-}
-TEST_F (testFixture, sparse_16x16x127_0p7) {
-
-    unsigned char inputWidth = 16;
-    unsigned char inputHeight = 16;
-    unsigned char numInputChannel = 127;
-    unsigned char widthBlockSize = 1;
-    unsigned char sizeOutputTileWidthPerColFul = 8;
-    unsigned char sizeOutputTileHeightFull = 8;
-    bool flagEnableRelu = true;
-    float bias = 0.0;
-    e_tensor_type tensorType = SPARSE;
-    bool flagCompression = false;
-    float sparseProb = 0.7f;
-
-    launch(
-        inputWidth,
-        inputHeight,
-        numInputChannel,
-        widthBlockSize,
-        sizeOutputTileWidthPerColFul,
-        sizeOutputTileHeightFull,
-        flagEnableRelu,
-        tensorType,
-        bias,
-        flagCompression,
-        1.0f - sparseProb);
-}
-TEST_F (testFixture, sparse_16x16x127_0p8) {
-
-    unsigned char inputWidth = 16;
-    unsigned char inputHeight = 16;
-    unsigned char numInputChannel = 127;
-    unsigned char widthBlockSize = 1;
-    unsigned char sizeOutputTileWidthPerColFul = 8;
-    unsigned char sizeOutputTileHeightFull = 8;
-    bool flagEnableRelu = true;
-    float bias = 0.0;
-    e_tensor_type tensorType = SPARSE;
-    bool flagCompression = false;
-    float sparseProb = 0.8f;
-
-    launch(
-        inputWidth,
-        inputHeight,
-        numInputChannel,
-        widthBlockSize,
-        sizeOutputTileWidthPerColFul,
-        sizeOutputTileHeightFull,
-        flagEnableRelu,
-        tensorType,
-        bias,
-        flagCompression,
-        1.0f - sparseProb);
-}
-TEST_F (testFixture, sparse_16x16x127_0p9) {
-
-    unsigned char inputWidth = 16;
-    unsigned char inputHeight = 16;
-    unsigned char numInputChannel = 127;
-    unsigned char widthBlockSize = 1;
-    unsigned char sizeOutputTileWidthPerColFul = 8;
-    unsigned char sizeOutputTileHeightFull = 8;
-    bool flagEnableRelu = true;
-    float bias = 0.0;
-    e_tensor_type tensorType = SPARSE;
-    bool flagCompression = false;
-    float sparseProb = 0.9f;
-
-    launch(
-        inputWidth,
-        inputHeight,
-        numInputChannel,
-        widthBlockSize,
-        sizeOutputTileWidthPerColFul,
-        sizeOutputTileHeightFull,
-        flagEnableRelu,
-        tensorType,
-        bias,
-        flagCompression,
-        1.0f - sparseProb);
-}
-TEST_F (testFixture, sparse_16x16x127_1p) {
-
-    unsigned char inputWidth = 16;
-    unsigned char inputHeight = 16;
-    unsigned char numInputChannel = 127;
-    unsigned char widthBlockSize = 1;
-    unsigned char sizeOutputTileWidthPerColFul = 8;
-    unsigned char sizeOutputTileHeightFull = 8;
-    bool flagEnableRelu = true;
-    float bias = 0.0;
-    e_tensor_type tensorType = SPARSE;
-    bool flagCompression = false;
-    float sparseProb = 1.0f;
-
-    launch(
-        inputWidth,
-        inputHeight,
-        numInputChannel,
-        widthBlockSize,
-        sizeOutputTileWidthPerColFul,
-        sizeOutputTileHeightFull,
-        flagEnableRelu,
-        tensorType,
-        bias,
-        flagCompression,
-        1.0f - sparseProb);
-}
-
-TEST_F (testFixture, sparse_1x1x127_0p) {
-
-    unsigned char inputWidth = 1;
-    unsigned char inputHeight = 1;
-    unsigned char numInputChannel = 127;
-    unsigned char widthBlockSize = 3;
-    unsigned char sizeOutputTileWidthPerColFul = 8;
-    unsigned char sizeOutputTileHeightFull = 8;
-    bool flagEnableRelu = true;
-    float bias = 0.0;
-    e_tensor_type tensorType = SPARSE;
-    bool flagCompression = false;
-    float sparseProb = 0.0f;
-
-    launch(
-        inputWidth,
-        inputHeight,
-        numInputChannel,
-        widthBlockSize,
-        sizeOutputTileWidthPerColFul,
-        sizeOutputTileHeightFull,
-        flagEnableRelu,
-        tensorType,
-        bias,
-        flagCompression,
-        1.0f - sparseProb);
-}
-TEST_F (testFixture, sparse_1x1x127_0p05) {
-
-    unsigned char inputWidth = 1;
-    unsigned char inputHeight = 1;
-    unsigned char numInputChannel = 127;
-    unsigned char widthBlockSize = 3;
-    unsigned char sizeOutputTileWidthPerColFul = 8;
-    unsigned char sizeOutputTileHeightFull = 8;
-    bool flagEnableRelu = true;
-    float bias = 0.0;
-    e_tensor_type tensorType = SPARSE;
-    bool flagCompression = false;
-    float sparseProb = 0.05f;
-
-    launch(
-        inputWidth,
-        inputHeight,
-        numInputChannel,
-        widthBlockSize,
-        sizeOutputTileWidthPerColFul,
-        sizeOutputTileHeightFull,
-        flagEnableRelu,
-        tensorType,
-        bias,
-        flagCompression,
-        1.0f - sparseProb);
-}
-TEST_F (testFixture, sparse_1x1x127_0p1) {
-
-    unsigned char inputWidth = 1;
-    unsigned char inputHeight = 1;
-    unsigned char numInputChannel = 127;
-    unsigned char widthBlockSize = 3;
-    unsigned char sizeOutputTileWidthPerColFul = 8;
-    unsigned char sizeOutputTileHeightFull = 8;
-    bool flagEnableRelu = true;
-    float bias = 0.0;
-    e_tensor_type tensorType = SPARSE;
-    bool flagCompression = false;
-    float sparseProb = 0.1f;
-
-    launch(
-        inputWidth,
-        inputHeight,
-        numInputChannel,
-        widthBlockSize,
-        sizeOutputTileWidthPerColFul,
-        sizeOutputTileHeightFull,
-        flagEnableRelu,
-        tensorType,
-        bias,
-        flagCompression,
-        1.0f - sparseProb);
-}
-TEST_F (testFixture, sparse_1x1x127_0p2) {
-
-    unsigned char inputWidth = 1;
-    unsigned char inputHeight = 1;
-    unsigned char numInputChannel = 127;
-    unsigned char widthBlockSize = 3;
-    unsigned char sizeOutputTileWidthPerColFul = 8;
-    unsigned char sizeOutputTileHeightFull = 8;
-    bool flagEnableRelu = true;
-    float bias = 0.0;
-    e_tensor_type tensorType = SPARSE;
-    bool flagCompression = false;
-    float sparseProb = 0.2f;
-
-    launch(
-        inputWidth,
-        inputHeight,
-        numInputChannel,
-        widthBlockSize,
-        sizeOutputTileWidthPerColFul,
-        sizeOutputTileHeightFull,
-        flagEnableRelu,
-        tensorType,
-        bias,
-        flagCompression,
-        1.0f - sparseProb);
-}
-TEST_F (testFixture, sparse_1x1x127_0p3) {
-
-    unsigned char inputWidth = 1;
-    unsigned char inputHeight = 1;
-    unsigned char numInputChannel = 127;
-    unsigned char widthBlockSize = 3;
-    unsigned char sizeOutputTileWidthPerColFul = 8;
-    unsigned char sizeOutputTileHeightFull = 8;
-    bool flagEnableRelu = true;
-    float bias = 0.0;
-    e_tensor_type tensorType = SPARSE;
-    bool flagCompression = false;
-    float sparseProb = 0.3f;
-
-    launch(
-        inputWidth,
-        inputHeight,
-        numInputChannel,
-        widthBlockSize,
-        sizeOutputTileWidthPerColFul,
-        sizeOutputTileHeightFull,
-        flagEnableRelu,
-        tensorType,
-        bias,
-        flagCompression,
-        1.0f - sparseProb);
-}
-TEST_F (testFixture, sparse_1x1x127_0p4) {
-
-    unsigned char inputWidth = 1;
-    unsigned char inputHeight = 1;
-    unsigned char numInputChannel = 127;
-    unsigned char widthBlockSize = 3;
-    unsigned char sizeOutputTileWidthPerColFul = 8;
-    unsigned char sizeOutputTileHeightFull = 8;
-    bool flagEnableRelu = true;
-    float bias = 0.0;
-    e_tensor_type tensorType = SPARSE;
-    bool flagCompression = false;
-    float sparseProb = 0.4f;
-
-    launch(
-        inputWidth,
-        inputHeight,
-        numInputChannel,
-        widthBlockSize,
-        sizeOutputTileWidthPerColFul,
-        sizeOutputTileHeightFull,
-        flagEnableRelu,
-        tensorType,
-        bias,
-        flagCompression,
-        1.0f - sparseProb);
-}
-TEST_F (testFixture, sparse_1x1x127_0p5) {
-
-    unsigned char inputWidth = 1;
-    unsigned char inputHeight = 1;
-    unsigned char numInputChannel = 127;
-    unsigned char widthBlockSize = 3;
-    unsigned char sizeOutputTileWidthPerColFul = 8;
-    unsigned char sizeOutputTileHeightFull = 8;
-    bool flagEnableRelu = true;
-    float bias = 0.0;
-    e_tensor_type tensorType = SPARSE;
-    bool flagCompression = false;
-    float sparseProb = 0.5f;
-
-    launch(
-        inputWidth,
-        inputHeight,
-        numInputChannel,
-        widthBlockSize,
-        sizeOutputTileWidthPerColFul,
-        sizeOutputTileHeightFull,
-        flagEnableRelu,
-        tensorType,
-        bias,
-        flagCompression,
-        1.0f - sparseProb);
-}
-TEST_F (testFixture, sparse_1x1x127_0p6) {
-
-    unsigned char inputWidth = 1;
-    unsigned char inputHeight = 1;
-    unsigned char numInputChannel = 127;
-    unsigned char widthBlockSize = 3;
-    unsigned char sizeOutputTileWidthPerColFul = 8;
-    unsigned char sizeOutputTileHeightFull = 8;
-    bool flagEnableRelu = true;
-    float bias = 0.0;
-    e_tensor_type tensorType = SPARSE;
-    bool flagCompression = false;
-    float sparseProb = 0.6f;
-
-    launch(
-        inputWidth,
-        inputHeight,
-        numInputChannel,
-        widthBlockSize,
-        sizeOutputTileWidthPerColFul,
-        sizeOutputTileHeightFull,
-        flagEnableRelu,
-        tensorType,
-        bias,
-        flagCompression,
-        1.0f - sparseProb);
-}
-TEST_F (testFixture, sparse_1x1x127_0p7) {
-
-    unsigned char inputWidth = 1;
-    unsigned char inputHeight = 1;
-    unsigned char numInputChannel = 127;
-    unsigned char widthBlockSize = 3;
-    unsigned char sizeOutputTileWidthPerColFul = 8;
-    unsigned char sizeOutputTileHeightFull = 8;
-    bool flagEnableRelu = true;
-    float bias = 0.0;
-    e_tensor_type tensorType = SPARSE;
-    bool flagCompression = false;
-    float sparseProb = 0.7f;
-
-    launch(
-        inputWidth,
-        inputHeight,
-        numInputChannel,
-        widthBlockSize,
-        sizeOutputTileWidthPerColFul,
-        sizeOutputTileHeightFull,
-        flagEnableRelu,
-        tensorType,
-        bias,
-        flagCompression,
-        1.0f - sparseProb);
-}
-TEST_F (testFixture, sparse_1x1x127_0p8) {
-
-    unsigned char inputWidth = 1;
-    unsigned char inputHeight = 1;
-    unsigned char numInputChannel = 127;
-    unsigned char widthBlockSize = 3;
-    unsigned char sizeOutputTileWidthPerColFul = 8;
-    unsigned char sizeOutputTileHeightFull = 8;
-    bool flagEnableRelu = true;
-    float bias = 0.0;
-    e_tensor_type tensorType = SPARSE;
-    bool flagCompression = false;
-    float sparseProb = 0.8f;
-
-    launch(
-        inputWidth,
-        inputHeight,
-        numInputChannel,
-        widthBlockSize,
-        sizeOutputTileWidthPerColFul,
-        sizeOutputTileHeightFull,
-        flagEnableRelu,
-        tensorType,
-        bias,
-        flagCompression,
-        1.0f - sparseProb);
-}
-TEST_F (testFixture, sparse_1x1x127_0p9) {
-
-    unsigned char inputWidth = 1;
-    unsigned char inputHeight = 1;
-    unsigned char numInputChannel = 127;
-    unsigned char widthBlockSize = 3;
-    unsigned char sizeOutputTileWidthPerColFul = 8;
-    unsigned char sizeOutputTileHeightFull = 8;
-    bool flagEnableRelu = true;
-    float bias = 0.0;
-    e_tensor_type tensorType = SPARSE;
-    bool flagCompression = false;
-    float sparseProb = 0.9f;
-
-    launch(
-        inputWidth,
-        inputHeight,
-        numInputChannel,
-        widthBlockSize,
-        sizeOutputTileWidthPerColFul,
-        sizeOutputTileHeightFull,
-        flagEnableRelu,
-        tensorType,
-        bias,
-        flagCompression,
-        1.0f - sparseProb);
-}
-TEST_F (testFixture, sparse_1x1x127_1p) {
-
-    unsigned char inputWidth = 1;
-    unsigned char inputHeight = 1;
-    unsigned char numInputChannel = 127;
-    unsigned char widthBlockSize = 3;
-    unsigned char sizeOutputTileWidthPerColFul = 8;
-    unsigned char sizeOutputTileHeightFull = 8;
-    bool flagEnableRelu = true;
-    float bias = 0.0;
-    e_tensor_type tensorType = SPARSE;
-    bool flagCompression = false;
-    float sparseProb = 1.0f;
-
-    launch(
-        inputWidth,
-        inputHeight,
-        numInputChannel,
-        widthBlockSize,
-        sizeOutputTileWidthPerColFul,
-        sizeOutputTileHeightFull,
-        flagEnableRelu,
-        tensorType,
-        bias,
-        flagCompression,
-        1.0f - sparseProb);
-}
-#else
-TEST_F (testFixture, small_5x5) {
-
-    unsigned char inputWidth = 5;
-    unsigned char inputHeight = 5;
-    unsigned char numInputChannel = 4;
-    unsigned char widthBlockSize = 3;
-    unsigned char sizeOutputTileWidthPerColFul = 2;
-    unsigned char sizeOutputTileHeightFull = 2;
-    bool flagEnableRelu = true;
-
-    launch(
-        inputWidth,
-        inputHeight,
-        numInputChannel,
-        widthBlockSize,
-        sizeOutputTileWidthPerColFul,
-        sizeOutputTileHeightFull,
-        flagEnableRelu,
-        TEST_TYPE);
-}
-
-TEST_F (testFixture, large_16x16x8_tileSizeCol_8) {
-
-    unsigned char inputWidth = 16;
-    unsigned char inputHeight = 16;
-    unsigned char numInputChannel = 8;
-    unsigned char widthBlockSize = 3;
-    unsigned char sizeOutputTileWidthPerColFul = 8;
-    unsigned char sizeOutputTileHeightFull = 8;
-    bool flagEnableRelu = true;
-
-    launch(
-        inputWidth,
-        inputHeight,
-        numInputChannel,
-        widthBlockSize,
-        sizeOutputTileWidthPerColFul,
-        sizeOutputTileHeightFull,
-        flagEnableRelu,
-        TEST_TYPE);
-}
-
-TEST_F (testFixture, large_16x16x16_tileSizeCol_8) {
-
-    unsigned char inputWidth = 16;
-    unsigned char inputHeight = 16;
-    unsigned char numInputChannel = 16;
-    unsigned char widthBlockSize = 3;
-    unsigned char sizeOutputTileWidthPerColFul = 8;
-    unsigned char sizeOutputTileHeightFull = 8;
-    bool flagEnableRelu = true;
-
-    launch(
-        inputWidth,
-        inputHeight,
-        numInputChannel,
-        widthBlockSize,
-        sizeOutputTileWidthPerColFul,
-        sizeOutputTileHeightFull,
-        flagEnableRelu,
-        TEST_TYPE);
-}
-
-TEST_F (testFixture, large_16x16x32_tileSizeCol_8) {
-
-    unsigned char inputWidth = 16;
-    unsigned char inputHeight = 16;
-    unsigned char numInputChannel = 32;
-    unsigned char widthBlockSize = 3;
-    unsigned char sizeOutputTileWidthPerColFul = 8;
-    unsigned char sizeOutputTileHeightFull = 8;
-    bool flagEnableRelu = true;
-
-    launch(
-        inputWidth,
-        inputHeight,
-        numInputChannel,
-        widthBlockSize,
-        sizeOutputTileWidthPerColFul,
-        sizeOutputTileHeightFull,
-        flagEnableRelu,
-        TEST_TYPE);
-}
-
-TEST_F (testFixture, large_16x16x64_tileSizeCol_8) {
-
-    unsigned char inputWidth = 16;
-    unsigned char inputHeight = 16;
-    unsigned char numInputChannel = 64;
-    unsigned char widthBlockSize = 3;
-    unsigned char sizeOutputTileWidthPerColFul = 8;
-    unsigned char sizeOutputTileHeightFull = 8;
-    bool flagEnableRelu = true;
-
-    launch(
-        inputWidth,
-        inputHeight,
-        numInputChannel,
-        widthBlockSize,
-        sizeOutputTileWidthPerColFul,
-        sizeOutputTileHeightFull,
-        flagEnableRelu,
-        TEST_TYPE);
-}
-
-TEST_F (testFixture, large_16x16x127_tileSizeCol_2) {
-
-    unsigned char inputWidth = 16;
-    unsigned char inputHeight = 16;
-    unsigned char numInputChannel = 127;
-    unsigned char widthBlockSize = 3;
-    unsigned char sizeOutputTileWidthPerColFul = 2;
-    unsigned char sizeOutputTileHeightFull = 2;
-    bool flagEnableRelu = true;
-
-    launch(
-        inputWidth,
-        inputHeight,
-        numInputChannel,
-        widthBlockSize,
-        sizeOutputTileWidthPerColFul,
-        sizeOutputTileHeightFull,
-        flagEnableRelu,
-        TEST_TYPE);
-}
-
-TEST_F (testFixture, large_16x16x127_tileSizeCol_4) {
-
-    unsigned char inputWidth = 16;
-    unsigned char inputHeight = 16;
-    unsigned char numInputChannel = 127;
-    unsigned char widthBlockSize = 3;
-    unsigned char sizeOutputTileWidthPerColFul = 4;
-    unsigned char sizeOutputTileHeightFull = 4;
-    bool flagEnableRelu = true;
-
-    launch(
-        inputWidth,
-        inputHeight,
-        numInputChannel,
-        widthBlockSize,
-        sizeOutputTileWidthPerColFul,
-        sizeOutputTileHeightFull,
-        flagEnableRelu,
-        TEST_TYPE);
-}
-
-TEST_F (testFixture, large_16x16x127_tileSizeCol_8) {
-
-    unsigned char inputWidth = 16;
-    unsigned char inputHeight = 16;
-    unsigned char numInputChannel = 127;
-    unsigned char widthBlockSize = 3;
-    unsigned char sizeOutputTileWidthPerColFul = 8;
-    unsigned char sizeOutputTileHeightFull = 8;
-    bool flagEnableRelu = true;
-
-    launch(
-        inputWidth,
-        inputHeight,
-        numInputChannel,
-        widthBlockSize,
-        sizeOutputTileWidthPerColFul,
-        sizeOutputTileHeightFull,
-        flagEnableRelu,
-        TEST_TYPE);
-}
-
-TEST_F (testFixture, narrow_1x1x8) {
-
-    unsigned char inputWidth = 1;
-    unsigned char inputHeight = 1;
-    unsigned char numInputChannel = 8;
-    unsigned char widthBlockSize = 3;
-    unsigned char sizeOutputTileWidthPerColFul = 8;
-    unsigned char sizeOutputTileHeightFull = 8;
-    bool flagEnableRelu = true;
-
-    launch(
-        inputWidth,
-        inputHeight,
-        numInputChannel,
-        widthBlockSize,
-        sizeOutputTileWidthPerColFul,
-        sizeOutputTileHeightFull,
-        flagEnableRelu,
-        TEST_TYPE);
-}
-
-TEST_F (testFixture, narrow_1x1x16) {
-
-    unsigned char inputWidth = 1;
-    unsigned char inputHeight = 1;
-    unsigned char numInputChannel = 16;
-    unsigned char widthBlockSize = 3;
-    unsigned char sizeOutputTileWidthPerColFul = 8;
-    unsigned char sizeOutputTileHeightFull = 8;
-    bool flagEnableRelu = true;
-
-    launch(
-        inputWidth,
-        inputHeight,
-        numInputChannel,
-        widthBlockSize,
-        sizeOutputTileWidthPerColFul,
-        sizeOutputTileHeightFull,
-        flagEnableRelu,
-        TEST_TYPE);
-}
-
-TEST_F (testFixture, narrow_1x1x32) {
-
-    unsigned char inputWidth = 1;
-    unsigned char inputHeight = 1;
-    unsigned char numInputChannel = 32;
-    unsigned char widthBlockSize = 3;
-    unsigned char sizeOutputTileWidthPerColFul = 8;
-    unsigned char sizeOutputTileHeightFull = 8;
-    bool flagEnableRelu = true;
-
-    launch(
-        inputWidth,
-        inputHeight,
-        numInputChannel,
-        widthBlockSize,
-        sizeOutputTileWidthPerColFul,
-        sizeOutputTileHeightFull,
-        flagEnableRelu,
-        TEST_TYPE);
-}
-
-TEST_F (testFixture, narrow_1x1x64) {
-
-    unsigned char inputWidth = 1;
-    unsigned char inputHeight = 1;
-    unsigned char numInputChannel = 64;
-    unsigned char widthBlockSize = 3;
-    unsigned char sizeOutputTileWidthPerColFul = 8;
-    unsigned char sizeOutputTileHeightFull = 8;
-    bool flagEnableRelu = true;
-
-    launch(
-        inputWidth,
-        inputHeight,
-        numInputChannel,
-        widthBlockSize,
-        sizeOutputTileWidthPerColFul,
-        sizeOutputTileHeightFull,
-        flagEnableRelu,
-        TEST_TYPE);
-}
-
-TEST_F (testFixture, narrow_1x1x127) {
-
-    unsigned char inputWidth = 1;
-    unsigned char inputHeight = 1;
-    unsigned char numInputChannel = 127;
-    unsigned char widthBlockSize = 3;
-    unsigned char sizeOutputTileWidthPerColFul = 8;
-    unsigned char sizeOutputTileHeightFull = 8;
-    bool flagEnableRelu = true;
-
-    launch(
-        inputWidth,
-        inputHeight,
-        numInputChannel,
-        widthBlockSize,
-        sizeOutputTileWidthPerColFul,
-        sizeOutputTileHeightFull,
-        flagEnableRelu,
-        TEST_TYPE);
-}
-#endif //SPARSE_LEVEL_TEST
 #endif  //PLAY
 
 int main(int argc, char* argv[]) {
