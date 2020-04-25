@@ -1540,7 +1540,7 @@ __kernel void kernelOABuffer ()
 
 __attribute__((max_global_work_dim(0)))
 __kernel void kernelOATileController (
-	__global t_oa_tile_controller_instruction* restrict pInst,
+	volatile  __global t_oa_tile_controller_instruction* restrict pInst,
 	unsigned int numInstructions
 	)
 {
