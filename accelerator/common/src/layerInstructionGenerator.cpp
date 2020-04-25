@@ -60,9 +60,6 @@ void instruction_generator(
             unsigned int memOATBCountColStride,
 
             signed int memWeightTBCountStart,
-        #else
-            unsigned int numTBPerOAStrip,
-            unsigned int numTBPerWeightFilter,
         #endif
 
         unsigned char flagSparseOutput,
@@ -376,7 +373,10 @@ void instruction_generator(
                 instructionOA.memTBRowStride = (t_ushort)((unsigned int) outputWidth * memOATBCountColStride);
                 instructionOA.memTBColStride = (t_ushort) memOATBCountColStride;
     #else
-                instructionOA.numDramBlockPerStrip = (t_uint) (numTBPerOAStrip >> WIDE_SIZE_OFFSET);
+                unsigned int numTBPerGroupNextLayer =
+                        1 + (numOutputChannelsPerGroupNextLayer-1) / CLUSTER_SIZE / TRANSFER_SIZE
+                instructionOA.numDramBlockPerStrip =
+                        (t_uint) (1 + (numTBPerGroupNextLayer-1)/WIDE_SIZE);
     #endif
                 instructionOA.tileHeight = (t_uchar) maxTP;
                 instructionOA.columnTileWidth = (t_uchar) maxTQPerCol;
@@ -519,7 +519,9 @@ void instruction_generator(
                         #if defined(SPARSE_SYSTEM)
                             instructionWMover.memTBCountStart = (t_int) memWeightTBCountStart + (t_int) filterIndex;
                         #else
-                            instructionWMover.numTBPerFilter = (t_uint) numTBPerWeightFilter;
+                            unsigned int numTBPerInputStrip =
+                                    1+(numIAMoverInputChannelsPerGroup0-1)/CLUSTER_SIZE/TRANSFER_SIZE;
+                            instructionWMover.numTBPerFilter = (t_uint) numTBPerInputStrip*kernelSize*kernelSize;
                         #endif
                         vecWeightMoverInstruction.push_back(instructionWMover);
                     } //Generate the weight mover instruction

@@ -60,9 +60,6 @@ void instruction_generator(//Type of the operation
             unsigned int memOATBCountColStride,
 
             signed int memWeightTBCountStart,
-        #else
-            unsigned int numTBPerOAStrip,
-            unsigned int numTBPerWeightFilter,
         #endif
 
         unsigned char flagSparseOutput,
