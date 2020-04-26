@@ -293,14 +293,11 @@ __kernel void kernelWMover (
 		#if defined(SPARSE_SYSTEM)
 		 //Pointer to filter transfer block count
 		 volatile __global t_streamblock_address* restrict pFilterTBCount,
-		#else
-		 // Number of transfer blocks inside a filter. Used for dense system only
-		 unsigned short numTBCountPerFilter,
 		#endif //SPARSE_SYSTEM
-		int numInstruction
+		unsigned int numInstruction
 	)
 {
-	for (int iInst=0; iInst<numInstruction; iInst++)
+	for (unsigned int iInst=0; iInst<numInstruction; iInst++)
 	{
 		t_weight_mover_instruction inst = pInst[iInst];
 
@@ -712,11 +709,11 @@ __kernel void kernelIABuffer ()
 //TODO: imcomplete
 __attribute__((max_global_work_dim(0)))
 __kernel void kernelIATileController (
-	__global t_ia_tile_controller_instruction* restrict pInstruction,
-	int numInstructions
+	__global volatile t_ia_tile_controller_instruction* restrict pInstruction,
+	unsigned int numInstructions
 	)
 {
-	for (int iInstruction=0; iInstruction < numInstructions; iInstruction++)
+	for (unsigned int iInstruction=0; iInstruction < numInstructions; iInstruction++)
 	{
 		/*
 		1. Read the instruction of the tile from the memory reader
