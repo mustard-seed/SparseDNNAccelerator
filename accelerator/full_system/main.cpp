@@ -50,7 +50,7 @@
 #define WEIGHT_SEED 1234
 #define INPUT_SEED   7653
 
-//#define PLAY
+#define PLAY
 #define EMULATE
 
 #if defined(C5SOC) //Hack for ARMv7, otherwise chrono won't work
@@ -176,23 +176,37 @@ protected:
 #ifdef PLAY
 TEST_F (testFixture, play) {
 
-    unsigned char inputWidth = 3;
-    unsigned char inputHeight = 3;
+    unsigned char inputWidth = 4;
+    unsigned char inputHeight = 4;
     unsigned char numInputChannel = 8;
-    unsigned char widthBlockSize = 1;
-    unsigned char sizeOutputTileWidthPerColFul = 2;
-    unsigned char sizeOutputTileHeightFull = 2;
-    bool flagEnableRelu = true;
+    unsigned char numInputGroup = 1;
+    unsigned char numOutputGroup = 1;
+    unsigned char inputHeightSPUnitSize = 1;
+    unsigned char inputWidthSPUnitSize = 1;
+    unsigned char sizeOutputTileWidthPerColFull = 2;
+    unsigned char sizeOutputTileHeight = 4;
+    bool flagEnableRelu = false;
+    bool flagSparseInput = false;
+    bool flagSparseOutput = false;
+    OPERATION op = CONVOLUTION;
+    float bias = 0.0f;
 
     launch(
-        inputWidth,
-        inputHeight,
-        numInputChannel,
-        widthBlockSize,
-        sizeOutputTileWidthPerColFul,
-        sizeOutputTileHeightFull,
-        flagEnableRelu,
-        TEST_TYPE);
+                inputWidth,
+                inputHeight,
+                numInputChannel,
+                numInputGroup,
+                numOutputGroup,
+                inputHeightSPUnitSize,
+                inputWidthSPUnitSize,
+                sizeOutputTileWidthPerColFull,
+                sizeOutputTileHeight,
+                flagEnableRelu,
+                flagSparseInput,
+                flagSparseOutput,
+                op,
+                bias
+          );
 }
 #else
 TEST_F (testFixture, conv_dense_input_dense_output_plain)
@@ -1080,6 +1094,13 @@ void testFixture::launch (
                 //numGroupsNextLayer
                 _numGroupNext
                 );
+
+    std::cout <<"Number of IA Mover instructions: "<<vecIAMoverInstruction.size()<<std::endl;
+    std::cout <<"Number of IA tile controller instructions: "<<vecIATileControllerInstruction.size()<<std::endl;
+    std::cout <<"Number of OA Mover instructions: "<<vecOAMoverInstruction.size()<<std::endl;
+    std::cout <<"Number of OA tile contrller instructions: "<<vecOATileControllerInstruction.size()<<std::endl;
+    std::cout <<"Number of W Mover instructions: "<<vecWMoverInstruction.size()<<std::endl;
+    std::cout <<"Number of MK controller instructions"<<vecMiscInstruction.size()<<std::endl;
 
     std::cout <<stepCount++<<". Setting kernel arguments for the IA Mover."<<std::endl;
     {

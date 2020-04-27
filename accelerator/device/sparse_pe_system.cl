@@ -183,8 +183,8 @@ __kernel void kernelIAMover (
                         "iColInSPTile=%d, "
 						"rowIsDense=%#03x, "
 						"colIsDense=%#03x, "
-						"numTBInStrip=%d"
-						"numActiveCols=%d"
+						"numTBInStrip=%d, "
+						"numActiveCols=%d, "
 						"destinationMisc=%#03x\n",
 						iInst, 
 						iRowInSPTile,
@@ -527,14 +527,16 @@ __kernel void kernelIABuffer ()
 						"iaDramBlockAddressBase=%#010x, "
 						"iaDramBlockColStride=%#010x, "
 						"iaDramBlockRowStride=%#010x, "
-						"numStripInRow=%d, "
+						"numStripsRow=%d, "
+						"numStripsCol=%d, "
 						"maxPeRowID=%d\n\n ",
 						colID, 
 						(unsigned char) isLoad, 
 						iaDramBlockAddressBase,
 						iaDramBlockColStride,
 						iaDramBlockRowStride,
-						numStripInRow,
+						numStripsRow,
+						numStripsCol,
 						maxPeRowID));
 				#else
 					EMULATOR_PRINT(("[kernelIABuffer %d] START processing instruction. "
@@ -545,7 +547,8 @@ __kernel void kernelIABuffer ()
 						"tbAddressBase=%#010x, "
 						"tbAddressRowStride=%#010x, "
 						"flagPadBitmask=%#03x, "
-						"numStripInRow=%d, "
+						"numStripsRow=%d, "
+						"numStripsCol=%d, "
 						"maxPeRowID=%d\n\n",
 						colID, 
 						(unsigned char) isLoad, 
@@ -555,7 +558,8 @@ __kernel void kernelIABuffer ()
 						tbAddressBase,
 						tbAddressRowStride,
 						(unsigned char)flagPadBitmask,
-						numStripInRow,
+						numStripsRow,
+						numStripsCol,
 						maxPeRowID));
 				#endif
 					
@@ -698,7 +702,7 @@ __kernel void kernelIABuffer ()
 				if (iStripInRow == numStripsRow)
 				{
 					nextState = IA_BUFFER_STATE_PADD;
-					EMULATOR_PRINT(("[kernelIABuffer %d] FINISHED processing instruction.\n\n"));
+					EMULATOR_PRINT(("[kernelIABuffer %d] FINISHED processing instruction.\n\n", colID));
 				}
 			}
 		}
@@ -1037,7 +1041,7 @@ __kernel void kernelMisc ()
 
 		EMULATOR_PRINT(("[kernelMisc %d] Received command "
 						"opcode=%#04x, numDramBlocksToReduce=%d, numEffectiveValues=%d \n",
-						i, ((unsigned char)opcode), numDramBlocksToReduce, numEffectiveValues));
+						colID, ((unsigned char)opcode), numDramBlocksToReduce, numEffectiveValues));
 
 		//Initialize the reductionBlock
 		#pragma unroll
@@ -1093,7 +1097,7 @@ __kernel void kernelMisc ()
 			}
 		}
 
-		EMULATOR_PRINT(("[kernelMisc %d] Finished processing a command\n"));
+		EMULATOR_PRINT(("[kernelMisc %d] Finished processing a command\n", colID));
 	}
 }
 #endif
@@ -1146,20 +1150,18 @@ __kernel void kernelOAMover (
 		for (unsigned short iter=0; iter<inst.numColumnTileWidthxTileHeightxNumActiveCols; iter++)
 		{
 
-			EMULATOR_PRINT(("[kenrelOAMover] START strip transfer. "
+			EMULATOR_PRINT(("[kernelOAMover] START strip transfer. "
 						"iInst=%d, "
 						"iCol=%d, " 
                         "iOutputWidthInColTile=%d, "
 						"iOutputHeightInColTile=%d, "
 						"enableSparsification=%#03x, "
-						"numTBInStrip=%d"
 						"numActivePeCols=%d\n",
 						iInst, 
 						iCol,
 						iOutputWidthInColTile,
 						iOutputHeightInColTile,
 						(unsigned char) enableSparsification,
-						numTBInStrip,
 						numActivePeCols));
 			//int addrOA = inst.memOAStart + addrOAGroupContribution + addrOARowContribution + addrOAColContribution + addrOAPeColContribution;
 			int addrOA = inst.memOAStart + addrOARowContribution + addrOAColContribution + addrOAPeColContribution;
@@ -1237,16 +1239,16 @@ __kernel void kernelOAMover (
 					#endif
 				}
 			}
-			EMULATOR_PRINT(("[kenrelOAMover] FINISHED a strip transfer.\n"));
+			EMULATOR_PRINT(("[kernelOAMover] FINISHED a strip transfer.\n"));
 		} //for. strip inside the OA tile
 
 		//Send the activation sync if needed
 		if (enableSendSync == TRUE)
 		{
-			EMULATOR_PRINT(("[kenrelOAMover] SYNC: Waiting for send the transfer token. \n"));
+			EMULATOR_PRINT(("[kernelOAMover] SYNC: Waiting for send the transfer token. \n"));
 			mem_fence(CLK_GLOBAL_MEM_FENCE | CLK_CHANNEL_MEM_FENCE);
 			write_channel_intel(channel_activation_sync, 0x0);
-			EMULATOR_PRINT(("[kenrelOAMover] SYNC: Sent the transfer token. \n"));
+			EMULATOR_PRINT(("[kernelOAMover] SYNC: Sent the transfer token. \n"));
 		}
 	} //for. over instruction
 } //kernelOAMover
@@ -1527,7 +1529,7 @@ __kernel void kernelOABuffer ()
 			{
 				delayCount = 0;
 				nextState = OA_BUFFER_STATE_PADD;
-				EMULATOR_PRINT(("[kernelOABuffer %d] Finished processing processing instruction.\n"));
+				EMULATOR_PRINT(("[kernelOABuffer %d] Finished processing processing instruction.\n", colID));
 			}
 		}
 
