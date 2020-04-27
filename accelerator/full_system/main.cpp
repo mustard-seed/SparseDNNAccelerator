@@ -160,6 +160,7 @@ protected:
             unsigned char _inputHeight,
             unsigned char _numInputChannel,
             unsigned char _numInputGroup, //The code will override this to 1 if the operation is not convolution
+            unsigned char _numGroupNext, //Number of groups for the next layer
             unsigned char _inputHeightSPUnitSize, //The code will override this to 1 if the operation is not convolution
             unsigned char _inputWidthSPUnitSize, //The code will overide this to 1 if the operation is not convolution
             unsigned char _sizeOutputTileWidthPerColFull, //The code will override this to 1 if the operation is not convolution
@@ -196,15 +197,16 @@ TEST_F (testFixture, play) {
 #else
 TEST_F (testFixture, conv_dense_input_dense_output_plain)
 {
-    unsigned char inputWidth = 8;
-    unsigned char inputHeight = 8;
-    unsigned char numInputChannel = 16;
+    unsigned char inputWidth = 4;
+    unsigned char inputHeight = 4;
+    unsigned char numInputChannel = 8;
     unsigned char numInputGroup = 1;
+    unsigned char numOutputGroup = 1;
     unsigned char inputHeightSPUnitSize = 1;
     unsigned char inputWidthSPUnitSize = 1;
-    unsigned char sizeOutputTileWidthPerColFull = 4;
-    unsigned char sizeOutputTileHeight = 8;
-    bool flagEnableRelu = true;
+    unsigned char sizeOutputTileWidthPerColFull = 2;
+    unsigned char sizeOutputTileHeight = 4;
+    bool flagEnableRelu = false;
     bool flagSparseInput = false;
     bool flagSparseOutput = false;
     OPERATION op = CONVOLUTION;
@@ -215,6 +217,217 @@ TEST_F (testFixture, conv_dense_input_dense_output_plain)
                 inputHeight,
                 numInputChannel,
                 numInputGroup,
+                numOutputGroup,
+                inputHeightSPUnitSize,
+                inputWidthSPUnitSize,
+                sizeOutputTileWidthPerColFull,
+                sizeOutputTileHeight,
+                flagEnableRelu,
+                flagSparseInput,
+                flagSparseOutput,
+                op,
+                bias
+          );
+}
+
+TEST_F (testFixture, conv_dense_input_dense_output_grouped)
+{
+    unsigned char inputWidth = 4;
+    unsigned char inputHeight = 4;
+    unsigned char numInputChannel = 8;
+    unsigned char numInputGroup = 2;
+    unsigned char numOutputGroup = 2;
+    unsigned char inputHeightSPUnitSize = 1;
+    unsigned char inputWidthSPUnitSize = 1;
+    unsigned char sizeOutputTileWidthPerColFull = 2;
+    unsigned char sizeOutputTileHeight = 4;
+    bool flagEnableRelu = false;
+    bool flagSparseInput = false;
+    bool flagSparseOutput = false;
+    OPERATION op = CONVOLUTION;
+    float bias = 0.0f;
+
+    launch(
+                inputWidth,
+                inputHeight,
+                numInputChannel,
+                numInputGroup,
+                numOutputGroup,
+                inputHeightSPUnitSize,
+                inputWidthSPUnitSize,
+                sizeOutputTileWidthPerColFull,
+                sizeOutputTileHeight,
+                flagEnableRelu,
+                flagSparseInput,
+                flagSparseOutput,
+                op,
+                bias
+          );
+}
+
+TEST_F (testFixture, conv_dense_input_dense_output_strided)
+{
+    unsigned char inputWidth = 4;
+    unsigned char inputHeight = 4;
+    unsigned char numInputChannel = 8;
+    unsigned char numInputGroup = 1;
+    unsigned char numOutputGroup = 1;
+    unsigned char inputHeightSPUnitSize = 2;
+    unsigned char inputWidthSPUnitSize = 2;
+    unsigned char sizeOutputTileWidthPerColFull = 2;
+    unsigned char sizeOutputTileHeight = 4;
+    bool flagEnableRelu = false;
+    bool flagSparseInput = false;
+    bool flagSparseOutput = false;
+    OPERATION op = CONVOLUTION;
+    float bias = 0.0f;
+
+    launch(
+                inputWidth,
+                inputHeight,
+                numInputChannel,
+                numInputGroup,
+                numOutputGroup,
+                inputHeightSPUnitSize,
+                inputWidthSPUnitSize,
+                sizeOutputTileWidthPerColFull,
+                sizeOutputTileHeight,
+                flagEnableRelu,
+                flagSparseInput,
+                flagSparseOutput,
+                op,
+                bias
+          );
+}
+
+TEST_F (testFixture, conv_sparse_input_sparse_output)
+{
+    unsigned char inputWidth = 4;
+    unsigned char inputHeight = 4;
+    unsigned char numInputChannel = 8;
+    unsigned char numInputGroup = 1;
+    unsigned char numOutputGroup = 1;
+    unsigned char inputHeightSPUnitSize = 1;
+    unsigned char inputWidthSPUnitSize = 1;
+    unsigned char sizeOutputTileWidthPerColFull = 2;
+    unsigned char sizeOutputTileHeight = 4;
+    bool flagEnableRelu = false;
+    bool flagSparseInput = true;
+    bool flagSparseOutput = true;
+    OPERATION op = CONVOLUTION;
+    float bias = 0.0f;
+
+    launch(
+                inputWidth,
+                inputHeight,
+                numInputChannel,
+                numInputGroup,
+                numOutputGroup,
+                inputHeightSPUnitSize,
+                inputWidthSPUnitSize,
+                sizeOutputTileWidthPerColFull,
+                sizeOutputTileHeight,
+                flagEnableRelu,
+                flagSparseInput,
+                flagSparseOutput,
+                op,
+                bias
+          );
+}
+
+TEST_F (testFixture, max_pool_sparse_output_grouped)
+{
+    unsigned char inputWidth = 4;
+    unsigned char inputHeight = 4;
+    unsigned char numInputChannel = 8;
+    unsigned char numInputGroup = 1;
+    unsigned char numOutputGroup = 2;
+    unsigned char inputHeightSPUnitSize = 1;
+    unsigned char inputWidthSPUnitSize = 1;
+    unsigned char sizeOutputTileWidthPerColFull = 2;
+    unsigned char sizeOutputTileHeight = 4;
+    bool flagEnableRelu = false;
+    bool flagSparseInput = false;
+    bool flagSparseOutput = true;
+    OPERATION op = MAX_POOL;
+    float bias = 0.0f;
+
+    launch(
+                inputWidth,
+                inputHeight,
+                numInputChannel,
+                numInputGroup,
+                numOutputGroup,
+                inputHeightSPUnitSize,
+                inputWidthSPUnitSize,
+                sizeOutputTileWidthPerColFull,
+                sizeOutputTileHeight,
+                flagEnableRelu,
+                flagSparseInput,
+                flagSparseOutput,
+                op,
+                bias
+          );
+}
+
+TEST_F (testFixture, elt_add_sparse_output)
+{
+    unsigned char inputWidth = 4;
+    unsigned char inputHeight = 4;
+    unsigned char numInputChannel = 8;
+    unsigned char numInputGroup = 1;
+    unsigned char numOutputGroup = 1;
+    unsigned char inputHeightSPUnitSize = 1;
+    unsigned char inputWidthSPUnitSize = 1;
+    unsigned char sizeOutputTileWidthPerColFull = 2;
+    unsigned char sizeOutputTileHeight = 4;
+    bool flagEnableRelu = false;
+    bool flagSparseInput = false;
+    bool flagSparseOutput = true;
+    OPERATION op = ELT_ADD;
+    float bias = 0.0f;
+
+    launch(
+                inputWidth,
+                inputHeight,
+                numInputChannel,
+                numInputGroup,
+                numOutputGroup,
+                inputHeightSPUnitSize,
+                inputWidthSPUnitSize,
+                sizeOutputTileWidthPerColFull,
+                sizeOutputTileHeight,
+                flagEnableRelu,
+                flagSparseInput,
+                flagSparseOutput,
+                op,
+                bias
+          );
+}
+
+TEST_F (testFixture, concat_sparse_output_grouped)
+{
+    unsigned char inputWidth = 4;
+    unsigned char inputHeight = 4;
+    unsigned char numInputChannel = 8;
+    unsigned char numInputGroup = 1;
+    unsigned char numOutputGroup = 2;
+    unsigned char inputHeightSPUnitSize = 1;
+    unsigned char inputWidthSPUnitSize = 1;
+    unsigned char sizeOutputTileWidthPerColFull = 2;
+    unsigned char sizeOutputTileHeight = 4;
+    bool flagEnableRelu = false;
+    bool flagSparseInput = false;
+    bool flagSparseOutput = true;
+    OPERATION op = CONCATENATION;
+    float bias = 0.0f;
+
+    launch(
+                inputWidth,
+                inputHeight,
+                numInputChannel,
+                numInputGroup,
+                numOutputGroup,
                 inputHeightSPUnitSize,
                 inputWidthSPUnitSize,
                 sizeOutputTileWidthPerColFull,
@@ -426,7 +639,8 @@ std::vector<fixedPointNumber> testFixture::generateInputTensor (
             {
                 for (unsigned char c=0; c<numICPerGroup; c++)
                 {
-                    signed char fpBits = (w % 2 == 0) ? c : -1*((signed char) c);
+                    unsigned char globalChannel = g*numICPerGroup+c;
+                    signed char fpBits = (w % 2 == 0) ? globalChannel : -1*((signed char) globalChannel);
                     fixedPointNumber fpNumber(fpBits, FRAC_WIDTH, INT_WIDTH);
                     inputFPVector.push_back(fpNumber);
                 }
@@ -478,6 +692,7 @@ void testFixture::launch (
         unsigned char _inputHeight,
         unsigned char _numInputChannel,
         unsigned char _numInputGroup, //The code will override this to 1 if the operation is not convolution
+        unsigned char _numGroupNext, //Number of groups for the next layer
         unsigned char _inputHeightSPUnitSize, //The code will override this to 1 if the operation is not convolution
         unsigned char _inputWidthSPUnitSize, //The code will overide this to 1 if the operation is not convolution
         unsigned char _sizeOutputTileWidthPerColFull, //The code will override this to 1 if the operation is not convolution
@@ -500,6 +715,7 @@ void testFixture::launch (
     unsigned char numInputChannel0;
     unsigned char numInputChannel1;
     unsigned char numOutputChannels;
+    unsigned char numOutputChannelPerGroup;
     unsigned char numOutputWidth;
     unsigned char numOutputHeight;
     unsigned char numGroupCurrentLayer;
@@ -605,6 +821,8 @@ void testFixture::launch (
     horizontalBorderPadding  = (op==CONVOLUTION) ? 1 : 0;
     unsigned char numActiveColsPartialOutputTile = (op==CONVOLUTION) ?
                 1 : (numOutputWidth % PE_COLS);
+    assert(numOutputChannels % _numGroupNext == 0);
+    numOutputChannelPerGroup = numOutputChannels / _numGroupNext;
 
     /* Generate the dense, fixed point tensors
      * */
@@ -615,6 +833,7 @@ void testFixture::launch (
               <<"Input channels 0: "<<(unsigned int) numInputChannel0<<std::endl
               <<"Input channels 1: "<<(unsigned int) numInputChannel1<<std::endl
               <<"Output channels: "<<(unsigned int) numOutputChannels<<std::endl
+              <<"Number of output groups: "<<(unsigned int)_numGroupNext<<std::endl
               <<"Number of groups in current layer: "<<(unsigned int)numGroupCurrentLayer<<std::endl;
 
     std::vector<fixedPointNumber> inputTensorDense =
@@ -704,7 +923,7 @@ void testFixture::launch (
                     numOutputChannels, //_channel
                     numOutputWidth, //_width
                     numOutputHeight, //_height
-                    numOutputChannels-1, //_maxScalarIndexInChannelGroup
+                    numOutputChannelPerGroup-1, //_maxScalarIndexInChannelGroup
                     maxClusterIndexInCompressionBlock,
                     maxClusterIndexInTransferBlock,
                     maxScalarIndexInCluster,
@@ -718,7 +937,7 @@ void testFixture::launch (
                     numOutputChannels, //_channel
                     numOutputWidth, //_width
                     numOutputHeight, //_height
-                    numOutputChannels-1, //_maxScalarIndexInChannelGroup
+                    numOutputChannelPerGroup-1, //_maxScalarIndexInChannelGroup
                     maxClusterIndexInTransferBlock,
                     maxScalarIndexInCluster,
                     false //isKernel
@@ -859,7 +1078,7 @@ void testFixture::launch (
                 numGroupCurrentLayer,
                 numOutputChannels,
                 //numGroupsNextLayer
-                1
+                _numGroupNext
                 );
 
     std::cout <<stepCount++<<". Setting kernel arguments for the IA Mover."<<std::endl;
@@ -1336,65 +1555,71 @@ void testFixture::launch (
 
         std::cout <<stepCount++<<". Check the output"<<std::endl;
 
-        for (unsigned int iRow=0; iRow<numOutputHeight; iRow++)
+        for (unsigned int iGroup=0; iGroup<_numGroupNext; iGroup++)
         {
-            for (unsigned int iCol=0; iCol<numOutputWidth; iCol++)
+            for (unsigned int iRow=0; iRow<numOutputHeight; iRow++)
             {
-                for (unsigned int iCh=0; iCh<numOutputChannels; iCh++)
+                for (unsigned int iCol=0; iCol<numOutputWidth; iCol++)
                 {
-                    //Obtain the actual output
-                    unsigned int outputCoord = iRow*numOutputWidth*numOutputChannels + iCol*numOutputChannels + iCh;
-                    fixedPointNumber actualFP = outputFPVector.at(outputCoord);
+                    for (unsigned int iCh=0; iCh<numOutputChannelPerGroup; iCh++)
+                    {
+                        //Obtain the actual output
+                        unsigned int outputCoord =
+                                iGroup*numOutputHeight*numOutputWidth*numOutputChannelPerGroup
+                                +iRow*numOutputWidth*numOutputChannelPerGroup + iCol*numOutputChannelPerGroup + iCh;
+                        fixedPointNumber actualFP = outputFPVector.at(outputCoord);
 
-                    //Compute the expected output
-                    float unitFloat = 1.0f / (2 << FRAC_WIDTH);
-                    float expectedFloat;
-                    switch (op) {
-                        case CONVOLUTION: {
-                            bool colIsReal = ((iCol % inputWidthSPUnitSize) == 0);
-                            bool rowIsReal = ((iRow % inputHeightSPUnitSize) == 0);
-                            if ((colIsReal == true) && (rowIsReal == true))
-                            {
-                                unsigned int inputCol = iCol / inputWidthSPUnitSize;
-                                expectedFloat = (inputCol % 2 == 0) ? iCh*unitFloat : -1.0f*iCh*unitFloat;
-                                expectedFloat += _bias;
+                        //Compute the expected output
+                        float unitFloat = 1.0f / (2 << FRAC_WIDTH);
+                        float expectedFloat;
+                        switch (op) {
+                            case CONVOLUTION: {
+                                bool colIsReal = ((iCol % inputWidthSPUnitSize) == 0);
+                                bool rowIsReal = ((iRow % inputHeightSPUnitSize) == 0);
+                                if ((colIsReal == true) && (rowIsReal == true))
+                                {
+                                    unsigned int inputCol = iCol / inputWidthSPUnitSize;
+                                    unsigned char iChGlobal = iGroup*numOutputChannelPerGroup + iCh;
+                                    expectedFloat = (inputCol % 2 == 0) ? iChGlobal*unitFloat : -1.0f*iChGlobal*unitFloat;
+                                    expectedFloat += _bias;
+                                }
+                                else
+                                {
+                                    expectedFloat = _bias;
+                                }
                             }
-                            else
-                            {
-                                expectedFloat = _bias;
+                            break;
+                            case MAX_POOL: {
+                                //TODO: Change the ground truth generation if the max pooling kernel size
+                                //stride, or input pattern changes
+                                expectedFloat = iCh*unitFloat;
                             }
-                        }
-                        break;
-                        case MAX_POOL: {
-                            //TODO: Change the ground truth generation if the max pooling kernel size
-                            //stride, or input pattern changes
-                            expectedFloat = iCh*unitFloat;
-                        }
-                        break;
-                        case CONCATENATION: {
-                            expectedFloat = (iCol % 2 == 0) ?
-                                          (iCh % _numInputChannel)*unitFloat:
-                                          -1.0f*(iCh & _numInputChannel)*unitFloat;
+                            break;
+                            case CONCATENATION: {
+                                expectedFloat = (iCol % 2 == 0) ?
+                                              (iCh % _numInputChannel)*unitFloat:
+                                              -1.0f*(iCh & _numInputChannel)*unitFloat;
 
-                        }
-                        break;
-                        case ELT_ADD: {
-                            expectedFloat = (iCol % 2 == 0) ? iCh*unitFloat*2.0f : iCh*unitFloat*(-2.0f);
-                        }
-                        break;
-                    }//switch (op)
+                            }
+                            break;
+                            case ELT_ADD: {
+                                expectedFloat = (iCol % 2 == 0) ? iCh*unitFloat*2.0f : iCh*unitFloat*(-2.0f);
+                            }
+                            break;
+                        }//switch (op)
 
-                    fixedPointNumber expectedFP(expectedFloat, FRAC_WIDTH, INT_WIDTH);
+                        fixedPointNumber expectedFP(expectedFloat, FRAC_WIDTH, INT_WIDTH);
 
-                    signed char actualBits = actualFP.getBits();
-                    signed char expectedBits = expectedFP.getBits();
+                        signed char actualBits = actualFP.getBits();
+                        signed char expectedBits = expectedFP.getBits();
 
-                    //Compare the outputs
-                    EXPECT_TRUE(actualBits == expectedBits)
-                            <<"Value disagreement at [outputRow, outputCol, outputCh]: ["
-                            <<iRow<<" "<<iCol<<" "<<iCh<<"]"<<std::endl
-                            <<"Expected bits: 0x"<<std::bitset<8>(expectedBits)<<std::endl
-                            <<"Actual bits: 0x"<<std::bitset<8>(actualBits)<<std::endl;
+                        //Compare the outputs
+                        EXPECT_TRUE(actualBits == expectedBits)
+                                <<"Value disagreement at [outputGroup, outputRow, outputCol, outputCh]: ["
+                                <<iGroup<<" "<<iRow<<" "<<iCol<<" "<<iCh<<"]"<<std::endl
+                                <<"Expected bits: 0x"<<std::bitset<8>(expectedBits)<<std::endl
+                                <<"Actual bits: 0x"<<std::bitset<8>(actualBits)<<std::endl;
+                    }
                 }
             }
         }
