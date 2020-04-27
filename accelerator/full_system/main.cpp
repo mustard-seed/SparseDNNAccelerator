@@ -194,7 +194,38 @@ TEST_F (testFixture, play) {
         TEST_TYPE);
 }
 #else
+TEST_F (testFixture, conv_dense_input_dense_output_plain)
+{
+    unsigned char inputWidth = 8;
+    unsigned char inputHeight = 8;
+    unsigned char numInputChannel = 16;
+    unsigned char numInputGroup = 1;
+    unsigned char inputHeightSPUnitSize = 1;
+    unsigned char inputWidthSPUnitSize = 1;
+    unsigned char sizeOutputTileWidthPerColFull = 4;
+    unsigned char sizeOutputTileHeight = 8;
+    bool flagEnableRelu = true;
+    bool flagSparseInput = false;
+    bool flagSparseOutput = false;
+    OPERATION op = CONVOLUTION;
+    float bias = 0.0f;
 
+    launch(
+                inputWidth,
+                inputHeight,
+                numInputChannel,
+                numInputGroup,
+                inputHeightSPUnitSize,
+                inputWidthSPUnitSize,
+                sizeOutputTileWidthPerColFull,
+                sizeOutputTileHeight,
+                flagEnableRelu,
+                flagSparseInput,
+                flagSparseOutput,
+                op,
+                bias
+          );
+}
 #endif  //PLAY
 
 int main(int argc, char* argv[]) {
@@ -324,41 +355,41 @@ void testFixture::SetUp()
     vecBufferInfo.push_back({weightMoverInstructionBufferSize, bufferWMoverInstructions, CL_MEM_READ_ONLY, "bufferWMoverInstructions"});
 
     cl_ulong inputWeightBufferSize = maxBufferSizeByte < MAX_DRAM_BYTE_INPUT_WEIGHT ? maxBufferSizeByte : MAX_DRAM_BYTE_INPUT_WEIGHT;
-    vecBufferInfo.push_back(({inputWeightBufferSize, bufferWMoverWDramBlocks, CL_MEM_READ_ONLY, "bufferWMoverWDramBlocks"}));
+    vecBufferInfo.push_back({inputWeightBufferSize, bufferWMoverWDramBlocks, CL_MEM_READ_ONLY, "bufferWMoverWDramBlocks"});
 
     cl_ulong inputBiasSize = maxBufferSizeByte < MAX_DRAM_BYTE_INPUT_BIAS ? maxBufferSizeByte : MAX_DRAM_BYTE_INPUT_BIAS;
-    vecBufferInfo.push_back(({inputBiasSize, bufferWMoverBias, CL_MEM_READ_ONLY, "bufferWMoverBias"}));
+    vecBufferInfo.push_back({inputBiasSize, bufferWMoverBias, CL_MEM_READ_ONLY, "bufferWMoverBias"});
 
     cl_ulong inputActivationSize = maxBufferSizeByte < MAX_DRAM_BYTE_INPUT_ACTIVATION ? maxBufferSizeByte : MAX_DRAM_BYTE_INPUT_ACTIVATION;
-    vecBufferInfo.push_back(({inputActivationSize, bufferIAMoverIADramBlocks, CL_MEM_READ_WRITE, "bufferIAMoverIADramBlocks"}));
+    vecBufferInfo.push_back({inputActivationSize, bufferIAMoverIADramBlocks, CL_MEM_READ_WRITE, "bufferIAMoverIADramBlocks"});
 
     cl_ulong inputIAMoverInstructionSize = maxBufferSizeByte < MAX_DRAM_BYTE_INPUT_MOVER_INSTRUCTION ? maxBufferSizeByte : MAX_DRAM_BYTE_INPUT_MOVER_INSTRUCTION;
-    vecBufferInfo.push_back(({inputIAMoverInstructionSize, bufferIAMoverInstructions, CL_MEM_READ_ONLY, "bufferIAMoverInstructions"}));
+    vecBufferInfo.push_back({inputIAMoverInstructionSize, bufferIAMoverInstructions, CL_MEM_READ_ONLY, "bufferIAMoverInstructions"});
 
     cl_ulong inputIATileControllerInstructionSize = maxBufferSizeByte < MAX_DRAM_BYTE_INPUT_TILE_CONTROLLER_INSTRUCTION ? maxBufferSizeByte : MAX_DRAM_BYTE_INPUT_TILE_CONTROLLER_INSTRUCTION;
-    vecBufferInfo.push_back(({inputIATileControllerInstructionSize, bufferIATileControllerInstructions, CL_MEM_READ_ONLY, "bufferIATileControllerInstructions"}));
+    vecBufferInfo.push_back({inputIATileControllerInstructionSize, bufferIATileControllerInstructions, CL_MEM_READ_ONLY, "bufferIATileControllerInstructions"});
 
     cl_ulong outputActivationSize = maxBufferSizeByte < MAX_DRAM_BYTE_OUTPUT_ACTIVATION ? maxBufferSizeByte : MAX_DRAM_BYTE_OUTPUT_ACTIVATION;
-    vecBufferInfo.push_back(({outputActivationSize, bufferOAMoverOADramBlocks, CL_MEM_READ_WRITE, "bufferOAMoverOADramBlocks"}));
+    vecBufferInfo.push_back({outputActivationSize, bufferOAMoverOADramBlocks, CL_MEM_READ_WRITE, "bufferOAMoverOADramBlocks"});
 
     cl_ulong outputOAMoverInstructionSize = maxBufferSizeByte < MAX_DRAM_BYTE_OUTPUT_MOVER_INSTRUCTION ? maxBufferSizeByte : MAX_DRAM_BYTE_OUTPUT_MOVER_INSTRUCTION;
-    vecBufferInfo.push_back(({outputOAMoverInstructionSize, bufferOAMoverInstructions, CL_MEM_READ_ONLY, "bufferOAMoverInstructions"}));
+    vecBufferInfo.push_back({outputOAMoverInstructionSize, bufferOAMoverInstructions, CL_MEM_READ_ONLY, "bufferOAMoverInstructions"});
 
     cl_ulong outoutOATileControllerInstructionSize = maxBufferSizeByte < MAX_DRAM_BYTE_OUTPUT_TILE_CONTROLLER_INSTRUCTION ? maxBufferSizeByte : MAX_DRAM_BYTE_OUTPUT_TILE_CONTROLLER_INSTRUCTION;
-    vecBufferInfo.push_back(({outoutOATileControllerInstructionSize, bufferOATileControllerInstructions, CL_MEM_READ_ONLY, "bufferOATileControllerInstructions"}));
+    vecBufferInfo.push_back({outoutOATileControllerInstructionSize, bufferOATileControllerInstructions, CL_MEM_READ_ONLY, "bufferOATileControllerInstructions"});
 
     cl_ulong mkInstructionSize = maxBufferSizeByte < MAX_DRAM_BYTE_MISC_CONTROLLER_INSTRUCTION ? maxBufferSizeByte : MAX_DRAM_BYTE_MISC_CONTROLLER_INSTRUCTION;
-    vecBufferInfo.push_back(({mkInstructionSize, bufferMKInstructions, CL_MEM_READ_ONLY, "bufferMKInstructions"}));
+    vecBufferInfo.push_back({mkInstructionSize, bufferMKInstructions, CL_MEM_READ_ONLY, "bufferMKInstructions"});
 
 #if defined(SPARSE_SYSTEM)
     cl_ulong inputWeightSBSize = maxBufferSizeByte < MAX_DRAM_BYTE_INPUT_WEIGHT_SB_COUNT ? maxBufferSizeByte : MAX_DRAM_BYTE_INPUT_WEIGHT_SB_COUNT;
-    vecBufferInfo.push_back(({inputWeightSBSize, bufferWMoverWTBCounts, CL_MEM_READ_ONLY, "bufferWMoverWTBCounts"}));
+    vecBufferInfo.push_back({inputWeightSBSize, bufferWMoverWTBCounts, CL_MEM_READ_ONLY, "bufferWMoverWTBCounts"});
 
     cl_ulong inputIATBCountSize = maxBufferSizeByte < MAX_DRAM_BYTE_INPUT_ACTIVATION_SB_COUNT ? maxBufferSizeByte : MAX_DRAM_BYTE_INPUT_ACTIVATION_SB_COUNT;
-    vecBufferInfo.push_back(({inputIATBCountSize, bufferIAMoverIATBCounts, CL_MEM_READ_ONLY, "bufferIAMoverIATBCounts"}));
+    vecBufferInfo.push_back({inputIATBCountSize, bufferIAMoverIATBCounts, CL_MEM_READ_ONLY, "bufferIAMoverIATBCounts"});
 
     cl_ulong outputOATBCountSize = maxBufferSizeByte < MAX_DRAM_BYTE_OUTPUT_ACTIVATION_SB_COUNT ? maxBufferSizeByte : MAX_DRAM_BYTE_OUTPUT_ACTIVATION_SB_COUNT;
-    vecBufferInfo.push_back(({outputOATBCountSize, bufferOAMoverOATBCounts, CL_MEM_READ_ONLY, "bufferOAMoverOATBCounts"}));
+    vecBufferInfo.push_back({outputOATBCountSize, bufferOAMoverOATBCounts, CL_MEM_READ_ONLY, "bufferOAMoverOATBCounts"});
 #endif
 
     for (auto& info : vecBufferInfo)
@@ -378,20 +409,68 @@ void testFixture::SetUp()
 }
 
 std::vector<fixedPointNumber> testFixture::generateInputTensor (
-            unsigned char inputWidth,
-            unsigned char inputHeight,
-            unsigned char numInputChannel,
+            unsigned char _inputWidth,
+            unsigned char _inputHeight,
+            unsigned char _numInputChannel,
+            unsigned char _numGroupCurrentLayer
         )
 {
+    assert(_numInputChannel % _numGroupCurrentLayer == 0);
+    unsigned char numICPerGroup = _numInputChannel / _numGroupCurrentLayer;
+    std::vector<fixedPointNumber> inputFPVector;
+    for (unsigned char g=0; g<_numGroupCurrentLayer;g++)
+    {
+        for (unsigned char h=0; h<_inputHeight; h++)
+        {
+            for (unsigned char w=0; w<_inputWidth; w++)
+            {
+                for (unsigned char c=0; c<numICPerGroup; c++)
+                {
+                    signed char fpBits = (w % 2 == 0) ? c : -1*((signed char) c);
+                    fixedPointNumber fpNumber(fpBits, FRAC_WIDTH, INT_WIDTH);
+                    inputFPVector.push_back(fpNumber);
+                }
+            }
+        }
+    }
 
+    return inputFPVector;
 }
 
 std::vector<fixedPointNumber> testFixture::generateWeights (
-            unsigned char kernelSize,
-            unsigned char numInputChannel
+        unsigned char _kernelSize,
+        unsigned char _numInputChannel,
+        unsigned char _numGroups
         )
 {
+    assert(_kernelSize % 2 == 1);
+    assert(_numInputChannel % _numGroups == 0);
+    std::vector<fixedPointNumber> fpWeightTensor;
+    unsigned char numICPerGroup = _numInputChannel / _numGroups;
 
+    for (unsigned char g=0; g<_numGroups; g++)
+    {
+        for (unsigned char iFilter=0; iFilter<numICPerGroup; iFilter++)
+        {
+            for (unsigned char iH=0; iH<_kernelSize; iH++)
+            {
+                bool hCentre = (iH == (_kernelSize / 2));
+                for (unsigned char iW=0; iW<_kernelSize; iW++)
+                {
+                    bool vCentre = (iW == (_kernelSize / 2));
+                    for (unsigned char iC=0; iC<numICPerGroup; iC++)
+                    {
+                        bool isOne = (hCentre == true) && (vCentre == true) && (iFilter == iC);
+                        float floatWeight = isOne ? 1.0f : 0.0f;
+                        fixedPointNumber fpWeight(floatWeight, FRAC_WIDTH, INT_WIDTH);
+                        fpWeightTensor.push_back(fpWeight);
+                    }
+                }
+            }
+        }
+    }
+
+    return fpWeightTensor;
 }
 
 void testFixture::launch (
@@ -407,7 +486,7 @@ void testFixture::launch (
         bool _flagSparseInput, //The code will override this to FALSE if the operation is not convolution or if the accelerator only supports dense format
         bool _flagSparseOutput, //The code will override this to FALSE if the accelerator only supports dense format.
         OPERATION op,
-        float _bias = 0.0f //Only matter for convolution
+        float _bias //Only matter for convolution
         )
 {
     //Checking the parameters' consistency AND
@@ -550,11 +629,8 @@ void testFixture::launch (
 
     /* 2. Allocate the aligned tensors and compress them if necessary
      * */
-    std::cout <<stepCount++<<". Allocate, align, and compress the test tensors."<std::endl;
-    if (eTensorType == SPARSE)
-    {
-           std::cout <<"Sparsity level is "<<(1.0f - denseProb)<<std::endl;
-    }
+    std::cout <<stepCount++<<". Allocate, align, and compress the test tensors."<<std::endl;
+
     unsigned short maxScalarIndexInChannelGroup = _numInputChannel / numGroupCurrentLayer - 1;
     unsigned short maxClusterIndexInCompressionBlock = COMPRESSION_WINDOW_SIZE-1;
     unsigned short maxClusterIndexInTransferBlock = TRANSFER_SIZE-1;
@@ -676,7 +752,7 @@ void testFixture::launch (
     {
         if (FRAC_WIDTH+FRAC_WIDTH > (7-OUTPUT_INT_WIDTH))
         {
-            instOutputShiftBits = RAC_WIDTH+FRAC_WIDTH - 7 + OUTPUT_INT_WIDTH;
+            instOutputShiftBits = FRAC_WIDTH+FRAC_WIDTH - 7 + OUTPUT_INT_WIDTH;
             instOutputShiftLeft = FALSE;
         }
         else
@@ -689,7 +765,7 @@ void testFixture::launch (
     {
         if (FRAC_WIDTH+1 > (7-OUTPUT_INT_WIDTH))
         {
-            instOutputShiftBits = RAC_WIDTH+1 - 7 + OUTPUT_INT_WIDTH;
+            instOutputShiftBits = FRAC_WIDTH+1 - 7 + OUTPUT_INT_WIDTH;
             instOutputShiftLeft = FALSE;
         }
         else
@@ -1253,12 +1329,75 @@ void testFixture::launch (
 
     //TODO: Decompress the output, and check against the input if necessary
     {
-        std::cout <<"15. Decode the output"<<std::endl;
+        std::cout <<stepCount++<<". Decode the output"<<std::endl;
         std::vector<fixedPointNumber> outputFPVector;
 
         pOutput->decodeTensor(outputFPVector, FRAC_WIDTH, INT_WIDTH);
 
-        std::cout <<"16. Check the output"<<std::endl;
+        std::cout <<stepCount++<<". Check the output"<<std::endl;
+
+        for (unsigned int iRow=0; iRow<numOutputHeight; iRow++)
+        {
+            for (unsigned int iCol=0; iCol<numOutputWidth; iCol++)
+            {
+                for (unsigned int iCh=0; iCh<numOutputChannels; iCh++)
+                {
+                    //Obtain the actual output
+                    unsigned int outputCoord = iRow*numOutputWidth*numOutputChannels + iCol*numOutputChannels + iCh;
+                    fixedPointNumber actualFP = outputFPVector.at(outputCoord);
+
+                    //Compute the expected output
+                    float unitFloat = 1.0f / (2 << FRAC_WIDTH);
+                    float expectedFloat;
+                    switch (op) {
+                        case CONVOLUTION: {
+                            bool colIsReal = ((iCol % inputWidthSPUnitSize) == 0);
+                            bool rowIsReal = ((iRow % inputHeightSPUnitSize) == 0);
+                            if ((colIsReal == true) && (rowIsReal == true))
+                            {
+                                unsigned int inputCol = iCol / inputWidthSPUnitSize;
+                                expectedFloat = (inputCol % 2 == 0) ? iCh*unitFloat : -1.0f*iCh*unitFloat;
+                                expectedFloat += _bias;
+                            }
+                            else
+                            {
+                                expectedFloat = _bias;
+                            }
+                        }
+                        break;
+                        case MAX_POOL: {
+                            //TODO: Change the ground truth generation if the max pooling kernel size
+                            //stride, or input pattern changes
+                            expectedFloat = iCh*unitFloat;
+                        }
+                        break;
+                        case CONCATENATION: {
+                            expectedFloat = (iCol % 2 == 0) ?
+                                          (iCh % _numInputChannel)*unitFloat:
+                                          -1.0f*(iCh & _numInputChannel)*unitFloat;
+
+                        }
+                        break;
+                        case ELT_ADD: {
+                            expectedFloat = (iCol % 2 == 0) ? iCh*unitFloat*2.0f : iCh*unitFloat*(-2.0f);
+                        }
+                        break;
+                    }//switch (op)
+
+                    fixedPointNumber expectedFP(expectedFloat, FRAC_WIDTH, INT_WIDTH);
+
+                    signed char actualBits = actualFP.getBits();
+                    signed char expectedBits = expectedFP.getBits();
+
+                    //Compare the outputs
+                    EXPECT_TRUE(actualBits == expectedBits)
+                            <<"Value disagreement at [outputRow, outputCol, outputCh]: ["
+                            <<iRow<<" "<<iCol<<" "<<iCh<<"]"<<std::endl
+                            <<"Expected bits: 0x"<<std::bitset<8>(expectedBits)<<std::endl
+                            <<"Actual bits: 0x"<<std::bitset<8>(actualBits)<<std::endl;
+                }
+            }
+        }
 
     } // input checking block
 } //launch

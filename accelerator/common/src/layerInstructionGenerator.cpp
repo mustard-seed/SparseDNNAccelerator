@@ -146,7 +146,7 @@ void instruction_generator(
 
     unsigned int sizeOutputTilePartialWidthPerCol =
             ( ((unsigned int) outputWidth) %
-                ( ((unsigned int) PE_COLS) * ((unsigned int) sizeOutputTileFullWidthPerCol)
+                ( ((unsigned int) PE_COLS) * ((unsigned int) sizeOutputTileFullWidthPerCol) )
             ) / ((unsigned int) numActiveColsPartialOutputTile);
 
     unsigned int sizeInputTileFullHeight =
@@ -175,8 +175,6 @@ void instruction_generator(
     unsigned int memIA0DramBlockGroupStride;
     unsigned int memIA1DramBlockGroupStride;
 
-    //Number of input channels at the same planar position that passes through a MISC engine
-    unsigned int numMiscEngineOutputChannels;
 
     //Number of groups current layer
     unsigned int numOAGroupsCurrentLayer;
@@ -192,7 +190,7 @@ void instruction_generator(
     //Number of dram block each MK should reduce in order to produce a block of output;
     unsigned int numDramBlocksToReduceMK;
     switch(op) {
-        case (CONVOLUTION) : {
+        case CONVOLUTION : {
             numOAGroupsCurrentLayer = _numGroupsCurrentLayer;
             assert(numOutputChannels % _numGroupsCurrentLayer == 0);
             assert(numInputChannels0 % _numGroupsCurrentLayer == 0);
@@ -208,7 +206,7 @@ void instruction_generator(
             numDramBlocksToReduceMK = 0;
         }
         break;
-        case (CONCATENATION) : {
+        case CONCATENATION : {
             assert(numOutputChannels == (numInputChannels0 + numInputChannels1));
             assert(flagSparseInput == FALSE);
             assert(kernelSize == 1);
@@ -216,7 +214,6 @@ void instruction_generator(
             numIAMoverInputChannelsPerGroup1 = numInputChannels1;
             numIAMoverGroup0 = 1;
             numIAMoverGroup1 = 1;
-            numMiscEngineOutputChannels = numInputChannels0 + numInputChannels1;
             numActiveElementsInFullComputeFold = BURST_SIZE_BYTE;
             numOAGroupsCurrentLayer = 1;
             memIA0DramBlockGroupStride = _memIA0DramBlockGroupStride;
@@ -227,14 +224,13 @@ void instruction_generator(
             numDramBlocksToReduceMK = 1;
         }
         break;
-        case (MAX_POOL) : {
+        case MAX_POOL : {
             assert(numOutputChannels == numInputChannels0);
             assert(flagSparseInput == FALSE);
             numIAMoverInputChannelsPerGroup0 = BURST_SIZE_BYTE;
             numIAMoverInputChannelsPerGroup1 = 0;
             numIAMoverGroup0 = (1 + (numInputChannels0-1) / BURST_SIZE_BYTE);
             numIAMoverGroup1 = 0;
-            numMiscEngineOutputChannels = numInputChannels0;
             numActiveElementsInFullComputeFold = BURST_SIZE_BYTE;
             numOAGroupsCurrentLayer = 1;
             memIA0DramBlockGroupStride = 1;
@@ -244,7 +240,7 @@ void instruction_generator(
             numDramBlocksToReduceMK = kernelSize * kernelSize;
         }
         break;
-        case (ELT_ADD) : {
+        case ELT_ADD : {
             assert(numInputChannels0==numInputChannels1);
             assert(numOutputChannels == numInputChannels0);
             assert(flagSparseInput == FALSE);
@@ -253,7 +249,6 @@ void instruction_generator(
             numIAMoverInputChannelsPerGroup1 = BURST_SIZE_BYTE;
             numIAMoverGroup0 = (1 + (numInputChannels0-1) / BURST_SIZE_BYTE);
             numIAMoverGroup1 = (1 + (numInputChannels1-1) / BURST_SIZE_BYTE);
-            numMiscEngineOutputChannels = numInputChannels0;
             numActiveElementsInFullComputeFold = BURST_SIZE_BYTE;
             numOAGroupsCurrentLayer = 1;
             memIA0DramBlockGroupStride = 1;
@@ -265,6 +260,7 @@ void instruction_generator(
         }
         break;
         default:
+        break;
     }
     unsigned int numOutputChannelsPerGroupCurrentLayer =
             numOutputChannels / numOAGroupsCurrentLayer;
