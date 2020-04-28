@@ -1598,7 +1598,7 @@ void testFixture::launch (
                         fixedPointNumber actualFP = outputFPVector.at(outputCoord);
 
                         //Compute the expected output
-                        float unitFloat = 1.0f / (2 << FRAC_WIDTH);
+                        float unitFloat = 1.0f / (1 << FRAC_WIDTH);
                         float expectedFloat;
                         switch (op) {
                             case CONVOLUTION: {
