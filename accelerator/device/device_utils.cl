@@ -11,24 +11,24 @@ t_operand modifyOutput (
 {
     uint1_t shiftLeft = (shiftDirectionCatShiftAmount & 0x08) >> 0x3;
     unsigned char shiftAmount = shiftDirectionCatShiftAmount & 0x07;
-    uint1_t preShiftIsPositive;
+    uint1_t preShiftIsNonNegative;
 
 
 	t_accumulator comparedAccumulator;
 	if (enableRelu == TRUE)
 	{
 		comparedAccumulator = (accumulator > 0x0) ? accumulator : 0x0;
-        preShiftIsPositive = TRUE;
+        preShiftIsNonNegative = TRUE;
 	}
 	else
 	{
 		comparedAccumulator = accumulator;
-        preShiftIsPositive = (accumulator > 0x0) ? TRUE : FALSE;
+        preShiftIsNonNegative = (accumulator >= 0x0) ? TRUE : FALSE;
 	}
 
     //Handle the right shift case
     unsigned char rndRightShift = shiftAmount - 1;
-	t_accumulator signExtensionMask = (preShiftIsPositive == TRUE) ?
+	t_accumulator signExtensionMask = (preShiftIsNonNegative == TRUE) ?
 		0x00 : ~(0xFFFF >> rndRightShift);
 
 	t_accumulator rightShiftAccumulatorWithRndBit = signExtensionMask | ((t_accumulator) (comparedAccumulator >> rndRightShift));
@@ -53,7 +53,7 @@ t_operand modifyOutput (
     //Handle the left shift case
     t_accumulator leftShiftTemp = comparedAccumulator << shiftAmount;
     t_accumulator leftShiftPreTrunc;
-    if (preShiftIsPositive == TRUE)
+    if (preShiftIsNonNegative == TRUE)
     {   
         leftShiftPreTrunc = (leftShiftTemp < accumulator) ? 0x07F : (
                                     (leftShiftTemp <= ((t_accumulator) 255)) ? leftShiftTemp : 0x07F
@@ -83,11 +83,11 @@ signed char modifyCharOutput (
 {
     uint1_t shiftLeft = (shiftDirectionCatShiftAmount >> 0x3) & 0x01;
     unsigned char shiftAmount = shiftDirectionCatShiftAmount & 0x07;
-    uint1_t originalIsPositive = (input >= 0) ? TRUE : FALSE;
+    uint1_t originalIsNonNegative = (input >= 0) ? TRUE : FALSE;
 
     //Handle the right shift
     unsigned char rndRightShift = shiftAmount - 1;
-    signed char signExtensionMask = (originalIsPositive == TRUE) ? 0x00 : ~(0xFF >> rndRightShift);
+    signed char signExtensionMask = (originalIsNonNegative == TRUE) ? 0x00 : ~(0xFF >> rndRightShift);
     signed char rightShiftOutputWithRndBit = signExtensionMask | ((signed char) (input >> rndRightShift));
     signed char rightShiftOutputBiased = rightShiftOutputWithRndBit + 0x01;
     signed char rightShiftFinal = rightShiftOutputBiased >> 0x1;
@@ -95,7 +95,7 @@ signed char modifyCharOutput (
     //Handle the left shift
     signed char leftShiftTemp = input << shiftAmount;
     signed char leftShiftFinal;
-    if (originalIsPositive == TRUE)
+    if (originalIsNonNegative == TRUE)
     {
         leftShiftFinal = (leftShiftTemp < input) ? 0x7F : leftShiftTemp;
     }
