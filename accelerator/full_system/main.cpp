@@ -873,6 +873,7 @@ void testFixture::launch (
 
     std::unique_ptr<AlignedTensor> pInput, pWeights, pOutput;
 
+    //Prepare the input
     if (flagSparseInput == true)
     {
         pInput.reset(new FlexibleDirectCompressedTensor(
@@ -887,21 +888,6 @@ void testFixture::launch (
                         maxScalarIndexInCluster,
                         false //isKernel
                     ) );
-        if (op == CONVOLUTION)
-        {
-            pWeights.reset(new FlexibleDirectCompressedTensor (
-                        inputWeightDense,
-                        _numInputChannel, //_num3DTensors
-                        _numInputChannel,
-                        (unsigned char) kernelSize, //width
-                        (unsigned char) kernelSize, //height
-                        maxScalarIndexInChannelGroup,
-                        maxClusterIndexInCompressionBlock,
-                        maxClusterIndexInTransferBlock,
-                        maxScalarIndexInCluster,
-                        true //isKernel
-                    ) );
-        }
     }
     else
     {
@@ -916,22 +902,9 @@ void testFixture::launch (
                         maxScalarIndexInCluster,
                         false //isKernel
                     ) );
-        if (op == CONVOLUTION)
-        {
-            pWeights.reset( new AlignedTensor (
-                        inputWeightDense,
-                        _numInputChannel, //_num3DTensors
-                        _numInputChannel,
-                        (unsigned char) kernelSize, //width
-                        (unsigned char) kernelSize, //height
-                        maxScalarIndexInChannelGroup,
-                        maxClusterIndexInTransferBlock,
-                        maxScalarIndexInCluster,
-                        true //isKernel
-                    ));
-        }
     }
 
+    //Prepare the output
     if (flagSparseOutput == true)
     {
         pOutput.reset(new FlexibleDirectCompressedTensor(
@@ -958,6 +931,37 @@ void testFixture::launch (
                     maxScalarIndexInCluster,
                     false //isKernel
                     ));
+    }
+
+    //Prepare weights
+    if (op==CONVOLUTION)
+    {
+#if defined(SPARSE_SYSTEM)
+        pWeights.reset(new FlexibleDirectCompressedTensor (
+                    inputWeightDense,
+                    _numInputChannel, //_num3DTensors
+                    _numInputChannel,
+                    (unsigned char) kernelSize, //width
+                    (unsigned char) kernelSize, //height
+                    maxScalarIndexInChannelGroup,
+                    maxClusterIndexInCompressionBlock,
+                    maxClusterIndexInTransferBlock,
+                    maxScalarIndexInCluster,
+                    true //isKernel
+                ) );
+#else
+        pWeights.reset( new AlignedTensor (
+                    inputWeightDense,
+                    _numInputChannel, //_num3DTensors
+                    _numInputChannel,
+                    (unsigned char) kernelSize, //width
+                    (unsigned char) kernelSize, //height
+                    maxScalarIndexInChannelGroup,
+                    maxClusterIndexInTransferBlock,
+                    maxScalarIndexInCluster,
+                    true //isKernel
+                ));
+#endif
     }
     std::cout <<stepCount++<<". Generate the instructions"<<std::endl;
 
@@ -1417,7 +1421,7 @@ void testFixture::launch (
             std::cout <<"Transfer the filter weight tensors took "<<elapsedTimeUs<<" us"<<std::endl;
         }
 
-        if (flagSparseInput == true)
+#if defined(SPARSE_SYSTEM)
         {
             std::cout <<stepCount++<<". Transfer the filter weight TB counts"<<std::endl;
             cl::Event event;
@@ -1442,6 +1446,7 @@ void testFixture::launch (
             cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*(cl_double)(1e-3));
             std::cout <<"Transfer the filter weight TB counts took "<<elapsedTimeUs<<" us"<<std::endl;
         }
+#endif
     }
     else
     {
