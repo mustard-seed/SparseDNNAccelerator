@@ -496,6 +496,16 @@ void instruction_generator(
                         unsigned char inputNeedsBitmaskPadding = (flagSparseInput == 0x00) ? 0x80 : 0x00;
                         instructionIAControl.flagPadBitmaskCatNumActiveCols = (t_uchar)
                                 (inputNeedsBitmaskPadding | (0x7F & numActiveCols));
+#if defined(SPARSE_SYSTEM)
+                        assert(COMPRESSION_WINDOW_SIZE % 8 == 0);
+                        unsigned int roundedInputChannelsPerGroup = (1 + (numIAMoverInputChannelsPerGroup0-1) / CLUSTER_SIZE) * CLUSTER_SIZE;
+                        unsigned int partialBitmask = (roundedInputChannelsPerGroup % (COMPRESSION_WINDOW_SIZE*CLUSTER_SIZE) == 0)
+                                ? 0 : ((1 << (roundedInputChannelsPerGroup % (COMPRESSION_WINDOW_SIZE*CLUSTER_SIZE))) - 1);
+                        for (int i=0; i < (COMPRESSION_WINDOW_SIZE / 8); i++)
+                        {
+                            instructionIAControl.partialBitmask[i] = (partialBitmask >> (i*8)) & 0x0FF;
+                        }
+#endif
 
                         vecIATileControlInstruction.push_back(instructionIAControl);
                      } // generate the ia controller instruction

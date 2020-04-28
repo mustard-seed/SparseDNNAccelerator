@@ -459,6 +459,7 @@ __kernel void kernelIABuffer ()
 		uint1_t flagPadBitmask = FALSE;
 		//Number of transfer blocks in an uncompressed compression window
 		unsigned char iTBInCW = 0; //Only useful for dense input
+		unsigned char partialBitmask[COMPRESSION_WINDOW_SIZE / 8];
 	#else
 		unsigned short numTBPerStrip = 0;
 	#endif
@@ -516,6 +517,11 @@ __kernel void kernelIABuffer ()
 					tbAddressRowStride = controlPacketReceived.tbAddressRowStride;
 					tbAddressColContribution = 0;
 					tbAddressRowContribution = 0;
+					#pragma unroll
+					for (int i=0; i<(COMPRESSION_WINDOW_SIZE / 8); i++)
+					{
+						partialBitmask[i] = controlPacketReceived.partialBitmask[i];
+					}
 				#endif
 				numStripsRow = controlPacketReceived.numStripsRow;
 				numStripsCol = controlPacketReceived.numStripsCol;
@@ -634,7 +640,15 @@ __kernel void kernelIABuffer ()
 						#pragma unroll
 						for (int i=0; i<TRANSFER_SIZE*CLUSTER_SIZE; i++)
 						{
-							taggedBlock.values.values[i] = 0xFF;
+							if (i < (COMPRESSION_WINDOW_SIZE / 8))
+							{
+								taggedBlock.values.values[i] = ((numIAAccess - iterAccess) < (COMPRESSION_WINDOW_SIZE / TRANSFER_SIZE)) ?
+									partialBitmask[i] : 0xFF;
+							}
+							else
+							{
+								taggedBlock.values.values[i] = 0x00;
+							}
 						}
 						isLastTemp = FALSE;
 					}
@@ -811,6 +825,11 @@ __kernel void kernelIATileController (
 			#if defined(SPARSE_SYSTEM)
 				//The sparse system needs to know whether there is the need to insert operand bitmask to the ia stream
 				tileBufferControlPacket.controlBits |= ((unsigned char) flagPadBitmask) << 2;
+				#pragma unroll
+				for (int i=0; i<COMPRESSION_WINDOW_SIZE / 8; i++)
+				{
+					tileBufferControlPacket.partialBitmask[i] = instruction.partialBitmask[i];
+				}
 			#endif
 			tileBufferControlPacket.numStripsCol = kernelSize;
 			tileBufferControlPacket.numStripsRow = kernelSize;

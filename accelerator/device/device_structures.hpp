@@ -267,6 +267,12 @@ typedef struct __attribute__((packed)) __attribute__((aligned(16)))
     //Bit[6:0] Number of active PE columns
     //Bit[7] For sparse engine use only. Whether the input activation tensor is dense and hence need bitmask padding.
     t_uchar flagPadBitmaskCatNumActiveCols;
+
+    #if defined(SPARSE_SYSTEM)
+        //Partial bitmask for the last compression window in a strip
+        //Only useful when the sparse accelerator is processing dense activation
+        t_uchar partialBitmask[COMPRESSION_WINDOW_SIZE / 8];
+    #endif
 } t_ia_tile_controller_instruction;
 
 //Instructions for the output tile controller
@@ -394,6 +400,10 @@ typedef struct __attribute__((packed))
     unsigned char numStripsCol;
     //Number of rows in the transfer command
     unsigned char numStripsRow;
+    #if defined(SPARSE_SYSTEM)
+        //Bit mask for the last compression window, which might be incomplete
+        unsigned char partialBitmask[COMPRESSION_WINDOW_SIZE / 8];
+    #endif
 } t_input_buffer_tile_buffer_packet;
 
 
