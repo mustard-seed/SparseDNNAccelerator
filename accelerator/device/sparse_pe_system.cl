@@ -115,10 +115,10 @@ __kernel void kernelIAMover (
 		//Wait for the wait for the synchronous signal from the OA buffer
 		if (syncWithOA == TRUE)
 		{
-			EMULATOR_PRINT(("[kenrelIAMover] SYNC: Waiting for transfer token from the OA mover. \n"));
+			EMULATOR_PRINT(("[kernelIAMover] SYNC: Waiting for transfer token from the OA mover. \n"));
 			unsigned char token = read_channel_intel(channel_activation_sync);
 			mem_fence(CLK_GLOBAL_MEM_FENCE | CLK_CHANNEL_MEM_FENCE);
-			EMULATOR_PRINT(("[kenrelIAMover] SYNC: Received transfer token from the OA mover. \n"));
+			EMULATOR_PRINT(("[kernelIAMover] SYNC: Received transfer token from the OA mover. \n"));
 		}
 
 		//iterate over all IA strips in tile
@@ -177,8 +177,10 @@ __kernel void kernelIAMover (
 			//as well as the number of TB count, which is required by the convolution PE array
 			unsigned short numTransferActions = dramBlockCount + 1;
 
-			EMULATOR_PRINT(("[kenrelIAMover] START strip transfer. "
+			EMULATOR_PRINT(("[kernelIAMover] START strip transfer. "
 						"iInst=%d, "
+						"iStrip=%d, "
+						"tileSPWidthxTileSPHeight=%d, "
 						"iRowInSPTile=%d, " 
                         "iColInSPTile=%d, "
 						"rowIsDense=%#03x, "
@@ -186,14 +188,16 @@ __kernel void kernelIAMover (
 						"numTBInStrip=%d, "
 						"numActiveCols=%d, "
 						"destinationMisc=%#03x\n",
-						iInst, 
+						iInst,
+						iter,
+						(unsigned int) inst.tileSPWidthxTileSPHeight, 
 						iRowInSPTile,
 						iColInSPTile,
 						rowIsDense,
 						colIsDense,
 						numTBInStrip,
 						numActiveCols,
-						(unsigned char) destinationMisc));
+						(unsigned int) destinationMisc));
 
 			for (unsigned short iterTransfer=0; iterTransfer<numTransferActions; iterTransfer++)
 			{
@@ -239,7 +243,7 @@ __kernel void kernelIAMover (
 				write_channel_intel(channel_ia_wide[0], iaBlock);
 			}
 
-			EMULATOR_PRINT(("[kenrelIAMover] FINISHED strip transfer.\n\n"));
+			EMULATOR_PRINT(("[kernelIAMover] FINISHED strip transfer.\n\n"));
 
 			/*! Loop carried variable updates*/
 			//TODO: Double check the iColSPUnitIndex and iRowSPUnitIndex update conditions
@@ -743,7 +747,7 @@ __kernel void kernelIATileController (
 		unsigned short iaCacheRowStride = iaCacheColStride * ((unsigned short)(inputTileWidth));
 
 
-		EMULATOR_PRINT(("[kernelIATileController] START sending the buffer refresh comomand for instruction=%d .\n\n", iInstruction));
+		EMULATOR_PRINT(("[kernelIATileController] START sending the buffer refresh command for instruction=%d .\n\n", iInstruction));
 		{
 			t_input_buffer_tile_buffer_packet tileBufferControlPacket;
 			tileBufferControlPacket.iaDramBlockAddressBase = 0;
@@ -924,7 +928,7 @@ __kernel void kernelIATee ()
 					taggedBlock.dramBlock.transferBlocks[1].values[0] = actualColIndex - ((signed char) colSPStride);
 
 					EMULATOR_PRINT(("[kernelIATee %d] Detected a strip head. "
-						"actualColIndex=%d, colSPStride=%d, colSPWidth=%d, nextFlagRoute2Misc=%#03x. nextFlagRoute2Conv=%#03x\n\n", 
+						"actualColIndex=%d, colSPStride=%d, colSPWidth=%d, nextFlagRoute2Misc=%#03x. nextFlagRoute2Conv=%#03x\n", 
 						colID, actualColIndex, colSPStride, colSPWidth, ((unsigned char) nextFlagRoute2Misc), ((unsigned char) nextFlagRoute2Conv)));
 
 					nextState = IA_TEE_COMMAND_TRANSFER;
@@ -936,7 +940,7 @@ __kernel void kernelIATee ()
 					{
 						nextState = IA_TEE_COMMAND_READ_STRIP_HEADER;
 
-						EMULATOR_PRINT(("[kernelIATee %d] Finished processing a strip", colID));
+						EMULATOR_PRINT(("[kernelIATee %d] Finished processing a strip\n", colID));
 					}
 
 				} //IA_TEE_COMMAND_TRANSFER

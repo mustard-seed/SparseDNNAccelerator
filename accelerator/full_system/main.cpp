@@ -842,8 +842,10 @@ void testFixture::launch (
      * */
     int stepCount = 1;
     std::cout <<stepCount++<<". Preparing the test tensors. Test operation type is "<<op<<std::endl;
-    std::cout <<"Input SP width:  "<<(unsigned int) inputWidthSPSize<<std::endl
-              <<"Input SP height: "<<(unsigned int) inputHeightSPSize<<std::endl
+    std::cout <<"Input SP dimensions (H, W):  "<<(unsigned int) inputHeightSPSize<<" "<<(unsigned int) inputWidthSPSize<<std::endl
+              <<"PE dimension (H, W): "<<PE_ROWS<<" "<<PE_COLS<<std::endl
+              <<"Output planar dimensions (H, W): "<<(unsigned int)numOutputHeight<<" "<<(unsigned int)numOutputWidth<<std::endl
+              <<"Full output tile per col planar sizes (H, W): "<<(unsigned int)sizeOutputTileHeight<<" "<<(unsigned int)sizeOutputTileWidthPerCol<<std::endl
               <<"Input channels 0: "<<(unsigned int) numInputChannel0<<std::endl
               <<"Input channels 1: "<<(unsigned int) numInputChannel1<<std::endl
               <<"Output channels: "<<(unsigned int) numOutputChannels<<std::endl
@@ -1100,7 +1102,7 @@ void testFixture::launch (
     std::cout <<"Number of OA Mover instructions: "<<vecOAMoverInstruction.size()<<std::endl;
     std::cout <<"Number of OA tile contrller instructions: "<<vecOATileControllerInstruction.size()<<std::endl;
     std::cout <<"Number of W Mover instructions: "<<vecWMoverInstruction.size()<<std::endl;
-    std::cout <<"Number of MK controller instructions"<<vecMiscInstruction.size()<<std::endl;
+    std::cout <<"Number of MK controller instructions: "<<vecMiscInstruction.size()<<std::endl;
 
     std::cout <<stepCount++<<". Setting kernel arguments for the IA Mover."<<std::endl;
     {

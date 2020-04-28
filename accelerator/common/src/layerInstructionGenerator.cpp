@@ -445,11 +445,11 @@ void instruction_generator(
                         instructionIA.tileSPWidth = (t_uchar) maxTN;
                         unsigned char inputTileLeftPadding = (iterNGlobal < inputWidthPadding) ?
                                     inputWidthPadding : 0;
-                        unsigned char inputTileRightPadding = ((iterNGlobal + maxTQ) >= (inputWidthPadding + inputDenseWidth)) ?
+                        unsigned char inputTileRightPadding = ((iterNGlobal + maxTN) >= (inputWidthPadding + inputDenseWidth)) ?
                                     inputWidthPadding : 0;
                         unsigned char inputTileTopPadding = (iterMGlobal < inputHeightPadding) ?
                                     inputHeightPadding : 0;
-                        unsigned char inputTileBottomPadding = ((iterMGlobal + maxTP) >= (inputHeightPadding + inputDenseHeight)) ?
+                        unsigned char inputTileBottomPadding = ((iterMGlobal + maxTM) >= (inputHeightPadding + inputDenseHeight)) ?
                                     inputHeightPadding : 0;
                         instructionIA.concatPadding = (t_uchar) (
                                           (inputTileLeftPadding & 0x03)
@@ -507,7 +507,7 @@ void instruction_generator(
                         instructionWMover.numFiltersInGroup = (t_ushort) numOutputChannelsPerGroupCurrentLayer;
                         instructionWMover.numFullFilterFold = (t_ushort) numFullComputeFoldPerGroup;
                         instructionWMover.numFiltersInPartialFold = (t_uchar) numActiveElementsInPartialComputeFold;
-                        instructionWMover.filterReuse = (t_ushort) maxTNPerCol * (t_ushort) maxTM;
+                        instructionWMover.filterReuse = (t_ushort) maxTQPerCol * (t_ushort) maxTP;
                         instructionWMover.numActivePeCols = (t_uchar) numActiveCols;
                         instructionWMover.memBiasStart = (t_int)(memBiasStartIndex + filterIndex);
                         instructionWMover.memWeightStart = (t_int) memWeightDramBlockStartIndex +(t_int) filterIndex * memWeightDramBlockFilterStride;
@@ -635,10 +635,10 @@ void instruction_generator(
                 } //Transfer the MISC instruction
             } //Non-convolution stuff
             iterQGlobal += maxTQ;
-            iterNGlobal += maxTN;
+            iterNGlobal += ((unsigned int)kernelStride)*maxTQ;
         } //for iterQTile
         iterPGlobal += maxTP;
-        iterMGlobal += maxTM;
+        iterMGlobal += ((unsigned int)kernelStride)*maxTP;
     } //for iterPTile
 }
 
