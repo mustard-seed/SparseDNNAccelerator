@@ -652,6 +652,13 @@ __kernel void kernelIABuffer ()
 				bool success = write_channel_nb_intel(channel_activation[0][colID], taggedBlock);
 				if (success)
 				{
+					EMULATOR_PRINT(("[kernelIABuffer %d] Sent TB %d / %d. TB[0-3]: %#04x %#04x %#04x %#04x \n\n",
+					colID, iterAccess, numIAAccess
+					,taggedBlock.values.values[0]
+					,taggedBlock.values.values[1]
+					,taggedBlock.values.values[2]
+					,taggedBlock.values.values[3]
+					));
 					#if defined(SPARSE_SYSTEM)
 						if ((iTBInCW > 0) || (flagPadBitmask == FALSE))
 						{
@@ -662,16 +669,9 @@ __kernel void kernelIABuffer ()
 						{
 							iTBInCW = 0;
 						}
-					else
+					#else
 						iterAccess++;
 					#endif
-					EMULATOR_PRINT(("[kernelIABuffer %d] Sent TB %d / %d. TB[0-3]: %#04x %#04x %#04x %#04x \n\n",
-					colID, iterAccess, numIAAccess
-					,taggedBlock.values.values[0]
-					,taggedBlock.values.values[1]
-					,taggedBlock.values.values[2]
-					,taggedBlock.values.values[3]
-					));
 				}
 			} // draining from the cache
 
