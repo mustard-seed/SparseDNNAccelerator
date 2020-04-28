@@ -498,9 +498,9 @@ void instruction_generator(
                                 (inputNeedsBitmaskPadding | (0x7F & numActiveCols));
 #if defined(SPARSE_SYSTEM)
                         assert(COMPRESSION_WINDOW_SIZE % 8 == 0);
-                        unsigned int roundedInputChannelsPerGroup = (1 + (numIAMoverInputChannelsPerGroup0-1) / CLUSTER_SIZE) * CLUSTER_SIZE;
-                        unsigned int partialBitmask = (roundedInputChannelsPerGroup % (COMPRESSION_WINDOW_SIZE*CLUSTER_SIZE) == 0)
-                                ? 0 : ((1 << (roundedInputChannelsPerGroup % (COMPRESSION_WINDOW_SIZE*CLUSTER_SIZE))) - 1);
+                        unsigned int numClusterinChannelGroup = 1 + (numIAMoverInputChannelsPerGroup0-1) / CLUSTER_SIZE;
+                        unsigned int partialBitmask = (numClusterinChannelGroup % COMPRESSION_WINDOW_SIZE == 0)
+                                ? 0 : ((1 << (numClusterinChannelGroup % COMPRESSION_WINDOW_SIZE)) - 1);
                         for (int i=0; i < (COMPRESSION_WINDOW_SIZE / 8); i++)
                         {
                             instructionIAControl.partialBitmask[i] = (partialBitmask >> (i*8)) & 0x0FF;
