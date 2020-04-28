@@ -3697,7 +3697,7 @@ __kernel void kernelOperandFilter ()
 			}
 			else
 			{
-				EMULATOR_PRINT(("[Op Filter (%d, %d)] Commit. pSum value: %#04x \n", idy, idx, pSum));
+				EMULATOR_PRINT(("[Op Filter (%d, %d)] Commit. pSum value: %#04x \n", idy, idx, (signed int) drainTransportBlock.value));
 				if (drainTransportBlock.isLast == TRUE)
 				{
 					nextDrainInstruction = STATE_DRAIN_TRANSPORT_SYNC;
@@ -4116,7 +4116,7 @@ __kernel void kernelDensePE ()
 			}
 			else
 			{
-				EMULATOR_PRINT(("[DENSE PE (%d, %d)] Commit. pSum value: %#04x \n", idy, idx, pSum));
+				EMULATOR_PRINT(("[DENSE PE (%d, %d)] Commit. pSum value: %#04x \n", idy, idx, drainTransportBlock.value));
 				if (drainTransportBlock.isLast == TRUE)
 				{
 					nextDrainInstruction = STATE_DRAIN_TRANSPORT_SYNC;
