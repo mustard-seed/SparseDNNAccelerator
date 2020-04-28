@@ -1483,8 +1483,8 @@ void testFixture::launch (
         status = clCQIATileController.enqueueTask(kernelIATileController, NULL);
         aocl_utils_cpp::checkError(status, "Failed to launch kernelIATileController!");
 
-        status = clCQWMover.enqueueTask(kernelIAMover, NULL);
-        aocl_utils_cpp::checkError(status, "Failed to launch clCQWMover!");
+        status = clCQWMover.enqueueTask(kernelWMover, NULL);
+        aocl_utils_cpp::checkError(status, "Failed to launch kernelWMover!");
 
         status = clCQMKController.enqueueTask(kernelMKInstructionMover, NULL);
         aocl_utils_cpp::checkError(status, "Failed to launch kernelMKInstructionMover!");
