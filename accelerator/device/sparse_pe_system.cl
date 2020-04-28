@@ -187,6 +187,7 @@ __kernel void kernelIAMover (
 						"colIsDense=%#03x, "
 						"numTBInStrip=%d, "
 						"numActiveCols=%d, "
+						"addressIADramBlockDDR=%#010x, "
 						"destinationMisc=%#03x\n",
 						iInst,
 						iter,
@@ -197,6 +198,7 @@ __kernel void kernelIAMover (
 						colIsDense,
 						numTBInStrip,
 						numActiveCols,
+						(unsigned int) addressIADramBlockDDR,
 						(unsigned int) destinationMisc));
 
 			for (unsigned short iterTransfer=0; iterTransfer<numTransferActions; iterTransfer++)
@@ -341,7 +343,7 @@ __kernel void kernelWMover (
 
 			int iDramBlock = addrWeightFilterBase;
 
-			EMULATOR_PRINT(("[kenrelWMover] START filter transfer. "
+			EMULATOR_PRINT(("[kernelWMover] START filter transfer. "
 						"iInst=%d, "
 						"iFilterInGroup=%d, " 
                         "iFilterInFold=%d, "
@@ -380,7 +382,7 @@ __kernel void kernelWMover (
 				write_channel_intel(channel_weight_wide[0], taggedBlock);
 			} // iTransmitCount
 
-			EMULATOR_PRINT(("[kenrelWMover] FINISHED filter transfer. "));
+			EMULATOR_PRINT(("[kernelWMover] FINISHED filter transfer.\n"));
 
 			addrWeightFilterBase += inst.memWeightFilterStride;
 
@@ -539,8 +541,8 @@ __kernel void kernelIABuffer ()
 						iaDramBlockAddressBase,
 						iaDramBlockColStride,
 						iaDramBlockRowStride,
-						numStripsRow,
-						numStripsCol,
+						(unsigned int)numStripsRow,
+						(unsigned int)numStripsCol,
 						maxPeRowID));
 				#else
 					EMULATOR_PRINT(("[kernelIABuffer %d] START processing instruction. "
@@ -561,9 +563,9 @@ __kernel void kernelIABuffer ()
 						iaDramBlockRowStride,
 						tbAddressBase,
 						tbAddressRowStride,
-						(unsigned char)flagPadBitmask,
-						numStripsRow,
-						numStripsCol,
+						(unsigned int)flagPadBitmask,
+						(unsigned int)numStripsRow,
+						(unsigned int)numStripsCol,
 						maxPeRowID));
 				#endif
 					
@@ -747,7 +749,12 @@ __kernel void kernelIATileController (
 		unsigned short iaCacheRowStride = iaCacheColStride * ((unsigned short)(inputTileWidth));
 
 
-		EMULATOR_PRINT(("[kernelIATileController] START sending the buffer refresh command for instruction=%d .\n\n", iInstruction));
+		EMULATOR_PRINT(("[kernelIATileController] START sending the buffer refresh command for instruction=%d\n"
+			"numStripsRow: %d, "
+			"numStripsCol: %d\n"
+			,iInstruction
+			,(unsigned int)inputTileHeight
+			,(unsigned int)inputTileWidth));
 		{
 			t_input_buffer_tile_buffer_packet tileBufferControlPacket;
 			tileBufferControlPacket.iaDramBlockAddressBase = 0;
