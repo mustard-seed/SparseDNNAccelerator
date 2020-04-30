@@ -144,10 +144,11 @@ void instruction_generator(
             1 + ((unsigned int) (outputWidth-1) ) /
                 ( ((unsigned int) PE_COLS) * ((unsigned int) sizeOutputTileFullWidthPerCol) );
 
-    unsigned int sizeOutputTilePartialWidthPerCol =
-            ( ((unsigned int) outputWidth) %
-                ( ((unsigned int) PE_COLS) * ((unsigned int) sizeOutputTileFullWidthPerCol) )
-            ) / ((unsigned int) numActiveColsPartialOutputTile);
+    unsigned int sizeOutputTilePartialWidthPerCol = (numActiveColsPartialOutputTile != 0) ?
+                ( ((unsigned int) outputWidth) %
+                    ( ((unsigned int) PE_COLS) * ((unsigned int) sizeOutputTileFullWidthPerCol) )
+                ) / ((unsigned int) numActiveColsPartialOutputTile)
+              : sizeOutputTileFullWidthPerCol;
 
     unsigned int sizeInputTileFullHeight =
             ((unsigned int) (sizeOutputTileFullHeight-1))* ((unsigned int) kernelStride)

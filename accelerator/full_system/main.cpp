@@ -179,7 +179,7 @@ TEST_F (testFixture, play) {
     unsigned char inputWidth = 4;
     unsigned char inputHeight = 4;
     unsigned char numInputChannel = 8;
-    unsigned char numInputGroup = 2;
+    unsigned char numInputGroup = 1;
     unsigned char numOutputGroup = 2;
     unsigned char inputHeightSPUnitSize = 1;
     unsigned char inputWidthSPUnitSize = 1;
@@ -187,8 +187,8 @@ TEST_F (testFixture, play) {
     unsigned char sizeOutputTileHeight = 4;
     bool flagEnableRelu = false;
     bool flagSparseInput = false;
-    bool flagSparseOutput = false;
-    OPERATION op = CONVOLUTION;
+    bool flagSparseOutput = true;
+    OPERATION op = MAX_POOL;
     float bias = 0.0f;
 
     launch(
@@ -976,7 +976,17 @@ void testFixture::launch (
     t_aligned_weight_mover_instruction_vector vecWMoverInstruction;
     t_aligned_misc_instruction_vector vecMiscInstruction;
 
-    signed int memDramBlockFilterStride = (pWeights->getExternalMemoryAddressStride()) >> WIDE_SIZE_OFFSET;
+    signed int memDramBlockFilterStride;
+    //assign memDramBlockFilterStride conditionally, otherwise there might be seg fault.
+    if (op == CONVOLUTION)
+    {
+        memDramBlockFilterStride = (pWeights->getExternalMemoryAddressStride()) >> WIDE_SIZE_OFFSET;
+    }
+    else
+    {
+        memDramBlockFilterStride = 0;
+    }
+
     signed int memDramBlockIAColStride = (pInput->getExternalMemoryAddressStride()) >> WIDE_SIZE_OFFSET;
     signed int memDramBlockOAColStride = (pOutput->getExternalMemoryAddressStride()) >> WIDE_SIZE_OFFSET;
 
@@ -1268,14 +1278,15 @@ void testFixture::launch (
         std::cout <<"Transfer the IA mover instructions tensor took "<<elapsedTimeUs<<" us"<<std::endl;
     }
 
-    std::cout <<stepCount++<<". Transfer the IA Tile Controller instructions"<<std::endl;
+    if (op == CONVOLUTION)
     {
+        std::cout <<stepCount++<<". Transfer the IA Tile Controller instructions"<<std::endl;
         cl::Event event;
         auto numElements = vecIATileControllerInstruction.size();
         auto sizeElement = sizeof(typeof(vecIATileControllerInstruction.at(0)));
         auto transferBytes = sizeElement * numElements;
 
-        std::cout <<"Transfering "<<transferBytes<<" bytes into bufferIAMoverInstructions"<<std::endl;
+        std::cout <<"Transfering "<<transferBytes<<" bytes into bufferIATileControllerInstructions"<<std::endl;
 
         status = clCQIATileController.enqueueWriteBuffer(bufferIATileControllerInstructions, //buffer
                                              CL_TRUE, //blocking_write
@@ -1292,6 +1303,7 @@ void testFixture::launch (
         cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*(cl_double)(1e-3));
         std::cout <<"Transfer the IA tile controller instructions tensor took "<<elapsedTimeUs<<" us"<<std::endl;
     }
+
 
     std::cout <<stepCount++<<". Transfer the OA Mover instructions"<<std::endl;
     {

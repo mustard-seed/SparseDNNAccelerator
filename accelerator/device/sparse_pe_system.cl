@@ -1036,7 +1036,7 @@ __kernel void kernelMiscControlMover (
 		packet.numDramBlocksToReduce = instruction.numDramBlocksToReduce;
 		packet.numEffectiveValues = instruction.numEffectiveValues;
 		write_channel_intel(channel_misc_instruction[0], packet);
-		EMULATOR_PRINT(("[kernelMiscControlMover] Sent instruction %d ",
+		EMULATOR_PRINT(("[kernelMiscControlMover] Sent instruction %d \n",
 						i));
 	}
 }
