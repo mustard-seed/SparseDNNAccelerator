@@ -318,12 +318,13 @@ void instruction_generator(
                 instructionOAControl.numActiveCols = (t_uchar) numActiveCols;
                 unsigned char leftShift = flagOutputShiftLeft;
                 unsigned char scaleShift = outputShiftBits;
+                unsigned char sourceIsMisc = (op != CONVOLUTION) ? 0x01 : 0x00;
                 instructionOAControl.flagSparseCatFlagReluCatFlagSourceCatShift = (t_uchar)
                         (   ((t_uchar) (scaleShift & 0x07))
                             | ((t_uchar) ((leftShift & 0x01) << 0x3))
                             | (t_uchar)((flagRelu & 0x01) << 0x6)
                             | (t_uchar)((flagSparseOutput & 0x01) << 0x04)
-                            | (t_uchar)(0x00 << 0x5) //drain source is convolution
+                            | (t_uchar)((sourceIsMisc & 0x01) << 0x5) //drain source is convolution
                         );
                 vecOATileControlInstruction.push_back(instructionOAControl);
             }
