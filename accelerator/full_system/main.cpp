@@ -179,8 +179,8 @@ TEST_F (testFixture, play) {
     unsigned char inputWidth = 4;
     unsigned char inputHeight = 4;
     unsigned char numInputChannel = 8;
-    unsigned char numInputGroup = 1;
-    unsigned char numOutputGroup = 1;
+    unsigned char numInputGroup = 2;
+    unsigned char numOutputGroup = 2;
     unsigned char inputHeightSPUnitSize = 1;
     unsigned char inputWidthSPUnitSize = 1;
     unsigned char sizeOutputTileWidthPerColFull = 2;
