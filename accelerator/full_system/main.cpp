@@ -1013,21 +1013,22 @@ void testFixture::launch (
     }
     else if (op == ELT_ADD)
     {
-        if (FRAC_WIDTH+1 > (7-OUTPUT_INT_WIDTH))
+        if (FRAC_WIDTH > (7-OUTPUT_INT_WIDTH))
         {
-            instOutputShiftBits = FRAC_WIDTH+1 - 7 + OUTPUT_INT_WIDTH;
+            instOutputShiftBits = FRAC_WIDTH - 7 + OUTPUT_INT_WIDTH;
             instOutputShiftLeft = FALSE;
         }
         else
         {
-            instOutputShiftBits = 7 - OUTPUT_INT_WIDTH-FRAC_WIDTH-1;
+            instOutputShiftBits = 7 - OUTPUT_INT_WIDTH-FRAC_WIDTH;
             instOutputShiftLeft = TRUE;
         }
     }
     else
     {
         instOutputShiftBits = 0x0;
-        instOutputShiftLeft = FALSE;
+        //Gottcha!!! Need to be shift left!!!
+        instOutputShiftLeft = TRUE;
     }
 
     instruction_generator(
