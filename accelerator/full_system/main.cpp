@@ -678,6 +678,7 @@ std::vector<fixedPointNumber> testFixture::generateWeights (
 
     for (unsigned char g=0; g<_numGroups; g++)
     {
+        //Number of OC per group equals to the number of IC per group
         for (unsigned char iFilter=0; iFilter<numICPerGroup; iFilter++)
         {
             for (unsigned char iH=0; iH<_kernelSize; iH++)
@@ -940,7 +941,7 @@ void testFixture::launch (
         pWeights.reset(new FlexibleDirectCompressedTensor (
                     inputWeightDense,
                     _numInputChannel, //_num3DTensors
-                    _numInputChannel,
+                    maxScalarIndexInChannelGroup+1, //channel
                     (unsigned char) kernelSize, //width
                     (unsigned char) kernelSize, //height
                     maxScalarIndexInChannelGroup,
@@ -953,7 +954,7 @@ void testFixture::launch (
         pWeights.reset( new AlignedTensor (
                     inputWeightDense,
                     _numInputChannel, //_num3DTensors
-                    _numInputChannel,
+                    maxScalarIndexInChannelGroup+1, //channel
                     (unsigned char) kernelSize, //width
                     (unsigned char) kernelSize, //height
                     maxScalarIndexInChannelGroup,
