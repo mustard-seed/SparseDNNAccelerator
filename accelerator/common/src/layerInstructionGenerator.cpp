@@ -287,7 +287,7 @@ void instruction_generator(
         for (unsigned int iterQTile=0; iterQTile < numOutputTileX; iterQTile++)
         {
             unsigned char numActiveCols = (iterQTile >= numFullOutputTileX) ?
-                        PE_COLS : numActiveColsPartialOutputTile;
+                        numActiveColsPartialOutputTile : PE_COLS;
 
             unsigned int maxTQPerCol = (iterQTile >= numFullOutputTileX) ?
                         sizeOutputTilePartialWidthPerCol : sizeOutputTileFullWidthPerCol;
