@@ -1180,21 +1180,23 @@ __kernel void kernelOAMover (
 		for (unsigned short iter=0; iter<inst.numColumnTileWidthxTileHeightxNumActiveCols; iter++)
 		{
 
+			//int addrOA = inst.memOAStart + addrOAGroupContribution + addrOARowContribution + addrOAColContribution + addrOAPeColContribution;
+			int addrOA = inst.memOAStart + addrOARowContribution + addrOAColContribution + addrOAPeColContribution;
 			EMULATOR_PRINT(("[kernelOAMover] START strip transfer. "
 						"iInst=%d, "
 						"iCol=%d, " 
                         "iOutputWidthInColTile=%d, "
 						"iOutputHeightInColTile=%d, "
 						"enableSparsification=%#03x, "
+						"addrOA=%#08x, "
 						"numActivePeCols=%d\n",
 						iInst, 
 						iCol,
 						iOutputWidthInColTile,
 						iOutputHeightInColTile,
 						(unsigned char) enableSparsification,
+						addrOA,
 						numActivePeCols));
-			//int addrOA = inst.memOAStart + addrOAGroupContribution + addrOARowContribution + addrOAColContribution + addrOAPeColContribution;
-			int addrOA = inst.memOAStart + addrOARowContribution + addrOAColContribution + addrOAPeColContribution;
 			#if defined(SPARSE_SYSTEM)
 				//int addrTB = inst.memTBStart + addrTBGroupContribution + addrTBRowContribution + addrTBColContribution + addrTBPeColContribution;
 				int addrTB = inst.memTBStart + addrTBRowContribution + addrTBColContribution + addrTBPeColContribution;

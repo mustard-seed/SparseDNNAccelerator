@@ -1634,18 +1634,21 @@ void testFixture::launch (
                             case MAX_POOL: {
                                 //TODO: Change the ground truth generation if the max pooling kernel size
                                 //stride, or input pattern changes
-                                expectedFloat = iCh*unitFloat;
+                                unsigned char iChGlobal = iGroup*numOutputChannelPerGroup + iCh;
+                                expectedFloat = iChGlobal*unitFloat;
                             }
                             break;
                             case CONCATENATION: {
+                                unsigned char iChGlobal = iGroup*numOutputChannelPerGroup + iCh;
                                 expectedFloat = (iCol % 2 == 0) ?
-                                              (iCh % _numInputChannel)*unitFloat:
-                                              -1.0f*(iCh & _numInputChannel)*unitFloat;
+                                              (iChGlobal % _numInputChannel)*unitFloat:
+                                              -1.0f*(iChGlobal & _numInputChannel)*unitFloat;
 
                             }
                             break;
                             case ELT_ADD: {
-                                expectedFloat = (iCol % 2 == 0) ? iCh*unitFloat*2.0f : iCh*unitFloat*(-2.0f);
+                                unsigned char iChGlobal = iGroup*numOutputChannelPerGroup + iCh;
+                                expectedFloat = (iCol % 2 == 0) ? iChGlobal*unitFloat*2.0f : iChGlobal*unitFloat*(-2.0f);
                             }
                             break;
                         }//switch (op)
