@@ -50,7 +50,7 @@
 #define WEIGHT_SEED 1234
 #define INPUT_SEED   7653
 
-#define PLAY
+//#define PLAY
 #define EMULATE
 
 #if defined(C5SOC) //Hack for ARMv7, otherwise chrono won't work
@@ -1231,6 +1231,7 @@ void testFixture::launch (
         std::cout <<"Transfer the input actvation tensor took "<<elapsedTimeUs<<" us"<<std::endl;
     } // Transfer the input
 
+#if defined(SPARSE_SYSTEM)
     if (flagSparseInput == true)
     {
         std::cout <<stepCount++<<". Transfer the input activation TB count "<<std::endl;
@@ -1257,6 +1258,7 @@ void testFixture::launch (
         cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*(cl_double)(1e-3));
         std::cout <<"Transfer the input activation TB count took "<<elapsedTimeUs<<" us"<<std::endl;
     }
+#endif
 
     std::cout <<stepCount++<<". Transfer the IA Mover instructions"<<std::endl;
     {
@@ -1566,6 +1568,7 @@ void testFixture::launch (
     );
     aocl_utils_cpp::checkError(status, "Failed to read output values!");
 
+#if defined(SPARSE_SYSTEM)
     if (flagSparseOutput == true)
     {
         status = clCQOAMover.enqueueReadBuffer(
@@ -1579,7 +1582,7 @@ void testFixture::launch (
         );
         aocl_utils_cpp::checkError(status, "Failed to read output TB count!");
     }
-
+#endif
     cl_ulong outputValueTransferStart = eventReadOutput.getProfilingInfo<CL_PROFILING_COMMAND_START>();
     cl_ulong outputValueTransferEnd = eventReadOutput.getProfilingInfo<CL_PROFILING_COMMAND_END>();
     cl_double outputValueTransferDuration = (cl_double)((outputValueTransferEnd - outputValueTransferStart) * (cl_double)(1e-3));
@@ -1590,7 +1593,9 @@ void testFixture::launch (
 
     std::cout <<"Average Convolution time:  (us): "<<proccessDurationUs<<std::endl;
     std::cout <<"Output transfer time (us): "<<outputValueTransferDuration<<std::endl;
+#if defined(SPARSE_SYSTEM)
     std::cout <<"Output count transfer time (us): "<<outputCountTransferDuration<<std::endl;
+#endif
 
     //TODO: Decompress the output, and check against the input if necessary
     {

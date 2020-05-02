@@ -269,7 +269,9 @@ __kernel void kernelIAMover (
 				iColInSPTile = 0;
 				iColSPUnitIndex = hInitSPIndex;
 				offsetIADramBlockCol = 0;
-				offsetTBCountCol = 0;
+				#if defined(SPARSE_SYSTEM)
+					offsetTBCountCol = 0;
+				#endif
 
 				iRowInSPTile++;
 				if ( (iRowInSPTile > ((signed char) tileTopPadding)) 

@@ -372,7 +372,7 @@ void instruction_generator(
                 instructionOA.memTBColStride = (t_ushort) memOATBCountColStride;
     #else
                 unsigned int numTBPerGroupNextLayer =
-                        1 + (numOutputChannelsPerGroupNextLayer-1) / CLUSTER_SIZE / TRANSFER_SIZE
+                        1 + (numOutputChannelsPerGroupNextLayer-1) / CLUSTER_SIZE / TRANSFER_SIZE;
                 instructionOA.numDramBlockPerStrip =
                         (t_uint) (1 + (numTBPerGroupNextLayer-1)/WIDE_SIZE);
     #endif
