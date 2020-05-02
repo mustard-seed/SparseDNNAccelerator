@@ -180,7 +180,7 @@ TEST_F (testFixture, play) {
     unsigned char inputHeight = 4;
     unsigned char numInputChannel = 8;
     unsigned char numInputGroup = 1;
-    unsigned char numOutputGroup = 2;
+    unsigned char numOutputGroup = 1;
     unsigned char inputHeightSPUnitSize = 1;
     unsigned char inputWidthSPUnitSize = 1;
     unsigned char sizeOutputTileWidthPerColFull = 2;
@@ -188,7 +188,7 @@ TEST_F (testFixture, play) {
     bool flagEnableRelu = false;
     bool flagSparseInput = false;
     bool flagSparseOutput = true;
-    OPERATION op = MAX_POOL;
+    OPERATION op = ELT_ADD;
     float bias = 0.0f;
 
     launch(
@@ -759,6 +759,8 @@ void testFixture::launch (
             kernelSize = 3;
             stride = 1;
 
+            numOutputChannels = numInputChannel0;
+
 #if defined(SPARSE_SYSTEM)
             flagSparseInput = _flagSparseInput;
             flagSparseOutput = _flagSparseOutput;
@@ -778,6 +780,7 @@ void testFixture::launch (
             sizeOutputTileHeight = 1;
             kernelSize = 2;
             stride = 2;
+            numOutputChannels = numInputChannel0;
 
             flagSparseInput = false;
 #if defined(SPARSE_SYSTEM)
@@ -789,7 +792,7 @@ void testFixture::launch (
         break;
         case ELT_ADD: {
             numInputChannel0 = _numInputChannel;
-            numInputChannel1 = 0;
+            numInputChannel1 = _numInputChannel;
             inputHeightSPUnitSize = 1;
             inputWidthSPUnitSize = 1;
             numGroupCurrentLayer = 1;
@@ -797,6 +800,7 @@ void testFixture::launch (
             sizeOutputTileHeight = 1;
             kernelSize = 1;
             stride = 1;
+            numOutputChannels = numInputChannel0;
 
             flagSparseInput = false;
 #if defined(SPARSE_SYSTEM)
@@ -817,6 +821,7 @@ void testFixture::launch (
             sizeOutputTileHeight = 1;
             kernelSize = 1;
             stride = 1;
+            numOutputChannels = numInputChannel0 + numInputChannel1;
 
             flagSparseInput = false;
 #if defined(SPARSE_SYSTEM)
@@ -827,7 +832,6 @@ void testFixture::launch (
         }
         break;
     } //switch
-    numOutputChannels = numInputChannel0 + numInputChannel1;
     inputWidthSPSize = inputWidthSPUnitSize*(_inputWidth-1) + 1;
     inputHeightSPSize = inputHeightSPUnitSize*(_inputHeight-1) + 1;
     numOutputWidth = (op==MAX_POOL) ? inputWidthSPSize / 2 : inputWidthSPSize;
