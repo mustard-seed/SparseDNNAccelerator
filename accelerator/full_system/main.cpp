@@ -180,7 +180,7 @@ TEST_F (testFixture, play) {
     unsigned char inputHeight = 4;
     unsigned char numInputChannel = 8;
     unsigned char numInputGroup = 1;
-    unsigned char numOutputGroup = 1;
+    unsigned char numOutputGroup = 2;
     unsigned char inputHeightSPUnitSize = 1;
     unsigned char inputWidthSPUnitSize = 1;
     unsigned char sizeOutputTileWidthPerColFull = 2;
@@ -188,7 +188,7 @@ TEST_F (testFixture, play) {
     bool flagEnableRelu = false;
     bool flagSparseInput = false;
     bool flagSparseOutput = true;
-    OPERATION op = ELT_ADD;
+    OPERATION op = CONCATENATION;
     float bias = 0.0f;
 
     launch(
@@ -1646,7 +1646,7 @@ void testFixture::launch (
                                 unsigned char iChGlobal = iGroup*numOutputChannelPerGroup + iCh;
                                 expectedFloat = (iCol % 2 == 0) ?
                                               (iChGlobal % _numInputChannel)*unitFloat:
-                                              -1.0f*(iChGlobal & _numInputChannel)*unitFloat;
+                                              -1.0f*(iChGlobal % _numInputChannel)*unitFloat;
 
                             }
                             break;
