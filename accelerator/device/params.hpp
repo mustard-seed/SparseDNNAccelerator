@@ -1,7 +1,7 @@
 #ifndef PARAMS_DEFINED
 #define PARAMS_DEFINED
 
-//#define SPARSE_SYSTEM
+#define SPARSE_SYSTEM
 #define INSTRUCTION_SIZE_BYTE 24
 #define DEPENDENCY_LIST_SIZE_BYTE 2
 #define MAX_INSTRUCTION_IN_FLIGHT_COUNT_PER_TYPE 3
@@ -79,15 +79,14 @@
 #define SYNC_SIZE 8
 #define MAX_SIMD_BLOCK_INDEX 0x0FF
 
-//Memory region offset
-#define MEM_START_IA_0 0x0
-#define MEM_START_IA_1 0x400000
-#define MEM_START_OA_0 0X0
-#define MEM_START_OA_1 0x400000
-#define MEM_START_ITB_0 0X0
-#define MEM_START_ITB_1 0x40000 //Provision for 512x512 input
-#define MEM_START_OTB_0 0X0
-#define MEM_START_OTB_1 0x40000 //Provision for 512x512 input
+//Activation memory region offsets
+//In terms of DRAM blocks
+#define MEM_START_ACTIVATION_0 0x0
+#define MEM_START_ACTIVATION_1 (1 << 20)
+//TB count memory region offsets
+//In terms of TB counts (shorts)
+#define MEM_START_TB_0 0X0
+#define MEM_START_TB_1 (1 << 18)
 
 //TODO: Change COMPRESSION_WINDOW_SIZE, TRANSFER_SIZE, CLUSTER_SIZE, and related offsets and masks if compression configuration changes
 #define COMPRESSION_WINDOW_SIZE 8 //compression window size in terms of clusters

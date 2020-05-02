@@ -25,17 +25,15 @@
 #include "vectorType.hpp"
 #include "layerInstructionGenerator.hpp"
 
-/*Limits on the buffer sizes
- * Assume the biggest test convolves a 32x32x64 tensor with a 128*32*32*64 tensor
- * Add a safety factor of 4
+/*Limits on the buffer sizes in bytes
  * */
-#define MAX_DRAM_BYTE_INPUT_ACTIVATION 262144
-#define MAX_DRAM_BYTE_INPUT_ACTIVATION_SB_COUNT 8192
-#define MAX_DRAM_BYTE_INPUT_WEIGHT 16777216
-#define MAX_DRAM_BYTE_INPUT_WEIGHT_SB_COUNT 2048
-#define MAX_DRAM_BYTE_INPUT_BIAS 2048
-#define MAX_DRAM_BYTE_OUTPUT_ACTIVATION 1048576
-#define MAX_DRAM_BYTE_OUTPUT_ACTIVATION_SB_COUNT 8192
+#define MAX_DRAM_BYTE_INPUT_ACTIVATION (1 << 25)
+#define MAX_DRAM_BYTE_INPUT_ACTIVATION_SB_COUNT (1 << 20)
+#define MAX_DRAM_BYTE_INPUT_WEIGHT (1 << 24)
+#define MAX_DRAM_BYTE_INPUT_WEIGHT_SB_COUNT 0x800
+#define MAX_DRAM_BYTE_INPUT_BIAS 0x800
+//#define MAX_DRAM_BYTE_OUTPUT_ACTIVATION 0x400000
+//#define MAX_DRAM_BYTE_OUTPUT_ACTIVATION_SB_COUNT 0x40000
 #define MAX_DRAM_BYTE_INPUT_MOVER_INSTRUCTION (1 << 20)
 #define MAX_DRAM_BYTE_INPUT_TILE_CONTROLLER_INSTRUCTION (1 << 20)
 #define MAX_DRAM_BYTE_OUTPUT_MOVER_INSTRUCTION (1 << 20)
@@ -49,8 +47,7 @@
 
 #define WEIGHT_SEED 1234
 #define INPUT_SEED   7653
-
-//#define PLAY
+#define PLAY
 #define EMULATE
 
 #if defined(C5SOC) //Hack for ARMv7, otherwise chrono won't work
@@ -88,9 +85,9 @@ protected:
 
     //Buffer members associated with the IA Mover kernel
     cl::Buffer bufferIAMoverInstructions;
-    cl::Buffer bufferIAMoverIADramBlocks;
+    cl::Buffer bufferActivationDramBlocks;
 #if defined(SPARSE_SYSTEM)
-    cl::Buffer bufferIAMoverIATBCounts;
+    cl::Buffer bufferActivationTBCounts;
 #endif
 
     //Buffer members associated with the IA tile controller
@@ -98,10 +95,10 @@ protected:
 
     //Buffer members associated with the OA Mover kernel
     cl::Buffer bufferOAMoverInstructions;
-    cl::Buffer bufferOAMoverOADramBlocks;
-#if defined(SPARSE_SYSTEM)
-    cl::Buffer bufferOAMoverOATBCounts;
-#endif
+//    cl::Buffer bufferOAMoverOADramBlocks;
+//#if defined(SPARSE_SYSTEM)
+//    cl::Buffer bufferOAMoverOATBCounts;
+//#endif
 
     //Buffer members associated with the OA tile controller
     cl::Buffer bufferOATileControllerInstructions;
@@ -155,8 +152,7 @@ protected:
             );
 
 
-    void launch (
-            unsigned char _inputWidth,
+    void launch (unsigned char _inputWidth,
             unsigned char _inputHeight,
             unsigned char _numInputChannel,
             unsigned char _numInputGroup, //The code will override this to 1 if the operation is not convolution
@@ -170,7 +166,8 @@ protected:
             bool _flagSparseOutput,
             OPERATION op,
             float _bias = 0.0f //Only matter for convolution
-            );
+            ,bool flagMultiLayerConv = false
+          );
 }; //testFixture
 
 #ifdef PLAY
@@ -180,16 +177,17 @@ TEST_F (testFixture, play) {
     unsigned char inputHeight = 4;
     unsigned char numInputChannel = 8;
     unsigned char numInputGroup = 1;
-    unsigned char numOutputGroup = 2;
+    unsigned char numOutputGroup = 1;
     unsigned char inputHeightSPUnitSize = 1;
     unsigned char inputWidthSPUnitSize = 1;
     unsigned char sizeOutputTileWidthPerColFull = 2;
     unsigned char sizeOutputTileHeight = 4;
     bool flagEnableRelu = false;
     bool flagSparseInput = false;
-    bool flagSparseOutput = true;
-    OPERATION op = CONCATENATION;
+    bool flagSparseOutput = false;
+    OPERATION op = CONVOLUTION;
     float bias = 0.0f;
+    bool flag2Layer = true;
 
     launch(
                 inputWidth,
@@ -205,7 +203,8 @@ TEST_F (testFixture, play) {
                 flagSparseInput,
                 flagSparseOutput,
                 op,
-                bias
+                bias,
+                flag2Layer
           );
 }
 #else
@@ -453,6 +452,43 @@ TEST_F (testFixture, concat_sparse_output_grouped)
                 bias
           );
 }
+
+TEST_F (testFixture, back_to_back_identity_conv)
+{
+    unsigned char inputWidth = 4;
+    unsigned char inputHeight = 4;
+    unsigned char numInputChannel = 8;
+    unsigned char numInputGroup = 1;
+    unsigned char numOutputGroup = 1;
+    unsigned char inputHeightSPUnitSize = 1;
+    unsigned char inputWidthSPUnitSize = 1;
+    unsigned char sizeOutputTileWidthPerColFull = 2;
+    unsigned char sizeOutputTileHeight = 4;
+    bool flagEnableRelu = false;
+    bool flagSparseInput = false;
+    bool flagSparseOutput = false;
+    OPERATION op = CONVOLUTION;
+    float bias = 0.0f;
+    bool flag2Layer = true;
+
+    launch(
+                inputWidth,
+                inputHeight,
+                numInputChannel,
+                numInputGroup,
+                numOutputGroup,
+                inputHeightSPUnitSize,
+                inputWidthSPUnitSize,
+                sizeOutputTileWidthPerColFull,
+                sizeOutputTileHeight,
+                flagEnableRelu,
+                flagSparseInput,
+                flagSparseOutput,
+                op,
+                bias,
+                flag2Layer
+          );
+}
 #endif  //PLAY
 
 int main(int argc, char* argv[]) {
@@ -587,17 +623,14 @@ void testFixture::SetUp()
     cl_ulong inputBiasSize = maxBufferSizeByte < MAX_DRAM_BYTE_INPUT_BIAS ? maxBufferSizeByte : MAX_DRAM_BYTE_INPUT_BIAS;
     vecBufferInfo.push_back({inputBiasSize, bufferWMoverBias, CL_MEM_READ_ONLY, "bufferWMoverBias"});
 
-    cl_ulong inputActivationSize = maxBufferSizeByte < MAX_DRAM_BYTE_INPUT_ACTIVATION ? maxBufferSizeByte : MAX_DRAM_BYTE_INPUT_ACTIVATION;
-    vecBufferInfo.push_back({inputActivationSize, bufferIAMoverIADramBlocks, CL_MEM_READ_WRITE, "bufferIAMoverIADramBlocks"});
+    cl_ulong activationSize = maxBufferSizeByte < MAX_DRAM_BYTE_INPUT_ACTIVATION ? maxBufferSizeByte : MAX_DRAM_BYTE_INPUT_ACTIVATION;
+    vecBufferInfo.push_back({activationSize, bufferActivationDramBlocks, CL_MEM_READ_WRITE, "bufferActivationDramBlocks"});
 
     cl_ulong inputIAMoverInstructionSize = maxBufferSizeByte < MAX_DRAM_BYTE_INPUT_MOVER_INSTRUCTION ? maxBufferSizeByte : MAX_DRAM_BYTE_INPUT_MOVER_INSTRUCTION;
     vecBufferInfo.push_back({inputIAMoverInstructionSize, bufferIAMoverInstructions, CL_MEM_READ_ONLY, "bufferIAMoverInstructions"});
 
     cl_ulong inputIATileControllerInstructionSize = maxBufferSizeByte < MAX_DRAM_BYTE_INPUT_TILE_CONTROLLER_INSTRUCTION ? maxBufferSizeByte : MAX_DRAM_BYTE_INPUT_TILE_CONTROLLER_INSTRUCTION;
     vecBufferInfo.push_back({inputIATileControllerInstructionSize, bufferIATileControllerInstructions, CL_MEM_READ_ONLY, "bufferIATileControllerInstructions"});
-
-    cl_ulong outputActivationSize = maxBufferSizeByte < MAX_DRAM_BYTE_OUTPUT_ACTIVATION ? maxBufferSizeByte : MAX_DRAM_BYTE_OUTPUT_ACTIVATION;
-    vecBufferInfo.push_back({outputActivationSize, bufferOAMoverOADramBlocks, CL_MEM_READ_WRITE, "bufferOAMoverOADramBlocks"});
 
     cl_ulong outputOAMoverInstructionSize = maxBufferSizeByte < MAX_DRAM_BYTE_OUTPUT_MOVER_INSTRUCTION ? maxBufferSizeByte : MAX_DRAM_BYTE_OUTPUT_MOVER_INSTRUCTION;
     vecBufferInfo.push_back({outputOAMoverInstructionSize, bufferOAMoverInstructions, CL_MEM_READ_ONLY, "bufferOAMoverInstructions"});
@@ -612,11 +645,8 @@ void testFixture::SetUp()
     cl_ulong inputWeightSBSize = maxBufferSizeByte < MAX_DRAM_BYTE_INPUT_WEIGHT_SB_COUNT ? maxBufferSizeByte : MAX_DRAM_BYTE_INPUT_WEIGHT_SB_COUNT;
     vecBufferInfo.push_back({inputWeightSBSize, bufferWMoverWTBCounts, CL_MEM_READ_ONLY, "bufferWMoverWTBCounts"});
 
-    cl_ulong inputIATBCountSize = maxBufferSizeByte < MAX_DRAM_BYTE_INPUT_ACTIVATION_SB_COUNT ? maxBufferSizeByte : MAX_DRAM_BYTE_INPUT_ACTIVATION_SB_COUNT;
-    vecBufferInfo.push_back({inputIATBCountSize, bufferIAMoverIATBCounts, CL_MEM_READ_ONLY, "bufferIAMoverIATBCounts"});
-
-    cl_ulong outputOATBCountSize = maxBufferSizeByte < MAX_DRAM_BYTE_OUTPUT_ACTIVATION_SB_COUNT ? maxBufferSizeByte : MAX_DRAM_BYTE_OUTPUT_ACTIVATION_SB_COUNT;
-    vecBufferInfo.push_back({outputOATBCountSize, bufferOAMoverOATBCounts, CL_MEM_READ_ONLY, "bufferOAMoverOATBCounts"});
+    cl_ulong activationTBCountSize = maxBufferSizeByte < MAX_DRAM_BYTE_INPUT_ACTIVATION_SB_COUNT ? maxBufferSizeByte : MAX_DRAM_BYTE_INPUT_ACTIVATION_SB_COUNT;
+    vecBufferInfo.push_back({activationTBCountSize, bufferActivationTBCounts, CL_MEM_READ_ONLY, "bufferActivationTBCounts"});
 #endif
 
     for (auto& info : vecBufferInfo)
@@ -716,7 +746,8 @@ void testFixture::launch (
         bool _flagSparseInput, //The code will override this to FALSE if the operation is not convolution or if the accelerator only supports dense format
         bool _flagSparseOutput, //The code will override this to FALSE if the accelerator only supports dense format.
         OPERATION op,
-        float _bias //Only matter for convolution
+        float _bias, //Only matter for convolution
+        bool flagMultiLayerConv
         )
 {
     //Checking the parameters' consistency AND
@@ -748,6 +779,7 @@ void testFixture::launch (
     switch (op) {
         case CONVOLUTION: {
             assert(_numInputChannel % _numInputGroup == 0);
+            assert((flagMultiLayerConv==false) || (_numInputGroup == 1));
             numInputChannel0 = _numInputChannel;
             numInputChannel1 = 0;
             numOutputChannels = _numInputChannel;
@@ -1035,87 +1067,263 @@ void testFixture::launch (
         instOutputShiftLeft = TRUE;
     }
 
-    instruction_generator(
-                op,
-                vecIAMoverInstruction,
-                vecOAMoverInstruction,
-                vecIATileControllerInstruction,
-                vecOATileControllerInstruction,
-                vecWMoverInstruction,
-                vecMiscInstruction,
+    if (op==CONVOLUTION && flagMultiLayerConv == true)
+    {
+        //First set of instructions
+        instruction_generator(
+                    op,
+                    vecIAMoverInstruction,
+                    vecOAMoverInstruction,
+                    vecIATileControllerInstruction,
+                    vecOATileControllerInstruction,
+                    vecWMoverInstruction,
+                    vecMiscInstruction,
 
-                //signed int memIA0DramBlockStartIndex
-                0,
-                //signed int memIA1DramBlockStartIndex
-                0,
-                //signed int memOADramBlockStartIndex
-                0,
-                //signed int memWeightDramBlockStartIndex
-                0,
-                //signed int memBiasStartIndex
-                0,
+                    //signed int memIA0DramBlockStartIndex
+                    MEM_START_ACTIVATION_0,
+                    //signed int memIA1DramBlockStartIndex
+                    MEM_START_ACTIVATION_0,
+                    //signed int memOADramBlockStartIndex
+                    MEM_START_ACTIVATION_1,
+                    //signed int memWeightDramBlockStartIndex
+                    0,
+                    //signed int memBiasStartIndex
+                    0,
 
-                //input 0 strides
-                memDramBlockIAColStride,
-                memDramBlockIARowStride,
-                memDramBlockIAGroupStride,
+                    //input 0 strides
+                    memDramBlockIAColStride,
+                    memDramBlockIARowStride,
+                    memDramBlockIAGroupStride,
 
-                //input 1 strides
-                memDramBlockIAColStride,
-                memDramBlockIARowStride,
-                memDramBlockIAGroupStride,
+                    //input 1 strides
+                    memDramBlockIAColStride,
+                    memDramBlockIARowStride,
+                    memDramBlockIAGroupStride,
 
-                //output stride
-                memDramBlockOAColStride,
+                    //output stride
+                    memDramBlockOAColStride,
 
-                //weight stride
-                memDramBlockFilterStride,
+                    //weight stride
+                    memDramBlockFilterStride,
 
-            #if defined(SPARSE_SYSTEM)
-                //memIATB0CountStart
-                0,
-                //memIATB0CountColStride,
-                1,
-                //memOATBCountStart
-                0,
-                //memOATBCountColStride
-                1,
-                //memWeightTBCountStart
-                0,
-            #endif
+                #if defined(SPARSE_SYSTEM)
+                    //memIATB0CountStart
+                    MEM_START_TB_0,
+                    //memIATB0CountColStride,
+                    1,
+                    //memOATBCountStart
+                    MEM_START_TB_1,
+                    //memOATBCountColStride
+                    1,
+                    //memWeightTBCountStart
+                    0,
+                #endif
 
-                instFlagSparseOutput,
-                instFlagSparseInput,
-                //flagInputSync
-                0x0,
-                //flagOutputSync
-                0x0,
-                instFlagRelu,
-                instOutputShiftBits,
-                instOutputShiftLeft,
+                    //flagSparseOutput,
+                    TRUE,
+                    instFlagSparseInput,
+                    //flagInputSync
+                    0x0,
+                    //flagOutputSync
+                    TRUE,
+                    //instFlagRelu,
+                    FALSE,
+                    instOutputShiftBits,
+                    instOutputShiftLeft,
 
-                inputWidthSPSize,
-                inputHeightSPSize,
-                inputWidthSPUnitSize,
-                inputHeightSPUnitSize,
+                    inputWidthSPSize,
+                    inputHeightSPSize,
+                    inputWidthSPUnitSize,
+                    inputHeightSPUnitSize,
 
-                horizontalBorderPadding,
-                verticalBorderPadding,
+                    horizontalBorderPadding,
+                    verticalBorderPadding,
 
-                kernelSize,
-                stride,
+                    kernelSize,
+                    stride,
 
-                sizeOutputTileHeight,
-                sizeOutputTileWidthPerCol,
-                numActiveColsPartialOutputTile,
+                    sizeOutputTileHeight,
+                    sizeOutputTileWidthPerCol,
+                    numActiveColsPartialOutputTile,
 
-                numInputChannel0,
-                numInputChannel1,
-                numGroupCurrentLayer,
-                numOutputChannels,
-                //numGroupsNextLayer
-                _numGroupNext
-                );
+                    numInputChannel0,
+                    numInputChannel1,
+                    numGroupCurrentLayer,
+                    numOutputChannels,
+                    //numGroupsNextLayer
+                    numGroupCurrentLayer
+                    );
+
+        //2 SECOND set of instructions
+        instruction_generator(
+                    op,
+                    vecIAMoverInstruction,
+                    vecOAMoverInstruction,
+                    vecIATileControllerInstruction,
+                    vecOATileControllerInstruction,
+                    vecWMoverInstruction,
+                    vecMiscInstruction,
+
+                    //signed int memIA0DramBlockStartIndex
+                    MEM_START_ACTIVATION_1,
+                    //signed int memIA1DramBlockStartIndex
+                    MEM_START_ACTIVATION_1,
+                    //signed int memOADramBlockStartIndex
+                    MEM_START_ACTIVATION_0,
+                    //signed int memWeightDramBlockStartIndex
+                    0,
+                    //signed int memBiasStartIndex
+                    0,
+
+                    //input 0 strides
+                    memDramBlockIAColStride,
+                    memDramBlockIARowStride,
+                    memDramBlockIAGroupStride,
+
+                    //input 1 strides
+                    memDramBlockIAColStride,
+                    memDramBlockIARowStride,
+                    memDramBlockIAGroupStride,
+
+                    //output stride
+                    memDramBlockOAColStride,
+
+                    //weight stride
+                    memDramBlockFilterStride,
+
+                #if defined(SPARSE_SYSTEM)
+                    //memIATB0CountStart
+                    MEM_START_TB_1,
+                    //memIATB0CountColStride,
+                    1,
+                    //memOATBCountStart
+                    MEM_START_TB_0,
+                    //memOATBCountColStride
+                    1,
+                    //memWeightTBCountStart
+                    0,
+                #endif
+
+                    instFlagSparseOutput,
+                    //instFlagSparseInput,
+                    TRUE,
+                    //flagInputSync
+                    TRUE,
+                    //flagOutputSync
+                    0x0,
+                    instFlagRelu,
+                    instOutputShiftBits,
+                    instOutputShiftLeft,
+
+                    inputWidthSPSize,
+                    inputHeightSPSize,
+                    inputWidthSPUnitSize,
+                    inputHeightSPUnitSize,
+
+                    horizontalBorderPadding,
+                    verticalBorderPadding,
+
+                    kernelSize,
+                    stride,
+
+                    sizeOutputTileHeight,
+                    sizeOutputTileWidthPerCol,
+                    numActiveColsPartialOutputTile,
+
+                    numInputChannel0,
+                    numInputChannel1,
+                    numGroupCurrentLayer,
+                    numOutputChannels,
+                    //numGroupsNextLayer
+                    _numGroupNext
+                    );
+    } //multilayer-convolution
+    else
+    {
+        instruction_generator(
+                    op,
+                    vecIAMoverInstruction,
+                    vecOAMoverInstruction,
+                    vecIATileControllerInstruction,
+                    vecOATileControllerInstruction,
+                    vecWMoverInstruction,
+                    vecMiscInstruction,
+
+                    //signed int memIA0DramBlockStartIndex
+                    MEM_START_ACTIVATION_0,
+                    //signed int memIA1DramBlockStartIndex
+                    MEM_START_ACTIVATION_0,
+                    //signed int memOADramBlockStartIndex
+                    MEM_START_ACTIVATION_1,
+                    //signed int memWeightDramBlockStartIndex
+                    0,
+                    //signed int memBiasStartIndex
+                    0,
+
+                    //input 0 strides
+                    memDramBlockIAColStride,
+                    memDramBlockIARowStride,
+                    memDramBlockIAGroupStride,
+
+                    //input 1 strides
+                    memDramBlockIAColStride,
+                    memDramBlockIARowStride,
+                    memDramBlockIAGroupStride,
+
+                    //output stride
+                    memDramBlockOAColStride,
+
+                    //weight stride
+                    memDramBlockFilterStride,
+
+                #if defined(SPARSE_SYSTEM)
+                    //memIATB0CountStart
+                    MEM_START_TB_0,
+                    //memIATB0CountColStride,
+                    1,
+                    //memOATBCountStart
+                    MEM_START_TB_1,
+                    //memOATBCountColStride
+                    1,
+                    //memWeightTBCountStart
+                    0,
+                #endif
+
+                    instFlagSparseOutput,
+                    instFlagSparseInput,
+                    //flagInputSync
+                    0x0,
+                    //flagOutputSync
+                    0x0,
+                    instFlagRelu,
+                    instOutputShiftBits,
+                    instOutputShiftLeft,
+
+                    inputWidthSPSize,
+                    inputHeightSPSize,
+                    inputWidthSPUnitSize,
+                    inputHeightSPUnitSize,
+
+                    horizontalBorderPadding,
+                    verticalBorderPadding,
+
+                    kernelSize,
+                    stride,
+
+                    sizeOutputTileHeight,
+                    sizeOutputTileWidthPerCol,
+                    numActiveColsPartialOutputTile,
+
+                    numInputChannel0,
+                    numInputChannel1,
+                    numGroupCurrentLayer,
+                    numOutputChannels,
+                    //numGroupsNextLayer
+                    _numGroupNext
+                    );
+    }
+
+
 
     std::cout <<"Number of IA Mover instructions: "<<vecIAMoverInstruction.size()<<std::endl;
     std::cout <<"Number of IA tile controller instructions: "<<vecIATileControllerInstruction.size()<<std::endl;
@@ -1128,11 +1336,11 @@ void testFixture::launch (
     {
         cl_uint argIdx = 0;
         //volatile __global t_dram_block* restrict pIA
-        kernelIAMover.setArg(argIdx, bufferIAMoverIADramBlocks);
+        kernelIAMover.setArg(argIdx, bufferActivationDramBlocks);
         argIdx++;
         #if defined(SPARSE_SYSTEM)
             //volatile __global t_streamblock_address* restrict pTBCount,
-            kernelIAMover.setArg(argIdx, bufferIAMoverIATBCounts);
+            kernelIAMover.setArg(argIdx, bufferActivationTBCounts);
             argIdx++;
         #endif
         //volatile __global t_ia_mover_instruction* restrict pInstruction,
@@ -1183,10 +1391,10 @@ void testFixture::launch (
     {
         cl_uint argIdx=0;
         //volatile __global t_output_dram_block* restrict pOA,
-        kernelOAMover.setArg(argIdx++, bufferOAMoverOADramBlocks);
+        kernelOAMover.setArg(argIdx++, bufferActivationDramBlocks);
         #if defined(SPARSE_SYSTEM)
             //volatile __global t_streamblock_address* restrict pTBCount,
-            kernelOAMover.setArg(argIdx++, bufferOAMoverOATBCounts);
+            kernelOAMover.setArg(argIdx++, bufferActivationTBCounts);
         #endif
         //volatile __global t_oa_mover_instruction* restrict pInstruction,
         kernelOAMover.setArg(argIdx++, bufferOAMoverInstructions);
@@ -1213,11 +1421,13 @@ void testFixture::launch (
         auto sizeTransferBlockElement = sizeof(typeof((pInput->getTransferBlockVector()).at(0)));
         auto valueVectorSizeBytes = sizeTransferBlockElement * numTransferBlocks;
 
-        std::cout <<"Transfering "<<valueVectorSizeBytes<<" bytes into bufferMemoryReaderWideInput"<<std::endl;
+        int activationOffsetByte = MEM_START_ACTIVATION_0 * BURST_SIZE_BYTE;
 
-        status = clCQIAMover.enqueueWriteBuffer(bufferIAMoverIADramBlocks, //buffer
+        std::cout <<"Transfering "<<valueVectorSizeBytes<<" bytes into bufferActivationDramBlocks"<<std::endl;
+
+        status = clCQIAMover.enqueueWriteBuffer(bufferActivationDramBlocks, //buffer
                                              CL_TRUE, //blocking_write
-                                             0, //offset
+                                             activationOffsetByte, //offset
                                              valueVectorSizeBytes, //size
                                              (pInput->getTransferBlockVector()).data(), //data pointer
                                              NULL, //dependency list
@@ -1241,11 +1451,13 @@ void testFixture::launch (
         auto sizeElement = sizeof(typeof((pInput->getTransferBlockCountVector()).at(0)));
         auto transferBytes = sizeElement * numElements;
 
-        std::cout <<"Transfering "<<transferBytes<<" bytes into bufferIAMoverIATBCounts"<<std::endl;
+        int tbCountOffsetByte = MEM_START_TB_0 * sizeof(t_streamblock_address);
 
-        status = clCQIAMover.enqueueWriteBuffer(bufferIAMoverIATBCounts, //buffer
+        std::cout <<"Transfering "<<transferBytes<<" bytes into bufferActivationTBCounts"<<std::endl;
+
+        status = clCQIAMover.enqueueWriteBuffer(bufferActivationTBCounts, //buffer
                                              CL_TRUE, //blocking_write
-                                             0, //offset
+                                             tbCountOffsetByte, //offset
                                              transferBytes, //size
                                              (pInput->getTransferBlockCountVector()).data(), //data pointer
                                              NULL, //dependency list
@@ -1556,11 +1768,13 @@ void testFixture::launch (
 #endif
 
     std::cout <<stepCount++<<". Retrieve the output."<<std::endl;
+    int oaOffset = ((op == CONVOLUTION) && (flagMultiLayerConv == true)) ?
+                MEM_START_ACTIVATION_0 * BURST_SIZE_BYTE : MEM_START_ACTIVATION_1 * BURST_SIZE_BYTE;
     cl::Event eventReadOutput, eventReadOutputCount;
     status = clCQOAMover.enqueueReadBuffer(
-        bufferOAMoverOADramBlocks,
+        bufferActivationDramBlocks,
         CL_TRUE,
-        0,
+        oaOffset,
         sizeof(typeof((pOutput->getTransferBlockVector()).at(0))) * (pOutput->getTransferBlockVector()).size(),
         (pOutput->getTransferBlockVector()).data(),
         NULL,
@@ -1571,10 +1785,12 @@ void testFixture::launch (
 #if defined(SPARSE_SYSTEM)
     if (flagSparseOutput == true)
     {
+        int oaTBOffset = ((op == CONVOLUTION) && (flagMultiLayerConv == true)) ?
+                    MEM_START_TB_0 * BURST_SIZE_BYTE : MEM_START_TB_1 * BURST_SIZE_BYTE;
         status = clCQOAMover.enqueueReadBuffer(
-            bufferOAMoverOATBCounts,
+            bufferActivationTBCounts,
             CL_TRUE,
-            0,
+            oaTBOffset,
             sizeof(typeof((pOutput->getTransferBlockCountVector()).at(0))) * (pOutput->getTransferBlockCountVector()).size(),
             (pOutput->getTransferBlockCountVector()).data(),
             NULL,
