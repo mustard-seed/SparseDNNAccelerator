@@ -47,7 +47,7 @@
 
 #define WEIGHT_SEED 1234
 #define INPUT_SEED   7653
-#define PLAY
+//#define PLAY
 #define EMULATE
 
 #if defined(C5SOC) //Hack for ARMv7, otherwise chrono won't work
@@ -453,42 +453,42 @@ TEST_F (testFixture, concat_sparse_output_grouped)
           );
 }
 
-TEST_F (testFixture, back_to_back_identity_conv)
-{
-    unsigned char inputWidth = 4;
-    unsigned char inputHeight = 4;
-    unsigned char numInputChannel = 8;
-    unsigned char numInputGroup = 1;
-    unsigned char numOutputGroup = 1;
-    unsigned char inputHeightSPUnitSize = 1;
-    unsigned char inputWidthSPUnitSize = 1;
-    unsigned char sizeOutputTileWidthPerColFull = 2;
-    unsigned char sizeOutputTileHeight = 4;
-    bool flagEnableRelu = false;
-    bool flagSparseInput = false;
-    bool flagSparseOutput = false;
-    OPERATION op = CONVOLUTION;
-    float bias = 0.0f;
-    bool flag2Layer = true;
+//TEST_F (testFixture, back_to_back_identity_conv)
+//{
+//    unsigned char inputWidth = 4;
+//    unsigned char inputHeight = 4;
+//    unsigned char numInputChannel = 8;
+//    unsigned char numInputGroup = 1;
+//    unsigned char numOutputGroup = 1;
+//    unsigned char inputHeightSPUnitSize = 1;
+//    unsigned char inputWidthSPUnitSize = 1;
+//    unsigned char sizeOutputTileWidthPerColFull = 2;
+//    unsigned char sizeOutputTileHeight = 4;
+//    bool flagEnableRelu = false;
+//    bool flagSparseInput = false;
+//    bool flagSparseOutput = false;
+//    OPERATION op = CONVOLUTION;
+//    float bias = 0.0f;
+//    bool flag2Layer = true;
 
-    launch(
-                inputWidth,
-                inputHeight,
-                numInputChannel,
-                numInputGroup,
-                numOutputGroup,
-                inputHeightSPUnitSize,
-                inputWidthSPUnitSize,
-                sizeOutputTileWidthPerColFull,
-                sizeOutputTileHeight,
-                flagEnableRelu,
-                flagSparseInput,
-                flagSparseOutput,
-                op,
-                bias,
-                flag2Layer
-          );
-}
+//    launch(
+//                inputWidth,
+//                inputHeight,
+//                numInputChannel,
+//                numInputGroup,
+//                numOutputGroup,
+//                inputHeightSPUnitSize,
+//                inputWidthSPUnitSize,
+//                sizeOutputTileWidthPerColFull,
+//                sizeOutputTileHeight,
+//                flagEnableRelu,
+//                flagSparseInput,
+//                flagSparseOutput,
+//                op,
+//                bias,
+//                flag2Layer
+//          );
+//}
 #endif  //PLAY
 
 int main(int argc, char* argv[]) {
@@ -646,7 +646,7 @@ void testFixture::SetUp()
     vecBufferInfo.push_back({inputWeightSBSize, bufferWMoverWTBCounts, CL_MEM_READ_ONLY, "bufferWMoverWTBCounts"});
 
     cl_ulong activationTBCountSize = maxBufferSizeByte < MAX_DRAM_BYTE_INPUT_ACTIVATION_SB_COUNT ? maxBufferSizeByte : MAX_DRAM_BYTE_INPUT_ACTIVATION_SB_COUNT;
-    vecBufferInfo.push_back({activationTBCountSize, bufferActivationTBCounts, CL_MEM_READ_ONLY, "bufferActivationTBCounts"});
+    vecBufferInfo.push_back({activationTBCountSize, bufferActivationTBCounts, CL_MEM_READ_WRITE, "bufferActivationTBCounts"});
 #endif
 
     for (auto& info : vecBufferInfo)
@@ -1069,6 +1069,13 @@ void testFixture::launch (
 
     if (op==CONVOLUTION && flagMultiLayerConv == true)
     {
+        //Number of compression block per intermediate channel group
+        int numCBPerIMOAChannelGroup =
+                1 + (numInputChannel0 / numGroupCurrentLayer - 1) / (CLUSTER_SIZE * COMPRESSION_WINDOW_SIZE);
+        int numTBPerCB = COMPRESSION_WINDOW_SIZE / TRANSFER_SIZE + 1;
+        int intermediateAColStride = numCBPerIMOAChannelGroup * numTBPerCB;
+        int intermediateARowStride = intermediateAColStride * _inputWidth;
+        int intermediateAGroupStride = intermediateARowStride * _inputHeight;
         //First set of instructions
         instruction_generator(
                     op,
@@ -1101,7 +1108,7 @@ void testFixture::launch (
                     memDramBlockIAGroupStride,
 
                     //output stride
-                    memDramBlockOAColStride,
+                    intermediateAColStride,
 
                     //weight stride
                     memDramBlockFilterStride,
@@ -1176,14 +1183,14 @@ void testFixture::launch (
                     0,
 
                     //input 0 strides
-                    memDramBlockIAColStride,
-                    memDramBlockIARowStride,
-                    memDramBlockIAGroupStride,
+                    intermediateAColStride,
+                    intermediateARowStride,
+                    intermediateAGroupStride,
 
                     //input 1 strides
-                    memDramBlockIAColStride,
-                    memDramBlockIARowStride,
-                    memDramBlockIAGroupStride,
+                    intermediateAColStride,
+                    intermediateARowStride,
+                    intermediateAGroupStride,
 
                     //output stride
                     memDramBlockOAColStride,
@@ -1786,7 +1793,7 @@ void testFixture::launch (
     if (flagSparseOutput == true)
     {
         int oaTBOffset = ((op == CONVOLUTION) && (flagMultiLayerConv == true)) ?
-                    MEM_START_TB_0 * BURST_SIZE_BYTE : MEM_START_TB_1 * BURST_SIZE_BYTE;
+                    MEM_START_TB_0 * sizeof(t_streamblock_address) : MEM_START_TB_1 * sizeof(t_streamblock_address);
         status = clCQOAMover.enqueueReadBuffer(
             bufferActivationTBCounts,
             CL_TRUE,
