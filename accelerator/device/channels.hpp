@@ -105,7 +105,7 @@ channel t_output_dram_block_tagged channel_output_wide[PE_COLS] __attribute__((d
   Synchornization channel from the OA mover to IA mover
   =========================================================
 */
-channel unsigned char channel_activation_sync __attribute__((depth(0)));
+channel unsigned char channel_activation_sync __attribute__((depth(1)));
 #endif //ACTIVATION_MEMORY_INTERCONNECT
 
 #endif

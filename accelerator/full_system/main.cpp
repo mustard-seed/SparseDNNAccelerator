@@ -47,7 +47,7 @@
 
 #define WEIGHT_SEED 1234
 #define INPUT_SEED   7653
-//#define PLAY
+#define PLAY
 #define EMULATE
 
 #if defined(C5SOC) //Hack for ARMv7, otherwise chrono won't work
@@ -1130,7 +1130,7 @@ void testFixture::launch (
                     TRUE,
                     instFlagSparseInput,
                     //flagInputSync
-                    0x0,
+                    TRUE,
                     //flagOutputSync
                     TRUE,
                     //instFlagRelu,
@@ -1215,7 +1215,7 @@ void testFixture::launch (
                     //instFlagSparseInput,
                     TRUE,
                     //flagInputSync
-                    TRUE,
+                    FALSE,
                     //flagOutputSync
                     0x0,
                     instFlagRelu,

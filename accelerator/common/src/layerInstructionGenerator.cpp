@@ -64,6 +64,8 @@ void instruction_generator(
 
         unsigned char flagSparseOutput,
         unsigned char flagSparseInput,
+        //Whether the IA mover kernel should wait for the output to commit before moving
+        //on to the next tensor
         unsigned char flagInputSync,
         unsigned char flagOutputSync,
         unsigned char flagRelu,
@@ -406,12 +408,13 @@ void instruction_generator(
                 /*! Send the input IA instruction */
                 {
                     t_ia_mover_instruction instructionIA;
-                    bool isFirstInputTile =
-                            ( iterInputGroup0 == 0)
-                            && (iterPTile == 0)
-                            && (iterQTile == 0);
+                    bool isLastInputTile =
+                            (op == CONVOLUTION || op == MAX_POOL)
+                            && ( iterInputGroup0 == (numIAMoverGroup0-1))
+                            && ((iterPTile+1) == numOutputTileY)
+                            && ((iterQTile+1) == numOutputTileX);
                     unsigned char actualFlagInputSync = (flagInputSync == 0x01) ?
-                                ((isFirstInputTile == true) ? 0x1 : 0x0)
+                                ((isLastInputTile == true) ? 0x1 : 0x0)
                                 : 0x0;
                     //Set the transport target. 0x0 means convolution, 0x1 means MISC
                     unsigned char flagTarget= (op == CONVOLUTION) ?  0x00 : 0x01;
@@ -546,9 +549,20 @@ void instruction_generator(
                     {
                         t_ia_mover_instruction instructionIA;
 
+                        bool isLastInputTile =
+                                    (op != CONVOLUTION)
+                                && (op != MAX_POOL)
+                                && ( iterInputGroup1 == (numIAMoverGroup1-1))
+                                && ((iterPTile+1) == numOutputTileY)
+                                && ((iterQTile+1) == numOutputTileX);
+
+                        unsigned char actualFlagInputSync = (flagInputSync == 0x01) ?
+                                    ((isLastInputTile == true) ? 0x1 : 0x0)
+                                    : 0x0;
+
                         instructionIA.memRegionCatSparseFlagCatDestinationCatSyncCatNumActiveCols = (t_uchar)
                                 ( ( ((t_uchar) numActiveCols)& 0x0F)
-                                 | ((((t_uchar) 0x0) & 0x01) << 0x04) //Not going to wait for sync
+                                 | ((((t_uchar) actualFlagInputSync) & 0x01) << 0x04)
                                  | ((((t_uchar) 0x01) & 0x01) << 0x05) //Compute engine is MISC
                                  | ((((t_uchar) 0x0) & 0x01) << 0x06) //Sparse flag for the input tensor. Will be dense
                                 );

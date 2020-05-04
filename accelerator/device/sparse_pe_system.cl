@@ -75,7 +75,7 @@ __kernel void kernelIAMover (
 		/*! Unpackethe concatenated fields of the instruction */
 		//Number of compute columns that are active in this transfer
 		unsigned char numActiveCols = inst.memRegionCatSparseFlagCatDestinationCatSyncCatNumActiveCols & 0x0F;
-		//Flag for waiting for synchornization flag from the output writer before performing transfers
+		//Flag for waiting for synchornization flag from the output writer AFTER performing transfers
 		t_flag syncWithOA = (inst.memRegionCatSparseFlagCatDestinationCatSyncCatNumActiveCols >> 0x04) & 0x01;
 		//Flag for the transfer destignatiion. 1 for MISC channel, 0 for CONV PE array.
 		t_flag destinationMisc = (inst.memRegionCatSparseFlagCatDestinationCatSyncCatNumActiveCols >> 0x05) & 0x01;
@@ -111,15 +111,6 @@ __kernel void kernelIAMover (
 			signed int offsetTBCountRow = 0;
 			signed int offsetTBCountCol = 0;
 		#endif
-
-		//Wait for the wait for the synchronous signal from the OA buffer
-		if (syncWithOA == TRUE)
-		{
-			EMULATOR_PRINT(("[kernelIAMover] SYNC: Waiting for transfer token from the OA mover. \n"));
-			unsigned char token = read_channel_intel(channel_activation_sync);
-			mem_fence(CLK_GLOBAL_MEM_FENCE | CLK_CHANNEL_MEM_FENCE);
-			EMULATOR_PRINT(("[kernelIAMover] SYNC: Received transfer token from the OA mover. \n"));
-		}
 
 		//iterate over all IA strips in tile
 		for (unsigned short iter=0; iter < inst.tileSPWidthxTileSPHeight; iter++)
@@ -289,6 +280,31 @@ __kernel void kernelIAMover (
 				}
 			}
 		} //for. iter
+
+		if (syncWithOA == TRUE)
+		{
+			EMULATOR_PRINT(("[kernelIAMover] SYNC: Waiting for transfer token from the OA mover. \n"));	
+		}
+		
+		//Wait for the wait for the synchronous signal from the OA buffer
+		t_flag wait = syncWithOA;
+
+		while (wait == TRUE)
+		{
+			bool readSuccess = false;
+			unsigned char token = read_channel_nb_intel(channel_activation_sync, &readSuccess);
+			if (readSuccess == true)
+			{
+				wait = FALSE;
+			}
+		}
+
+		if (syncWithOA == TRUE)
+		{
+			EMULATOR_PRINT(("[kernelIAMover] SYNC: Received transfer token from the OA mover. \n"));
+
+		}
+
 	} // for. iInst
 }
 
@@ -1276,11 +1292,11 @@ __kernel void kernelOAMover (
 			EMULATOR_PRINT(("[kernelOAMover] FINISHED a strip transfer.\n"));
 		} //for. strip inside the OA tile
 
+		mem_fence(CLK_GLOBAL_MEM_FENCE | CLK_CHANNEL_MEM_FENCE);
 		//Send the activation sync if needed
 		if (enableSendSync == TRUE)
 		{
 			EMULATOR_PRINT(("[kernelOAMover] SYNC: Waiting for send the transfer token. \n"));
-			mem_fence(CLK_GLOBAL_MEM_FENCE | CLK_CHANNEL_MEM_FENCE);
 			write_channel_intel(channel_activation_sync, 0x0);
 			EMULATOR_PRINT(("[kernelOAMover] SYNC: Sent the transfer token. \n"));
 		}
