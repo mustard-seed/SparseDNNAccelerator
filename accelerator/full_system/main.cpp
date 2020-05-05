@@ -47,7 +47,7 @@
 
 #define WEIGHT_SEED 1234
 #define INPUT_SEED   7653
-#define PLAY
+//#define PLAY
 #define EMULATE
 
 #if defined(C5SOC) //Hack for ARMv7, otherwise chrono won't work
@@ -453,42 +453,42 @@ TEST_F (testFixture, concat_sparse_output_grouped)
           );
 }
 
-//TEST_F (testFixture, back_to_back_identity_conv)
-//{
-//    unsigned char inputWidth = 4;
-//    unsigned char inputHeight = 4;
-//    unsigned char numInputChannel = 8;
-//    unsigned char numInputGroup = 1;
-//    unsigned char numOutputGroup = 1;
-//    unsigned char inputHeightSPUnitSize = 1;
-//    unsigned char inputWidthSPUnitSize = 1;
-//    unsigned char sizeOutputTileWidthPerColFull = 2;
-//    unsigned char sizeOutputTileHeight = 4;
-//    bool flagEnableRelu = false;
-//    bool flagSparseInput = false;
-//    bool flagSparseOutput = false;
-//    OPERATION op = CONVOLUTION;
-//    float bias = 0.0f;
-//    bool flag2Layer = true;
+TEST_F (testFixture, back_to_back_identity_conv)
+{
+    unsigned char inputWidth = 4;
+    unsigned char inputHeight = 4;
+    unsigned char numInputChannel = 8;
+    unsigned char numInputGroup = 1;
+    unsigned char numOutputGroup = 1;
+    unsigned char inputHeightSPUnitSize = 1;
+    unsigned char inputWidthSPUnitSize = 1;
+    unsigned char sizeOutputTileWidthPerColFull = 2;
+    unsigned char sizeOutputTileHeight = 4;
+    bool flagEnableRelu = false;
+    bool flagSparseInput = false;
+    bool flagSparseOutput = false;
+    OPERATION op = CONVOLUTION;
+    float bias = 0.0f;
+    bool flag2Layer = true;
 
-//    launch(
-//                inputWidth,
-//                inputHeight,
-//                numInputChannel,
-//                numInputGroup,
-//                numOutputGroup,
-//                inputHeightSPUnitSize,
-//                inputWidthSPUnitSize,
-//                sizeOutputTileWidthPerColFull,
-//                sizeOutputTileHeight,
-//                flagEnableRelu,
-//                flagSparseInput,
-//                flagSparseOutput,
-//                op,
-//                bias,
-//                flag2Layer
-//          );
-//}
+    launch(
+                inputWidth,
+                inputHeight,
+                numInputChannel,
+                numInputGroup,
+                numOutputGroup,
+                inputHeightSPUnitSize,
+                inputWidthSPUnitSize,
+                sizeOutputTileWidthPerColFull,
+                sizeOutputTileHeight,
+                flagEnableRelu,
+                flagSparseInput,
+                flagSparseOutput,
+                op,
+                bias,
+                flag2Layer
+          );
+}
 #endif  //PLAY
 
 int main(int argc, char* argv[]) {
@@ -1217,7 +1217,7 @@ void testFixture::launch (
                     //flagInputSync
                     FALSE,
                     //flagOutputSync
-                    0x0,
+                    FALSE,
                     instFlagRelu,
                     instOutputShiftBits,
                     instOutputShiftLeft,

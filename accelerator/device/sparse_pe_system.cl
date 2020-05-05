@@ -1222,18 +1222,22 @@ __kernel void kernelOAMover (
 				unsigned short clusterCount = 0;
 				while (proceed)
 				{
-					t_output_dram_block_tagged receivedBlock = read_channel_intel(channel_output_wide[0]);
-					if ((receivedBlock.isLastFlag & 0x1) == TRUE)
+					bool readSuccess = false;
+					t_output_dram_block_tagged receivedBlock = read_channel_nb_intel(channel_output_wide[0], &readSuccess);
+					if (readSuccess == true)
 					{
-						proceed = false;
-					}
-						clusterCount = outputDramBlock2ClusterCount(receivedBlock.block);
-					
-					//When output sparsification is disabled, no TB count is transferred
-					if (((receivedBlock.isLastFlag & 0x1) == FALSE) || (enableSparsification == FALSE))
-					{
-						//Store the dram block
-						pOA[addrOA++] = receivedBlock.block;
+						if ((receivedBlock.isLastFlag & 0x1) == TRUE)
+						{
+							proceed = false;
+						}
+							clusterCount = outputDramBlock2ClusterCount(receivedBlock.block);
+						
+						//When output sparsification is disabled, no TB count is transferred
+						if (((receivedBlock.isLastFlag & 0x1) == FALSE) || (enableSparsification == FALSE))
+						{
+							//Store the dram block
+							pOA[addrOA++] = receivedBlock.block;
+						}
 					}
 				} //while
 
@@ -1245,10 +1249,15 @@ __kernel void kernelOAMover (
 					pTBCount[addrTB++] = tbBlockCount;
 				}
 			#else
-				for (unsigned int i=0; i<inst.numDramBlockPerStrip; i++)
+				for (unsigned int i=0; i<inst.numDramBlockPerStrip;)
 				{
-					t_output_dram_block_tagged receivedBlock = read_channel_intel(channel_output_wide[0]);
-					pOA[addrOA++] = receivedBlock.block;
+					bool readSuccess = false;
+					t_output_dram_block_tagged receivedBlock = read_channel_nb_intel(channel_output_wide[0], &readSuccess);
+					if (readSuccess == true)
+					{
+						pOA[addrOA++] = receivedBlock.block;
+						i++;
+					}
 				}
 			#endif
 
@@ -1294,9 +1303,20 @@ __kernel void kernelOAMover (
 
 		mem_fence(CLK_GLOBAL_MEM_FENCE | CLK_CHANNEL_MEM_FENCE);
 		//Send the activation sync if needed
+
+		// t_flag keepSending = enableSendSync;
+		// while (keepSending == TRUE)
+		// {
+		// 	bool sendSuccess = false;
+		// 	sendSuccess = write_channel_nb_intel(channel_activation_sync, 0x0);
+		// 	if (sendSuccess == true)
+		// 	{
+		// 		keepSending = FALSE;
+		// 		DEBUG_PRINT(("[kernelOAMover] SYNC: Sent the transfer token. \n"));
+		// 	}
+		// }
 		if (enableSendSync == TRUE)
 		{
-			DEBUG_PRINT(("[kernelOAMover] SYNC: Waiting for send the transfer token. \n"));
 			write_channel_intel(channel_activation_sync, 0x0);
 			DEBUG_PRINT(("[kernelOAMover] SYNC: Sent the transfer token. \n"));
 		}

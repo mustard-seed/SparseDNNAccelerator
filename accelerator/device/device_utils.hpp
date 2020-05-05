@@ -2,7 +2,7 @@
 #define DEVICE_UTILS_HPP
 #include "device_structures.hpp"
 #define EMUPRINT
-#define HW_DEBUG
+//#define HW_DEBUG
 /*
 printf enabled during SW emulation
 */
