@@ -283,12 +283,16 @@ __kernel void kernelIAMover (
 
 		if (syncWithOA == TRUE)
 		{
-			EMULATOR_PRINT(("[kernelIAMover] SYNC: Waiting for transfer token from the OA mover. \n"));	
+			DEBUG_PRINT(("[kernelIAMover] SYNC: Waiting for transfer token from the OA mover. \n"));	
 		}
+
+		//Gotcha: Need mem_fence here
+		mem_fence(CLK_CHANNEL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
 		
 		//Wait for the wait for the synchronous signal from the OA buffer
 		t_flag wait = syncWithOA;
 
+		//Gotcha: use non-blocking read
 		while (wait == TRUE)
 		{
 			bool readSuccess = false;
@@ -296,14 +300,10 @@ __kernel void kernelIAMover (
 			if (readSuccess == true)
 			{
 				wait = FALSE;
+				DEBUG_PRINT(("[kernelIAMover] SYNC: Received transfer token from the OA mover. \n"));
 			}
 		}
 
-		if (syncWithOA == TRUE)
-		{
-			EMULATOR_PRINT(("[kernelIAMover] SYNC: Received transfer token from the OA mover. \n"));
-
-		}
 
 	} // for. iInst
 }
@@ -1296,9 +1296,9 @@ __kernel void kernelOAMover (
 		//Send the activation sync if needed
 		if (enableSendSync == TRUE)
 		{
-			EMULATOR_PRINT(("[kernelOAMover] SYNC: Waiting for send the transfer token. \n"));
+			DEBUG_PRINT(("[kernelOAMover] SYNC: Waiting for send the transfer token. \n"));
 			write_channel_intel(channel_activation_sync, 0x0);
-			EMULATOR_PRINT(("[kernelOAMover] SYNC: Sent the transfer token. \n"));
+			DEBUG_PRINT(("[kernelOAMover] SYNC: Sent the transfer token. \n"));
 		}
 	} //for. over instruction
 } //kernelOAMover

@@ -2,7 +2,7 @@
 #define DEVICE_UTILS_HPP
 #include "device_structures.hpp"
 #define EMUPRINT
-//#define HW_DEBUG
+#define HW_DEBUG
 /*
 printf enabled during SW emulation
 */
@@ -16,6 +16,8 @@ printf enabled during SW emulation
 printf enabled on HW if -HW_DEBUG flag is set
 */
 #if defined(HW_DEBUG) && defined(EMUPRINT)
+	#define DEBUG_PRINT(format) printf format
+#elif defined (EMULATOR) && defined(EMUPRINT)
 	#define DEBUG_PRINT(format) printf format
 #else
 	#define DEBUG_PRINT(format)
