@@ -574,9 +574,6 @@ __kernel void kernelIABuffer ()
 						"iaDramBlockAddressBase=%#010x, "
 						"iaDramBlockColStride=%#010x, "
 						"iaDramBlockRowStride=%#010x, "
-						"tbAddressBase=%#010x, "
-						"tbAddressRowStride=%#010x, "
-						"flagPadBitmask=%#03x, "
 						"numStripsRow=%d, "
 						"numStripsCol=%d, "
 						"maxPeRowID=%d\n\n",
@@ -585,9 +582,6 @@ __kernel void kernelIABuffer ()
 						iaDramBlockAddressBase,
 						iaDramBlockColStride,
 						iaDramBlockRowStride,
-						tbAddressBase,
-						tbAddressRowStride,
-						(unsigned int)flagPadBitmask,
 						(unsigned int)numStripsRow,
 						(unsigned int)numStripsCol,
 						maxPeRowID));
@@ -859,9 +853,16 @@ __kernel void kernelIATileController (
 			*/
 			//if (success)
 			//{
+			#if defined(SPARSE_SYSTEM)
 				EMULATOR_PRINT(("[kernelIATileController] Sent a buffer stream command. "
 				"iInstruction=%d, numActivePeRows=%d, iInputTileHeight=%d, iInputTileWidth=%d. flagPadBitmask=%#03x\n\n", 
 				iInstruction, numActivePeRows, iInputTileHeight, iInputTileWidth, ((unsigned char) flagPadBitmask)));
+			#else
+				EMULATOR_PRINT(("[kernelIATileController] Sent a buffer stream command. "
+				"iInstruction=%d, numActivePeRows=%d, iInputTileHeight=%d, iInputTileWidth=%d.\n\n", 
+				iInstruction, numActivePeRows, iInputTileHeight, iInputTileWidth));
+			#endif
+				
 
 				if ((iInputTileWidth + kernelSize) >= inputTileWidth)
 				{
@@ -3603,7 +3604,7 @@ __kernel void kernelOperandFilter ()
 			#else
 				nextNumActivationClusterLeft = tempNumClusterLeft
 			#endif
-				
+
 			peAccumulateBitmask(&regActivationAccumulatedBitMaskBytes, &nextActivationBitmaskBytes);
 
 			nextActivationWindowIndex = 0x0;
