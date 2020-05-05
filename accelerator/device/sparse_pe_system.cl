@@ -3145,7 +3145,7 @@ typedef uint2_t t_drain_instruction;
 			currentStartIndex//unsigned char startIndex
 			);
 	
-		#if defined(ARRIA10)
+		#if defined(ARRIA10) || defined(STRATIX10)
 			unsigned short tempRegMaskFilterOutput = __fpga_reg(maskFilterOutput);
 		#else
 			unsigned short tempRegMaskFilterOutput = maskFilterOutput;
@@ -3510,7 +3510,13 @@ __kernel void kernelOperandFilter ()
 		else if (weightFilterInstruction == OPERAND_FILTER_ACCEPT_MASK)
 		{
 			convertTransferBlock2PEBitmask(&nextWeightBitmaskBytes, &weightBlock);
-			nextNumWeightClusterLeft = pePopCounter(&nextWeightBitmaskBytes);
+			//TODO: Try registering the output of pePopCounter
+			unsigned char tempNumClusterLeft = pePopCounter(&nextWeightBitmaskBytes);
+			#if defined(ARRIA10) || defined(STRATIX10)
+				nextNumWeightClusterLeft = __fpga_reg(tempNumClusterLeft);
+			#else
+				nextNumWeightClusterLeft = tempNumClusterLeft
+			#endif
 			peAccumulateBitmask(&regWeightAccumulatedBitMaskBytes, &nextWeightBitmaskBytes);
 
 			nextWeightWindowIndex = 0x0;
@@ -3590,7 +3596,14 @@ __kernel void kernelOperandFilter ()
 		{
 
 			convertTransferBlock2PEBitmask(&nextActivationBitmaskBytes, &activationBlock);
-			nextNumActivationClusterLeft = pePopCounter(&nextActivationBitmaskBytes);
+			//TODO: Try registering the output of pePopCounter
+			unsigned char tempNumClusterLeft = pePopCounter(&nextActivationBitmaskBytes);
+			#if defined(ARRIA10) || defined(STRATIX10)
+				nextNumActivationClusterLeft = __fpga_reg(tempNumClusterLeft);
+			#else
+				nextNumActivationClusterLeft = tempNumClusterLeft
+			#endif
+				
 			peAccumulateBitmask(&regActivationAccumulatedBitMaskBytes, &nextActivationBitmaskBytes);
 
 			nextActivationWindowIndex = 0x0;
