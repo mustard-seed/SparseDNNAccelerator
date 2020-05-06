@@ -970,7 +970,11 @@ __kernel void kernelIATee ()
 					}
 
 					//Adjust the col index seen by the next compute column
-					taggedBlock.dramBlock.transferBlocks[1].values[0] = actualColIndex - ((signed char) colSPStride);
+					#if (WIDE_SIZE > 1)
+						taggedBlock.dramBlock.transferBlocks[1].values[0] = actualColIndex - ((signed char) colSPStride);
+					#else
+						taggedBlock.dramBlock.transferBlocks[0].values[4] = actualColIndex - ((signed char) colSPStride);
+					#endif
 
 					EMULATOR_PRINT(("[kernelIATee %d] Detected a strip head. "
 						"actualColIndex=%d, colSPStride=%d, colSPWidth=%d, nextFlagRoute2Misc=%#03x. nextFlagRoute2Conv=%#03x\n", 

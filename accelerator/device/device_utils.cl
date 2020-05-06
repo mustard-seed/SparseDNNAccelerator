@@ -243,7 +243,11 @@ t_dram_block iaMetadata2DramBlock (unsigned short tbCount, unsigned char colSPWi
     dramBlock.transferBlocks[0].values[1] = (signed char) ((tbCount >> 8) & 0x0FF);
     dramBlock.transferBlocks[0].values[2] = (signed char) colSPWidth;
     dramBlock.transferBlocks[0].values[3] = (signed char) colSPStride;
+#if (WIDE_SIZE >= 2)
     dramBlock.transferBlocks[1].values[0] = (signed char) iColInSPTile;
+#else
+    dramBlock.transferBlocks[0].values[4] = (signed char) iColInSPTile;
+#endif
 
     return dramBlock;
 }
@@ -272,7 +276,12 @@ unsigned short getTBCount(t_dram_block block)
 
 signed char getColSPIndex(t_dram_block block)
 {
+#if (WIDE_SIZE >= 2)
     return block.transferBlocks[1].values[0];
+#else
+    return block.transferBlocks[0].values[4];
+#endif
+    
 }
 
 t_output_dram_block clusterCount2OutputDramBlock (unsigned short clusterCount)
