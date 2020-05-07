@@ -136,13 +136,12 @@ protected:
                 unsigned char _numGroupCurrentLayer
             );
 
-    std::vector<fixedPointNumber> generateSparseInput (
-                unsigned char _inputWidth,
+    std::vector<fixedPointNumber> generateSparseInput (unsigned char _inputWidth,
                 unsigned char _inputHeight,
                 unsigned char _numInputChannel,
                 unsigned char _numGroupCurrentLayer,
                 float denseProb = 1.0f
-            );
+                , int channelPruneScale = CLUSTER_SIZE);
 
     /*!
      * \brief generateWeights
@@ -161,12 +160,11 @@ protected:
             );
 
 
-    std::vector<fixedPointNumber> generateSparseWeights (
-                unsigned char _kernelSize,
+    std::vector<fixedPointNumber> generateSparseWeights (unsigned char _kernelSize,
                 unsigned char _numInputChannel,
                 unsigned char _numGroups,
                 float denseProb = 1.0f
-            );
+            , int channelPruneScale = CLUSTER_SIZE);
 
     void launch (unsigned char _inputWidth,
             unsigned char _inputHeight,
@@ -185,15 +183,16 @@ protected:
             , bool flagMultiLayerConv = false
             , bool _flagPerformanceTest = false
             , float denseProb = 1
+            , int pruneScale = CLUSTER_SIZE
             );
 }; //testFixture
 
 #ifdef PLAY
 TEST_F (testFixture, play) {
 
-    unsigned char inputWidth = 4;
-    unsigned char inputHeight = 4;
-    unsigned char numInputChannel = 8;
+    unsigned char inputWidth = 8;
+    unsigned char inputHeight = 8;
+    unsigned char numInputChannel = 64;
     unsigned char numInputGroup = 1;
     unsigned char numOutputGroup = 1;
     unsigned char inputHeightSPUnitSize = 1;
@@ -202,10 +201,9 @@ TEST_F (testFixture, play) {
     unsigned char sizeOutputTileHeight = 4;
     bool flagEnableRelu = false;
     bool flagSparseInput = false;
-    bool flagSparseOutput = false;
-    OPERATION op = CONVOLUTION;
+    bool flagSparseOutput = true;
+    OPERATION op = CONCATENATION;
     float bias = 0.0f;
-    bool flag2Layer = true;
 
     launch(
                 inputWidth,
@@ -221,16 +219,16 @@ TEST_F (testFixture, play) {
                 flagSparseInput,
                 flagSparseOutput,
                 op,
-                bias,
-                flag2Layer
+                bias
           );
 }
 #else
-TEST_F (testFixture, perf_test_conv_sparse_127x127x3x3x32x32)
+#if defined(PERF_TEST)
+TEST_F (testFixture, perf_test_conv_sparse_128x128x3x3x32x32)
 {
     unsigned char inputWidth = 32;
     unsigned char inputHeight = 32;
-    unsigned char numInputChannel = 127;
+    unsigned char numInputChannel = 128;
     unsigned char numInputGroup = 1;
     unsigned char numOutputGroup = 1;
     unsigned char inputHeightSPUnitSize = 1;
@@ -244,35 +242,40 @@ TEST_F (testFixture, perf_test_conv_sparse_127x127x3x3x32x32)
     OPERATION op = CONVOLUTION;
     float bias = 0.0f;
     std::vector<float> vecDenseProb = {1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.0};
-    for (auto & prob : vecDenseProb)
+    std::vector<int> vecPruneScale = {1, CLUSTER_SIZE};
+    for (auto& pruneScale: vecPruneScale)
     {
-        launch(
-                    inputWidth,
-                    inputHeight,
-                    numInputChannel,
-                    numInputGroup,
-                    numOutputGroup,
-                    inputHeightSPUnitSize,
-                    inputWidthSPUnitSize,
-                    sizeOutputTileWidthPerColFull,
-                    sizeOutputTileHeight,
-                    flagEnableRelu,
-                    flagSparseInput,
-                    flagSparseOutput,
-                    op,
-                    bias,
-                    false, //back to back
-                    true, //perf test
-                    prob //dense prob
-              );
-    }
+        for (auto & prob : vecDenseProb)
+        {
+            launch(
+                        inputWidth,
+                        inputHeight,
+                        numInputChannel,
+                        numInputGroup,
+                        numOutputGroup,
+                        inputHeightSPUnitSize,
+                        inputWidthSPUnitSize,
+                        sizeOutputTileWidthPerColFull,
+                        sizeOutputTileHeight,
+                        flagEnableRelu,
+                        flagSparseInput,
+                        flagSparseOutput,
+                        op,
+                        bias,
+                        false, //back to back
+                        true, //perf test
+                        prob, //dense prob
+                        pruneScale //channel prune scale
+                  );
+        }
+     }
 }
 
-TEST_F (testFixture, perf_test_max_pool_sparse_127x32x32)
+TEST_F (testFixture, perf_test_max_pool_sparse_128x32x32)
 {
     unsigned char inputWidth = 32;
     unsigned char inputHeight = 32;
-    unsigned char numInputChannel = 127;
+    unsigned char numInputChannel = 128;
     unsigned char numInputGroup = 1;
     unsigned char numOutputGroup = 1;
     unsigned char inputHeightSPUnitSize = 1;
@@ -285,7 +288,8 @@ TEST_F (testFixture, perf_test_max_pool_sparse_127x32x32)
     bool flagSparseOutput = true;
     OPERATION op = MAX_POOL;
     float bias = 0.0f;
-    std::vector<float> vecDenseProb = {1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.0};
+    int channelPruneScale = 1;
+    std::vector<float> vecDenseProb = {1.0, 0.0};
     for (auto & prob : vecDenseProb)
     {
         launch(
@@ -305,16 +309,17 @@ TEST_F (testFixture, perf_test_max_pool_sparse_127x32x32)
                     bias,
                     false, //back to back
                     true, //perf test
-                    prob //dense prob
+                    prob, //dense prob
+                    channelPruneScale
               );
     }
 }
 
-TEST_F (testFixture, perf_test_elt_add_sparse_127x32x32)
+TEST_F (testFixture, perf_test_elt_add_sparse_128x32x32)
 {
     unsigned char inputWidth = 32;
     unsigned char inputHeight = 32;
-    unsigned char numInputChannel = 127;
+    unsigned char numInputChannel = 128;
     unsigned char numInputGroup = 1;
     unsigned char numOutputGroup = 1;
     unsigned char inputHeightSPUnitSize = 1;
@@ -327,7 +332,8 @@ TEST_F (testFixture, perf_test_elt_add_sparse_127x32x32)
     bool flagSparseOutput = true;
     OPERATION op = ELT_ADD;
     float bias = 0.0f;
-    std::vector<float> vecDenseProb = {1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.0};
+    int channelPruneScale = 1;
+    std::vector<float> vecDenseProb = {1.0, 0.0};
     for (auto & prob : vecDenseProb)
     {
         launch(
@@ -347,11 +353,55 @@ TEST_F (testFixture, perf_test_elt_add_sparse_127x32x32)
                     bias,
                     false, //back to back
                     true, //perf test
-                    prob //dense prob
+                    prob, //dense prob
+                    channelPruneScale
               );
     }
 }
-#if defined(PERF_TEST)
+
+TEST_F (testFixture, perf_test_concat_sparse_64x32x32)
+{
+    unsigned char inputWidth = 32;
+    unsigned char inputHeight = 32;
+    unsigned char numInputChannel = 64;
+    unsigned char numInputGroup = 1;
+    unsigned char numOutputGroup = 1;
+    unsigned char inputHeightSPUnitSize = 1;
+    unsigned char inputWidthSPUnitSize = 1;
+    unsigned char sizeOutputTileWidthPerColFull = ((inputWidth / PE_COLS) > 8) ?
+                (inputWidth / PE_COLS) > 8 : 8;
+    unsigned char sizeOutputTileHeight = 8;
+    bool flagEnableRelu = false;
+    bool flagSparseInput = false;
+    bool flagSparseOutput = true;
+    OPERATION op = CONCATENATION;
+    float bias = 0.0f;
+    int channelPruneScale = 1;
+    std::vector<float> vecDenseProb = {1.0, 0.0};
+    for (auto & prob : vecDenseProb)
+    {
+        launch(
+                    inputWidth,
+                    inputHeight,
+                    numInputChannel,
+                    numInputGroup,
+                    numOutputGroup,
+                    inputHeightSPUnitSize,
+                    inputWidthSPUnitSize,
+                    sizeOutputTileWidthPerColFull,
+                    sizeOutputTileHeight,
+                    flagEnableRelu,
+                    flagSparseInput,
+                    flagSparseOutput,
+                    op,
+                    bias,
+                    false, //back to back
+                    true, //perf test
+                    prob, //dense prob
+                    channelPruneScale
+              );
+    }
+}
 #else //PERF_TEST
 TEST_F (testFixture, conv_dense_input_dense_output_plain)
 {
@@ -846,7 +896,8 @@ std::vector<fixedPointNumber> testFixture::generateSparseInput(
             unsigned char _inputHeight,
             unsigned char _numInputChannel,
             unsigned char _numGroupCurrentLayer,
-            float denseProb
+            float denseProb,
+            int channelPruneScale
         )
 {
      std::mt19937 generator(INPUT_SEED);
@@ -861,10 +912,15 @@ std::vector<fixedPointNumber> testFixture::generateSparseInput(
          {
              for (unsigned char w=0; w<_inputWidth; w++)
              {
+                 bool flagNonZero = false;
                  for (unsigned char c=0; c<numICPerGroup; c++)
                  {
+                     if (((int) c) % channelPruneScale == 0)
+                     {
+                         flagNonZero = bernDistribution(generator);
+                     }
                      signed char fpBits = (writePositive) ? 1 : -1;
-                     if (bernDistribution(generator) == false)
+                     if (flagNonZero == false)
                      {
                          fpBits = 0;
                      }
@@ -923,7 +979,8 @@ std::vector<fixedPointNumber> testFixture::generateSparseWeights (
         unsigned char _kernelSize,
         unsigned char _numInputChannel,
         unsigned char _numGroups,
-        float denseProb
+        float denseProb,
+        int channelPruneScale
         )
 {
     assert(_kernelSize % 2 == 1);
@@ -943,10 +1000,15 @@ std::vector<fixedPointNumber> testFixture::generateSparseWeights (
             {
                 for (unsigned char iW=0; iW<_kernelSize; iW++)
                 {
+                    bool flagNonZero = false;
                     for (unsigned char iC=0; iC<numICPerGroup; iC++)
                     {
+                        if (((int) iC) % channelPruneScale == 0)
+                        {
+                            flagNonZero = bernDistribution(generator);
+                        }
                         signed char fpBits = (writePositive) ? 1 : -1;
-                        if (bernDistribution(generator) == false)
+                        if (flagNonZero == false)
                         {
                             fpBits = 0;
                         }
@@ -982,14 +1044,15 @@ void testFixture::launch (
         float _bias, //Only matter for convolution
         bool flagMultiLayerConv,
         bool _flagPerformanceTest,
-        float denseProb
+        float denseProb,
+        int pruneScale
         )
 {
     //Checking the parameters' consistency AND
     //Derive parameters
     assert(_inputHeight % 2 == 0);
     assert(_inputWidth % 2 == 0);
-    assert(_numInputChannel <= 127);
+    //assert(_numInputChannel <= 127);
 
     cl_uchar kernelSize;
     cl_uchar stride;
@@ -1117,7 +1180,7 @@ void testFixture::launch (
     if (_flagPerformanceTest == true)
     {
         std::cout <<"This is a performance test"<<std::endl
-                  <<"Density: "<<denseProb<<std::endl;
+                  <<"Density, prune scale: "<<denseProb<<" "<<pruneScale<<std::endl;
     }
     std::cout <<"Input SP dimensions (H, W):  "<<(unsigned int) inputHeightSPSize<<" "<<(unsigned int) inputWidthSPSize<<std::endl
               <<"PE dimension (H, W): "<<PE_ROWS<<" "<<PE_COLS<<std::endl
@@ -1132,7 +1195,7 @@ void testFixture::launch (
     std::vector<fixedPointNumber> inputTensorDense;
     if (_flagPerformanceTest == true)
     {
-       inputTensorDense = generateSparseInput(_inputWidth, _inputHeight, _numInputChannel, numGroupCurrentLayer, denseProb);
+       inputTensorDense = generateSparseInput(_inputWidth, _inputHeight, _numInputChannel, numGroupCurrentLayer, denseProb, pruneScale);
     }
     else
     {
@@ -1144,7 +1207,7 @@ void testFixture::launch (
     {
         if (_flagPerformanceTest == true)
         {
-            inputWeightDense = generateSparseWeights((unsigned char) kernelSize, _numInputChannel, numGroupCurrentLayer, denseProb);
+            inputWeightDense = generateSparseWeights((unsigned char) kernelSize, _numInputChannel, numGroupCurrentLayer, denseProb, pruneScale);
         }
         else
         {
