@@ -49,6 +49,7 @@
 #define INPUT_SEED   7653
 //#define PLAY
 #define EMULATE
+#define PERF_TEST
 
 #if defined(C5SOC) //Hack for ARMv7, otherwise chrono won't work
 __asm__(".symver _ZNSt6chrono3_V212system_clock3nowEv,_ZNSt6chrono12system_clock3nowEv@GLIBCXX_3.4.11");
@@ -135,6 +136,14 @@ protected:
                 unsigned char _numGroupCurrentLayer
             );
 
+    std::vector<fixedPointNumber> generateSparseInput (
+                unsigned char _inputWidth,
+                unsigned char _inputHeight,
+                unsigned char _numInputChannel,
+                unsigned char _numGroupCurrentLayer,
+                float denseProb = 1.0f
+            );
+
     /*!
      * \brief generateWeights
      * \details Generate a tensor of weights, following the Filter * OC * W * H * IC layout.
@@ -152,6 +161,13 @@ protected:
             );
 
 
+    std::vector<fixedPointNumber> generateSparseWeights (
+                unsigned char _kernelSize,
+                unsigned char _numInputChannel,
+                unsigned char _numGroups,
+                float denseProb = 1.0f
+            );
+
     void launch (unsigned char _inputWidth,
             unsigned char _inputHeight,
             unsigned char _numInputChannel,
@@ -166,8 +182,10 @@ protected:
             bool _flagSparseOutput,
             OPERATION op,
             float _bias = 0.0f //Only matter for convolution
-            ,bool flagMultiLayerConv = false
-          );
+            , bool flagMultiLayerConv = false
+            , bool _flagPerformanceTest = false
+            , float denseProb = 1
+            );
 }; //testFixture
 
 #ifdef PLAY
@@ -208,6 +226,133 @@ TEST_F (testFixture, play) {
           );
 }
 #else
+TEST_F (testFixture, perf_test_conv_sparse_127x127x3x3x32x32)
+{
+    unsigned char inputWidth = 32;
+    unsigned char inputHeight = 32;
+    unsigned char numInputChannel = 127;
+    unsigned char numInputGroup = 1;
+    unsigned char numOutputGroup = 1;
+    unsigned char inputHeightSPUnitSize = 1;
+    unsigned char inputWidthSPUnitSize = 1;
+    unsigned char sizeOutputTileWidthPerColFull = ((inputWidth / PE_COLS) > 8) ?
+                (inputWidth / PE_COLS) > 8 : 8;
+    unsigned char sizeOutputTileHeight = 8;
+    bool flagEnableRelu = false;
+    bool flagSparseInput = true;
+    bool flagSparseOutput = true;
+    OPERATION op = CONVOLUTION;
+    float bias = 0.0f;
+    std::vector<float> vecDenseProb = {1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.0};
+    for (auto & prob : vecDenseProb)
+    {
+        launch(
+                    inputWidth,
+                    inputHeight,
+                    numInputChannel,
+                    numInputGroup,
+                    numOutputGroup,
+                    inputHeightSPUnitSize,
+                    inputWidthSPUnitSize,
+                    sizeOutputTileWidthPerColFull,
+                    sizeOutputTileHeight,
+                    flagEnableRelu,
+                    flagSparseInput,
+                    flagSparseOutput,
+                    op,
+                    bias,
+                    false, //back to back
+                    true, //perf test
+                    prob //dense prob
+              );
+    }
+}
+
+TEST_F (testFixture, perf_test_max_pool_sparse_127x32x32)
+{
+    unsigned char inputWidth = 32;
+    unsigned char inputHeight = 32;
+    unsigned char numInputChannel = 127;
+    unsigned char numInputGroup = 1;
+    unsigned char numOutputGroup = 1;
+    unsigned char inputHeightSPUnitSize = 1;
+    unsigned char inputWidthSPUnitSize = 1;
+    unsigned char sizeOutputTileWidthPerColFull = ((inputWidth / PE_COLS) > 8) ?
+                (inputWidth / PE_COLS) > 8 : 8;
+    unsigned char sizeOutputTileHeight = 8;
+    bool flagEnableRelu = false;
+    bool flagSparseInput = false;
+    bool flagSparseOutput = true;
+    OPERATION op = MAX_POOL;
+    float bias = 0.0f;
+    std::vector<float> vecDenseProb = {1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.0};
+    for (auto & prob : vecDenseProb)
+    {
+        launch(
+                    inputWidth,
+                    inputHeight,
+                    numInputChannel,
+                    numInputGroup,
+                    numOutputGroup,
+                    inputHeightSPUnitSize,
+                    inputWidthSPUnitSize,
+                    sizeOutputTileWidthPerColFull,
+                    sizeOutputTileHeight,
+                    flagEnableRelu,
+                    flagSparseInput,
+                    flagSparseOutput,
+                    op,
+                    bias,
+                    false, //back to back
+                    true, //perf test
+                    prob //dense prob
+              );
+    }
+}
+
+TEST_F (testFixture, perf_test_elt_add_sparse_127x32x32)
+{
+    unsigned char inputWidth = 32;
+    unsigned char inputHeight = 32;
+    unsigned char numInputChannel = 127;
+    unsigned char numInputGroup = 1;
+    unsigned char numOutputGroup = 1;
+    unsigned char inputHeightSPUnitSize = 1;
+    unsigned char inputWidthSPUnitSize = 1;
+    unsigned char sizeOutputTileWidthPerColFull = ((inputWidth / PE_COLS) > 8) ?
+                (inputWidth / PE_COLS) > 8 : 8;
+    unsigned char sizeOutputTileHeight = 8;
+    bool flagEnableRelu = false;
+    bool flagSparseInput = false;
+    bool flagSparseOutput = true;
+    OPERATION op = ELT_ADD;
+    float bias = 0.0f;
+    std::vector<float> vecDenseProb = {1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.0};
+    for (auto & prob : vecDenseProb)
+    {
+        launch(
+                    inputWidth,
+                    inputHeight,
+                    numInputChannel,
+                    numInputGroup,
+                    numOutputGroup,
+                    inputHeightSPUnitSize,
+                    inputWidthSPUnitSize,
+                    sizeOutputTileWidthPerColFull,
+                    sizeOutputTileHeight,
+                    flagEnableRelu,
+                    flagSparseInput,
+                    flagSparseOutput,
+                    op,
+                    bias,
+                    false, //back to back
+                    true, //perf test
+                    prob //dense prob
+              );
+    }
+}
+#if defined(PERF_TEST)
+#else //PERF_TEST
 TEST_F (testFixture, conv_dense_input_dense_output_plain)
 {
     unsigned char inputWidth = 4;
@@ -489,6 +634,7 @@ TEST_F (testFixture, back_to_back_identity_conv)
                 flag2Layer
           );
 }
+#endif //PERF_TEST
 #endif  //PLAY
 
 int main(int argc, char* argv[]) {
@@ -695,6 +841,47 @@ std::vector<fixedPointNumber> testFixture::generateInputTensor (
     return inputFPVector;
 }
 
+std::vector<fixedPointNumber> testFixture::generateSparseInput(
+            unsigned char _inputWidth,
+            unsigned char _inputHeight,
+            unsigned char _numInputChannel,
+            unsigned char _numGroupCurrentLayer,
+            float denseProb
+        )
+{
+     std::mt19937 generator(INPUT_SEED);
+     std::bernoulli_distribution bernDistribution(denseProb);
+     assert(_numInputChannel % _numGroupCurrentLayer == 0);
+     unsigned char numICPerGroup = _numInputChannel / _numGroupCurrentLayer;
+     std::vector<fixedPointNumber> inputFPVector;
+     bool writePositive = true;
+     for (unsigned char g=0; g<_numGroupCurrentLayer;g++)
+     {
+         for (unsigned char h=0; h<_inputHeight; h++)
+         {
+             for (unsigned char w=0; w<_inputWidth; w++)
+             {
+                 for (unsigned char c=0; c<numICPerGroup; c++)
+                 {
+                     signed char fpBits = (writePositive) ? 1 : -1;
+                     if (bernDistribution(generator) == false)
+                     {
+                         fpBits = 0;
+                     }
+                     else
+                     {
+                         writePositive = !writePositive;
+                     }
+                     fixedPointNumber fpNumber(fpBits, FRAC_WIDTH, INT_WIDTH);
+                     inputFPVector.push_back(fpNumber);
+                 }
+             }
+         }
+     }
+
+     return inputFPVector;
+}
+
 std::vector<fixedPointNumber> testFixture::generateWeights (
         unsigned char _kernelSize,
         unsigned char _numInputChannel,
@@ -732,6 +919,52 @@ std::vector<fixedPointNumber> testFixture::generateWeights (
     return fpWeightTensor;
 }
 
+std::vector<fixedPointNumber> testFixture::generateSparseWeights (
+        unsigned char _kernelSize,
+        unsigned char _numInputChannel,
+        unsigned char _numGroups,
+        float denseProb
+        )
+{
+    assert(_kernelSize % 2 == 1);
+    assert(_numInputChannel % _numGroups == 0);
+    std::vector<fixedPointNumber> fpWeightTensor;
+    unsigned char numICPerGroup = _numInputChannel / _numGroups;
+
+    std::mt19937 generator(WEIGHT_SEED);
+    std::bernoulli_distribution bernDistribution(denseProb);
+    bool writePositive = true;
+    for (unsigned char g=0; g<_numGroups; g++)
+    {
+        //Number of OC per group equals to the number of IC per group
+        for (unsigned char iFilter=0; iFilter<numICPerGroup; iFilter++)
+        {
+            for (unsigned char iH=0; iH<_kernelSize; iH++)
+            {
+                for (unsigned char iW=0; iW<_kernelSize; iW++)
+                {
+                    for (unsigned char iC=0; iC<numICPerGroup; iC++)
+                    {
+                        signed char fpBits = (writePositive) ? 1 : -1;
+                        if (bernDistribution(generator) == false)
+                        {
+                            fpBits = 0;
+                        }
+                        else
+                        {
+                            writePositive = !writePositive;
+                        }
+                        fixedPointNumber fpNumber(fpBits, FRAC_WIDTH, INT_WIDTH);
+                        fpWeightTensor.push_back(fpNumber);
+                    }
+                }
+            }
+        }
+    }
+
+    return fpWeightTensor;
+}
+
 void testFixture::launch (
         unsigned char _inputWidth,
         unsigned char _inputHeight,
@@ -747,7 +980,9 @@ void testFixture::launch (
         bool _flagSparseOutput, //The code will override this to FALSE if the accelerator only supports dense format.
         OPERATION op,
         float _bias, //Only matter for convolution
-        bool flagMultiLayerConv
+        bool flagMultiLayerConv,
+        bool _flagPerformanceTest,
+        float denseProb
         )
 {
     //Checking the parameters' consistency AND
@@ -879,6 +1114,11 @@ void testFixture::launch (
      * */
     int stepCount = 1;
     std::cout <<stepCount++<<". Preparing the test tensors. Test operation type is "<<op<<std::endl;
+    if (_flagPerformanceTest == true)
+    {
+        std::cout <<"This is a performance test"<<std::endl
+                  <<"Density: "<<denseProb<<std::endl;
+    }
     std::cout <<"Input SP dimensions (H, W):  "<<(unsigned int) inputHeightSPSize<<" "<<(unsigned int) inputWidthSPSize<<std::endl
               <<"PE dimension (H, W): "<<PE_ROWS<<" "<<PE_COLS<<std::endl
               <<"Output planar dimensions (H, W): "<<(unsigned int)numOutputHeight<<" "<<(unsigned int)numOutputWidth<<std::endl
@@ -889,12 +1129,27 @@ void testFixture::launch (
               <<"Number of output groups: "<<(unsigned int)_numGroupNext<<std::endl
               <<"Number of groups in current layer: "<<(unsigned int)numGroupCurrentLayer<<std::endl;
 
-    std::vector<fixedPointNumber> inputTensorDense =
-            generateInputTensor(_inputWidth, _inputHeight, _numInputChannel, numGroupCurrentLayer);
+    std::vector<fixedPointNumber> inputTensorDense;
+    if (_flagPerformanceTest == true)
+    {
+       inputTensorDense = generateSparseInput(_inputWidth, _inputHeight, _numInputChannel, numGroupCurrentLayer, denseProb);
+    }
+    else
+    {
+        inputTensorDense = generateInputTensor(_inputWidth, _inputHeight, _numInputChannel, numGroupCurrentLayer);
+    }
+
     std::vector<fixedPointNumber> inputWeightDense;
     if (op == CONVOLUTION)
     {
-        inputWeightDense = generateWeights((unsigned char) kernelSize, _numInputChannel, numGroupCurrentLayer);
+        if (_flagPerformanceTest == true)
+        {
+            inputWeightDense = generateSparseWeights((unsigned char) kernelSize, _numInputChannel, numGroupCurrentLayer, denseProb);
+        }
+        else
+        {
+            inputWeightDense = generateWeights((unsigned char) kernelSize, _numInputChannel, numGroupCurrentLayer);
+        }
     }
     t_accumulator fixedBias = (t_accumulator) (round(_bias * (float) (1 << (FRAC_WIDTH + FRAC_WIDTH)) ));
     t_aligned_short_vector biasVector (_numInputChannel, fixedBias);
@@ -1232,7 +1487,6 @@ void testFixture::launch (
 
                     kernelSize,
                     stride,
-
                     sizeOutputTileHeight,
                     sizeOutputTileWidthPerCol,
                     numActiveColsPartialOutputTile,
@@ -1827,79 +2081,81 @@ void testFixture::launch (
 
         pOutput->decodeTensor(outputFPVector, FRAC_WIDTH, INT_WIDTH);
 
-        std::cout <<stepCount++<<". Check the output"<<std::endl;
-
-        for (unsigned int iGroup=0; iGroup<_numGroupNext; iGroup++)
+        if (_flagPerformanceTest == false)
         {
-            for (unsigned int iRow=0; iRow<numOutputHeight; iRow++)
+            std::cout <<stepCount++<<". Check the output"<<std::endl;
+
+            for (unsigned int iGroup=0; iGroup<_numGroupNext; iGroup++)
             {
-                for (unsigned int iCol=0; iCol<numOutputWidth; iCol++)
+                for (unsigned int iRow=0; iRow<numOutputHeight; iRow++)
                 {
-                    for (unsigned int iCh=0; iCh<numOutputChannelPerGroup; iCh++)
+                    for (unsigned int iCol=0; iCol<numOutputWidth; iCol++)
                     {
-                        //Obtain the actual output
-                        unsigned int outputCoord =
-                                iGroup*numOutputHeight*numOutputWidth*numOutputChannelPerGroup
-                                +iRow*numOutputWidth*numOutputChannelPerGroup + iCol*numOutputChannelPerGroup + iCh;
-                        fixedPointNumber actualFP = outputFPVector.at(outputCoord);
+                        for (unsigned int iCh=0; iCh<numOutputChannelPerGroup; iCh++)
+                        {
+                            //Obtain the actual output
+                            unsigned int outputCoord =
+                                    iGroup*numOutputHeight*numOutputWidth*numOutputChannelPerGroup
+                                    +iRow*numOutputWidth*numOutputChannelPerGroup + iCol*numOutputChannelPerGroup + iCh;
+                            fixedPointNumber actualFP = outputFPVector.at(outputCoord);
 
-                        //Compute the expected output
-                        float unitFloat = 1.0f / (1 << FRAC_WIDTH);
-                        float expectedFloat;
-                        switch (op) {
-                            case CONVOLUTION: {
-                                bool colIsReal = ((iCol % inputWidthSPUnitSize) == 0);
-                                bool rowIsReal = ((iRow % inputHeightSPUnitSize) == 0);
-                                if ((colIsReal == true) && (rowIsReal == true))
-                                {
-                                    unsigned int inputCol = iCol / inputWidthSPUnitSize;
+                            //Compute the expected output
+                            float unitFloat = 1.0f / (1 << FRAC_WIDTH);
+                            float expectedFloat;
+                            switch (op) {
+                                case CONVOLUTION: {
+                                    bool colIsReal = ((iCol % inputWidthSPUnitSize) == 0);
+                                    bool rowIsReal = ((iRow % inputHeightSPUnitSize) == 0);
+                                    if ((colIsReal == true) && (rowIsReal == true))
+                                    {
+                                        unsigned int inputCol = iCol / inputWidthSPUnitSize;
+                                        unsigned char iChGlobal = iGroup*numOutputChannelPerGroup + iCh;
+                                        expectedFloat = (inputCol % 2 == 0) ? iChGlobal*unitFloat : -1.0f*iChGlobal*unitFloat;
+                                        expectedFloat += _bias;
+                                    }
+                                    else
+                                    {
+                                        expectedFloat = _bias;
+                                    }
+                                }
+                                break;
+                                case MAX_POOL: {
+                                    //TODO: Change the ground truth generation if the max pooling kernel size
+                                    //stride, or input pattern changes
                                     unsigned char iChGlobal = iGroup*numOutputChannelPerGroup + iCh;
-                                    expectedFloat = (inputCol % 2 == 0) ? iChGlobal*unitFloat : -1.0f*iChGlobal*unitFloat;
-                                    expectedFloat += _bias;
+                                    expectedFloat = iChGlobal*unitFloat;
                                 }
-                                else
-                                {
-                                    expectedFloat = _bias;
+                                break;
+                                case CONCATENATION: {
+                                    unsigned char iChGlobal = iGroup*numOutputChannelPerGroup + iCh;
+                                    expectedFloat = (iCol % 2 == 0) ?
+                                                  (iChGlobal % _numInputChannel)*unitFloat:
+                                                  -1.0f*(iChGlobal % _numInputChannel)*unitFloat;
+
                                 }
-                            }
-                            break;
-                            case MAX_POOL: {
-                                //TODO: Change the ground truth generation if the max pooling kernel size
-                                //stride, or input pattern changes
-                                unsigned char iChGlobal = iGroup*numOutputChannelPerGroup + iCh;
-                                expectedFloat = iChGlobal*unitFloat;
-                            }
-                            break;
-                            case CONCATENATION: {
-                                unsigned char iChGlobal = iGroup*numOutputChannelPerGroup + iCh;
-                                expectedFloat = (iCol % 2 == 0) ?
-                                              (iChGlobal % _numInputChannel)*unitFloat:
-                                              -1.0f*(iChGlobal % _numInputChannel)*unitFloat;
+                                break;
+                                case ELT_ADD: {
+                                    unsigned char iChGlobal = iGroup*numOutputChannelPerGroup + iCh;
+                                    expectedFloat = (iCol % 2 == 0) ? iChGlobal*unitFloat*2.0f : iChGlobal*unitFloat*(-2.0f);
+                                }
+                                break;
+                            }//switch (op)
 
-                            }
-                            break;
-                            case ELT_ADD: {
-                                unsigned char iChGlobal = iGroup*numOutputChannelPerGroup + iCh;
-                                expectedFloat = (iCol % 2 == 0) ? iChGlobal*unitFloat*2.0f : iChGlobal*unitFloat*(-2.0f);
-                            }
-                            break;
-                        }//switch (op)
+                            fixedPointNumber expectedFP(expectedFloat, FRAC_WIDTH, INT_WIDTH);
 
-                        fixedPointNumber expectedFP(expectedFloat, FRAC_WIDTH, INT_WIDTH);
+                            signed char actualBits = actualFP.getBits();
+                            signed char expectedBits = expectedFP.getBits();
 
-                        signed char actualBits = actualFP.getBits();
-                        signed char expectedBits = expectedFP.getBits();
-
-                        //Compare the outputs
-                        EXPECT_TRUE(actualBits == expectedBits)
-                                <<"Value disagreement at [outputGroup, outputRow, outputCol, outputCh]: ["
-                                <<iGroup<<" "<<iRow<<" "<<iCol<<" "<<iCh<<"]"<<std::endl
-                                <<"Expected bits: 0x"<<std::bitset<8>(expectedBits)<<std::endl
-                                <<"Actual bits: 0x"<<std::bitset<8>(actualBits)<<std::endl;
+                            //Compare the outputs
+                            EXPECT_TRUE(actualBits == expectedBits)
+                                    <<"Value disagreement at [outputGroup, outputRow, outputCol, outputCh]: ["
+                                    <<iGroup<<" "<<iRow<<" "<<iCol<<" "<<iCh<<"]"<<std::endl
+                                    <<"Expected bits: 0x"<<std::bitset<8>(expectedBits)<<std::endl
+                                    <<"Actual bits: 0x"<<std::bitset<8>(actualBits)<<std::endl;
+                        }
                     }
                 }
             }
-        }
-
-    } // input checking block
+        } //check the input if necessary
+    } // output decode
 } //launch

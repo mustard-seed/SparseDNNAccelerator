@@ -3520,7 +3520,7 @@ __kernel void kernelOperandFilter ()
 			#if defined(ARRIA10) || defined(STRATIX10)
 				nextNumWeightClusterLeft = __fpga_reg(tempNumClusterLeft);
 			#else
-				nextNumWeightClusterLeft = tempNumClusterLeft
+				nextNumWeightClusterLeft = tempNumClusterLeft;
 			#endif
 			peAccumulateBitmask(&regWeightAccumulatedBitMaskBytes, &nextWeightBitmaskBytes);
 
@@ -3606,7 +3606,7 @@ __kernel void kernelOperandFilter ()
 			#if defined(ARRIA10) || defined(STRATIX10)
 				nextNumActivationClusterLeft = __fpga_reg(tempNumClusterLeft);
 			#else
-				nextNumActivationClusterLeft = tempNumClusterLeft
+				nextNumActivationClusterLeft = tempNumClusterLeft;
 			#endif
 
 			peAccumulateBitmask(&regActivationAccumulatedBitMaskBytes, &nextActivationBitmaskBytes);
