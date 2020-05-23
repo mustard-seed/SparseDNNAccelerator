@@ -1346,8 +1346,8 @@ __kernel void kernelOABuffer ()
 	typedef uint3_t t_state;
 
 	int colID = get_compute_id(0);
-	char cacheOutputActivations[OA_CACHE_SIZE] __attribute__((
-                   bankwidth(CLUSTER_SIZE)));
+	char cacheOutputActivations[OA_CACHE_DEPTH][CLUSTER_SIZE] __attribute__((
+                   numbanks(CLUSTER_SIZE), singlepump));
 
 	/*
 	 *Loop carried variables
@@ -1494,7 +1494,8 @@ __kernel void kernelOABuffer ()
 				
 				if (readSuccess == true) {
 					t_operand shortOutput = modifyOutput(wideOutput, accumulatorShiftDirCatShiftAmount, enableRelu);
-					cacheOutputActivations[indexOutput] = shortOutput;
+					//cacheOutputActivations[indexOutput] = shortOutput;
+					cacheOutputActivations[indexOutput >> VALUE_TO_CLUSTER_SHIFT][indexOutput & VALUE_DIVIDED_BY_CLUSTER_SIZE_REMAINDER_MASK] = shortOutput;
 
 					EMULATOR_PRINT(("[kernelOABuffer %d] Read and processed value from PE. Value: %#04x, %d out of %d values read.\n\n", 
 					colID, shortOutput, indexOutput, numOutputsPerStrip));
@@ -1519,9 +1520,10 @@ __kernel void kernelOABuffer ()
 						#pragma unroll
 						for (unsigned char i=0; i<CLUSTER_SIZE; i++)
 						{
+							unsigned short index = indexOutput + i;
 							unsigned short tempOC = iOutputChannelFetched + i;
 							char tempValue = (tempOC >= numOutputsPerStrip) ?
-								0x0 : cacheOutputActivations[indexOutput+i];
+								0x0 : cacheOutputActivations[index >> VALUE_TO_CLUSTER_SHIFT][i];
 							cluster.cluster_values[i] = tempValue;
 							keep = keep || (tempValue != 0x0);
 						}
@@ -1569,9 +1571,10 @@ __kernel void kernelOABuffer ()
 					#pragma unroll
 					for (unsigned char i=0; i<CLUSTER_SIZE; i++)
 					{
+						unsigned short index = indexOutput + i;
 						unsigned short tempOC = iOutputChannelFetched + i;
 						char tempValue = (tempOC >= numOutputsPerStrip) ?
-							0x0 : cacheOutputActivations[indexOutput+i];
+								0x0 : cacheOutputActivations[index >> VALUE_TO_CLUSTER_SHIFT][i];
 						taggedCluster.cluster.cluster_values[i] = tempValue;
 					}
 

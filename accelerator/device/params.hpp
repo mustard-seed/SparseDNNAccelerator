@@ -1,7 +1,7 @@
 #ifndef PARAMS_DEFINED
 #define PARAMS_DEFINED
 
-#define SPARSE_SYSTEM
+//#define SPARSE_SYSTEM
 #define INSTRUCTION_SIZE_BYTE 24
 #define DEPENDENCY_LIST_SIZE_BYTE 2
 #define MAX_INSTRUCTION_IN_FLIGHT_COUNT_PER_TYPE 3
@@ -61,7 +61,7 @@
 #define PACKET_SIZE 1
 
 #if defined FULL_SYSTEM
-	#define PE_ROWS 2
+	#define PE_ROWS 8
 	#define PE_COLS 2
 #else
 	#define PE_ROWS 2
@@ -129,7 +129,8 @@
 #define IA_CACHE_DEPTH (IA_CACHE_SIZE_BYTE/BURST_SIZE_BYTE)
 
 #define OA_CACHE_SIZE_BYTE 32768
-#define OA_CACHE_SIZE OA_CACHE_SIZE_BYTE
+#define OA_CACHE_DEPTH (1+ (OA_CACHE_SIZE_BYTE-1)/CLUSTER_SIZE)
+
 
 //TODO: Change WIDE_SIZE and related offsets when compression configuration changes
 #define WIDE_SIZE (BURST_SIZE_BYTE/CLUSTER_SIZE/TRANSFER_SIZE)  //Each transfer block takes 4 bytes, so need 8 transfer blocks to populate 256 bits
