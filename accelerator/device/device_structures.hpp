@@ -324,15 +324,18 @@ typedef struct __attribute__((aligned(16)))
     //Bit[5:4]: OpCode. 00: Add; 01: Max Pooling; 10: Stream
     t_uchar controlBits;
 
-    //Number of dram blocks to reduce
+    //Number of dram blocks to reduce per output dram block
     t_uchar numDramBlocksToReduce;
+
+    //Number of output dram blocks to produce
+    t_uchar numOutputBlocks;
 
     //Bit [2:0] Shift amount
     //Bit [3] Flag for left/right shift. 0 for right, 1 for left
     //t_uchar flagLeftShiftCatShiftAmount;
 
     ////Number of effective values in the final dram block
-    t_uchar numEffectiveValues;
+    t_uchar numEffectiveValuesInLastStrip;
 
 } t_misc_instruction;
 
@@ -456,15 +459,18 @@ typedef struct __attribute__((packed))
     //Bit[5:4]: OpCode. 00: Add; 01: Max Pooling; 10: Stream
     t_uchar controlBits;
 
-    //Number of dram blocks to reduce
+    //Number of dram blocks to reduce per output dram block
     t_uchar numDramBlocksToReduce;
+
+    //Number of output dram blocks to produce
+    t_uchar numOutputBlocks;
 
     //Bit [2:0] Shift amount
     //Bit [3] Flag for left/right shift. 0 for right, 1 for left
     //t_uchar flagLeftShiftCatShiftAmount;
 
-    //Number of effective values in the final dram block
-    t_uchar numEffectiveValues;
+    ////Number of effective values in the final dram block
+    t_uchar numEffectiveValuesInLastStrip;
 
 } t_misc_control_packet;
 

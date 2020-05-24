@@ -188,8 +188,9 @@ void instruction_generator(
     //Number of output channels caused by each blob that the MISC kernels have to process
     unsigned int numOutputChannelsBlob0MK;
     unsigned int numOutputChannelsBlob1MK;
-    //Number of fold per *current layer* output strip
-    unsigned int numFoldMK;
+    //Number of misc engine output blocks per *current layer* output strip
+    unsigned int numOutputBlocksBlob0MK;
+    unsigned int numOutputBlocksBlob1MK;
     //Number of dram block each MK should reduce in order to produce a block of output;
     unsigned int numDramBlocksToReduceMK;
     switch(op) {
@@ -205,7 +206,8 @@ void instruction_generator(
             memIA0DramBlockGroupStride = _memIA0DramBlockGroupStride;
             numOutputChannelsBlob0MK = 0;
             numOutputChannelsBlob1MK = 0;
-            numFoldMK = 0;
+            numOutputBlocksBlob0MK = 0;
+            numOutputBlocksBlob1MK = 0;
             numDramBlocksToReduceMK = 0;
         }
         break;
@@ -223,7 +225,8 @@ void instruction_generator(
             memIA1DramBlockGroupStride = _memIA1DramBlockGroupStride;
             numOutputChannelsBlob0MK = numInputChannels0;
             numOutputChannelsBlob1MK = numInputChannels1;
-            numFoldMK = 1+ (numOutputChannelsBlob0MK-1) / BURST_SIZE_BYTE + 1 + (numOutputChannelsBlob1MK-1) / BURST_SIZE_BYTE;
+            numOutputBlocksBlob0MK = 1+ (numOutputChannelsBlob0MK-1) / BURST_SIZE_BYTE;
+            numOutputBlocksBlob1MK = 1+ (numOutputChannelsBlob1MK-1) / BURST_SIZE_BYTE;
             numDramBlocksToReduceMK = 1;
         }
         break;
@@ -239,7 +242,8 @@ void instruction_generator(
             memIA0DramBlockGroupStride = 1;
             numOutputChannelsBlob0MK = numInputChannels0;
             numOutputChannelsBlob1MK = 0;
-            numFoldMK = 1+ (numOutputChannelsBlob0MK-1) / BURST_SIZE_BYTE;
+            numOutputBlocksBlob0MK = 1+ (numOutputChannelsBlob0MK-1) / BURST_SIZE_BYTE;
+            numOutputBlocksBlob1MK = 0;
             numDramBlocksToReduceMK = kernelSize * kernelSize;
         }
         break;
@@ -258,7 +262,8 @@ void instruction_generator(
             memIA1DramBlockGroupStride = 1;
             numOutputChannelsBlob0MK = numInputChannels0;
             numOutputChannelsBlob1MK = 0;
-            numFoldMK = 1+ (numOutputChannelsBlob0MK-1) / BURST_SIZE_BYTE;
+            numOutputBlocksBlob0MK = 1+ (numOutputChannelsBlob0MK-1) / BURST_SIZE_BYTE;
+            numOutputBlocksBlob1MK = 0;
             numDramBlocksToReduceMK = 2;
         }
         break;
@@ -614,50 +619,43 @@ void instruction_generator(
 
                 //Transfer the MISC instruction
                 {
-                    unsigned int iMiscChannel = 0;
-                    unsigned int iBlob = 0;
-                    for (unsigned int iMiscFold=0; iMiscFold < numFoldMK; iMiscFold++)
+                    unsigned char opCodeField = 0X0;
+                    if (op == ELT_ADD)
                     {
-                        unsigned int numEffectiveOutputs = BURST_SIZE_BYTE;
-                        //Handle transfers from Blob 0
-                        if (iBlob == 0)
-                        {
-                           numEffectiveOutputs = ((numOutputChannelsBlob0MK - iMiscChannel) < BURST_SIZE_BYTE) ?
-                                  (numOutputChannelsBlob0MK - iMiscChannel) :  BURST_SIZE_BYTE;
-                           iMiscChannel += numEffectiveOutputs;
-                           if (iMiscChannel == numOutputChannelsBlob0MK)
-                           {
-                               iMiscChannel = 0;
-                               iBlob++;
-                           }
-                        }
-                        //Handle transfers from Blob 1
-                        else
-                        {
-                            numEffectiveOutputs = ((numOutputChannelsBlob1MK - iMiscChannel) < BURST_SIZE_BYTE) ?
-                                   (numOutputChannelsBlob1MK - iMiscChannel) :  BURST_SIZE_BYTE;
-                            iMiscChannel += numEffectiveOutputs;
-                        }
+                        opCodeField = 0x0;
+                    }
+                    else if (op == MAX_POOL)
+                    {
+                        opCodeField = 0x10;
+                    }
+                    else if (op == CONCATENATION)
+                    {
+                        opCodeField = 0x20;
+                    }
+
+                    if (numOutputBlocksBlob0MK > 0)
+                    {
                         t_misc_instruction instructionMisc;
-                        unsigned char opCodeField = 0X0;
-                        if (op == ELT_ADD)
-                        {
-                            opCodeField = 0x0;
-                        }
-                        else if (op == MAX_POOL)
-                        {
-                            opCodeField = 0x10;
-                        }
-                        else if (op == CONCATENATION)
-                        {
-                            opCodeField = 0x20;
-                        }
                         instructionMisc.controlBits = (t_uchar) (opCodeField |( numActiveCols & 0x0F));
                         instructionMisc.numDramBlocksToReduce = (t_uchar) numDramBlocksToReduceMK;
-                        instructionMisc.numEffectiveValues = (t_uchar) numEffectiveOutputs;
+                        instructionMisc.numOutputBlocks = numOutputBlocksBlob0MK;
+                        instructionMisc.numEffectiveValuesInLastStrip = (t_uchar) (
+                                    numOutputChannelsBlob0MK - (numOutputBlocksBlob0MK-1)*BURST_SIZE_BYTE);
 
                         vecMiscInstruction.push_back(instructionMisc);
-                    } //For. iMiscFold
+                    } //if fold 0 iMiscFold
+
+                    if (numOutputBlocksBlob1MK > 0)
+                    {
+                        t_misc_instruction instructionMisc;
+                        instructionMisc.controlBits = (t_uchar) (opCodeField |( numActiveCols & 0x0F));
+                        instructionMisc.numDramBlocksToReduce = (t_uchar) numDramBlocksToReduceMK;
+                        instructionMisc.numOutputBlocks = numOutputBlocksBlob1MK;
+                        instructionMisc.numEffectiveValuesInLastStrip = (t_uchar) (
+                                    numOutputChannelsBlob1MK - (numOutputBlocksBlob1MK-1)*BURST_SIZE_BYTE);
+
+                        vecMiscInstruction.push_back(instructionMisc);
+                    } //if fold 0 iMiscFold
                 } //Transfer the MISC instruction
             } //Non-convolution stuff
             iterQGlobal += maxTQ;

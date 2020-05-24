@@ -1057,7 +1057,8 @@ __kernel void kernelMiscControlMover (
 		t_misc_control_packet packet;
 		packet.controlBits = instruction.controlBits;
 		packet.numDramBlocksToReduce = instruction.numDramBlocksToReduce;
-		packet.numEffectiveValues = instruction.numEffectiveValues;
+		packet.numOutputBlocks	=	instruction.numOutputBlocks;
+		packet.numEffectiveValuesInLastStrip = instruction.numEffectiveValuesInLastStrip;
 		write_channel_intel(channel_misc_instruction[0], packet);
 		EMULATOR_PRINT(("[kernelMiscControlMover] Sent instruction %d \n",
 						i));
@@ -1090,65 +1091,73 @@ __kernel void kernelMisc ()
 		//OpCode. 00: Add; 01: Max Pooling; 10: Stream
 		uint2_t opcode = (controlPacket.controlBits >> 4) & 0x03;
 		unsigned char numDramBlocksToReduce = controlPacket.numDramBlocksToReduce;
-		unsigned char numEffectiveValues = controlPacket.numEffectiveValues;
+		unsigned char numOutputBlocks = controlPacket.numOutputBlocks;
+		unsigned char numEffectiveValuesInLastStrip = controlPacket.numEffectiveValuesInLastStrip;
 
 		EMULATOR_PRINT(("[kernelMisc %d] Received command "
-						"opcode=%#04x, numDramBlocksToReduce=%d, numEffectiveValues=%d \n",
-						colID, ((unsigned char)opcode), numDramBlocksToReduce, numEffectiveValues));
+						"opcode=%#04x, numOutputBlocks=%d, numDramBlocksToReduce=%d, numEffectiveValues=%d \n",
+						colID, ((unsigned char)opcode), numOutputBlocks, numDramBlocksToReduce, numEffectiveValuesInLastStrip));
 
-		//Initialize the reductionBlock
-		#pragma unroll
-		for (int iCluster=0; iCluster<NUM_CLUSTER_IN_DRAM_SIZE; iCluster++)
+		for (unsigned char iOutput=0; iOutput < numOutputBlocks; iOutput++)
 		{
+			unsigned char numEffectiveValues = (iOutput < (numOutputBlocks-1)) ? BURST_SIZE_BYTE : numEffectiveValuesInLastStrip;
+			//Initialize the reductionBlock
 			#pragma unroll
-			for (int iVal=0; iVal < BURST_SIZE_BYTE; iVal++)
+			for (int iCluster=0; iCluster<NUM_CLUSTER_IN_DRAM_SIZE; iCluster++)
 			{
-				//If max pooling, then intialize the values to the minimum, else zero
-				reductionBlock[iVal] = (opcode == 0x01) ? 
-					0x80 : 0x00;
+				#pragma unroll
+				for (int iVal=0; iVal < BURST_SIZE_BYTE; iVal++)
+				{
+					//If max pooling, then intialize the values to the minimum, else zero
+					reductionBlock[iVal] = (opcode == 0x01) ? 
+						0x80 : 0x00;
+				}
 			}
-		}
 
-		//Perform reduction
-		for (unsigned char iBlock=0; iBlock<numDramBlocksToReduce; iBlock++)
-		{
-			t_dram_block inputDramBlock = read_channel_intel(channel_ia_wide_misc[colID]);
-			#pragma unroll
-			for (int iValue=0; iValue < BURST_SIZE_BYTE; iValue++)
+			//Perform reduction
+			for (unsigned char iBlock=0; iBlock<numDramBlocksToReduce; iBlock++)
 			{
-				signed char inputValue = inputDramBlock
-					.transferBlocks[iValue >> (VALUE_TO_CLUSTER_SHIFT + CLUSTER_TO_TRANSFER_SIZE_SHIFT)]
-					.values[iValue & VALUE_DIVIDED_BY_SIMD_SIZE_REMAINDER_MASK];
-
-				signed char currentValue = reductionBlock[iValue];
-
-				signed char newValue;
-				if (opcode == 0x00)
+				t_dram_block inputDramBlock = read_channel_intel(channel_ia_wide_misc[colID]);
+				#pragma unroll
+				for (int iValue=0; iValue < BURST_SIZE_BYTE; iValue++)
 				{
-					newValue = inputValue + currentValue;
-				}
-				else if (opcode == 0x01)
-				{
-					newValue = (inputValue >= currentValue) ? inputValue : currentValue;
-				}
-				else
-				{
-					newValue = inputValue;
-				}
+					signed char inputValue = inputDramBlock
+						.transferBlocks[iValue >> (VALUE_TO_CLUSTER_SHIFT + CLUSTER_TO_TRANSFER_SIZE_SHIFT)]
+						.values[iValue & VALUE_DIVIDED_BY_SIMD_SIZE_REMAINDER_MASK];
 
-				reductionBlock[iValue]
-					= newValue;
+					signed char currentValue = reductionBlock[iValue];
+
+					signed char newValue;
+					if (opcode == 0x00)
+					{
+						newValue = inputValue + currentValue;
+					}
+					else if (opcode == 0x01)
+					{
+						newValue = (inputValue >= currentValue) ? inputValue : currentValue;
+					}
+					else
+					{
+						newValue = inputValue;
+					}
+
+					reductionBlock[iValue]
+						= newValue;
+				}
 			}
-		}
 
-		//Drain the output
-		for (unsigned char iVal=0; iVal < BURST_SIZE_BYTE; iVal++)
-		{
-			if (iVal<numEffectiveValues)
+			//Drain the output
+			for (unsigned char iVal=0; iVal < BURST_SIZE_BYTE; iVal++)
 			{
-				write_channel_intel(channel_drain_misc[colID], reductionBlock[iVal]);
+				if (iVal<numEffectiveValues)
+				{
+					write_channel_intel(channel_drain_misc[colID], reductionBlock[iVal]);
+				}
 			}
-		}
+
+			EMULATOR_PRINT(("[kernelMisc %d] Finished processing output block %d / %d of the command.\n", colID, iOutput, numOutputBlocks));
+		}  //iOutput
+		
 
 		EMULATOR_PRINT(("[kernelMisc %d] Finished processing a command\n", colID));
 	}
