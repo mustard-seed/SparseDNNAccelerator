@@ -49,6 +49,11 @@ t_conv_input_index sPIndex2RegularIndex (
 	return result;
 }
 
+__attribute__((max_global_work_dim(0)))
+__kernel void kernelNoop ()
+{
+}
+
 #ifdef MEMORY_READER
 //TODO: reduce the number of activation/TB count input ports from 2 to 1
 __attribute__((max_global_work_dim(0)))

@@ -48,7 +48,7 @@
 #define WEIGHT_SEED 1234
 #define INPUT_SEED   7653
 //#define PLAY
-#define EMULATE
+//#define EMULATE
 #define PERF_TEST
 
 #if defined(C5SOC) //Hack for ARMv7, otherwise chrono won't work
@@ -75,6 +75,7 @@ protected:
     cl::CommandQueue clCQIATileController;
     cl::CommandQueue clCQOATileController;
     cl::CommandQueue clCQMKController;
+    cl::CommandQueue clCQNoop;
 
     //The kernels
     cl::Kernel kernelIAMover;
@@ -83,6 +84,7 @@ protected:
     cl::Kernel kernelMKInstructionMover;
     cl::Kernel kernelIATileController;
     cl::Kernel KernelOATileController;
+    cl::Kernel kernelNoop;
 
     //Buffer members associated with the IA Mover kernel
     cl::Buffer bufferIAMoverInstructions;
@@ -224,9 +226,9 @@ TEST_F (testFixture, play) {
 }
 #else
 #if defined(PERF_TEST)
-TEST_F (testFixture, perf_test_conv_sparse_128x128x3x3x32x32)
+TEST_F (testFixture, perf_test_conv_sparse_128x128x3x3x32x42)
 {
-    unsigned char inputWidth = 32;
+    unsigned char inputWidth = 42;
     unsigned char inputHeight = 32;
     unsigned char numInputChannel = 128;
     unsigned char numInputGroup = 1;
@@ -234,7 +236,7 @@ TEST_F (testFixture, perf_test_conv_sparse_128x128x3x3x32x32)
     unsigned char inputHeightSPUnitSize = 1;
     unsigned char inputWidthSPUnitSize = 1;
     unsigned char sizeOutputTileWidthPerColFull = ((inputWidth / PE_COLS) > 8) ?
-                (inputWidth / PE_COLS) > 8 : 8;
+                8 : (inputWidth / PE_COLS);
     unsigned char sizeOutputTileHeight = 8;
     bool flagEnableRelu = false;
     bool flagSparseInput = true;
@@ -281,7 +283,7 @@ TEST_F (testFixture, perf_test_max_pool_sparse_128x32x32)
     unsigned char inputHeightSPUnitSize = 1;
     unsigned char inputWidthSPUnitSize = 1;
     unsigned char sizeOutputTileWidthPerColFull = ((inputWidth / PE_COLS) > 8) ?
-                (inputWidth / PE_COLS) > 8 : 8;
+                8 : (inputWidth / PE_COLS);
     unsigned char sizeOutputTileHeight = 8;
     bool flagEnableRelu = false;
     bool flagSparseInput = false;
@@ -325,7 +327,7 @@ TEST_F (testFixture, perf_test_elt_add_sparse_128x32x32)
     unsigned char inputHeightSPUnitSize = 1;
     unsigned char inputWidthSPUnitSize = 1;
     unsigned char sizeOutputTileWidthPerColFull = ((inputWidth / PE_COLS) > 8) ?
-                (inputWidth / PE_COLS) > 8 : 8;
+                8 : (inputWidth / PE_COLS);
     unsigned char sizeOutputTileHeight = 8;
     bool flagEnableRelu = false;
     bool flagSparseInput = false;
@@ -369,7 +371,7 @@ TEST_F (testFixture, perf_test_concat_sparse_64x32x32)
     unsigned char inputHeightSPUnitSize = 1;
     unsigned char inputWidthSPUnitSize = 1;
     unsigned char sizeOutputTileWidthPerColFull = ((inputWidth / PE_COLS) > 8) ?
-                (inputWidth / PE_COLS) > 8 : 8;
+                8 : (inputWidth / PE_COLS);
     unsigned char sizeOutputTileHeight = 8;
     bool flagEnableRelu = false;
     bool flagSparseInput = false;
@@ -700,7 +702,7 @@ void testFixture::SetUp()
     binaryFile = "device_utils.aocx";
     clPlatform = aocl_utils_cpp::findPlatform("Intel(R) FPGA SDK for OpenCL(TM)");
 #else
-    binaryFile = "smallBuffer.aocx";
+    binaryFile = "sparse_pe_system.aocx";
 #if defined(EMULATE)
     clPlatform = aocl_utils_cpp::findPlatform("Intel(R) FPGA Emulation Platform for OpenCL(TM)");
 #else
@@ -713,12 +715,20 @@ void testFixture::SetUp()
     status = clPlatform.getDevices(CL_DEVICE_TYPE_ALL, &devices);
     aocl_utils_cpp::checkError(status, "Failed to query the devices");
     clDevice = devices[0];
-    clContext = cl::Context({clDevice}
-                            ,NULL
-                            ,&aocl_utils_cpp::oclContextCallback
-                            ,NULL
-                            ,&status);
-    aocl_utils_cpp::checkError(status, "Failed to create context");
+    #if defined(C5SOC)
+        clContext = cl::Context({clDevice}
+                                ,NULL
+                                ,&aocl_utils_cpp::oclContextCallback
+                                ,NULL
+                                ,&status);
+    #else
+        clContext = cl::Context(clDevice
+                                ,NULL
+                                ,&aocl_utils_cpp::oclContextCallback
+                                ,NULL
+                                ,&status);
+        aocl_utils_cpp::checkError(status, "Failed to create context");
+    #endif
 
     //Parse the binary and invoke the kernel
     program = aocl_utils_cpp::createProgramFromBinary(
@@ -748,6 +758,8 @@ void testFixture::SetUp()
     kernelMKInstructionMover = cl::Kernel(program, "kernelMiscControlMover", &status);
     aocl_utils_cpp::checkError(status, "Failed to create kernelMiscControlMover!");
 
+    kernelNoop = cl::Kernel(program, "kernelNoop", &status);
+    aocl_utils_cpp::checkError(status, "Failed to create kernelNoop!");
     //Instantiate the command queues
     clCQIAMover = cl::CommandQueue(
                 clContext,
@@ -797,6 +809,13 @@ void testFixture::SetUp()
                 );
     aocl_utils_cpp::checkError(status, "Failed to setup the command queue clMKController!");
 
+    clCQNoop = cl::CommandQueue(
+                clContext,
+                clDevice,
+                CL_QUEUE_PROFILING_ENABLE,
+                &status
+                );
+    aocl_utils_cpp::checkError(status, "Failed to setup the command queue clCQNoop!");
     //Instantiate the buffers
     cl_ulong maxBufferSizeByte = clDevice.getInfo<CL_DEVICE_MAX_MEM_ALLOC_SIZE> (&status);
     aocl_utils_cpp::checkError(status, "Failed to query the maximum buffer size in bytes!");
@@ -2136,6 +2155,24 @@ void testFixture::launch (
 #if defined(SPARSE_SYSTEM)
     std::cout <<"Output count transfer time (us): "<<outputCountTransferDuration<<std::endl;
 #endif
+
+    //Test the noop time
+    {
+        std::cout <<stepCount++<<". Measure NOOP time"<<std::endl;
+        cl_double duration = 0;
+        cl::Event eventNoop;
+
+        status = clCQNoop.enqueueTask(kernelNoop, NULL, &eventNoop);
+        aocl_utils_cpp::checkError(status, "Failed to launch kernelNoop!");
+
+        clCQNoop.finish();
+
+        cl_ulong processStart = eventNoop.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+        cl_ulong processEnd = eventNoop.getProfilingInfo<CL_PROFILING_COMMAND_END>();
+        duration = ((cl_double)(processEnd - processStart)) * ((cl_double)(1e-3));
+        std::cout <<"Noop time (us): "<<duration<<std::endl;
+
+    }
 
     //TODO: Decompress the output, and check against the input if necessary
     {
