@@ -25,6 +25,14 @@
 #include "vectorType.hpp"
 #include "layerInstructionGenerator.hpp"
 
+//#define PLAY
+//#define EMULATE
+#define PERF_TEST
+#define PROFILE
+#if defined(PROFILE)
+#include "CL/cl_ext_intelfpga.h"
+#endif
+
 /*Limits on the buffer sizes in bytes
  * */
 #define MAX_DRAM_BYTE_INPUT_ACTIVATION (1 << 25)
@@ -47,9 +55,6 @@
 
 #define WEIGHT_SEED 1234
 #define INPUT_SEED   7653
-//#define PLAY
-//#define EMULATE
-#define PERF_TEST
 
 #if defined(C5SOC) //Hack for ARMv7, otherwise chrono won't work
 __asm__(".symver _ZNSt6chrono3_V212system_clock3nowEv,_ZNSt6chrono12system_clock3nowEv@GLIBCXX_3.4.11");
@@ -2094,8 +2099,8 @@ void testFixture::launch (
 #endif
 
 
-#if defined(PROFILE) && defined(C5SOC)
-    std::cout <<"14.b Attempting to retrieve autorun profiling data."<<std::endl;
+#if defined(PROFILE)
+    std::cout <<stepCount++<<". Attempting to retrieve autorun profiling data."<<std::endl;
     status = clGetProfileDataDeviceIntelFPGA(
               clDevice(),
               program(),
