@@ -5,6 +5,12 @@
 #include "ihc_apint.h"
 #include "rtl_lib.hpp"
 
+#if defined(C5SOC)
+#define VOLATILE volatile
+#else
+#define VOLATILE 
+#endif
+
 /** t_conv_input_index
  * \brief Structure that annotates an index in the stretched-padded domain
  * \param isPad bool. Indicate whether the index in the stretched-padded domain is a padding
@@ -59,15 +65,15 @@ __kernel void kernelNoop ()
 __attribute__((max_global_work_dim(0)))
 __kernel void kernelIAMover (
 		// Memory port for input activations
-		volatile __global t_dram_block* restrict pIA,
+		VOLATILE __global const t_dram_block* restrict pIA,
 
 		#if defined(SPARSE_SYSTEM)
 			// Memory port for TB count per strip
-			volatile __global t_streamblock_address* restrict pTBCount,
+			VOLATILE __global const t_streamblock_address* restrict pTBCount,
 		#endif
 
 		//Memory port for transfer instructions
-		volatile __global t_ia_mover_instruction* restrict pInstruction,
+		VOLATILE __global const t_ia_mover_instruction* restrict pInstruction,
 		//Number of transfer instructions
 		unsigned int numInstruction
 	)
@@ -316,12 +322,12 @@ __kernel void kernelIAMover (
 __attribute__((max_global_work_dim(0)))
 __kernel void kernelWMover (
 		//Memory port for instructions
-		volatile __global t_weight_mover_instruction* restrict pInst,
-		volatile __global t_dram_block* restrict pW,
-		volatile __global t_accumulator* restrict pBias,
+		VOLATILE __global const t_weight_mover_instruction* restrict pInst,
+		VOLATILE __global const t_dram_block* restrict pW,
+		VOLATILE __global const t_accumulator* restrict pBias,
 		#if defined(SPARSE_SYSTEM)
 		 //Pointer to filter transfer block count
-		 volatile __global t_streamblock_address* restrict pFilterTBCount,
+		 VOLATILE __global const t_streamblock_address* restrict pFilterTBCount,
 		#endif //SPARSE_SYSTEM
 		unsigned int numInstruction
 	)
@@ -750,7 +756,7 @@ __kernel void kernelIABuffer ()
 //TODO: imcomplete
 __attribute__((max_global_work_dim(0)))
 __kernel void kernelIATileController (
-	__global volatile t_ia_tile_controller_instruction* restrict pInstruction,
+	VOLATILE __global const t_ia_tile_controller_instruction* restrict pInstruction,
 	unsigned int numInstructions
 	)
 {
@@ -1172,13 +1178,13 @@ __kernel void kernelMisc ()
 #ifdef MEMORY_WRITER
 __attribute__((max_global_work_dim(0)))
 __kernel void kernelOAMover (
-		volatile __global t_output_dram_block* restrict pOA,
+		VOLATILE __global t_output_dram_block* restrict pOA,
 
 		#if defined(SPARSE_SYSTEM)
-			volatile __global t_streamblock_address* restrict pTBCount,
+			VOLATILE __global t_streamblock_address* restrict pTBCount,
 		#endif
 
-		volatile __global t_oa_mover_instruction* restrict pInstruction,
+		VOLATILE __global const t_oa_mover_instruction* restrict pInstruction,
 		unsigned int numInstruction
 	)
 {
@@ -1323,22 +1329,22 @@ __kernel void kernelOAMover (
 		mem_fence(CLK_GLOBAL_MEM_FENCE | CLK_CHANNEL_MEM_FENCE);
 		//Send the activation sync if needed
 
-		// t_flag keepSending = enableSendSync;
-		// while (keepSending == TRUE)
-		// {
-		// 	bool sendSuccess = false;
-		// 	sendSuccess = write_channel_nb_intel(channel_activation_sync, 0x0);
-		// 	if (sendSuccess == true)
-		// 	{
-		// 		keepSending = FALSE;
-		// 		DEBUG_PRINT(("[kernelOAMover] SYNC: Sent the transfer token. \n"));
-		// 	}
-		// }
-		if (enableSendSync == TRUE)
+		t_flag keepSending = enableSendSync;
+		while (keepSending == TRUE)
 		{
-			write_channel_intel(channel_activation_sync, 0x0);
-			DEBUG_PRINT(("[kernelOAMover] SYNC: Sent the transfer token. \n"));
+			bool sendSuccess = false;
+			sendSuccess = write_channel_nb_intel(channel_activation_sync, 0x0);
+			if (sendSuccess == true)
+			{
+				keepSending = FALSE;
+				DEBUG_PRINT(("[kernelOAMover] SYNC: Sent the transfer token. \n"));
+			}
 		}
+		// if (enableSendSync == TRUE)
+		// {
+		// 	write_channel_intel(channel_activation_sync, 0x0);
+		// 	DEBUG_PRINT(("[kernelOAMover] SYNC: Sent the transfer token. \n"));
+		// }
 	} //for. over instruction
 } //kernelOAMover
 #endif //MEMORY_WRITER 
@@ -1631,7 +1637,7 @@ __kernel void kernelOABuffer ()
 
 __attribute__((max_global_work_dim(0)))
 __kernel void kernelOATileController (
-	volatile  __global t_oa_tile_controller_instruction* restrict pInst,
+	VOLATILE  __global const t_oa_tile_controller_instruction* restrict pInst,
 	unsigned int numInstructions
 	)
 {

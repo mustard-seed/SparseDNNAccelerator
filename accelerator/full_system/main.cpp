@@ -28,7 +28,8 @@
 //#define PLAY
 //#define EMULATE
 #define PERF_TEST
-#define PROFILE
+//#NOOP
+//#define PROFILE
 #if defined(PROFILE)
 #include "CL/cl_ext_intelfpga.h"
 #endif
@@ -80,7 +81,9 @@ protected:
     cl::CommandQueue clCQIATileController;
     cl::CommandQueue clCQOATileController;
     cl::CommandQueue clCQMKController;
+    #if defined(NOOP)
     cl::CommandQueue clCQNoop;
+    #endif
 
     //The kernels
     cl::Kernel kernelIAMover;
@@ -89,7 +92,9 @@ protected:
     cl::Kernel kernelMKInstructionMover;
     cl::Kernel kernelIATileController;
     cl::Kernel KernelOATileController;
+    #if defined(NOOP)
     cl::Kernel kernelNoop;
+    #endif
 
     //Buffer members associated with the IA Mover kernel
     cl::Buffer bufferIAMoverInstructions;
@@ -231,17 +236,16 @@ TEST_F (testFixture, play) {
 }
 #else
 #if defined(PERF_TEST)
-TEST_F (testFixture, perf_test_conv_sparse_128x128x3x3x32x42)
+TEST_F (testFixture, perf_test_conv_sparse_128x128x3x3x32x16COL)
 {
-    unsigned char inputWidth = 42;
+    unsigned char inputWidth = 16*PE_COLS;
     unsigned char inputHeight = 32;
     unsigned char numInputChannel = 128;
     unsigned char numInputGroup = 1;
     unsigned char numOutputGroup = 1;
     unsigned char inputHeightSPUnitSize = 1;
     unsigned char inputWidthSPUnitSize = 1;
-    unsigned char sizeOutputTileWidthPerColFull = ((inputWidth / PE_COLS) > 8) ?
-                8 : (inputWidth / PE_COLS);
+    unsigned char sizeOutputTileWidthPerColFull = 16;
     unsigned char sizeOutputTileHeight = 8;
     bool flagEnableRelu = false;
     bool flagSparseInput = true;
@@ -763,8 +767,10 @@ void testFixture::SetUp()
     kernelMKInstructionMover = cl::Kernel(program, "kernelMiscControlMover", &status);
     aocl_utils_cpp::checkError(status, "Failed to create kernelMiscControlMover!");
 
+#if defined(NOOP)
     kernelNoop = cl::Kernel(program, "kernelNoop", &status);
     aocl_utils_cpp::checkError(status, "Failed to create kernelNoop!");
+#endif
     //Instantiate the command queues
     clCQIAMover = cl::CommandQueue(
                 clContext,
@@ -814,6 +820,7 @@ void testFixture::SetUp()
                 );
     aocl_utils_cpp::checkError(status, "Failed to setup the command queue clMKController!");
 
+#if defined(NOOP)
     clCQNoop = cl::CommandQueue(
                 clContext,
                 clDevice,
@@ -821,6 +828,7 @@ void testFixture::SetUp()
                 &status
                 );
     aocl_utils_cpp::checkError(status, "Failed to setup the command queue clCQNoop!");
+#endif
     //Instantiate the buffers
     cl_ulong maxBufferSizeByte = clDevice.getInfo<CL_DEVICE_MAX_MEM_ALLOC_SIZE> (&status);
     aocl_utils_cpp::checkError(status, "Failed to query the maximum buffer size in bytes!");
@@ -2059,6 +2067,7 @@ void testFixture::launch (
     //Launch the kernels
     std::cout<<stepCount++<<". Launch the kernels."<<std::endl;
     cl_ulong proccessDuration = 0;
+    for (int i=0; i<10; i++)
     {
         cl::Event eventIAMover, eventWMover, eventOAMover, eventMKController, eventIATileController, eventOATileController;
 
@@ -2084,9 +2093,9 @@ void testFixture::launch (
 
         cl_ulong processStart = eventOAMover.getProfilingInfo<CL_PROFILING_COMMAND_START>();
         cl_ulong processEnd = eventOAMover.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-        proccessDuration = (processEnd - processStart);
+        proccessDuration += (processEnd - processStart);
      }
-
+     proccessDuration /= 10;
 
     //auto processEnd = std::chrono::system_clock::now();
 
@@ -2161,6 +2170,7 @@ void testFixture::launch (
     std::cout <<"Output count transfer time (us): "<<outputCountTransferDuration<<std::endl;
 #endif
 
+#if defined(NOOP)
     //Test the noop time
     {
         std::cout <<stepCount++<<". Measure NOOP time"<<std::endl;
@@ -2178,6 +2188,7 @@ void testFixture::launch (
         std::cout <<"Noop time (us): "<<duration<<std::endl;
 
     }
+#endif
 
     //TODO: Decompress the output, and check against the input if necessary
     {
