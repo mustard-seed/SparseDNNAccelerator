@@ -1216,6 +1216,9 @@ void testFixture::launch (
     }
     std::cout <<"Input SP dimensions (H, W):  "<<(unsigned int) inputHeightSPSize<<" "<<(unsigned int) inputWidthSPSize<<std::endl
               <<"PE dimension (H, W): "<<PE_ROWS<<" "<<PE_COLS<<std::endl
+              <<"CLUSTER_SIZE: "<<CLUSTER_SIZE<<std::endl
+              <<"TRANSFER_SIZE: "<<TRANSFER_SIZE<<std::endl
+              <<"WIDE_SIZE "<<WIDE_SIZE<<std::endl
               <<"Output planar dimensions (H, W): "<<(unsigned int)numOutputHeight<<" "<<(unsigned int)numOutputWidth<<std::endl
               <<"Full output tile per col planar sizes (H, W): "<<(unsigned int)sizeOutputTileHeight<<" "<<(unsigned int)sizeOutputTileWidthPerCol<<std::endl
               <<"Input channels 0: "<<(unsigned int) numInputChannel0<<std::endl

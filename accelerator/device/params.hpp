@@ -61,8 +61,8 @@
 #define PACKET_SIZE 1
 
 #if defined FULL_SYSTEM
-	#define PE_ROWS 8
-	#define PE_COLS 2
+	#define PE_ROWS 32
+	#define PE_COLS 7
 #else
 	#define PE_ROWS 2
 	#define PE_COLS 2
@@ -95,9 +95,9 @@
 #define TRANSFER_SIZE 2 //transfer block size in terms of clusters
 #define CLUSTER_TO_TRANSFER_SIZE_SHIFT 0X1
 #define CLUSTER_TO_TRANSEFER_SIZE_REMAINDER 0X1
-#define CLUSTER_SIZE 2 //cluster size in terms of values
-#define VALUE_TO_CLUSTER_SHIFT 1 //amount of right shift required to convert a value index into cluster index
-#define VALUE_DIVIDED_BY_CLUSTER_SIZE_REMAINDER_MASK 0x1
+#define CLUSTER_SIZE 4 //cluster size in terms of values
+#define VALUE_TO_CLUSTER_SHIFT 2 //amount of right shift required to convert a value index into cluster index
+#define VALUE_DIVIDED_BY_CLUSTER_SIZE_REMAINDER_MASK 0x3
 #define VALUE_DIVIDED_BY_SIMD_SIZE_REMAINDER_MASK ((1 << (VALUE_TO_CLUSTER_SHIFT + CLUSTER_TO_TRANSFER_SIZE_SHIFT)) - 1)
 #define CLUSTER_TO_TRANSFER_BLOCK_SHIFT CLUSTER_TO_TRANSFER_SIZE_SHIFT //amount of right shift required to convert a cluster count into transfer block count
 
@@ -117,7 +117,7 @@
 #define SURVIVING_COUNT_CLUSTER_INDEX 0X1
 #define SURVIVING_COUNT_TRANSFER_BLOCK_INDEX 0x1
 
-#define BURST_SIZE_BYTE 8
+#define BURST_SIZE_BYTE 32
 
 #define KERNEL_CACHE_LANES PE_ROWS
 #define KERNEL_CACHE_LANE_MASK 0x7
@@ -134,8 +134,8 @@
 
 //TODO: Change WIDE_SIZE and related offsets when compression configuration changes
 #define WIDE_SIZE (BURST_SIZE_BYTE/CLUSTER_SIZE/TRANSFER_SIZE)  //Each transfer block takes 4 bytes, so need 8 transfer blocks to populate 256 bits
-#define WIDE_SIZE_OFFSET 0x1 //Numnber of bits to shift the transfer block index to the right in order to recover the wide offset
-#define WIDE_SIZE_REMAINDER_MASK 0x1
+#define WIDE_SIZE_OFFSET 0x2 //Numnber of bits to shift the transfer block index to the right in order to recover the wide offset
+#define WIDE_SIZE_REMAINDER_MASK 0x3
 
 #define NUM_CLUSTER_IN_DRAM_SIZE BURST_SIZE_BYTE/CLUSTER_SIZE
 
