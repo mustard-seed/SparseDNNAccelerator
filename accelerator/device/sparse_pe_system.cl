@@ -438,13 +438,184 @@ __kernel void kernelWMover (
 #endif //MEMORY_READER
 
 #ifdef IA_MEMORY
-//TODO: Change this to handle the new IA data packet
-#define IA_BUFFER_STATE_DECODE 0x0
-#define IA_BUFFER_STATE_COMPUTE_NUM_ACCESS 0x1
-#define IA_BUFFER_STATE_ACCESS 0x2
-#define IA_BUFFER_STATE_PADD 0x3 //NOP operation
-#define IA_BUFFER_STATE_UPDATE_STRIP 0x4
-#define IA_BUFFER_PADD_COUNT 2 
+#define IA_BUFFER_WRITE_STATE_DECODE 0X0
+#define IA_BUFFER_WRITE_STATE_COMP_NUM_ACCESS 0X1
+#define IA_BUFFER_WRITE_STATE_ACCESS 0X2
+#define IA_BUFFER_WRITE_STATE_UPDATE_STRIP 0X3
+
+#define IA_BUFFER_READ_STATE_DECODE 0X0
+#define IA_BUFFER_READ_STATE_COMP_NUM_ACCESS 0X1
+#define IA_BUFFER_READ_STATE_ACCESS 0X2
+#define IA_BUFFER_READ_STATE_UPDATE_STRIP 0X3
+
+#define IA_BUFFER_INSTRUCTION_STATE_DECODE 0X0
+#define IA_BUFFER_INSTRUCTION_STATE_BUFFER 0X1
+
+typedef uint3_t t_ia_buffer_w_state
+typedef uint3_t t_ia_buffer_r_state
+
+/**
+ * Helper data bundle for accessing the dram_block cache in IA buffers
+ */
+typedef struct __attribute__((packed)) 
+{
+	unsigned short addressBase;
+	unsigned short colStride;
+	unsigned short rowStride;
+	unsigned short colContribution;
+	unsigned short rowContribution;
+} t_ia_data_buffer_access_info;
+
+
+#if defined(SPARSE_SYSTEM)
+/**
+ * Helper data struct for accessing the tb counts in each IA strip. 
+ * Only used in the sparse architecture
+ */
+typedef struct __attribute__((packed)) 
+{
+	//Iterators that are used to access the TB count cache
+		//tbAddress = tbAddressBase + tbAddressRowContribution + tbAddressColContribution
+	unsigned char addressBase;
+	unsigned char rowStride;
+	unsigned char colContribution;
+	unsigned char rowContribution;
+} t_ia_tb_buffer_access_info;
+
+#endif
+
+/**
+ * Helper data struct for accessing the position in tile
+ */
+typedef struct __attribute__((packed)) 
+{
+	unsigned char iRow
+	unsigned char iCol
+	unsigned char colContribution;
+	unsigned char rowContribution;
+} t_ia_tile_access_info;
+
+/**
+ * IA Buffer writer state and variables encapsulation
+ */
+typedef struct __attribute__((packed)) {
+
+	t_ia_data_buffer_access_info iaBlockInfo;
+	t_ia_tile_access_info tileInfo;
+
+	#if defined(SPARSE_SYSTEM)
+		t_ia_tb_buffer_access_info tbCountInfo;
+	#endif
+
+	//Number of dram blocks in each strip during buffer loading, 
+	unsigned short numIAAccess;
+
+	//Iterator for the buffer access count
+	unsigned short iterAccess;
+
+	t_flag accessBank;
+} t_ia_buffer_write_registers;
+
+
+void getIABufferWriterOutput (
+		//Inputs
+		t_ia_buffer_w_state currentState,
+
+		//Outputs
+		t_flag* pOutAcceptInstruction,
+		t_flag* pOutAcceptData,
+
+		//Auxillary,
+		int colId
+	);
+
+void updateIABufferWriter (
+		//Inputs
+		t_input_buffer_tile_buffer_packet control,
+		t_flag validControl,
+
+		t_dram_block dramBlock,
+		t_flag validDramBlock,
+
+		//Modified buffer and buffers
+		#if defined(SPARSE_SYSTEM)
+			t_streamblock_address cacheIAStreamBlockAddress [2][256],
+		else
+			unsigned short numTBPerStrip,
+		#endif
+		t_dram_block cacheIABlocks [2][IA_CACHE_DEPTH],
+		t_ia_buffer_w_state* pCurrentState,
+		t_ia_buffer_write_registers* pCurrentRegisters,
+
+		//Auxillary
+		int colID
+	);
+
+/**
+ * IA Buffer reader state and variables encapsulation
+ */
+typedef struct __attribute__((packed)) {
+
+	t_ia_data_buffer_access_info iaBlockInfo;
+	t_ia_tile_access_info tileInfo;
+
+	#if defined(SPARSE_SYSTEM)
+		t_ia_tb_buffer_access_info tbCountInfo;
+
+		//Flag that indicates whether the IA strip is in fact dense, 
+		//hence the buffer needs to sparse bitmask when streaming IA strips to the PE array
+		uint1_t flagPadBitmask = FALSE;
+		//Number of transfer blocks in an uncompressed compression window
+		unsigned char iTBInCW = 0; //Only useful for dense input
+		unsigned char partialBitmask[COMPRESSION_WINDOW_SIZE / 8];
+	#endif
+
+	//Number of dram blocks in each strip during buffer loading, 
+	unsigned short numIAAccess;
+
+	//Iterator for the buffer access count
+	unsigned short iterAccess;
+
+	t_flag accessBank;
+} t_ia_buffer_read_registers;
+
+void getIABufferReaderOutput (
+		//Inputs
+		t_ia_buffer_r_state currentState,
+
+		//Buffers to read from
+		#if defined(SPARSE_SYSTEM)
+			t_streamblock_address cacheIAStreamBlockAddress [2][256],
+		else
+			unsigned short numTBPerStrip,
+		#endif
+		t_dram_block cacheIABlocks [2][IA_CACHE_DEPTH],
+
+		//Outputs
+		t_flag* pOutAcceptInstruction,
+		
+		t_transferblock_tagged* pTaggedBlock,
+		t_flag* pSendTransferBlock,
+
+		//Auxillary,
+		int colId
+	);
+
+void updateIABufferReader (
+		//Inputs
+		t_input_buffer_tile_buffer_packet control,
+		t_flag validControl,
+
+		t_flag writeSuccessTaggedBlock,
+
+		//Modified buffer and buffers
+		t_ia_buffer_r_state* pCurrentState,
+		t_ia_buffer_read_registers* pCurrentRegisters,
+
+		//Auxillary
+		int colID
+	);
+
 __attribute__((max_global_work_dim(0)))
 __attribute__((autorun))
 __attribute__((num_compute_units(PE_COLS)))
@@ -760,120 +931,156 @@ __kernel void kernelIATileController (
 	unsigned int numInstructions
 	)
 {
-	for (unsigned int iInstruction=0; iInstruction < numInstructions; iInstruction++)
+	//The activities in one instruction cycle consists of
+	//sending one IA write instruciton, and then sending all the IA read instructions
+	//that stream the IA buffer.
+	//To faciliate double buffering,
+	//The first cycle consists only of sending the IA write instruction,
+	//and the last cycle consists only of sending the IA read instruction 
+	unsigned int numInstructionCycles = numInstructions + 1;
+	unsigned int iInstruction = 0;
+	uint1_t writeSideIndex = 0;
+
+
+	t_ia_tile_controller_instruction regInstruction;
+
+	for (unsigned int iInstructionCycle=0; iInstructionCycle < numInstructionCycles; iInstructionCycle++)
 	{
+		/*
+		 * Obtain the snapshots of the instruction registers before
+		 * the new instruciton cycle overwrites them
+		 * 
+		*/
+		t_ia_tile_controller_instruction drainInstruction = regInstruction;
 		/*
 		1. Read the instruction of the tile from the memory reader
 		*/
-		t_ia_tile_controller_instruction instruction = pInstruction[iInstruction];
-
-		unsigned char inputTileWidth = instruction.localTileWidth;
-	    unsigned char inputTileHeight = instruction.localTileHeight;
-	    unsigned char stride = instruction.kernelStride;
-	    unsigned char kernelSize = instruction.kernelSize;
-        unsigned int numOutputInstructions = instruction.numOutputInstructions;
-	    unsigned char numActivePeCols = instruction.flagPadBitmaskCatNumActiveCols & 0x7F;
-	    unsigned short numOutputChannelsInGroup = instruction.numOutputChannelsInGroup;
-	    unsigned short iaCacheColStride = instruction.cacheIAStripColStride;
-
-	    #if defined(SPARSE_SYSTEM)
-	    	uint1_t flagPadBitmask = ((instruction.flagPadBitmaskCatNumActiveCols & 0x80) >> 7);
-	    	unsigned char iStripInTile = 0;
-	    #endif
-		/*
-		2. Send load instructions to the tile buffer
-		*/
-		unsigned short iaCacheRowStride = iaCacheColStride * ((unsigned short)(inputTileWidth));
-
-
-		EMULATOR_PRINT(("[kernelIATileController] START sending the buffer refresh command for instruction=%d\n"
-			"numStripsRow: %d, "
-			"numStripsCol: %d\n"
-			,iInstruction
-			,(unsigned int)inputTileHeight
-			,(unsigned int)inputTileWidth));
+		if (iInstructionCycle < numInstructions)
 		{
-			t_input_buffer_tile_buffer_packet tileBufferControlPacket;
-			tileBufferControlPacket.iaDramBlockAddressBase = 0;
+			t_ia_tile_controller_instruction instruction = pInstruction[iInstruction];
 
-			tileBufferControlPacket.iaDramBlockColStride = iaCacheColStride;
-			tileBufferControlPacket.iaDramBlockRowStride = iaCacheRowStride;
-			
-			tileBufferControlPacket.controlBits = ((numActivePeCols-1) << 0x3) | 0x1;
+			unsigned char inputTileWidth = instruction.localTileWidth;
+		    unsigned char inputTileHeight = instruction.localTileHeight;
+		    unsigned char stride = instruction.kernelStride;
+		    unsigned char kernelSize = instruction.kernelSize;
+	        unsigned int numOutputInstructions = instruction.numOutputInstructions;
+		    unsigned char numActivePeCols = instruction.flagPadBitmaskCatNumActiveCols & 0x7F;
+		    unsigned short numOutputChannelsInGroup = instruction.numOutputChannelsInGroup;
+		    unsigned short iaCacheColStride = instruction.cacheIAStripColStride;
 
-			#if defined(SPARSE_SYSTEM)
-                tileBufferControlPacket.tbAddressBase = 0;
-                tileBufferControlPacket.tbAddressRowStride = inputTileWidth;
+		    #if defined(SPARSE_SYSTEM)
+		    	uint1_t flagPadBitmask = ((instruction.flagPadBitmaskCatNumActiveCols & 0x80) >> 7);
+		    	unsigned char iStripInTile = 0;
 		    #endif
+			/*
+			2. Send load instructions to the tile buffer
+			*/
+			unsigned short iaCacheRowStride = iaCacheColStride * ((unsigned short)(inputTileWidth));
 
-		    tileBufferControlPacket.numStripsCol = inputTileWidth;
-		    tileBufferControlPacket.numStripsRow = inputTileHeight;
 
-			write_channel_intel(channel_control_to_ia_buffer[0], tileBufferControlPacket);
-		}
-		EMULATOR_PRINT(("[kernelIATileController] FINISHED sending the buffer refresh instructions for iInstruction=%d .\n\n", iInstruction));
-			
-		//End of sending load instructions
+			EMULATOR_PRINT(("[kernelIATileController] START sending the buffer refresh command for instruction=%d\n"
+				"numStripsRow: %d, "
+				"numStripsCol: %d\n"
+				,iInstructionCycle
+				,(unsigned int)inputTileHeight
+				,(unsigned int)inputTileWidth));
+			{
+				t_input_buffer_tile_buffer_packet tileBufferControlPacket;
+				tileBufferControlPacket.iaDramBlockAddressBase = 0;
+
+				tileBufferControlPacket.iaDramBlockColStride = iaCacheColStride;
+				tileBufferControlPacket.iaDramBlockRowStride = iaCacheRowStride;
+				
+				tileBufferControlPacket.controlBits = ((numActivePeCols-1) << 0x3) 
+					| ((unsigned char) writeSideIndex) & 0x01
+
+				#if defined(SPARSE_SYSTEM)
+	                tileBufferControlPacket.tbAddressBase = 0;
+	                tileBufferControlPacket.tbAddressRowStride = inputTileWidth;
+			    #endif
+
+			    tileBufferControlPacket.numStripsCol = inputTileWidth;
+			    tileBufferControlPacket.numStripsRow = inputTileHeight;
+
+				write_channel_intel(channel_control_to_ia_buffer[0], tileBufferControlPacket);
+			}
+			EMULATOR_PRINT(("[kernelIATileController] FINISHED sending the buffer refresh instructions for iInstructionCycle=%d .\n\n", iInstructionCycle));
+
+			regInstruction = instruction;
+			iInstruction++;
+		} //End of sending load instructions
 
 		/*
 		3. Send the streaming instructions to the tile buffer
 		*/
-		unsigned short iFilterInGroup = 0;
-		unsigned char iInputTileWidth = 0;
-		unsigned char iInputTileHeight = 0;
-		
-		//while (iFilterInGroup < numOutputChannelsInGroup)
-        for (unsigned int i=0; i<numOutputInstructions; i++)
+		if (iInstructionCycle > 0)
 		{
-			unsigned char numActivePeRows = ((numOutputChannelsInGroup - iFilterInGroup) < (unsigned short) (PE_ROWS)) ?
-				(unsigned char) (numOutputChannelsInGroup - iFilterInGroup) : PE_ROWS;
+			unsigned short iFilterInGroup = 0;
+			unsigned char iInputTileWidth = 0;
+			unsigned char iInputTileHeight = 0;
 
-			unsigned char iStripInTile = iInputTileHeight * inputTileWidth + iInputTileWidth;
-
-			t_input_buffer_tile_buffer_packet tileBufferControlPacket;
-			tileBufferControlPacket.iaDramBlockAddressBase = ((unsigned short) iStripInTile) * ((unsigned short) iaCacheColStride);
-			tileBufferControlPacket.maxPeRowID = (numActivePeRows - 1);
+			unsigned char inputTileWidth = drainInstruction.localTileWidth;
+		    unsigned char inputTileHeight = drainInstruction.localTileHeight;
+		    unsigned char stride = drainInstruction.kernelStride;
+		    unsigned char kernelSize = drainInstruction.kernelSize;
+	        unsigned int numOutputInstructions = drainInstruction.numOutputInstructions;
+		    unsigned char numActivePeCols = drainInstruction.flagPadBitmaskCatNumActiveCols & 0x7F;
+		    unsigned short numOutputChannelsInGroup = drainInstruction.numOutputChannelsInGroup;
+		    unsigned short iaCacheColStride = drainInstruction.cacheIAStripColStride;
 			
-			tileBufferControlPacket.iaDramBlockColStride = iaCacheColStride;
-			tileBufferControlPacket.iaDramBlockRowStride = iaCacheRowStride;
+			//while (iFilterInGroup < numOutputChannelsInGroup)
+	        for (unsigned int i=0; i<numOutputInstructions; i++)
+			{
+				unsigned char numActivePeRows = ((numOutputChannelsInGroup - iFilterInGroup) < (unsigned short) (PE_ROWS)) ?
+					(unsigned char) (numOutputChannelsInGroup - iFilterInGroup) : PE_ROWS;
 
-			#if defined(SPARSE_SYSTEM)
-		    	tileBufferControlPacket.tbAddressBase = iStripInTile;
-		    	tileBufferControlPacket.tbAddressRowStride = inputTileWidth;
-		    #endif
-			unsigned char sendInstructionType = 0x2; //Stream from the buffer
-			tileBufferControlPacket.controlBits =
-				(sendInstructionType & 0x3)
-				| ((numActivePeCols-1) << 0x3);
-			#if defined(SPARSE_SYSTEM)
-				//The sparse system needs to know whether there is the need to insert operand bitmask to the ia stream
-				tileBufferControlPacket.controlBits |= ((unsigned char) flagPadBitmask) << 2;
-				#pragma unroll
-				for (int i=0; i<COMPRESSION_WINDOW_SIZE / 8; i++)
-				{
-					tileBufferControlPacket.partialBitmask[i] = instruction.partialBitmask[i];
-				}
-			#endif
-			tileBufferControlPacket.numStripsCol = kernelSize;
-			tileBufferControlPacket.numStripsRow = kernelSize;
+				unsigned char iStripInTile = iInputTileHeight * inputTileWidth + iInputTileWidth;
 
-			//bool success = write_channel_nb_intel(channel_control_to_ia_buffer[0], tileBufferControlPacket);
-			write_channel_intel(channel_control_to_ia_buffer[0], tileBufferControlPacket);	
-			/*
-				Parameters update
-			*/
-			//if (success)
-			//{
-			#if defined(SPARSE_SYSTEM)
-				EMULATOR_PRINT(("[kernelIATileController] Sent a buffer stream command. "
-				"iInstruction=%d, numActivePeRows=%d, iInputTileHeight=%d, iInputTileWidth=%d. flagPadBitmask=%#03x\n\n", 
-				iInstruction, numActivePeRows, iInputTileHeight, iInputTileWidth, ((unsigned char) flagPadBitmask)));
-			#else
-				EMULATOR_PRINT(("[kernelIATileController] Sent a buffer stream command. "
-				"iInstruction=%d, numActivePeRows=%d, iInputTileHeight=%d, iInputTileWidth=%d.\n\n", 
-				iInstruction, numActivePeRows, iInputTileHeight, iInputTileWidth));
-			#endif
+				t_input_buffer_tile_buffer_packet tileBufferControlPacket;
+				tileBufferControlPacket.iaDramBlockAddressBase = ((unsigned short) iStripInTile) * ((unsigned short) iaCacheColStride);
+				tileBufferControlPacket.maxPeRowID = (numActivePeRows - 1);
 				
+				tileBufferControlPacket.iaDramBlockColStride = iaCacheColStride;
+				tileBufferControlPacket.iaDramBlockRowStride = iaCacheRowStride;
+
+				#if defined(SPARSE_SYSTEM)
+			    	tileBufferControlPacket.tbAddressBase = iStripInTile;
+			    	tileBufferControlPacket.tbAddressRowStride = inputTileWidth;
+			    #endif
+				unsigned char sendInstructionType = 0x2; //Stream from the buffer
+				tileBufferControlPacket.controlBits =
+					(sendInstructionType & 0x2)
+					| (((unsigned char) (~writeSideIndex)) & 0x01)
+					| ((numActivePeCols-1) << 0x3);
+				#if defined(SPARSE_SYSTEM)
+					//The sparse system needs to know whether there is the need to insert operand bitmask to the ia stream
+					tileBufferControlPacket.controlBits |= ((unsigned char) flagPadBitmask) << 2;
+					#pragma unroll
+					for (int i=0; i<COMPRESSION_WINDOW_SIZE / 8; i++)
+					{
+						tileBufferControlPacket.partialBitmask[i] = instruction.partialBitmask[i];
+					}
+				#endif
+				tileBufferControlPacket.numStripsCol = kernelSize;
+				tileBufferControlPacket.numStripsRow = kernelSize;
+
+				//bool success = write_channel_nb_intel(channel_control_to_ia_buffer[0], tileBufferControlPacket);
+				write_channel_intel(channel_control_to_ia_buffer[0], tileBufferControlPacket);	
+				/*
+					Parameters update
+				*/
+				//if (success)
+				//{
+				#if defined(SPARSE_SYSTEM)
+					EMULATOR_PRINT(("[kernelIATileController] Sent a buffer stream command. "
+					"iInstructionCycle=%d, numActivePeRows=%d, iInputTileHeight=%d, iInputTileWidth=%d. flagPadBitmask=%#03x\n\n", 
+					iInstructionCycle, numActivePeRows, iInputTileHeight, iInputTileWidth, ((unsigned char) flagPadBitmask)));
+				#else
+					EMULATOR_PRINT(("[kernelIATileController] Sent a buffer stream command. "
+					"iInstructionCycle=%d, numActivePeRows=%d, iInputTileHeight=%d, iInputTileWidth=%d.\n\n", 
+					iInstructionCycle, numActivePeRows, iInputTileHeight, iInputTileWidth));
+				#endif
+					
 
 				if ((iInputTileWidth + kernelSize) >= inputTileWidth)
 				{
@@ -893,8 +1100,12 @@ __kernel void kernelIATileController (
 				{
 					iInputTileWidth += stride;
 				}
+			} // for
 		}
 		//End of sending streaming instructions
+
+		//SWAP the read side and the write side
+		writeSideIndex ~= writeSideIndex;
 	}
 }
 

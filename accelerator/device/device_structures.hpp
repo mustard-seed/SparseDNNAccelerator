@@ -391,10 +391,8 @@ typedef struct __attribute__((packed))
     unsigned char maxPeRowID; //Only relevant for sending
 
 
-    //Bit 1:0: 
-    // - 00: NOP for some fixed cycles. 
-    // - 01: Update the buffer.
-    // - 10: Stream from the buffer
+    //Bit 0: Whether to access IA buffer 0 or 1
+    //Bit 1: Whether to write in to the IA buffer (0), or to read from the IA buffer (1)
     //Bit 2: Only useful for sparse case. Flag for whether the tile require sparse bitmask padding. 1 for true, 0 for false
     //Bit 7:3: Max PE Cols to send to; 
     unsigned char controlBits; 
