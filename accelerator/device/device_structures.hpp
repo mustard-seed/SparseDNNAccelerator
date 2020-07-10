@@ -399,7 +399,9 @@ typedef struct __attribute__((packed))
 
     //Number of columns in the transfer command
     unsigned char numStripsCol;
+    
     //Number of rows in the transfer command
+    //If this is ZERO, then this is a ghost command!
     unsigned char numStripsRow;
     #if defined(SPARSE_SYSTEM)
         //Bit mask for the last compression window, which might be incomplete

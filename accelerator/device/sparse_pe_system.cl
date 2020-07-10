@@ -449,10 +449,12 @@ __kernel void kernelWMover (
 #define IA_BUFFER_READ_STATE_UPDATE_STRIP 0X3
 
 #define IA_BUFFER_INSTRUCTION_STATE_DECODE 0X0
-#define IA_BUFFER_INSTRUCTION_STATE_BUFFER 0X1
+#define IA_BUFFER_INSTRUCTION_STATE_SEND_TO_READER 0X1
+#define IA_BUFFER_INSTRUCTION_STATE_SEND_TO_WRITER 0x2
 
-typedef uint3_t t_ia_buffer_w_state
-typedef uint3_t t_ia_buffer_r_state
+typedef uint3_t t_ia_buffer_w_state;
+typedef uint3_t t_ia_buffer_r_state;
+typedef uint2_t t_ia_buffer_d_state;
 
 /**
  * Helper data bundle for accessing the dram_block cache in IA buffers
@@ -475,8 +477,9 @@ typedef struct __attribute__((packed))
 typedef struct __attribute__((packed)) 
 {
 	//Iterators that are used to access the TB count cache
-		//tbAddress = tbAddressBase + tbAddressRowContribution + tbAddressColContribution
+	//tbAddress = tbAddressBase + tbAddressRowContribution + tbAddressColContribution
 	unsigned char addressBase;
+	//Don't uncomment. unsigned char colStride = 1;
 	unsigned char rowStride;
 	unsigned char colContribution;
 	unsigned char rowContribution;
@@ -489,10 +492,10 @@ typedef struct __attribute__((packed))
  */
 typedef struct __attribute__((packed)) 
 {
-	unsigned char iRow
-	unsigned char iCol
-	unsigned char colContribution;
-	unsigned char rowContribution;
+	unsigned char iRow;
+	unsigned char iCol;
+	unsigned char numStripsRow;
+	unsigned char numStripsCol;
 } t_ia_tile_access_info;
 
 /**
@@ -513,10 +516,18 @@ typedef struct __attribute__((packed)) {
 	//Iterator for the buffer access count
 	unsigned short iterAccess;
 
+	//Which cache bank to write to
 	t_flag accessBank;
 } t_ia_buffer_write_registers;
 
-
+/**
+ * @brief      Gets the ia buffer writer interface outputs
+ *
+ * @param[in]  currentState           The current state
+ * @param      pOutAcceptInstruction  Pointer to the flag indicating whether the writer is ready to receive new instructions
+ * @param      pOutAcceptData         Pointer to the flag indicating whether the writer is ready to accept new dram block
+ * @param[in]  colId                  The col identifier
+ */
 void getIABufferWriterOutput (
 		//Inputs
 		t_ia_buffer_w_state currentState,
@@ -526,9 +537,23 @@ void getIABufferWriterOutput (
 		t_flag* pOutAcceptData,
 
 		//Auxillary,
-		int colId
+		int colID
 	);
 
+/**
+ * @brief      Update the ia buffer writer state and variable
+ *
+ * @param[in]  control                    Incoming instruction
+ * @param[in]  validControl               Flag that indicates whether the incoming instruction is valid
+ * @param[in]  dramBlock                  Incoming dram block
+ * @param[in]  validDramBlock             Flag that indicates whether the incoming dram block is valid
+ * @param      cacheIAStreamBlockAddress  Cache of TB counts. (Available for sparse architecture only)
+ * @param[in]  numTBPerStrip              Number of TB count per strip. Available for dense architecture only
+ * @param      cacheIABlocks              IA dram block cache
+ * @param      pCurrentState              The current state
+ * @param      pCurrentRegisters          The current registers
+ * @param[in]  colID                      The col id
+ */
 void updateIABufferWriter (
 		//Inputs
 		t_input_buffer_tile_buffer_packet control,
@@ -540,8 +565,8 @@ void updateIABufferWriter (
 		//Modified buffer and buffers
 		#if defined(SPARSE_SYSTEM)
 			t_streamblock_address cacheIAStreamBlockAddress [2][256],
-		else
-			unsigned short numTBPerStrip,
+		#else
+			unsigned short numTBPerStrip[2],
 		#endif
 		t_dram_block cacheIABlocks [2][IA_CACHE_DEPTH],
 		t_ia_buffer_w_state* pCurrentState,
@@ -563,7 +588,7 @@ typedef struct __attribute__((packed)) {
 		t_ia_tb_buffer_access_info tbCountInfo;
 
 		//Flag that indicates whether the IA strip is in fact dense, 
-		//hence the buffer needs to sparse bitmask when streaming IA strips to the PE array
+		//hence the buffer needs to insert sparse bitmask when streaming IA strips to the PE array
 		uint1_t flagPadBitmask = FALSE;
 		//Number of transfer blocks in an uncompressed compression window
 		unsigned char iTBInCW = 0; //Only useful for dense input
@@ -573,21 +598,38 @@ typedef struct __attribute__((packed)) {
 	//Number of dram blocks in each strip during buffer loading, 
 	unsigned short numIAAccess;
 
-	//Iterator for the buffer access count
+	//Iterator for the buffer access count (in each strip?)
 	unsigned short iterAccess;
 
+	
+
+	//Which cache bank to read from
 	t_flag accessBank;
 } t_ia_buffer_read_registers;
 
+/**
+ * @brief      Gets the ia buffer reader interface outputs.
+ *
+ * @param[in]  currentState               The current state
+ * @param[in]  currentRegisters           Current indices, etc
+ * @param      cacheIAStreamBlockAddress  The cache ia stream block address
+ * @param[in]  numTBPerStrip              Number of TB per strip (Dense architecture only)
+ * @param      cacheIABlocks              Number of TB per strip (dense architecture only)
+ * @param      pOutAcceptInstruction      Pointer to the flag indicating that this module can accept new instruciton
+ * @param      pTaggedBlock               Pointer to the transfer block fetchted from the IA cache
+ * @param      pSendTransferBlock         Pointer to the flag indicating that the transfer block is valid
+ * @param[in]  colId                      The col identifier
+ */
 void getIABufferReaderOutput (
 		//Inputs
 		t_ia_buffer_r_state currentState,
+		t_ia_buffer_read_registers currentRegisters,
 
 		//Buffers to read from
 		#if defined(SPARSE_SYSTEM)
 			t_streamblock_address cacheIAStreamBlockAddress [2][256],
-		else
-			unsigned short numTBPerStrip,
+		#else
+			unsigned short numTBPerStrip[2],
 		#endif
 		t_dram_block cacheIABlocks [2][IA_CACHE_DEPTH],
 
@@ -598,9 +640,19 @@ void getIABufferReaderOutput (
 		t_flag* pSendTransferBlock,
 
 		//Auxillary,
-		int colId
+		int colID
 	);
 
+/**
+ * @brief      Updates the state and variables of the IA buffer reader
+ *
+ * @param[in]  control                  Incoming control packet
+ * @param[in]  validControl             Flag that indicates the incoming control packet is valid
+ * @param[in]  writeSuccessTaggedBlock  Flag indicating whether the transfer block on the PE array interface has been successfully sent
+ * @param      pCurrentState            Current state
+ * @param      pCurrentRegisters        Current variable values
+ * @param[in]  colID                    The col id
+ */
 void updateIABufferReader (
 		//Inputs
 		t_input_buffer_tile_buffer_packet control,
@@ -616,315 +668,459 @@ void updateIABufferReader (
 		int colID
 	);
 
+void getIABufferDispatcherOutput (
+		//Current state
+		t_ia_buffer_d_state currentState,
+
+		//Instruction buffer
+		t_input_buffer_tile_buffer_packet controlBuffer,
+
+		//instruction channel interface
+		t_flag* pOutReadyForInstruction,
+
+		//accessor interface
+		t_flag* pOutValidReaderInstruction,
+		t_flag* pOutValidWriterInstruction,
+		t_input_buffer_tile_buffer_packet* pOutReaderControl,
+		t_input_buffer_tile_buffer_packet* pOutWriterControl,
+
+		//Auxillary
+		int colID
+	);
+
+void updateIABufferDispatcher (
+		//instruction channel interface
+		t_flag inInstructionValid,
+		t_input_buffer_tile_buffer_packet inControl,
+
+		//accessor interface
+		t_flag inReaderReady,
+		t_flag inWriterReady,
+
+		//context
+		t_ia_buffer_d_state* pState,
+		t_input_buffer_tile_buffer_packet* pControlBuffer,
+
+		//Auxillary
+		int colID
+	);
+
 __attribute__((max_global_work_dim(0)))
 __attribute__((autorun))
 __attribute__((num_compute_units(PE_COLS)))
 __kernel void kernelIABuffer ()
 {
-	typedef uint3_t t_state;
-	typedef uint6_t t_strip;
 	int colID = get_compute_id(0);
 
-	t_dram_block cacheIABlocks [IA_CACHE_DEPTH] __attribute__((bankwidth(BURST_SIZE_BYTE)));
+	t_dram_block cacheIABlocks [2][IA_CACHE_DEPTH] __attribute__((bankwidth(BURST_SIZE_BYTE)));
 
+	//TODO: Determine whether the attribute for the TB count cache is correct
 	#if defined(SPARSE_SYSTEM)
-		t_streamblock_address cacheIAStreamBlockAddress [256] __attribute__((numbanks(1)));
-	#endif
-
-	/*
-		Loop carried-variables
-	*/
-
-	uint1_t isLoad = FALSE;
-	uint1_t isLast = FALSE;
-
-	//Iterators that are used to access the IA dram block cache
-	//iaDramBlockAddress = iaDramBlockAddressBase + tbAddressRowContribution + tbAddressColContribution
-	unsigned short iaDramBlockAddressBase = 0;
-	unsigned short iaDramBlockColStride = 0;
-	unsigned short iaDramBlockRowStride = 0;
-	unsigned short iaDramBlockColContribution = 0;
-	unsigned short iaDramBlockRowContribution = 0;
-
-	#if defined(SPARSE_SYSTEM)
-		//Iterators that are used to access the TB count cache
-		//tbAddress = tbAddressBase + tbAddressRowContribution + tbAddressColContribution
-		unsigned char tbAddressBase = 0;
-		unsigned char tbAddressRowStride = 0;
-		unsigned char tbAddressColContribution = 0;
-		unsigned char tbAddressRowContribution = 0;
-
-		//Flag that indicates whether the IA strip is in fact dense, 
-		//hence the buffer needs to sparse bitmask when streaming IA strips to the PE array
-		uint1_t flagPadBitmask = FALSE;
-		//Number of transfer blocks in an uncompressed compression window
-		unsigned char iTBInCW = 0; //Only useful for dense input
-		unsigned char partialBitmask[COMPRESSION_WINDOW_SIZE / 8];
+		t_streamblock_address cacheIAStreamBlockAddress [2][256] __attribute__((numbanks(1)));
 	#else
-		unsigned short numTBPerStrip = 0;
+		t_streamblock_address numTBPerStrip [2];
 	#endif
-	//Maximum convolution PE row that will be affected by the buffer read operation
-	unsigned char maxPeRowID = 0;
 
-	//Number of dram blocks in each strip during buffer loading, 
-	//Number of transfer blocks during buffer draining
-	unsigned short numIAAccess = 0;
-	//Iterator for the buffer access count
-	unsigned short iterAccess = 0;
+	/**
+	 * Writer state and registers
+	 */
+	t_ia_buffer_writer_registers regWriterContext;
+	t_ia_buffer_w_state regWriterState = IA_BUFFER_WRITE_STATE_DECODE;
+
+	/**
+	 * Reader state and registers
+	 */
+	t_ia_buffer_read_registers regReaderContext;
+	t_ia_buffer_r_state regReaderState = IA_BUFFER_READ_STATE_DECODE;
 
 
-	//Counters and states
-	t_strip iStripInRow = 0;
-	t_strip iStripInCol = 0;
-	t_strip numStripsRow = 0;
-	t_strip numStripsCol = 0;
-
-	t_state currentState = IA_BUFFER_STATE_DECODE;
+	/**
+	 * Dispatcher state and registers
+	 */
+	t_input_buffer_tile_buffer_packet regDispatcherInstructionBuffer;
+	t_ia_buffer_d_state regDispatcherState = IA_BUFFER_INSTRUCTION_STATE_DECODE;
 
 	while (true)
 	{
-		t_state nextState = currentState;
-		t_dram_block dramBlock;
-		bool dataReadSuccess = false;
+		/**
+		 * instruction channel <====> dispatcher interface
+		 */
+		t_flag dispatcherReadyForInstruction = FALSE;
+		t_flag dispatcherInstructionValid = FALSE;
+		t_input_buffer_tile_buffer_packet dispatcherNewInstruction;
 
-		//Handle channel read separately
-        if (((currentState == IA_BUFFER_STATE_COMPUTE_NUM_ACCESS) && (isLoad == TRUE))
-                || ((currentState == IA_BUFFER_STATE_ACCESS) && (isLoad == TRUE)))
-		{
-			dramBlock = read_channel_nb_intel(channel_ia_wide_local[colID], &dataReadSuccess);
-		}
-		/*
-		First, read the instruction from the tile controller
-		*/
-		if (currentState == IA_BUFFER_STATE_DECODE)
+		/**
+		 * IA dram block channel <=====> writer interface
+		 */
+		t_flag writerReadyForBlock = FALSE;
+		t_flag writerBlockValid = FALSE;
+		t_dram_block writerNewBlock;
+
+		/**
+		 * PE transfer block channel <===> reader interface
+		 */
+		t_flag readerBlockValid = FALSE;
+		t_flag readerBlockSent = FALSE;
+		t_transferblock_tagged readerTB;
+
+		/**
+		 * dispatcher <===> writer interface
+		 */
+		t_flag writerReadyForInstruction = FALSE;
+		t_flag writerInstructionValid = FALSE;
+		t_input_buffer_tile_buffer_packet writerNewInstruction;
+
+		/**
+		 * dispatcher <===> reader interface
+		 */
+		t_flag readerReadyForInstruction = FALSE;
+		t_flag readerInstructionValid = FALSE;
+		t_input_buffer_tile_buffer_packet readerNewInstruction;
+
+		/**
+		 * Derive current interface outputs from the modules
+		 */
+		getIABufferWriterOutput (
+			regWriterState,
+
+			&writerReadyForInstruction,
+			&writerReadyForBlock,
+
+			colID
+			);
+
+		getIABufferReaderOutput (
+			regReaderState,
+			regReaderContext,
+
+			#if defined(SPARSE_SYSTEM)
+				cacheIAStreamBlockAddress,
+			#else
+				numTBPerStrip,
+			#endif
+			cacheIABlocks,
+
+			&readerReadyForInstruction,
+
+			&readerTB,
+			&readerBlockValid,
+
+			colID
+			);
+
+		getIABufferDispatcherOutput (
+			regDispatcherState,
+
+			regDispatcherInstructionBuffer,
+
+			&dispatcherReadyForInstruction,
+
+			&readerInstructionValid,
+			&writerInstructionValid,
+			&readerNewInstruction,
+			&writerNewInstruction,
+
+			colID
+			);
+
+		/**
+		 * Perform channel access
+		 */
+		if (dispatcherReadyForInstruction == TRUE)
 		{
 			bool success = false;
-			t_input_buffer_tile_buffer_packet controlPacketReceived = read_channel_nb_intel(channel_control_to_ia_buffer_local[colID], &success);
-
-			if (success)
+			dispatcherNewInstruction = read_channel_nb_intel(channel_control_to_ia_buffer_local[colID], &success);
+			if (success == true)
 			{
-				isLoad = ((controlPacketReceived.controlBits & 0x3) == 0x1) ? TRUE: FALSE;
-				iaDramBlockAddressBase = controlPacketReceived.iaDramBlockAddressBase;
-				iaDramBlockColStride = controlPacketReceived.iaDramBlockColStride;
-				iaDramBlockRowStride = controlPacketReceived.iaDramBlockRowStride;
-				iaDramBlockColContribution = 0;
-				iaDramBlockRowContribution = 0;
-				maxPeRowID = controlPacketReceived.maxPeRowID;
-
-				#if defined(SPARSE_SYSTEM)
-					flagPadBitmask = (controlPacketReceived.controlBits >> 2) & 0x01;
-					tbAddressBase = controlPacketReceived.tbAddressBase;
-					tbAddressRowStride = controlPacketReceived.tbAddressRowStride;
-					tbAddressColContribution = 0;
-					tbAddressRowContribution = 0;
-					#pragma unroll
-					for (int i=0; i<(COMPRESSION_WINDOW_SIZE / 8); i++)
-					{
-						partialBitmask[i] = controlPacketReceived.partialBitmask[i];
-					}
-				#endif
-				numStripsRow = controlPacketReceived.numStripsRow;
-				numStripsCol = controlPacketReceived.numStripsCol;
-
-				//Initialize the counters
-				iterAccess = 0;
-				iStripInRow = 0;
-				iStripInCol = 0;
-
-				nextState = IA_BUFFER_STATE_COMPUTE_NUM_ACCESS;
-
-				#if defined(SPARSE_SYSTEM)
-					EMULATOR_PRINT(("[kernelIABuffer %d] START processing instruction. "
-						"isLoad=%#04x, "
-						"iaDramBlockAddressBase=%#010x, "
-						"iaDramBlockColStride=%#010x, "
-						"iaDramBlockRowStride=%#010x, "
-						"numStripsRow=%d, "
-						"numStripsCol=%d, "
-						"maxPeRowID=%d\n\n ",
-						colID, 
-						(unsigned char) isLoad, 
-						iaDramBlockAddressBase,
-						iaDramBlockColStride,
-						iaDramBlockRowStride,
-						(unsigned int)numStripsRow,
-						(unsigned int)numStripsCol,
-						maxPeRowID));
-				#else
-					EMULATOR_PRINT(("[kernelIABuffer %d] START processing instruction. "
-						"isLoad=%#04x, "
-						"iaDramBlockAddressBase=%#010x, "
-						"iaDramBlockColStride=%#010x, "
-						"iaDramBlockRowStride=%#010x, "
-						"numStripsRow=%d, "
-						"numStripsCol=%d, "
-						"maxPeRowID=%d\n\n",
-						colID, 
-						(unsigned char) isLoad, 
-						iaDramBlockAddressBase,
-						iaDramBlockColStride,
-						iaDramBlockRowStride,
-						(unsigned int)numStripsRow,
-						(unsigned int)numStripsCol,
-						maxPeRowID));
-				#endif
-					
-			}
-		} //IA_BUFFER_STATE_DECODE
-		else if (currentState == IA_BUFFER_STATE_COMPUTE_NUM_ACCESS)
-		{
-			if (isLoad == TRUE)
-			{
-				if (dataReadSuccess == true)
-				{
-					t_streamblock_address numIATransferBlocks = getTBCount(dramBlock);
-					numIAAccess = 1 + ((numIATransferBlocks-1) >> WIDE_SIZE_OFFSET);
-					#if defined(SPARSE_SYSTEM)
-						cacheIAStreamBlockAddress[tbAddressBase + tbAddressColContribution + tbAddressRowContribution] = numIATransferBlocks;
-					#else
-						numTBPerStrip = numIATransferBlocks;
-					#endif
-
-					nextState = IA_BUFFER_STATE_ACCESS;
-				}
-			}
-			else
-			{
-				#if defined(SPARSE_SYSTEM)
-					numIAAccess = cacheIAStreamBlockAddress[tbAddressBase + tbAddressColContribution + tbAddressRowContribution];
-					iTBInCW = 0;
-					nextState = IA_BUFFER_STATE_ACCESS;
-				#else
-					numIAAccess = numTBPerStrip;
-					nextState = IA_BUFFER_STATE_ACCESS;
-				#endif
-			}
-		} //IA_BUFFER_STATE_COMPUTE_NUM_ACCESS
-		else if (currentState == IA_BUFFER_STATE_PADD)
-		{
-			iterAccess++;
-			if (iterAccess >= IA_BUFFER_PADD_COUNT)
-			{
-				nextState = IA_BUFFER_STATE_DECODE;
-			}
-		} //IA_BUFFER_STATE_PADD
-		else if (currentState == IA_BUFFER_STATE_ACCESS)
-		{
-			if (isLoad == TRUE)
-			{
-				if (dataReadSuccess)
-				{
-					cacheIABlocks[iterAccess + iaDramBlockAddressBase + iaDramBlockColContribution + iaDramBlockRowContribution] = dramBlock;
-					iterAccess++;
-				}
-			} //replenishing the cache
-			else
-			{
-				t_dram_block dramBlock = cacheIABlocks[iaDramBlockAddressBase + iaDramBlockColContribution + iaDramBlockRowContribution +  ((unsigned short)(iterAccess >> WIDE_SIZE_OFFSET))];	
-
-				t_transferblock_tagged taggedBlock;
-
-				unsigned char isLastTemp =  (((iterAccess + 1) == numIAAccess) && ((iStripInRow+1) == numStripsRow) && ((iStripInCol+1) == numStripsCol)) ?
-						TRUE : FALSE;
-
-				#if defined(SPARSE_SYSTEM)
-					//Insert the bitmask
-					if ((iTBInCW == 0) && (flagPadBitmask == TRUE))
-					{
-						#pragma unroll
-						for (int i=0; i<TRANSFER_SIZE*CLUSTER_SIZE; i++)
-						{
-							if (i < (COMPRESSION_WINDOW_SIZE / 8))
-							{
-								taggedBlock.values.values[i] = ((numIAAccess - iterAccess) < (COMPRESSION_WINDOW_SIZE / TRANSFER_SIZE)) ?
-									partialBitmask[i] : 0xFF;
-							}
-							else
-							{
-								taggedBlock.values.values[i] = 0x00;
-							}
-						}
-						isLastTemp = FALSE;
-					}
-					else
-					{
-						taggedBlock.values = dramBlock.transferBlocks[iterAccess & WIDE_SIZE_REMAINDER_MASK];
-					}
-				#else
-					taggedBlock.values = dramBlock.transferBlocks[iterAccess & WIDE_SIZE_REMAINDER_MASK];
-				#endif
-
-				setMaxTransferID(&taggedBlock, maxPeRowID);
-				setIsLast(&taggedBlock, isLastTemp);
-				
-				bool success = write_channel_nb_intel(channel_activation[0][colID], taggedBlock);
-				if (success)
-				{
-					EMULATOR_PRINT(("[kernelIABuffer %d] Sent TB %d / %d. TB[0-3]: %#04x %#04x %#04x %#04x \n\n",
-					colID, iterAccess, numIAAccess
-					,taggedBlock.values.values[0]
-					,taggedBlock.values.values[1]
-					,taggedBlock.values.values[2]
-					,taggedBlock.values.values[3]
-					));
-					#if defined(SPARSE_SYSTEM)
-						if ((iTBInCW > 0) || (flagPadBitmask == FALSE))
-						{
-							iterAccess++;
-						}
-						iTBInCW++;
-						if ( iTBInCW == (COMPRESSION_WINDOW_SIZE / TRANSFER_SIZE) )
-						{
-							iTBInCW = 0;
-						}
-					#else
-						iterAccess++;
-					#endif
-				}
-			} // draining from the cache
-
-			if (iterAccess == numIAAccess)
-			{
-				nextState = IA_BUFFER_STATE_UPDATE_STRIP;
-			}
-		} //IA_BUFFER_STATE_ACCESS
-		else if (currentState == IA_BUFFER_STATE_UPDATE_STRIP)
-		{
-			#if defined(SPARSE_SYSTEM)
-				nextState = IA_BUFFER_STATE_COMPUTE_NUM_ACCESS;
-			#else
-				nextState = (isLoad == TRUE) ?  IA_BUFFER_STATE_COMPUTE_NUM_ACCESS : IA_BUFFER_STATE_ACCESS;
-			#endif
-			iterAccess = 0;
-
-			iStripInCol++;
-			iaDramBlockColContribution += iaDramBlockColStride;
-			#if defined(SPARSE_SYSTEM)
-				tbAddressColContribution += 1;
-			#endif
-			if (iStripInCol == numStripsCol)
-			{
-				iStripInCol = 0;
-				iStripInRow++;
-				iaDramBlockColContribution = 0;
-				iaDramBlockRowContribution += iaDramBlockRowStride;
-				#if defined(SPARSE_SYSTEM)
-					tbAddressColContribution = 0;
-					tbAddressRowContribution += tbAddressRowStride;
-				#endif
-
-				if (iStripInRow == numStripsRow)
-				{
-					nextState = IA_BUFFER_STATE_PADD;
-					EMULATOR_PRINT(("[kernelIABuffer %d] FINISHED processing instruction.\n\n", colID));
-				}
+				dispatcherInstructionValid = TRUE;
 			}
 		}
-		currentState = nextState;
+
+		if (writerReadyForBlock == TRUE)
+		{
+			bool success = false;
+			writerNewBlock = read_channel_nb_intel(channel_ia_wide_local[colID], &success);
+			if (success == true)
+			{
+				writerBlockValid = TRUE;
+			}
+		}
+
+		if (readerBlockValid == TRUE)
+		{
+			bool success = false;
+			success = write_channel_nb_intel(channel_activation[0][colID], readerTB);
+			if (success == true)
+			{
+				readerBlockSent = TRUE;
+			}
+		}
+
+		/**
+		 * Update module states
+		 */
+		updateIABufferWriter (
+			writerNewInstruction,
+			writerInstructionValid,
+
+			writerNewBlock,
+			writerBlockValid,
+
+			#if defined(SPARSE_SYSTEM)
+				cacheIAStreamBlockAddress,
+			#else
+				numTBPerStrip,
+			#endif	
+			cacheIABlocks,
+			regWriterState,
+			regWriterContext
+			);
+
+		updateIABufferReader (
+			readerNewInstruction,
+			readerInstructionValid,
+
+			readerBlockSent,
+
+			&regReaderState,
+			&regReaderContext,
+
+			colID
+			);
+
+		updateIABufferDispatcher (
+			dispatcherInstructionValid,
+			dispatcherNewInstruction,
+
+			readerReadyForInstruction,
+			writerReadyForInstruction,
+
+			&regDispatcherState,
+			&regDispatcherInstructionBuffer,
+
+			colID
+			);
 	}
 }
 
-//TODO: imcomplete
+void getIABufferWriterOutput (
+		//Inputs
+		t_ia_buffer_w_state currentState,
+
+		//Outputs
+		t_flag* pOutAcceptInstruction,
+		t_flag* pOutAcceptData,
+
+		//Auxillary,
+		int colID
+	)
+{
+	//Default values:
+	*pOutAcceptInstruction = FALSE;
+	*pOutAcceptData = FALSE;
+
+
+	//Driver for the instruction interface's READY signal
+	if (currentState == IA_BUFFER_WRITE_STATE_DECODE)
+	{
+		*pOutAcceptInstruction = TRUE;
+	}
+
+	//Driver for the dram block interface's READY signal
+	if 	(
+			(currentState == IA_BUFFER_WRITE_STATE_DECODE) 
+			|| (currentState == IA_BUFFER_WRITE_STATE_COMP_NUM_ACCESS)
+		)
+	{
+		*pOutAcceptData = TRUE;
+	}
+}
+
+void updateIABufferWriter (
+		//Inputs
+		t_input_buffer_tile_buffer_packet control,
+		t_flag validControl,
+
+		t_dram_block dramBlock,
+		t_flag validDramBlock,
+
+		//Modified buffer and buffers
+		#if defined(SPARSE_SYSTEM)
+			t_streamblock_address cacheIAStreamBlockAddress [2][256],
+		#else
+			unsigned short numTBPerStrip[2],
+		#endif
+		t_dram_block cacheIABlocks [2][IA_CACHE_DEPTH],
+		t_ia_buffer_w_state* pCurrentState,
+		t_ia_buffer_write_registers* pCurrentRegisters,
+
+		//Auxillary
+		int colID
+	)
+{
+	switch (*pCurrentState) {
+		case IA_BUFFER_WRITE_STATE_DECODE: {
+			if (validControl == true) {
+				/**
+				 * Set registers
+				 */
+				pCurrentRegisters->iaBlockInfo.addressBase = control.iaDramBlockAddressBase;
+				pCurrentRegisters->iaBlockInfo.colStride = control.iaDramBlockColStride;
+				pCurrentRegisters->iaBlockInfo.rowStride = control.iaDramBlockRowStride;
+				pCurrentRegisters->iaBlockInfo.colContribution = 0;
+				pCurrentRegisters->iaBlockInfo.rowContribution = 0;
+
+				pCurrentRegisters->tileInfo.iRow = 0;
+				pCurrentRegisters->tileInfo.iCol = 0;
+				pCurrentRegisters->tileInfo.numStripsCol = control.numStripsCol;
+				pCurrentRegisters->tileInfo.numStripsRow = control.numStripsRow;
+
+				pCurrentRegisters->accessBank = control.controlBits & 0x01;
+				pCurrentRegisters->iterAccess = 0;
+				pCurrentRegisters->numIAAccess = 0;
+
+				#if defined(SPARSE_SYSTEM)
+					pCurrentRegisters->tbCountInfo.addressBase = control.tbAddressBase;
+					pCurrentRegisters->tbCountInfo.rowStride = control.tbAddressRowStride;
+					pCurrentRegisters->colContribution = 0;
+					pCurrentRegisters->rowContribution = 0;
+				#endif
+
+				/**
+				 * Update state, if this is not a ghost command
+				 */
+				if (control.numStripsRow != 0)
+				{
+					*pCurrentState = IA_BUFFER_WRITE_STATE_COMP_NUM_ACCESS;
+					#if defined(SPARSE_SYSTEM)
+					EMULATOR_PRINT(("[kernelIABuffer Writer %d] START processing instruction. "
+						"iaDramBlockAddressBase=%#010x, "
+						"iaDramBlockColStride=%#010x, "
+						"iaDramBlockRowStride=%#010x, "
+						"tbCountAddressBase=%#010x, "
+						"tbCountRowStride=%#010x, "
+						"numStripsRow=%d, "
+						"numStripsCol=%d\n\n"
+						colID, 
+						control.iaDramBlockAddressBase,
+						control.iaDramBlockColStride,
+						control.iaDramBlockRowStride,
+						control.tbAddressBase,
+						control.tbAddressRowStride,
+						(unsigned int) control.numStripsRow,
+						(unsigned int) control.numStripsCol));
+					#else
+						EMULATOR_PRINT(("[kernelIABuffer Writer %d] START processing instruction. "
+							"iaDramBlockAddressBase=%#010x, "
+							"iaDramBlockColStride=%#010x, "
+							"iaDramBlockRowStride=%#010x, "
+							"numStripsRow=%d, "
+							"numStripsCol=%d\n\n"
+							colID, 
+							control.iaDramBlockAddressBase,
+							control.iaDramBlockColStride,
+							control.iaDramBlockRowStride,
+							(unsigned int) control.numStripsRow,
+							(unsigned int) control.numStripsCol));
+					#endif
+				}
+				
+			} // if validControl == TRUE
+		}
+		break; //IA_BUFFER_WRITE_STATE_DECODE
+
+		case IA_BUFFER_WRITE_STATE_COMP_NUM_ACCESS: {
+			if (validDramBlock == TRUE)
+			{
+				t_streamblock_address numIATransferBlocks = getTBCount(dramBlock);
+
+				pCurrentRegisters->numIAAccess = 
+					1 + ((numIATransferBlocks-1) >> WIDE_SIZE_OFFSET);
+				pCurrentRegisters->iterAccess = 0;
+
+				#if defined(SPARSE_SYSTEM)
+					cacheIAStreamBlockAddress
+						[(pCurrentRegisters->accessBank) & 0x01]
+						[pCurrentRegisters->tbCountInfo.addressBase 
+							+ pCurrentRegisters->tbCountInfo.colContribution 
+							+ pCurrentRegisters->tbCountInfo.rowContribution] 
+						= numIATransferBlocks;
+				#else
+					numTBPerStrip[(pCurrentRegisters->accessBank) & 0x01] = numIATransferBlocks;
+				#endif
+
+				*pCurrentState = IA_BUFFER_WRITE_STATE_ACCESS;
+			}
+		}
+		break;
+
+		case IA_BUFFER_WRITE_STATE_ACCESS: {
+			/**
+			 * Write incoming dram block into the cache, and update the counters
+			 */
+			if (validDramBlock == TRUE)
+			{
+				cacheIABlocks[(pCurrentRegisters->accessBank) & 0x01]
+					[(pCurrentRegisters->iterAccess) 
+						+ (pCurrentRegisters->iaBlockInfo.addressBase)
+						+ (pCurrentRegisters->iaBlockInfo.colContribution)
+						+ (pCurrentRegisters->iaBlockInfo.rowContribution)]
+					= dramBlock;
+
+				pCurrentRegisters->iterAccess += 0x1;
+
+				if ((pCurrentRegisters->iterAccess) == (pCurrentRegisters->numIAAccess))
+				{
+					*pCurrentState = IA_BUFFER_WRITE_STATE_UPDATE_STRIP;
+				}
+			}
+			
+		}
+		break;
+
+		case IA_BUFFER_WRITE_STATE_UPDATE_STRIP: {
+			/**
+			 * Increment tile counter, cache counters
+			 */
+			pCurrentRegisters->iterAccess = 0;
+			pCurrentRegisters->tileInfo.iCol += 0x1;
+			pCurrentRegisters->iaBlockInfo.colContribution += pCurrentRegisters->iaBlockInfo.colStride;
+			#if defined(SPARSE_SYSTEM)
+				pCurrentRegisters->tbCountInfo.colContribution += 0x1;
+			#endif
+
+			*pCurrentState = IA_BUFFER_WRITE_STATE_COMP_NUM_ACCESS;
+
+			if (pCurrentRegisters->tileInfo.iCol == pCurrentRegisters->tileInfo.numStripsCol)
+			{
+				pCurrentRegisters->tileInfo.iCol = 0x0;
+				pCurrentRegisters->tileInfo.iRow += 0x1;
+				pCurrentRegisters->iaBlockInfo.colContribution = 0;
+				pCurrentRegisters->iaBlockInfo.rowContribution += pCurrentRegisters->iaBlockInfo.rowStride;
+				#if defined(SPARSE_SYSTEM)
+					pCurrentRegisters->tbCountInfo.colContribution 0x0;
+					pCurrentRegisters->tbCountInfo.rowContribution += pCurrentRegisters->tbCountInfo.rowStride;
+				#endif
+
+				if (pCurrentRegisters->tileInfo.iRow == pCurrentRegisters->tileInfo.numStripsRow)
+				{
+					*pCurrentState = IA_BUFFER_WRITE_STATE_DECODE;
+					EMULATOR_PRINT(("[kernelIABuffer WRITER %d] FINISHED processing instruction.\n\n", colID));
+				}
+			}
+		}
+		break;
+
+		default: {
+			// Keep the status-quo
+		}
+	} //end of state switch
+} //updateIABufferWriter
+
+
+
+
+
 __attribute__((max_global_work_dim(0)))
 __kernel void kernelIATileController (
 	VOLATILE __global const t_ia_tile_controller_instruction* restrict pInstruction,
@@ -955,7 +1151,6 @@ __kernel void kernelIATileController (
 		/*
 		1. Read the instruction of the tile from the memory reader
 		*/
-		if (iInstructionCycle < numInstructions)
 		{
 			t_ia_tile_controller_instruction instruction = pInstruction[iInstruction];
 
@@ -1000,7 +1195,14 @@ __kernel void kernelIATileController (
 			    #endif
 
 			    tileBufferControlPacket.numStripsCol = inputTileWidth;
-			    tileBufferControlPacket.numStripsRow = inputTileHeight;
+			    if (iInstructionCycle < numInstructions)
+				{
+			    	tileBufferControlPacket.numStripsRow = inputTileHeight;
+			    }
+			    else //HACK. Set the number of rows to zero represent a ghost command.
+			    {
+			    	tileBufferControlPacket.numStripsRow = 0;
+			    }
 
 				write_channel_intel(channel_control_to_ia_buffer[0], tileBufferControlPacket);
 			}
@@ -1111,7 +1313,6 @@ __kernel void kernelIATileController (
 
 
 
-//TODO: Maybe this kernel can be eliminiated
 __attribute__((max_global_work_dim(0)))
 __attribute__((autorun))
 __attribute__((num_compute_units(PE_COLS)))
@@ -1883,7 +2084,7 @@ __kernel void kernelOATileController (
 
 	   	EMULATOR_PRINT(("[kernelOATileController] START sending the drain-from-array instruction for instruction %d\n\n", 
 				iInst));
-	   	//TODO: Make sure to chagne how numDrainInstructions is calculated on the host
+
 	    for  (unsigned short i=0; i < inst.numDrainInstructions; i++)
 	    {
 	    	unsigned char numActivePeRows = (iFoldInGroup < numFullFoldsInGroupCurrentLayer) ?
@@ -1922,7 +2123,7 @@ __kernel void kernelOATileController (
 	   	EMULATOR_PRINT(("[kernelOATileController] START sending the write-to-memory instruction for tile %d\n\n", 
 				iInst));
 	    unsigned short iChannelNextLayer = 0;
-	    //TODO: make sure to change how numMemInstructions are calculated on the host.
+
 	    for  (unsigned short i=0; i<inst.numMemInstructions; i++)
 	    {
 	    	unsigned short startOutputIndex = iChannelNextLayer;
@@ -2434,8 +2635,6 @@ __kernel void kernelFilterBuffer ()
 	unsigned short iOutputRead = 0;
 
 
-	//TODO: Delete this;
-	//unsigned short iterCount= 0;
 
 	//#pragma ivdep array(cacheNzBlocks)
 	#pragma ivdep
@@ -2565,8 +2764,6 @@ __kernel void kernelFilterBuffer ()
 					iTransferBlockInFilterRead++;
 				}
 
-				//TODO: Delete this
-				//iterCount++;
 			}
 		} // STATE_FILTER_STREAMER_READ_CACHE_READ
 
