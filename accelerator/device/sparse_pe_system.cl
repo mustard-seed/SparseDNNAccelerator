@@ -601,6 +601,8 @@ typedef struct __attribute__((packed)) {
 	//Iterator for the buffer access count (in each strip?)
 	unsigned short iterAccess;
 
+	//Maximum convolution PE row that will be affected by the buffer read operation
+	unsigned char maxPeRowID;
 	
 
 	//Which cache bank to read from
@@ -1117,7 +1119,80 @@ void updateIABufferWriter (
 	} //end of state switch
 } //updateIABufferWriter
 
+void getIABufferReaderOutput (
+		//Inputs
+		t_ia_buffer_r_state currentState,
+		t_ia_buffer_read_registers currentRegisters,
 
+		//Buffers to read from
+		#if defined(SPARSE_SYSTEM)
+			t_streamblock_address cacheIAStreamBlockAddress [2][256],
+		#else
+			unsigned short numTBPerStrip[2],
+		#endif
+		t_dram_block cacheIABlocks [2][IA_CACHE_DEPTH],
+
+		//Outputs
+		t_flag* pOutAcceptInstruction,
+		
+		t_transferblock_tagged* pTaggedBlock,
+		t_flag* pSendTransferBlock,
+
+		//Auxillary,
+		int colID
+	)
+{
+	if (currentState == IA_BUFFER_READ_STATE_DECODE)
+	{
+		*pOutAcceptInstruction = TRUE;
+	}
+
+	if (currentState == IA_BUFFER_READ_STATE_ACCESS)
+	{
+		*pSendTransferBlock = TRUE;
+		
+		t_dram_block dramBlock = cacheIABlocks[currentRegisters.accessBank & 0x01]
+			[currentRegisters.iaBlockInfo.addressBase 
+				+ currentRegisters.iaBlockInfo.colContribution 
+				+ currentRegisters.iaBlockInfo.rowContribution 
+				+ ((unsigned short)(currentRegisters.iterAccess >> WIDE_SIZE_OFFSET))];	
+
+		unsigned char isLastTemp =  (((currentRegisters.iterAccess + 1) == currentRegisters.numIAAccess) 
+			&& ((currentRegisters.tileInfo.iRow+1) == currentRegisters.tileInfo.numStripsRow) 
+			&& ((currentRegisters.tileInfo.iCol+1) == currentRegisters.tileInfo.numStripsCol)) ?
+			TRUE : FALSE;
+
+		#if defined(SPARSE_SYSTEM)
+			//Insert the bitmask
+			if ((currentRegisters.iTBInCW == 0) && (currentRegisters.flagPadBitmask == TRUE))
+			{
+				#pragma unroll
+				for (int i=0; i<TRANSFER_SIZE*CLUSTER_SIZE; i++)
+				{
+					if (i < (COMPRESSION_WINDOW_SIZE / 8))
+					{
+						(*pTaggedBlock).values.values[i] = ((currentRegisters.numIAAccess - currentRegisters.iterAccess) < (COMPRESSION_WINDOW_SIZE / TRANSFER_SIZE)) ?
+							currentRegisters.partialBitmask[i] : 0xFF;
+					}
+					else
+					{
+						(*pTaggedBlock).values.values[i] = 0x00;
+					}
+				}
+				isLastTemp = FALSE;
+			}
+			else
+			{
+				(*pTaggedBlock).values = dramBlock.transferBlocks[(currentRegisters.iterAccess) & WIDE_SIZE_REMAINDER_MASK];
+			}
+		#else
+			(*pTaggedBlock).values = dramBlock.transferBlocks[(currentRegisters.iterAccess) & WIDE_SIZE_REMAINDER_MASK];
+		#endif
+
+		setMaxTransferID(pTaggedBlock, currentRegisters.maxPeRowID);
+		setIsLast(pTaggedBlock, isLastTemp);
+	}
+}
 
 
 
