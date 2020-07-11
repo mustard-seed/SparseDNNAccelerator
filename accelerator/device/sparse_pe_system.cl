@@ -439,9 +439,8 @@ __kernel void kernelWMover (
 
 #ifdef IA_MEMORY
 #define IA_BUFFER_WRITE_STATE_DECODE 0X0
-#define IA_BUFFER_WRITE_STATE_COMP_NUM_ACCESS 0X1
-#define IA_BUFFER_WRITE_STATE_ACCESS 0X2
-#define IA_BUFFER_WRITE_STATE_UPDATE_STRIP 0X3
+#define IA_BUFFER_WRITE_STATE_ACCESS 0X1
+#define IA_BUFFER_WRITE_STATE_UPDATE_STRIP 0X2
 
 #define IA_BUFFER_READ_STATE_DECODE 0X0
 #define IA_BUFFER_READ_STATE_COMP_NUM_ACCESS 0X1
@@ -451,6 +450,10 @@ __kernel void kernelWMover (
 #define IA_BUFFER_INSTRUCTION_STATE_DECODE 0X0
 #define IA_BUFFER_INSTRUCTION_STATE_SEND_TO_READER 0X1
 #define IA_BUFFER_INSTRUCTION_STATE_SEND_TO_WRITER 0x2
+
+#define IA_BUFFER_READ_STRIP_UPDATE_HORIZONTAL 0X0
+#define IA_BUFFER_READ_STRIP_UPDATE_VERTICAL 0X1
+#define IA_BUFFER_READ_STRIP_UPDATE_DONE 0x2
 
 typedef uint3_t t_ia_buffer_w_state;
 typedef uint3_t t_ia_buffer_r_state;
@@ -589,20 +592,24 @@ typedef struct __attribute__((packed)) {
 
 		//Flag that indicates whether the IA strip is in fact dense, 
 		//hence the buffer needs to insert sparse bitmask when streaming IA strips to the PE array
-		uint1_t flagPadBitmask = FALSE;
+		uint1_t flagPadBitmask;
 		//Number of transfer blocks in an uncompressed compression window
-		unsigned char iTBInCW = 0; //Only useful for dense input
+		unsigned char iTBInCW; //Only useful for dense input
 		unsigned char partialBitmask[COMPRESSION_WINDOW_SIZE / 8];
 	#endif
 
 	//Number of dram blocks in each strip during buffer loading, 
-	unsigned short numIAAccess;
+	unsigned short numTBPerStrip;
 
 	//Iterator for the buffer access count (in each strip?)
 	unsigned short iterAccess;
 
 	//Maximum convolution PE row that will be affected by the buffer read operation
 	unsigned char maxPeRowID;
+
+	//Instruction on how the dram cache pointer should be updated in update_strip state
+	//Also used to indicate whether the current strip is the last one to be streamed
+	uint2_t stripUpdateMode;
 	
 
 	//Which cache bank to read from
@@ -651,6 +658,8 @@ void getIABufferReaderOutput (
  * @param[in]  control                  Incoming control packet
  * @param[in]  validControl             Flag that indicates the incoming control packet is valid
  * @param[in]  writeSuccessTaggedBlock  Flag indicating whether the transfer block on the PE array interface has been successfully sent
+ * @param      cacheIAStreamBlockAddress  The cache ia stream block address
+ * @param      numTBPerStrip              The number tb per strip
  * @param      pCurrentState            Current state
  * @param      pCurrentRegisters        Current variable values
  * @param[in]  colID                    The col id
@@ -661,6 +670,13 @@ void updateIABufferReader (
 		t_flag validControl,
 
 		t_flag writeSuccessTaggedBlock,
+
+		//Buffers to read from
+		#if defined(SPARSE_SYSTEM)
+			t_streamblock_address cacheIAStreamBlockAddress [2][256],
+		#else
+			unsigned short numTBPerStrip[2],
+		#endif
 
 		//Modified buffer and buffers
 		t_ia_buffer_r_state* pCurrentState,
@@ -855,6 +871,14 @@ __kernel void kernelIABuffer ()
 			if (success == true)
 			{
 				readerBlockSent = TRUE;
+
+				EMULATOR_PRINT(("[kernelIABuffer %d] Sent TB %d / %d. TB[0-3]: %#04x %#04x %#04x %#04x \n\n",
+					colID, regReaderContext.iterAccess, regReaderContext.numIAAccess
+					,readerTB.values.values[0]
+					,readerTB.values.values[1]
+					,readerTB.values.values[2]
+					,readerTB.values.values[3]
+					));
 			}
 		}
 
@@ -883,6 +907,12 @@ __kernel void kernelIABuffer ()
 			readerInstructionValid,
 
 			readerBlockSent,
+
+			#if defined(SPARSE_SYSTEM)
+				cacheIAStreamBlockAddress,
+			#else
+				numTBPerStrip,
+			#endif	
 
 			&regReaderState,
 			&regReaderContext,
@@ -1157,9 +1187,9 @@ void getIABufferReaderOutput (
 				+ currentRegisters.iaBlockInfo.rowContribution 
 				+ ((unsigned short)(currentRegisters.iterAccess >> WIDE_SIZE_OFFSET))];	
 
-		unsigned char isLastTemp =  (((currentRegisters.iterAccess + 1) == currentRegisters.numIAAccess) 
-			&& ((currentRegisters.tileInfo.iRow+1) == currentRegisters.tileInfo.numStripsRow) 
-			&& ((currentRegisters.tileInfo.iCol+1) == currentRegisters.tileInfo.numStripsCol)) ?
+		//TODO: Change this
+		unsigned char isLastTemp =  (((currentRegisters.iterAccess + 1) == currentRegisters.numTBPerStrip) 
+			&& (currentRegisters.stripUpdateMode == IA_BUFFER_READ_STRIP_UPDATE_DONE) )
 			TRUE : FALSE;
 
 		#if defined(SPARSE_SYSTEM)
@@ -1171,7 +1201,7 @@ void getIABufferReaderOutput (
 				{
 					if (i < (COMPRESSION_WINDOW_SIZE / 8))
 					{
-						(*pTaggedBlock).values.values[i] = ((currentRegisters.numIAAccess - currentRegisters.iterAccess) < (COMPRESSION_WINDOW_SIZE / TRANSFER_SIZE)) ?
+						(*pTaggedBlock).values.values[i] = ((currentRegisters.numTBPerStrip - currentRegisters.iterAccess) < (COMPRESSION_WINDOW_SIZE / TRANSFER_SIZE)) ?
 							currentRegisters.partialBitmask[i] : 0xFF;
 					}
 					else
@@ -1194,8 +1224,340 @@ void getIABufferReaderOutput (
 	}
 }
 
+void updateIABufferReader (
+		//Inputs
+		t_input_buffer_tile_buffer_packet control,
+		t_flag validControl,
 
+		t_flag writeSuccessTaggedBlock,
 
+		//Buffers to read from
+		#if defined(SPARSE_SYSTEM)
+			t_streamblock_address cacheIAStreamBlockAddress [2][256],
+		#else
+			unsigned short numTBPerStrip[2],
+		#endif
+
+		//Modified buffer and buffers
+		t_ia_buffer_r_state* pCurrentState,
+		t_ia_buffer_read_registers* pCurrentRegisters,
+
+		//Auxillary
+		int colID
+	)
+{
+	switch (*pCurrentState) {
+		case IA_BUFFER_READ_STATE_DECODE: {
+			if (validControl == true) 
+			{
+				/**
+				 * Set registers
+				 */
+				pCurrentRegisters->iaBlockInfo.addressBase = control.iaDramBlockAddressBase;
+				pCurrentRegisters->iaBlockInfo.colStride = control.iaDramBlockColStride;
+				pCurrentRegisters->iaBlockInfo.rowStride = control.iaDramBlockRowStride;
+				pCurrentRegisters->iaBlockInfo.colContribution = 0;
+				pCurrentRegisters->iaBlockInfo.rowContribution = 0;
+
+				pCurrentRegisters->tileInfo.iRow = 0;
+				pCurrentRegisters->tileInfo.iCol = 0;
+				pCurrentRegisters->tileInfo.numStripsCol = control.numStripsCol;
+				pCurrentRegisters->tileInfo.numStripsRow = control.numStripsRow;
+
+				pCurrentRegisters->accessBank = control.controlBits & 0x01;
+				pCurrentRegisters->iterAccess = 0;
+				//Number of IA dram block cache per-strip
+				pCurrentRegisters->numTBPerStrip = 0;
+
+				pCurrentRegisters->maxPeRowID = control.maxPeRowID;
+
+				#if defined(SPARSE_SYSTEM)
+					//tbCountInfo
+					pCurrentRegisters->tbCountInfo.addressBase = control.tbAddressBase;
+					pCurrentRegisters->tbCountInfo.rowStride = control.tbAddressRowStride;
+					pCurrentRegisters->colContribution = 0;
+					pCurrentRegisters->rowContribution = 0;
+
+					pCurrentRegisters->flagPadBitmask = (control.controlBits >> 2) & 0x01;
+					pCurrentRegisters->iTBInCW = 0;
+					#pragma unroll
+					for (int i=0; i<(COMPRESSION_WINDOW_SIZE / 8); i++)
+					{
+						pCurrentRegisters->partialBitmask[i] = control.partialBitmask[i];
+					}
+				#endif
+
+				/**
+				 * Update state
+				 */
+				{
+					*pCurrentState = IA_BUFFER_READ_STATE_UPDATE_STRIP;
+					#if defined(SPARSE_SYSTEM)
+					EMULATOR_PRINT(("[kernelIABuffer Reader %d] START processing instruction. "
+						"iaDramBlockAddressBase=%#010x, "
+						"iaDramBlockColStride=%#010x, "
+						"iaDramBlockRowStride=%#010x, "
+						"tbCountAddressBase=%#010x, "
+						"tbCountRowStride=%#010x, "
+						"numStripsRow=%d, "
+						"numStripsCol=%d\n\n"
+						colID, 
+						control.iaDramBlockAddressBase,
+						control.iaDramBlockColStride,
+						control.iaDramBlockRowStride,
+						control.tbAddressBase,
+						control.tbAddressRowStride,
+						(unsigned int) control.numStripsRow,
+						(unsigned int) control.numStripsCol));
+					#else
+						EMULATOR_PRINT(("[kernelIABuffer Reader %d] START processing instruction. "
+							"iaDramBlockAddressBase=%#010x, "
+							"iaDramBlockColStride=%#010x, "
+							"iaDramBlockRowStride=%#010x, "
+							"numStripsRow=%d, "
+							"numStripsCol=%d\n\n"
+							colID, 
+							control.iaDramBlockAddressBase,
+							control.iaDramBlockColStride,
+							control.iaDramBlockRowStride,
+							(unsigned int) control.numStripsRow,
+							(unsigned int) control.numStripsCol));
+					#endif
+				}
+				
+			} // if validControl == TRUE
+		}
+		break; //IA_BUFFER_WRITE_STATE_DECODE
+
+		case IA_BUFFER_WRITE_STATE_UPDATE_STRIP: {
+			
+			*pCurrentState = IA_BUFFER_READ_STATE_ACCESS;
+
+			/**
+			 * Access the number of IA cache number of access in the upcoming strip
+			 */
+			#if defined(SPARSE_SYSTEM)
+				pCurrentRegisters->numTBPerStrip = 
+					cacheIAStreamBlockAddress
+						[pCurrentRegisters->accessBank & 0x01] 
+						[pCurrentRegisters->tbCountInfo.addressBase 
+							+ pCurrentRegisters->tbCountInfo.colContribution 
+							+ pCurrentRegisters->tbCountInfo.rowContribution];
+				pCurrentRegisters->iTBInCW = 0;
+			#else
+				pCurrentRegisters->numTBPerStrip = numTBPerStrip [pCurrentRegisters->accessBank & 0x01]; 
+			#endif
+
+			/*
+			 * Reset strip counters
+			*/
+			pCurrentRegisters->iterAccess = 0;
+
+			/**
+			 * increment the tile pointer and TB count pointers in advance,
+			 * obtain the strip update mode
+			 */
+			pCurrentRegisters->tileInfo.iCol += 0x1;
+			pCurrentRegisters->stripUpdateMode = IA_BUFFER_READ_STRIP_UPDATE_HORIZONTAL;
+			#if defined(SPARSE_SYSTEM)
+				pCurrentRegisters->tbCountInfo.colContribution += 0x1;
+			#endif
+
+			if (pCurrentRegisters->tileInfo.iCol == pCurrentRegisters->tileInfo.numStripsCol)
+			{
+				pCurrentRegisters->tileInfo.iCol = 0x0;
+				pCurrentRegisters->tileInfo.iRow += 0x1;
+
+				pCurrentRegisters->stripUpdateMode = IA_BUFFER_READ_STRIP_UPDATE_VERTICAL;
+
+				#if defined(SPARSE_SYSTEM)
+					pCurrentRegisters->tbCountInfo.colContribution = 0x0;
+					pCurrentRegisters->tbCountInfo.rowContribution += pCurrentRegisters->tbCountInfo.rowStride;
+				#endif
+
+				if (pCurrentRegisters->tileInfo.iRow == pCurrentRegisters->tileInfo.numStripsRow)
+				{
+					pCurrentRegisters->stripUpdateMode = IA_BUFFER_READ_STRIP_UPDATE_DONE;
+				}
+			}
+		}
+		break;
+
+		case IA_BUFFER_WRITE_STATE_ACCESS: {
+			/**
+			 * Update the ia strip counters and possibly move the ia pointers if the write to the
+			 * PE array is successful
+			 */
+			if (writeSuccessTaggedBlock == TRUE)
+			{
+				#if defined(SPARSE_SYSTEM)
+					if ((pCurrentRegisters->iTBInCW > 0) 
+						|| (pCurrentRegisters->flagPadBitmask == FALSE))
+					{
+						pCurrentRegisters->iterAccess += 1;
+					}
+
+					pCurrentRegisters->iTBInCW += 1;
+					if ( (pCurrentRegisters->iTBInCW) == (COMPRESSION_WINDOW_SIZE / TRANSFER_SIZE) )
+					{
+						pCurrentRegisters->iTBInCW = 0;
+					}
+				#else
+					pCurrentRegisters->iterAccess += 1;
+				#endif
+
+				/**
+				 * Update IA cache pointer and reader state
+				 */
+				if (pCurrentRegisters->iterAccess == pCurrentRegisters->numTBPerStrip)
+				{
+					if (pCurrentRegisters->stripUpdateMode == IA_BUFFER_READ_STRIP_UPDATE_HORIZONTAL)
+					{
+						pCurrentRegisters->iaBlockInfo.colContribution +=
+							pCurrentRegisters->iaBlockInfo.colStride;
+
+						*pCurrentState = IA_BUFFER_READ_STATE_UPDATE_STRIP;
+					}
+					else if (pCurrentRegisters->stripUpdateMode == IA_BUFFER_READ_STRIP_UPDATE_VERTICAL)
+					{
+						pCurrentRegisters->iaBlockInfo.colContribution = 0;
+
+						pCurrentRegisters->iaBlockInfo.rowContribution +=
+							pCurrentRegisters->iaBlockInfo.rowStride;
+
+						*pCurrentState = IA_BUFFER_READ_STATE_UPDATE_STRIP;
+					}
+					else if (pCurrentRegisters->stripUpdateMode == IA_BUFFER_READ_STRIP_UPDATE_DONE)
+					{
+						*pCurrentState = IA_BUFFER_READ_STATE_DECODE;
+					}
+				}
+			}
+			
+		}
+		break;
+
+		default: {
+			// Keep the status-quo
+		}
+	} //end of state switch
+} //update IA buffer reader
+
+void getIABufferDispatcherOutput (
+		//Current state
+		t_ia_buffer_d_state currentState,
+
+		//Instruction buffer
+		t_input_buffer_tile_buffer_packet controlBuffer,
+
+		//instruction channel interface
+		t_flag* pOutReadyForInstruction,
+
+		//accessor interface
+		t_flag* pOutValidReaderInstruction,
+		t_flag* pOutValidWriterInstruction,
+		t_input_buffer_tile_buffer_packet* pOutReaderControl,
+		t_input_buffer_tile_buffer_packet* pOutWriterControl,
+
+		//Auxillary
+		int colID
+	)
+{
+	/**
+	 * Default values
+	 */
+	*pOutReadyForInstruction = FALSE;
+	*pOutValidWriterInstruction = FALSE;
+	*pOutValidReaderInstruction = FALSE;
+
+	/**
+	 * Tile control packet interface signal
+	 */
+	if (currentState == IA_BUFFER_INSTRUCTION_STATE_DECODE)
+	{
+		*pOutReadyForInstruction = TRUE;
+	}
+
+	/**
+	 * Writer control interface
+	 */
+	if (currentState == IA_BUFFER_INSTRUCTION_STATE_SEND_TO_WRITER)
+	{
+		*pOutValidWriterInstruction = TRUE;
+		*pOutWriterControl = controlBuffer;
+	}
+
+	/**
+	 * Reader control interface
+	 */
+	if (currentState == IA_BUFFER_INSTRUCTION_STATE_SEND_TO_READER)
+	{
+		*pOutValidReaderInstruction = TRUE;
+		*pOutReaderControl = controlBuffer;
+	}
+} //getIABufferDispatcherOutput
+
+void updateIABufferDispatcher (
+		//instruction channel interface
+		t_flag inInstructionValid,
+		t_input_buffer_tile_buffer_packet inControl,
+
+		//accessor interface
+		t_flag inReaderReady,
+		t_flag inWriterReady,
+
+		//context
+		t_ia_buffer_d_state* pState,
+		t_input_buffer_tile_buffer_packet* pControlBuffer,
+
+		//Auxillary
+		int colID
+	)
+{
+	switch (*pState) {
+		case IA_BUFFER_INSTRUCTION_STATE_DECODE: {
+			if (inInstructionValid == TRUE) {
+				*pControlBuffer = inControl;
+				//Check whether the instruction is for the writer
+				if (((inControl.controlBits >> 0x1) & 0x01) == 0x0)
+				{
+					*pState = IA_BUFFER_INSTRUCTION_STATE_SEND_TO_WRITER;
+				}
+				//Check whether the instruction is for the reader
+				else if (((inControl.controlBits >> 0x1) & 0x01) == 0x1)
+				{
+					*pState = IA_BUFFER_INSTRUCTION_STATE_SEND_TO_READER;
+				}
+			}
+		}
+		break; //IA_BUFFER_INSTRUCTION_STATE_DECODE
+
+		case IA_BUFFER_INSTRUCTION_STATE_SEND_TO_WRITER: {
+			if (inWriterReady == TRUE)
+			{
+				*pState = IA_BUFFER_INSTRUCTION_STATE_DECODE;
+
+				EMULATOR_PRINT(("[kernelIABuffer Dispatcher %d] Sent instruction to WRITER.\n",
+							colID));
+			}
+		}
+		break; //IA_BUFFER_INSTRUCTION_STATE_SEND_TO_WRITER
+
+		case IA_BUFFER_INSTRUCTION_STATE_SEND_TO_READER: {
+			if (inReaderReady == TRUE)
+			{
+				*pState = IA_BUFFER_INSTRUCTION_STATE_DECODE;
+				EMULATOR_PRINT(("[kernelIABuffer Dispatcher %d] Sent instruction to READER.\n",
+							colID));
+			}
+		}
+		break; //IA_BUFFER_INSTRUCTION_STATE_SEND_TO_READER
+
+		default: {
+
+		}
+	} // switch statement
+} //updateIABufferDispatcher
 __attribute__((max_global_work_dim(0)))
 __kernel void kernelIATileController (
 	VOLATILE __global const t_ia_tile_controller_instruction* restrict pInstruction,
