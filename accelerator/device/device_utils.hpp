@@ -82,6 +82,8 @@ void setIsLast (t_transferblock_tagged* pBlockTagged, unsigned char isLast);
 
 void setMaxTransferID (t_transferblock_tagged* pBlockTagged, unsigned char maxTransferID);
 
+void initialize_dramblock(t_dram_block* pDramBlock);
+
 #endif
 
 #endif

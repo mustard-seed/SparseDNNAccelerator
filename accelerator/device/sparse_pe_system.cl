@@ -742,13 +742,68 @@ __kernel void kernelIABuffer ()
 	/**
 	 * Writer state and registers
 	 */
-	t_ia_buffer_write_registers regWriterContext;
+	t_ia_buffer_write_registers regWriterContext = {
+			.iaBlockInfo={
+				.addressBase = 0,
+				.colStride = 0,
+				.rowStride = 0,
+				.colContribution = 0,
+				.rowContribution = 0
+			},
+			.tileInfo={
+				.iRow = 0,
+				.iCol = 0,
+				.numStripsRow = 0,
+				.numStripsCol = 0
+			},
+			#if defined(SPARSE_SYSTEM)
+			.tbCountInfo={
+				.addressBase = 0,
+				.rowStride = 0,
+				.colContribution = 0,
+				.rowContribution = 0
+			},
+			#endif
+			.numIAAccess=0,
+			.iterAccess=0,
+			.accessBank = 0
+		};
 	t_ia_buffer_w_state regWriterState = IA_BUFFER_WRITE_STATE_DECODE;
 
 	/**
 	 * Reader state and registers
 	 */
-	t_ia_buffer_read_registers regReaderContext;
+	t_ia_buffer_read_registers regReaderContext = {
+			.iaBlockInfo={
+				.addressBase = 0,
+				.colStride = 0,
+				.rowStride = 0,
+				.colContribution = 0,
+				.rowContribution = 0
+			},
+			.tileInfo={
+				.iRow = 0,
+				.iCol = 0,
+				.numStripsRow = 0,
+				.numStripsCol = 0
+			},
+			#if defined(SPARSE_SYSTEM)
+			.tbCountInfo={
+				.addressBase = 0,
+				.rowStride = 0,
+				.colContribution = 0,
+				.rowContribution = 0
+			},
+			.flagPadBitmask = 0x0,
+			.iTBInCW = 0x0,
+			.partialBitmask = {0},
+			#endif
+			.numTBPerStrip = 0,
+			.iterAccess=0,
+			.accessBank = 0,
+			.maxPeRowID = 0,
+			.stripUpdateMode = 0
+		};
 	t_ia_buffer_r_state regReaderState = IA_BUFFER_READ_STATE_DECODE;
 
 
@@ -962,7 +1017,7 @@ void getIABufferWriterOutput (
 
 	//Driver for the dram block interface's READY signal
 	if 	(
-			(currentState == IA_BUFFER_WRITE_STATE_DECODE) 
+			(currentState == IA_BUFFER_WRITE_STATE_ACCESS) 
 			|| (currentState == IA_BUFFER_WRITE_STATE_COMP_NUM_ACCESS)
 		)
 	{
@@ -1084,6 +1139,11 @@ void updateIABufferWriter (
 				#endif
 
 				*pCurrentState = IA_BUFFER_WRITE_STATE_ACCESS;
+
+				EMULATOR_PRINT(("[kernelIABuffer Writer %d] Read a strip header instruction. "
+							"numIATransferBlocks=%#010x\n",
+							colID,
+							(int) numIATransferBlocks));
 			}
 		}
 		break;
@@ -1102,6 +1162,9 @@ void updateIABufferWriter (
 					= dramBlock;
 
 				pCurrentRegisters->iterAccess += 0x1;
+
+				// EMULATOR_PRINT(("[kernelIABuffer Writer %d] Read one dram block.\n",
+				// 			colID));
 
 				if ((pCurrentRegisters->iterAccess) == (pCurrentRegisters->numIAAccess))
 				{
@@ -1124,6 +1187,7 @@ void updateIABufferWriter (
 			#endif
 
 			*pCurrentState = IA_BUFFER_WRITE_STATE_COMP_NUM_ACCESS;
+			EMULATOR_PRINT(("[kernelIABuffer WRITER %d] Strip update.\n", colID));
 
 			if (pCurrentRegisters->tileInfo.iCol == pCurrentRegisters->tileInfo.numStripsCol)
 			{

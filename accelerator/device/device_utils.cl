@@ -334,4 +334,17 @@ void setMaxTransferID (t_transferblock_tagged* pBlockTagged, unsigned char maxTr
     pBlockTagged->isLastConcatMaxTransportID |= ((unsigned char)(maxTransferID & 0x07F));
 }
 
+void initialize_dramblock(t_dram_block* pDramBlock)
+{
+    #pragma unroll
+    for (int itb=0; itb<WIDE_SIZE; itb++)
+    {
+        #pragma unroll
+        for (int iVal=0; iVal<(TRANSFER_SIZE*CLUSTER_SIZE); iVal++)
+        {
+            pDramBlock->transferBlocks[itb].values[iVal] = 0x0;
+        }
+    }
+}
+
 #endif
