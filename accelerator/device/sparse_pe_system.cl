@@ -438,21 +438,21 @@ __kernel void kernelWMover (
 #endif //MEMORY_READER
 
 #ifdef IA_MEMORY
-#define IA_BUFFER_WRITE_STATE_DECODE 0X0
-#define IA_BUFFER_WRITE_STATE_ACCESS 0X1
-#define IA_BUFFER_WRITE_STATE_UPDATE_STRIP 0X2
+#define IA_BUFFER_WRITE_STATE_DECODE 0x0
+#define IA_BUFFER_WRITE_STATE_COMP_NUM_ACCESS 0x1
+#define IA_BUFFER_WRITE_STATE_ACCESS 0x2
+#define IA_BUFFER_WRITE_STATE_UPDATE_STRIP 0x3
 
-#define IA_BUFFER_READ_STATE_DECODE 0X0
-#define IA_BUFFER_READ_STATE_COMP_NUM_ACCESS 0X1
-#define IA_BUFFER_READ_STATE_ACCESS 0X2
-#define IA_BUFFER_READ_STATE_UPDATE_STRIP 0X3
+#define IA_BUFFER_READ_STATE_DECODE 0x0
+#define IA_BUFFER_READ_STATE_ACCESS 0x1
+#define IA_BUFFER_READ_STATE_UPDATE_STRIP 0x2
 
-#define IA_BUFFER_INSTRUCTION_STATE_DECODE 0X0
-#define IA_BUFFER_INSTRUCTION_STATE_SEND_TO_READER 0X1
+#define IA_BUFFER_INSTRUCTION_STATE_DECODE 0x0
+#define IA_BUFFER_INSTRUCTION_STATE_SEND_TO_READER 0x1
 #define IA_BUFFER_INSTRUCTION_STATE_SEND_TO_WRITER 0x2
 
-#define IA_BUFFER_READ_STRIP_UPDATE_HORIZONTAL 0X0
-#define IA_BUFFER_READ_STRIP_UPDATE_VERTICAL 0X1
+#define IA_BUFFER_READ_STRIP_UPDATE_HORIZONTAL 0x0
+#define IA_BUFFER_READ_STRIP_UPDATE_VERTICAL 0x1
 #define IA_BUFFER_READ_STRIP_UPDATE_DONE 0x2
 
 typedef uint3_t t_ia_buffer_w_state;
@@ -734,7 +734,7 @@ __kernel void kernelIABuffer ()
 
 	//TODO: Determine whether the attribute for the TB count cache is correct
 	#if defined(SPARSE_SYSTEM)
-		t_streamblock_address cacheIAStreamBlockAddress [2][256] __attribute__((numbanks(1)));
+		t_streamblock_address cacheIAStreamBlockAddress [2][IA_TBCOUNT_CACHE_SIZE] __attribute__((numbanks(1)));
 	#else
 		t_streamblock_address numTBPerStrip [2];
 	#endif
@@ -742,7 +742,7 @@ __kernel void kernelIABuffer ()
 	/**
 	 * Writer state and registers
 	 */
-	t_ia_buffer_writer_registers regWriterContext;
+	t_ia_buffer_write_registers regWriterContext;
 	t_ia_buffer_w_state regWriterState = IA_BUFFER_WRITE_STATE_DECODE;
 
 	/**
@@ -873,7 +873,7 @@ __kernel void kernelIABuffer ()
 				readerBlockSent = TRUE;
 
 				EMULATOR_PRINT(("[kernelIABuffer %d] Sent TB %d / %d. TB[0-3]: %#04x %#04x %#04x %#04x \n\n",
-					colID, regReaderContext.iterAccess, regReaderContext.numIAAccess
+					colID, regReaderContext.iterAccess, regReaderContext.numTBPerStrip
 					,readerTB.values.values[0]
 					,readerTB.values.values[1]
 					,readerTB.values.values[2]
@@ -898,8 +898,10 @@ __kernel void kernelIABuffer ()
 				numTBPerStrip,
 			#endif	
 			cacheIABlocks,
-			regWriterState,
-			regWriterContext
+			&regWriterState,
+			&regWriterContext,
+
+			colID
 			);
 
 		updateIABufferReader (
@@ -1032,7 +1034,7 @@ void updateIABufferWriter (
 						"tbCountAddressBase=%#010x, "
 						"tbCountRowStride=%#010x, "
 						"numStripsRow=%d, "
-						"numStripsCol=%d\n\n"
+						"numStripsCol=%d\n\n",
 						colID, 
 						control.iaDramBlockAddressBase,
 						control.iaDramBlockColStride,
@@ -1047,7 +1049,7 @@ void updateIABufferWriter (
 							"iaDramBlockColStride=%#010x, "
 							"iaDramBlockRowStride=%#010x, "
 							"numStripsRow=%d, "
-							"numStripsCol=%d\n\n"
+							"numStripsCol=%d\n\n",
 							colID, 
 							control.iaDramBlockAddressBase,
 							control.iaDramBlockColStride,
@@ -1190,7 +1192,7 @@ void getIABufferReaderOutput (
 		//TODO: Change this
 		unsigned char isLastTemp =  (((currentRegisters.iterAccess + 1) == currentRegisters.numTBPerStrip) 
 			&& (currentRegisters.stripUpdateMode == IA_BUFFER_READ_STRIP_UPDATE_DONE) )
-			TRUE : FALSE;
+			? TRUE : FALSE;
 
 		#if defined(SPARSE_SYSTEM)
 			//Insert the bitmask
@@ -1300,7 +1302,7 @@ void updateIABufferReader (
 						"tbCountAddressBase=%#010x, "
 						"tbCountRowStride=%#010x, "
 						"numStripsRow=%d, "
-						"numStripsCol=%d\n\n"
+						"numStripsCol=%d\n\n",
 						colID, 
 						control.iaDramBlockAddressBase,
 						control.iaDramBlockColStride,
@@ -1315,7 +1317,7 @@ void updateIABufferReader (
 							"iaDramBlockColStride=%#010x, "
 							"iaDramBlockRowStride=%#010x, "
 							"numStripsRow=%d, "
-							"numStripsCol=%d\n\n"
+							"numStripsCol=%d\n\n",
 							colID, 
 							control.iaDramBlockAddressBase,
 							control.iaDramBlockColStride,
@@ -1430,6 +1432,7 @@ void updateIABufferReader (
 					else if (pCurrentRegisters->stripUpdateMode == IA_BUFFER_READ_STRIP_UPDATE_DONE)
 					{
 						*pCurrentState = IA_BUFFER_READ_STATE_DECODE;
+						EMULATOR_PRINT(("[kernelIABuffer READER %d] FINISHED processing instruction.\n\n", colID));
 					}
 				}
 			}
@@ -1598,7 +1601,8 @@ __kernel void kernelIATileController (
 	        unsigned int numOutputInstructions = instruction.numOutputInstructions;
 		    unsigned char numActivePeCols = instruction.flagPadBitmaskCatNumActiveCols & 0x7F;
 		    unsigned short numOutputChannelsInGroup = instruction.numOutputChannelsInGroup;
-		    unsigned short iaCacheColStride = instruction.cacheIAStripColStride;
+		    unsigned short iaCacheColStride = drainInstruction.cacheIAStripColStride;
+		    unsigned short iaCacheRowStride = iaCacheColStride * ((unsigned short)(inputTileWidth));
 
 		    #if defined(SPARSE_SYSTEM)
 		    	uint1_t flagPadBitmask = ((instruction.flagPadBitmaskCatNumActiveCols & 0x80) >> 7);
@@ -1607,8 +1611,6 @@ __kernel void kernelIATileController (
 			/*
 			2. Send load instructions to the tile buffer
 			*/
-			unsigned short iaCacheRowStride = iaCacheColStride * ((unsigned short)(inputTileWidth));
-
 
 			EMULATOR_PRINT(("[kernelIATileController] START sending the buffer refresh command for instruction=%d\n"
 				"numStripsRow: %d, "
@@ -1624,7 +1626,7 @@ __kernel void kernelIATileController (
 				tileBufferControlPacket.iaDramBlockRowStride = iaCacheRowStride;
 				
 				tileBufferControlPacket.controlBits = ((numActivePeCols-1) << 0x3) 
-					| ((unsigned char) writeSideIndex) & 0x01
+					| (((unsigned char) writeSideIndex) & 0x01);
 
 				#if defined(SPARSE_SYSTEM)
 	                tileBufferControlPacket.tbAddressBase = 0;
@@ -1665,8 +1667,9 @@ __kernel void kernelIATileController (
 	        unsigned int numOutputInstructions = drainInstruction.numOutputInstructions;
 		    unsigned char numActivePeCols = drainInstruction.flagPadBitmaskCatNumActiveCols & 0x7F;
 		    unsigned short numOutputChannelsInGroup = drainInstruction.numOutputChannelsInGroup;
-		    unsigned short iaCacheColStride = drainInstruction.cacheIAStripColStride;
-			
+			unsigned short iaCacheColStride = drainInstruction.cacheIAStripColStride;
+		    unsigned short iaCacheRowStride = iaCacheColStride * ((unsigned short)(inputTileWidth));
+
 			//while (iFilterInGroup < numOutputChannelsInGroup)
 	        for (unsigned int i=0; i<numOutputInstructions; i++)
 			{
@@ -1744,7 +1747,7 @@ __kernel void kernelIATileController (
 		//End of sending streaming instructions
 
 		//SWAP the read side and the write side
-		writeSideIndex ~= writeSideIndex;
+		writeSideIndex = (~writeSideIndex) & 0x01;
 	}
 }
 

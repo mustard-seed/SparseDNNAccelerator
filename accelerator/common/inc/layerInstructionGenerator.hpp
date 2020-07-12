@@ -3,7 +3,7 @@
 #include "vectorType.hpp"
 
 enum OPERATION {CONVOLUTION, MAX_POOL, ELT_ADD, CONCATENATION};
-void instruction_generator(//Type of the operation
+void instruction_generator (//Type of the operation
         OPERATION op,
 
         //Instruction buffers
@@ -107,7 +107,59 @@ void instruction_generator(//Type of the operation
         //Number of groups in the next layer
 
         unsigned short numGroupsNextLayer
-
         );
+
+/*!
+ * \brief ia_cache_boundary_check
+ * \details Calculates the IA cache requirement in terms of dram block given the IA tile dimentions
+ * \param heightTile Number of rows in a tile
+ * \param widthTile Number of columns in a tile
+ * \param numDramBlockPerDenseStrip Depth of the tile in terms of dram block
+ * \return The cache size requirement in dram block
+ */
+int ia_cache_boundary_check(
+      int heightTile,
+      int widthTile,
+      int numDramBlockPerDenseStrip
+        );
+
+/*!
+ * \brief ia_tbcount_cache_boundary_check
+ * \details Calculates the tb count cache size in terms of tb counts given the IA tile dimensions
+ * \param heightTile
+ * \param widthTile
+ * \return The cache size in tb count
+ */
+int ia_tbcount_cache_boundary_check(
+      int heightTile,
+      int widthTile
+        );
+
+/*!
+ * \brief oa_cache_boundary_check
+ * \details Calculates the oa cache size requirements in terms of oa values
+ * \param heightTile
+ * \param widthTile
+ * \param numChannels Number of channels in unsparsified output tensor group
+ * \return The oa cache size
+ */
+int oa_cache_boundary_check(
+      int heightTile,
+      int widthTile,
+      int numChannels
+        );
+
+/*!
+ * \brief filter_cache_boundary_check
+ * \details Calculates the filter cache size requirements in term of dram blocks
+ * \param kernelSize Kernel height/width
+ * \param inputChannelSize Number of input channels
+ * \return dram blocks
+ */
+int filter_cache_boundary_check(
+      int kernelSize,
+      int inputChannelSize
+        );
+
 
 #endif

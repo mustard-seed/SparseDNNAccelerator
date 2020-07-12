@@ -25,30 +25,14 @@
 #include "vectorType.hpp"
 #include "layerInstructionGenerator.hpp"
 
-//#define PLAY
-//#define EMULATE
-#define PERF_TEST
+#define PLAY
+#define EMULATE
+//#define PERF_TEST
 //#NOOP
 //#define PROFILE
 #if defined(PROFILE)
 #include "CL/cl_ext_intelfpga.h"
 #endif
-
-/*Limits on the buffer sizes in bytes
- * */
-#define MAX_DRAM_BYTE_INPUT_ACTIVATION (1 << 27)
-#define MAX_DRAM_BYTE_INPUT_ACTIVATION_SB_COUNT (1 << 22)
-#define MAX_DRAM_BYTE_INPUT_WEIGHT (1 << 26)
-#define MAX_DRAM_BYTE_INPUT_WEIGHT_SB_COUNT 0x800
-#define MAX_DRAM_BYTE_INPUT_BIAS 0x800
-//#define MAX_DRAM_BYTE_OUTPUT_ACTIVATION 0x400000
-//#define MAX_DRAM_BYTE_OUTPUT_ACTIVATION_SB_COUNT 0x40000
-#define MAX_DRAM_BYTE_INPUT_MOVER_INSTRUCTION (1 << 20)
-#define MAX_DRAM_BYTE_INPUT_TILE_CONTROLLER_INSTRUCTION (1 << 20)
-#define MAX_DRAM_BYTE_OUTPUT_MOVER_INSTRUCTION (1 << 20)
-#define MAX_DRAM_BYTE_WEIGHT_MOVER_INSTRUCTION (1 << 20)
-#define MAX_DRAM_BYTE_OUTPUT_TILE_CONTROLLER_INSTRUCTION (1 << 20)
-#define MAX_DRAM_BYTE_MISC_CONTROLLER_INSTRUCTION (1 << 20)
 
 #define FRAC_WIDTH 4
 #define INT_WIDTH 3
@@ -200,21 +184,21 @@ protected:
 }; //testFixture
 
 #ifdef PLAY
-TEST_F (testFixture, play) {
-
+TEST_F (testFixture, conv_dense_input_dense_output_plain)
+{
     unsigned char inputWidth = 4;
     unsigned char inputHeight = 4;
     unsigned char numInputChannel = 8;
     unsigned char numInputGroup = 1;
-    unsigned char numOutputGroup = 2;
+    unsigned char numOutputGroup = 1;
     unsigned char inputHeightSPUnitSize = 1;
     unsigned char inputWidthSPUnitSize = 1;
     unsigned char sizeOutputTileWidthPerColFull = 2;
     unsigned char sizeOutputTileHeight = 4;
     bool flagEnableRelu = false;
     bool flagSparseInput = false;
-    bool flagSparseOutput = true;
-    OPERATION op = CONCATENATION;
+    bool flagSparseOutput = false;
+    OPERATION op = CONVOLUTION;
     float bias = 0.0f;
 
     launch(
@@ -714,6 +698,8 @@ void testFixture::SetUp()
     binaryFile = "sparse_pe_system.aocx";
 #if defined(EMULATE)
     clPlatform = aocl_utils_cpp::findPlatform("Intel(R) FPGA Emulation Platform for OpenCL(TM)");
+    //Hacke
+    binaryFile = "smallBuffer.aocx";
 #else
     clPlatform = aocl_utils_cpp::findPlatform("Intel(R) FPGA SDK for OpenCL(TM)");
 #endif
@@ -1772,6 +1758,20 @@ void testFixture::launch (
 
     cl_int status;
 
+    //Also check the output activation size
+    {
+        int oaSizeBytes = sizeof(typeof((pOutput->getTransferBlockVector()).at(0))) * (pOutput->getTransferBlockVector()).size();
+        int oaOffset = ((op == CONVOLUTION) && (flagMultiLayerConv == true)) ?
+                MEM_START_ACTIVATION_0 * BURST_SIZE_BYTE : MEM_START_ACTIVATION_1 * BURST_SIZE_BYTE;
+        assert(oaOffset+oaSizeBytes <= MAX_DRAM_BYTE_INPUT_ACTIVATION && "Too many output activation bytes to fit inside the global memory" );
+        #if defined(SPARSE_SYSTEM)
+            int oaTBSizeBytes = sizeof(typeof((pOutput->getTransferBlockCountVector()).at(0))) * (pOutput->getTransferBlockCountVector()).size();
+            int oaTBOffset = ((op == CONVOLUTION) && (flagMultiLayerConv == true)) ?
+                    MEM_START_TB_0 * sizeof(t_streamblock_address) : MEM_START_TB_1 * sizeof(t_streamblock_address);
+            assert(oaTBOffset+oaTBSizeBytes <= MAX_DRAM_BYTE_INPUT_ACTIVATION_SB_COUNT && "Too many output activation TB counts to fit inside the global memory" );
+        #endif
+    }
+
     //Transfer the input
     std::cout <<stepCount++<<". Transfer the input activations "<<std::endl;
     {
@@ -1783,6 +1783,7 @@ void testFixture::launch (
         int activationOffsetByte = MEM_START_ACTIVATION_0 * BURST_SIZE_BYTE;
 
         std::cout <<"Transfering "<<valueVectorSizeBytes<<" bytes into bufferActivationDramBlocks"<<std::endl;
+        assert(activationOffsetByte+valueVectorSizeBytes <= MAX_DRAM_BYTE_INPUT_ACTIVATION && "Too many input activation bytes to fit inside the global memory" );
 
         status = clCQIAMover.enqueueWriteBuffer(bufferActivationDramBlocks, //buffer
                                              CL_TRUE, //blocking_write
@@ -1813,6 +1814,7 @@ void testFixture::launch (
         int tbCountOffsetByte = MEM_START_TB_0 * sizeof(t_streamblock_address);
 
         std::cout <<"Transfering "<<transferBytes<<" bytes into bufferActivationTBCounts"<<std::endl;
+        assert(tbCountOffsetByte+transferBytes <= MAX_DRAM_BYTE_INPUT_ACTIVATION_SB_COUNT && "Too many input activation TB count bytes to fit inside the global memory" );
 
         status = clCQIAMover.enqueueWriteBuffer(bufferActivationTBCounts, //buffer
                                              CL_TRUE, //blocking_write
@@ -1839,6 +1841,7 @@ void testFixture::launch (
         auto transferBytes = sizeElement * numElements;
 
         std::cout <<"Transfering "<<transferBytes<<" bytes into bufferIAMoverInstructions"<<std::endl;
+        assert(transferBytes <= MAX_DRAM_BYTE_INPUT_MOVER_INSTRUCTION && "Too many IA mover instructions to fit inside the global memory" );
 
         status = clCQIAMover.enqueueWriteBuffer(bufferIAMoverInstructions, //buffer
                                              CL_TRUE, //blocking_write
@@ -1865,6 +1868,7 @@ void testFixture::launch (
         auto transferBytes = sizeElement * numElements;
 
         std::cout <<"Transfering "<<transferBytes<<" bytes into bufferIATileControllerInstructions"<<std::endl;
+        assert(transferBytes <= MAX_DRAM_BYTE_INPUT_TILE_CONTROLLER_INSTRUCTION && "Too many IA Tile instructions to fit inside the global memory" );
 
         status = clCQIATileController.enqueueWriteBuffer(bufferIATileControllerInstructions, //buffer
                                              CL_TRUE, //blocking_write
@@ -1891,6 +1895,7 @@ void testFixture::launch (
         auto transferBytes = sizeElement * numElements;
 
         std::cout <<"Transfering "<<transferBytes<<" bytes into bufferOAMoverInstructions"<<std::endl;
+        assert(transferBytes <= MAX_DRAM_BYTE_OUTPUT_MOVER_INSTRUCTION && "Too many OA mover instructions to fit inside the global memory" );
 
         status = clCQOAMover.enqueueWriteBuffer(bufferOAMoverInstructions, //buffer
                                              CL_TRUE, //blocking_write
@@ -1916,6 +1921,7 @@ void testFixture::launch (
         auto transferBytes = sizeElement * numElements;
 
         std::cout <<"Transfering "<<transferBytes<<" bytes into bufferOAMoverInstructions"<<std::endl;
+        assert(transferBytes <= MAX_DRAM_BYTE_OUTPUT_TILE_CONTROLLER_INSTRUCTION && "Too many OA TILE instructions to fit inside the global memory" );
 
         status = clCQOATileController.enqueueWriteBuffer(bufferOATileControllerInstructions, //buffer
                                              CL_TRUE, //blocking_write
@@ -1945,6 +1951,8 @@ void testFixture::launch (
             auto transferBytes = sizeElement * numElements;
 
             std::cout <<"Transfering "<<transferBytes<<" bytes into bufferWMoverInstructions"<<std::endl;
+            assert(transferBytes <= MAX_DRAM_BYTE_WEIGHT_MOVER_INSTRUCTION && "Too many Weight Mover instructions to fit inside the global memory" );
+
 
             status = clCQWMover.enqueueWriteBuffer(bufferWMoverInstructions, //buffer
                                                  CL_TRUE, //blocking_write
@@ -1970,6 +1978,7 @@ void testFixture::launch (
             auto transferBytes = sizeElement * numElements;
 
             std::cout <<"Transfering "<<transferBytes<<" bytes into bufferWMoverBias"<<std::endl;
+            assert(transferBytes <= MAX_DRAM_BYTE_INPUT_BIAS && "Too many biases to fit inside the global memory" );
 
             status = clCQWMover.enqueueWriteBuffer(bufferWMoverBias, //buffer
                                                  CL_TRUE, //blocking_write
@@ -1995,6 +2004,7 @@ void testFixture::launch (
             auto transferBytes = sizeElement * numElements;
 
             std::cout <<"Transfering "<<transferBytes<<" bytes into bufferWMoverWDramBlocks"<<std::endl;
+            assert(transferBytes <= MAX_DRAM_BYTE_INPUT_WEIGHT && "Too many weights to fit inside the global memory" );
 
             status = clCQWMover.enqueueWriteBuffer(bufferWMoverWDramBlocks, //buffer
                                                  CL_TRUE, //blocking_write
@@ -2021,6 +2031,7 @@ void testFixture::launch (
             auto transferBytes = sizeElement * numElements;
 
             std::cout <<"Transfering "<<transferBytes<<" bytes into bufferWMoverWTBCounts"<<std::endl;
+            assert(transferBytes <= MAX_DRAM_BYTE_INPUT_WEIGHT_SB_COUNT && "Too many weight TB counts to fit inside the global memory" );
 
             status = clCQWMover.enqueueWriteBuffer(bufferWMoverWTBCounts, //buffer
                                                  CL_TRUE, //blocking_write
@@ -2048,7 +2059,8 @@ void testFixture::launch (
             auto sizeElement = sizeof(typeof(vecMiscInstruction.at(0)));
             auto transferBytes = sizeElement * numElements;
 
-            std::cout <<"Transfering "<<transferBytes<<" bytes into bufferWMoverInstructions"<<std::endl;
+            std::cout <<"Transfering "<<transferBytes<<" bytes into bufferMKInstructions"<<std::endl;
+            assert(transferBytes <= MAX_DRAM_BYTE_MISC_CONTROLLER_INSTRUCTION && "Too many MK instructions to fit inside the global memory" );
 
             status = clCQMKController.enqueueWriteBuffer(bufferMKInstructions, //buffer
                                                  CL_TRUE, //blocking_write

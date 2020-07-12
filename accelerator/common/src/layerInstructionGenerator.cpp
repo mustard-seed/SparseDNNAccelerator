@@ -280,6 +280,52 @@ void instruction_generator(
     unsigned int numFullComputeFoldPerGroup = numOutputChannelsPerGroupCurrentLayer / numActiveElementsInFullComputeFold;
     unsigned int numActiveElementsInPartialComputeFold = numOutputChannelsPerGroupCurrentLayer % numActiveElementsInFullComputeFold;
 
+    /*
+     * Cache limit check
+    */
+    int maxIATileHeight = sizeInputTileFullHeight > sizeInputTilePartialHeight ?
+                sizeInputTileFullHeight : sizeInputTilePartialHeight;
+    int maxIATileWidth = sizeInputTileFullWidthPerCol > sizeInputTilePartialWidthPerCol ?
+                sizeInputTileFullWidthPerCol : sizeInputTilePartialWidthPerCol;
+    int iaCacheRequirement = ia_cache_boundary_check(
+                //heightTile
+                maxIATileHeight,
+                //widthTile
+                maxIATileWidth,
+                //numDramBlockPerDenseStrip,
+                memIA0DramBlockColStride
+                );
+    assert(iaCacheRequirement < IA_CACHE_DEPTH && "IA tile size is too big to fit inside the cache");
+
+#if defined(SPARSE_SYSTEM)
+    int iaTBCountRequirement = ia_tbcount_cache_boundary_check(
+                maxIATileHeight,
+                maxIATileWidth
+                );
+    assert(iaTBCountRequirement < IA_TBCOUNT_CACHE_SIZE && "Number if IA TB count too big to fit inside the cache");
+#endif
+
+    int maxOATileHeight = sizeOutputTileFullHeight > sizeOutputTilePartialHeight ?
+                    sizeOutputTileFullHeight : sizeOutputTilePartialHeight;
+    int maxOATileWidth = sizeOutputTileFullWidthPerCol > sizeOutputTilePartialWidthPerCol ?
+                sizeOutputTileFullWidthPerCol : sizeOutputTilePartialWidthPerCol;
+    int oaCacheRequirement = oa_cache_boundary_check(
+                //heightTile
+                maxOATileHeight,
+                //widthTile
+                maxOATileWidth,
+                //numChannels,
+                numOutputChannels
+                );
+    assert(oaCacheRequirement < (OA_CACHE_DEPTH * CLUSTER_SIZE) && "OA tile size is too big to fit inside the oa cache");
+
+    int filterCacheRequirement = filter_cache_boundary_check(
+                    kernelSize,
+                    numInputChannels0
+                );
+    assert(filterCacheRequirement < KERNEL_CACHE_DEPTH && "Individual fitler size is too big to fit inside the filter cache");
+
+
     //x & y planar coordinates in the input planar dimension
     unsigned int iterPGlobal = 0;
     unsigned int iterMGlobal = 0;
@@ -665,4 +711,56 @@ void instruction_generator(
         iterMGlobal += ((unsigned int)kernelStride)*maxTP;
     } //for iterPTile
 }
+
+int ia_cache_boundary_check(
+      int heightTile,
+      int widthTile,
+      int numDramBlockPerDenseStrip
+        )
+{
+    int requirement = numDramBlockPerDenseStrip*heightTile*widthTile;
+    return requirement;
+}
+
+int ia_tbcount_cache_boundary_check(
+      int heightTile,
+      int widthTile
+        )
+{
+    return (heightTile * widthTile);
+}
+
+
+int oa_cache_boundary_check(
+      int heightTile,
+      int widthTile,
+      int numChannels
+        )
+{
+    int roundedNumChannels = ((numChannels - 1) / CLUSTER_SIZE + 1) * CLUSTER_SIZE;
+    return (heightTile*widthTile* roundedNumChannels);
+}
+
+int filter_cache_boundary_check(
+      int kernelSize,
+      int inputChannelSize
+        )
+{
+    //Nubmer of dram blocks required to store one filter
+#if defined(SPARSE_SYSTEM)
+    unsigned int numTransferBlocksPerCompressionBlock
+            =  (COMPRESSION_WINDOW_SIZE + TRANSFER_SIZE - 1) / TRANSFER_SIZE + 1;
+    unsigned int numCompressionBlocksInChannel =
+            1 + (inputChannelSize - 1) / (COMPRESSION_WINDOW_SIZE * CLUSTER_SIZE);
+    unsigned int tempStride = kernelSize*kernelSize*((unsigned int) numTransferBlocksPerCompressionBlock* (unsigned int) numCompressionBlocksInChannel);
+    //externalMemoryAddressStride = lcm(tempStride, (unsigned int) WIDE_SIZE); //DRAM stride needs to be a multiple of DRAM width and the storage requirement per filter
+    externalMemoryAddressStride = (unsigned int) std::ceil( ((float) (tempStride) ) / ((float) (WIDE_SIZE)) ) * WIDE_SIZE;
+    int requirement = (tempStride-1) / WIDE_SIZE + 1;
+#else
+    int requirement = (inputChannelSize * kernelSize * kernelSize - 1) / BURST_SIZE_BYTE + 1;
+#endif
+
+    return requirement;
+}
+
 
