@@ -26,6 +26,7 @@
 #include "layerInstructionGenerator.hpp"
 
 #define PLAY
+#define REPEAT 1
 #define EMULATE
 //#define PERF_TEST
 //#NOOP
@@ -2082,7 +2083,7 @@ void testFixture::launch (
     //Launch the kernels
     std::cout<<stepCount++<<". Launch the kernels."<<std::endl;
     cl_ulong proccessDuration = 0;
-    for (int i=0; i<10; i++)
+    for (int i=0; i<REPEAT; i++)
     {
         cl::Event eventIAMover, eventWMover, eventOAMover, eventMKController, eventIATileController, eventOATileController;
 
@@ -2110,7 +2111,7 @@ void testFixture::launch (
         cl_ulong processEnd = eventOAMover.getProfilingInfo<CL_PROFILING_COMMAND_END>();
         proccessDuration += (processEnd - processStart);
      }
-     proccessDuration /= 10;
+     proccessDuration /= REPEAT;
 
     //auto processEnd = std::chrono::system_clock::now();
 

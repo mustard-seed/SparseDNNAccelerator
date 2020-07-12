@@ -1393,9 +1393,9 @@ void updateIABufferReader (
 				
 			} // if validControl == TRUE
 		}
-		break; //IA_BUFFER_WRITE_STATE_DECODE
+		break; //IA_BUFFER_READ_STATE_DECODE
 
-		case IA_BUFFER_WRITE_STATE_UPDATE_STRIP: {
+		case IA_BUFFER_READ_STATE_UPDATE_STRIP: {
 			
 			*pCurrentState = IA_BUFFER_READ_STATE_ACCESS;
 
@@ -1449,7 +1449,7 @@ void updateIABufferReader (
 		}
 		break;
 
-		case IA_BUFFER_WRITE_STATE_ACCESS: {
+		case IA_BUFFER_READ_STATE_ACCESS: {
 			/**
 			 * Update the ia strip counters and possibly move the ia pointers if the write to the
 			 * PE array is successful
