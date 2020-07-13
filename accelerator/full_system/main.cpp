@@ -1766,10 +1766,13 @@ void testFixture::launch (
                 MEM_START_ACTIVATION_0 * BURST_SIZE_BYTE : MEM_START_ACTIVATION_1 * BURST_SIZE_BYTE;
         assert(oaOffset+oaSizeBytes <= MAX_DRAM_BYTE_INPUT_ACTIVATION && "Too many output activation bytes to fit inside the global memory" );
         #if defined(SPARSE_SYSTEM)
-            int oaTBSizeBytes = sizeof(typeof((pOutput->getTransferBlockCountVector()).at(0))) * (pOutput->getTransferBlockCountVector()).size();
-            int oaTBOffset = ((op == CONVOLUTION) && (flagMultiLayerConv == true)) ?
-                    MEM_START_TB_0 * sizeof(t_streamblock_address) : MEM_START_TB_1 * sizeof(t_streamblock_address);
-            assert(oaTBOffset+oaTBSizeBytes <= MAX_DRAM_BYTE_INPUT_ACTIVATION_SB_COUNT && "Too many output activation TB counts to fit inside the global memory" );
+            if (flagSparseOutput == true)
+            {
+                int oaTBSizeBytes = sizeof(typeof((pOutput->getTransferBlockCountVector()).at(0))) * (pOutput->getTransferBlockCountVector()).size();
+                int oaTBOffset = ((op == CONVOLUTION) && (flagMultiLayerConv == true)) ?
+                        MEM_START_TB_0 * sizeof(t_streamblock_address) : MEM_START_TB_1 * sizeof(t_streamblock_address);
+                assert(oaTBOffset+oaTBSizeBytes <= MAX_DRAM_BYTE_INPUT_ACTIVATION_SB_COUNT && "Too many output activation TB counts to fit inside the global memory" );
+            }
         #endif
     }
 

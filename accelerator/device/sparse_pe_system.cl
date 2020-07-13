@@ -1071,8 +1071,8 @@ void updateIABufferWriter (
 				#if defined(SPARSE_SYSTEM)
 					pCurrentRegisters->tbCountInfo.addressBase = control.tbAddressBase;
 					pCurrentRegisters->tbCountInfo.rowStride = control.tbAddressRowStride;
-					pCurrentRegisters->colContribution = 0;
-					pCurrentRegisters->rowContribution = 0;
+					pCurrentRegisters->tbCountInfo.colContribution = 0;
+					pCurrentRegisters->tbCountInfo.rowContribution = 0;
 				#endif
 
 				/**
@@ -1089,7 +1089,8 @@ void updateIABufferWriter (
 						"tbCountAddressBase=%#010x, "
 						"tbCountRowStride=%#010x, "
 						"numStripsRow=%d, "
-						"numStripsCol=%d\n\n",
+						"numStripsCol=%d, "
+						"accessBank=%#04x\n\n",
 						colID, 
 						control.iaDramBlockAddressBase,
 						control.iaDramBlockColStride,
@@ -1097,20 +1098,23 @@ void updateIABufferWriter (
 						control.tbAddressBase,
 						control.tbAddressRowStride,
 						(unsigned int) control.numStripsRow,
-						(unsigned int) control.numStripsCol));
+						(unsigned int) control.numStripsCol,
+						(unsigned int) pCurrentRegisters->accessBank));
 					#else
 						EMULATOR_PRINT(("[kernelIABuffer Writer %d] START processing instruction. "
 							"iaDramBlockAddressBase=%#010x, "
 							"iaDramBlockColStride=%#010x, "
 							"iaDramBlockRowStride=%#010x, "
 							"numStripsRow=%d, "
-							"numStripsCol=%d\n\n",
+							"numStripsCol=%d, "
+							"accessBank=%#04x\n\n",
 							colID, 
 							control.iaDramBlockAddressBase,
 							control.iaDramBlockColStride,
 							control.iaDramBlockRowStride,
 							(unsigned int) control.numStripsRow,
-							(unsigned int) control.numStripsCol));
+							(unsigned int) control.numStripsCol,
+							(unsigned int) pCurrentRegisters->accessBank));
 					#endif
 				}
 				
@@ -1196,7 +1200,7 @@ void updateIABufferWriter (
 				pCurrentRegisters->iaBlockInfo.colContribution = 0;
 				pCurrentRegisters->iaBlockInfo.rowContribution += pCurrentRegisters->iaBlockInfo.rowStride;
 				#if defined(SPARSE_SYSTEM)
-					pCurrentRegisters->tbCountInfo.colContribution 0x0;
+					pCurrentRegisters->tbCountInfo.colContribution = 0x0;
 					pCurrentRegisters->tbCountInfo.rowContribution += pCurrentRegisters->tbCountInfo.rowStride;
 				#endif
 
@@ -1247,7 +1251,7 @@ void getIABufferReaderOutput (
 	{
 		*pSendTransferBlock = TRUE;
 		
-		t_dram_block dramBlock = cacheIABlocks[currentRegisters.accessBank & 0x01]
+		t_dram_block dramBlock = cacheIABlocks[(currentRegisters.accessBank) & 0x01]
 			[currentRegisters.iaBlockInfo.addressBase 
 				+ currentRegisters.iaBlockInfo.colContribution 
 				+ currentRegisters.iaBlockInfo.rowContribution 
@@ -1341,8 +1345,8 @@ void updateIABufferReader (
 					//tbCountInfo
 					pCurrentRegisters->tbCountInfo.addressBase = control.tbAddressBase;
 					pCurrentRegisters->tbCountInfo.rowStride = control.tbAddressRowStride;
-					pCurrentRegisters->colContribution = 0;
-					pCurrentRegisters->rowContribution = 0;
+					pCurrentRegisters->tbCountInfo.colContribution = 0;
+					pCurrentRegisters->tbCountInfo.rowContribution = 0;
 
 					pCurrentRegisters->flagPadBitmask = (control.controlBits >> 2) & 0x01;
 					pCurrentRegisters->iTBInCW = 0;
@@ -1366,7 +1370,8 @@ void updateIABufferReader (
 						"tbCountAddressBase=%#010x, "
 						"tbCountRowStride=%#010x, "
 						"numStripsRow=%d, "
-						"numStripsCol=%d\n\n",
+						"numStripsCol=%d, "
+						"accessBank=%#04x\n\n",
 						colID, 
 						control.iaDramBlockAddressBase,
 						control.iaDramBlockColStride,
@@ -1374,20 +1379,23 @@ void updateIABufferReader (
 						control.tbAddressBase,
 						control.tbAddressRowStride,
 						(unsigned int) control.numStripsRow,
-						(unsigned int) control.numStripsCol));
+						(unsigned int) control.numStripsCol,
+						(unsigned int) pCurrentRegisters->accessBank));
 					#else
 						EMULATOR_PRINT(("[kernelIABuffer Reader %d] START processing instruction. "
 							"iaDramBlockAddressBase=%#010x, "
 							"iaDramBlockColStride=%#010x, "
 							"iaDramBlockRowStride=%#010x, "
 							"numStripsRow=%d, "
-							"numStripsCol=%d\n\n",
+							"numStripsCol=%d, "
+							"accessBank=%#04x\n\n",
 							colID, 
 							control.iaDramBlockAddressBase,
 							control.iaDramBlockColStride,
 							control.iaDramBlockRowStride,
 							(unsigned int) control.numStripsRow,
-							(unsigned int) control.numStripsCol));
+							(unsigned int) control.numStripsCol,
+							(unsigned int) pCurrentRegisters->accessBank));
 					#endif
 				}
 				
@@ -1405,13 +1413,13 @@ void updateIABufferReader (
 			#if defined(SPARSE_SYSTEM)
 				pCurrentRegisters->numTBPerStrip = 
 					cacheIAStreamBlockAddress
-						[pCurrentRegisters->accessBank & 0x01] 
+						[(pCurrentRegisters->accessBank) & 0x01] 
 						[pCurrentRegisters->tbCountInfo.addressBase 
 							+ pCurrentRegisters->tbCountInfo.colContribution 
 							+ pCurrentRegisters->tbCountInfo.rowContribution];
 				pCurrentRegisters->iTBInCW = 0;
 			#else
-				pCurrentRegisters->numTBPerStrip = numTBPerStrip [pCurrentRegisters->accessBank & 0x01]; 
+				pCurrentRegisters->numTBPerStrip = numTBPerStrip [(pCurrentRegisters->accessBank) & 0x01]; 
 			#endif
 
 			/*
@@ -1665,13 +1673,9 @@ __kernel void kernelIATileController (
 	        unsigned int numOutputInstructions = instruction.numOutputInstructions;
 		    unsigned char numActivePeCols = instruction.flagPadBitmaskCatNumActiveCols & 0x7F;
 		    unsigned short numOutputChannelsInGroup = instruction.numOutputChannelsInGroup;
-		    unsigned short iaCacheColStride = drainInstruction.cacheIAStripColStride;
+		    unsigned short iaCacheColStride = instruction.cacheIAStripColStride;
 		    unsigned short iaCacheRowStride = iaCacheColStride * ((unsigned short)(inputTileWidth));
 
-		    #if defined(SPARSE_SYSTEM)
-		    	uint1_t flagPadBitmask = ((instruction.flagPadBitmaskCatNumActiveCols & 0x80) >> 7);
-		    	unsigned char iStripInTile = 0;
-		    #endif
 			/*
 			2. Send load instructions to the tile buffer
 			*/
@@ -1734,6 +1738,10 @@ __kernel void kernelIATileController (
 			unsigned short iaCacheColStride = drainInstruction.cacheIAStripColStride;
 		    unsigned short iaCacheRowStride = iaCacheColStride * ((unsigned short)(inputTileWidth));
 
+		    #if defined(SPARSE_SYSTEM)
+		    	uint1_t flagPadBitmask = ((drainInstruction.flagPadBitmaskCatNumActiveCols & 0x80) >> 7);
+		    #endif
+
 			//while (iFilterInGroup < numOutputChannelsInGroup)
 	        for (unsigned int i=0; i<numOutputInstructions; i++)
 			{
@@ -1764,7 +1772,7 @@ __kernel void kernelIATileController (
 					#pragma unroll
 					for (int i=0; i<COMPRESSION_WINDOW_SIZE / 8; i++)
 					{
-						tileBufferControlPacket.partialBitmask[i] = instruction.partialBitmask[i];
+						tileBufferControlPacket.partialBitmask[i] = drainInstruction.partialBitmask[i];
 					}
 				#endif
 				tileBufferControlPacket.numStripsCol = kernelSize;
