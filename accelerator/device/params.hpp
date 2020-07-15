@@ -1,7 +1,7 @@
 #ifndef PARAMS_DEFINED
 #define PARAMS_DEFINED
 
-#define SPARSE_SYSTEM
+//#define SPARSE_SYSTEM
 
 /**
  * Global memory settings
@@ -74,8 +74,8 @@
 #define PACKET_SIZE 1
 
 #if defined FULL_SYSTEM
-	#define PE_ROWS 1
-	#define PE_COLS 1
+	#define PE_ROWS 8
+	#define PE_COLS 2
 #else
 	#define PE_ROWS 2
 	#define PE_COLS 2

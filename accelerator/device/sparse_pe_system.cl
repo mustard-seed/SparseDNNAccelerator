@@ -638,7 +638,7 @@ void getIABufferReaderOutput (
 		#if defined(SPARSE_SYSTEM)
 			t_streamblock_address cacheIAStreamBlockAddress [2][256],
 		#else
-			unsigned short numTBPerStrip[2],
+			unsigned short numTBPerStrip[],
 		#endif
 		t_dram_block cacheIABlocks [2][IA_CACHE_DEPTH],
 
@@ -675,7 +675,7 @@ void updateIABufferReader (
 		#if defined(SPARSE_SYSTEM)
 			t_streamblock_address cacheIAStreamBlockAddress [2][256],
 		#else
-			unsigned short numTBPerStrip[2],
+			unsigned short numTBPerStrip[],
 		#endif
 
 		//Modified buffer and buffers
@@ -689,6 +689,8 @@ void updateIABufferReader (
 void getIABufferDispatcherOutput (
 		//Current state
 		t_ia_buffer_d_state currentState,
+		//sync,
+		bool unblockReader,
 
 		//Instruction buffer
 		t_input_buffer_tile_buffer_packet controlBuffer,
@@ -718,6 +720,9 @@ void updateIABufferDispatcher (
 		//context
 		t_ia_buffer_d_state* pState,
 		t_input_buffer_tile_buffer_packet* pControlBuffer,
+
+		//sync,
+		bool unblockReader,
 
 		//Auxillary
 		int colID
@@ -851,6 +856,13 @@ __kernel void kernelIABuffer ()
 		t_input_buffer_tile_buffer_packet readerNewInstruction;
 
 		/**
+		 * Reader-writer synchornization
+		 */
+		bool unblockReader = 
+				(regWriterState == IA_BUFFER_WRITE_STATE_DECODE) 
+				|| (regWriterContext.accessBank != (regDispatcherInstructionBuffer.controlBits & 0x01));
+
+		/**
 		 * Derive current interface outputs from the modules
 		 */
 		getIABufferWriterOutput (
@@ -883,6 +895,7 @@ __kernel void kernelIABuffer ()
 
 		getIABufferDispatcherOutput (
 			regDispatcherState,
+			unblockReader,
 
 			regDispatcherInstructionBuffer,
 
@@ -937,6 +950,7 @@ __kernel void kernelIABuffer ()
 			}
 		}
 
+
 		/**
 		 * Update module states
 		 */
@@ -986,6 +1000,8 @@ __kernel void kernelIABuffer ()
 
 			&regDispatcherState,
 			&regDispatcherInstructionBuffer,
+
+			unblockReader,
 
 			colID
 			);
@@ -1037,7 +1053,7 @@ void updateIABufferWriter (
 		#if defined(SPARSE_SYSTEM)
 			t_streamblock_address cacheIAStreamBlockAddress [2][256],
 		#else
-			unsigned short numTBPerStrip[2],
+			unsigned short numTBPerStrip[],
 		#endif
 		t_dram_block cacheIABlocks [2][IA_CACHE_DEPTH],
 		t_ia_buffer_w_state* pCurrentState,
@@ -1228,7 +1244,7 @@ void getIABufferReaderOutput (
 		#if defined(SPARSE_SYSTEM)
 			t_streamblock_address cacheIAStreamBlockAddress [2][256],
 		#else
-			unsigned short numTBPerStrip[2],
+			unsigned short numTBPerStrip[],
 		#endif
 		t_dram_block cacheIABlocks [2][IA_CACHE_DEPTH],
 
@@ -1305,7 +1321,7 @@ void updateIABufferReader (
 		#if defined(SPARSE_SYSTEM)
 			t_streamblock_address cacheIAStreamBlockAddress [2][256],
 		#else
-			unsigned short numTBPerStrip[2],
+			unsigned short numTBPerStrip[],
 		#endif
 
 		//Modified buffer and buffers
@@ -1521,6 +1537,7 @@ void updateIABufferReader (
 void getIABufferDispatcherOutput (
 		//Current state
 		t_ia_buffer_d_state currentState,
+		bool unblockReader,
 
 		//Instruction buffer
 		t_input_buffer_tile_buffer_packet controlBuffer,
@@ -1563,12 +1580,17 @@ void getIABufferDispatcherOutput (
 	}
 
 	/**
-	 * Reader control interface
+	 * Reader control interface.
+	 * Send instruction to the reader once the writer has finished loading the data
 	 */
 	if (currentState == IA_BUFFER_INSTRUCTION_STATE_SEND_TO_READER)
 	{
-		*pOutValidReaderInstruction = TRUE;
-		*pOutReaderControl = controlBuffer;
+		if (unblockReader == true)
+		{
+			*pOutValidReaderInstruction = TRUE;
+			*pOutReaderControl = controlBuffer;
+		}
+			
 	}
 } //getIABufferDispatcherOutput
 
@@ -1584,6 +1606,9 @@ void updateIABufferDispatcher (
 		//context
 		t_ia_buffer_d_state* pState,
 		t_input_buffer_tile_buffer_packet* pControlBuffer,
+
+		//sync
+		bool unblockReader,
 
 		//Auxillary
 		int colID
@@ -1619,7 +1644,7 @@ void updateIABufferDispatcher (
 		break; //IA_BUFFER_INSTRUCTION_STATE_SEND_TO_WRITER
 
 		case IA_BUFFER_INSTRUCTION_STATE_SEND_TO_READER: {
-			if (inReaderReady == TRUE)
+			if ((inReaderReady == TRUE) && (unblockReader == true))
 			{
 				*pState = IA_BUFFER_INSTRUCTION_STATE_DECODE;
 				EMULATOR_PRINT(("[kernelIABuffer Dispatcher %d] Sent instruction to READER.\n",
@@ -1663,6 +1688,7 @@ __kernel void kernelIATileController (
 		/*
 		1. Read the instruction of the tile from the memory reader
 		*/
+		if (iInstructionCycle < numInstructions)
 		{
 			t_ia_tile_controller_instruction instruction = pInstruction[iInstruction];
 
@@ -1702,14 +1728,7 @@ __kernel void kernelIATileController (
 			    #endif
 
 			    tileBufferControlPacket.numStripsCol = inputTileWidth;
-			    if (iInstructionCycle < numInstructions)
-				{
-			    	tileBufferControlPacket.numStripsRow = inputTileHeight;
-			    }
-			    else //HACK. Set the number of rows to zero represent a ghost command.
-			    {
-			    	tileBufferControlPacket.numStripsRow = 0;
-			    }
+			 	tileBufferControlPacket.numStripsRow = inputTileHeight;
 
 				write_channel_intel(channel_control_to_ia_buffer[0], tileBufferControlPacket);
 			}
@@ -1742,7 +1761,6 @@ __kernel void kernelIATileController (
 		    	uint1_t flagPadBitmask = ((drainInstruction.flagPadBitmaskCatNumActiveCols & 0x80) >> 7);
 		    #endif
 
-			//while (iFilterInGroup < numOutputChannelsInGroup)
 	        for (unsigned int i=0; i<numOutputInstructions; i++)
 			{
 				unsigned char numActivePeRows = ((numOutputChannelsInGroup - iFilterInGroup) < (unsigned short) (PE_ROWS)) ?
