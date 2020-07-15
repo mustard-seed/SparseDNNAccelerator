@@ -185,20 +185,20 @@ protected:
 }; //testFixture
 
 #ifdef PLAY
-TEST_F (testFixture, conv_dense_input_dense_output_strided)
+TEST_F (testFixture, conv_sparse_input_sparse_output)
 {
     unsigned char inputWidth = 4;
     unsigned char inputHeight = 4;
     unsigned char numInputChannel = 8;
     unsigned char numInputGroup = 1;
     unsigned char numOutputGroup = 1;
-    unsigned char inputHeightSPUnitSize = 2;
-    unsigned char inputWidthSPUnitSize = 2;
+    unsigned char inputHeightSPUnitSize = 1;
+    unsigned char inputWidthSPUnitSize = 1;
     unsigned char sizeOutputTileWidthPerColFull = 2;
     unsigned char sizeOutputTileHeight = 4;
     bool flagEnableRelu = false;
-    bool flagSparseInput = false;
-    bool flagSparseOutput = false;
+    bool flagSparseInput = true;
+    bool flagSparseOutput = true;
     OPERATION op = CONVOLUTION;
     float bias = 0.0f;
 
