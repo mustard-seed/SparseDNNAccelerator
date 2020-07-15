@@ -26,9 +26,9 @@
 #include "layerInstructionGenerator.hpp"
 
 //#define PLAY
-#define REPEAT 1
-#define EMULATE
-//#define PERF_TEST
+#define REPEAT 10
+//#define EMULATE
+#define PERF_TEST
 //#NOOP
 //#define PROFILE
 #if defined(PROFILE)
@@ -185,52 +185,61 @@ protected:
 }; //testFixture
 
 #ifdef PLAY
-TEST_F (testFixture, conv_sparse_input_sparse_output)
+TEST_F (testFixture, depth_sensitivity)
 {
-    unsigned char inputWidth = 4;
-    unsigned char inputHeight = 4;
-    unsigned char numInputChannel = 8;
+    unsigned char inputWidth = 8*2*PE_COLS;
+    unsigned char inputHeight = 32;
+    std::vector<unsigned char> vecInputChannel = {32, 64, 96, 128};
     unsigned char numInputGroup = 1;
     unsigned char numOutputGroup = 1;
     unsigned char inputHeightSPUnitSize = 1;
     unsigned char inputWidthSPUnitSize = 1;
-    unsigned char sizeOutputTileWidthPerColFull = 2;
-    unsigned char sizeOutputTileHeight = 4;
+    unsigned char sizeOutputTileWidthPerColFull = 8;
+    unsigned char sizeOutputTileHeight = 8;
     bool flagEnableRelu = false;
     bool flagSparseInput = true;
     bool flagSparseOutput = true;
     OPERATION op = CONVOLUTION;
     float bias = 0.0f;
+    float prob = 1.0f;
+    float pruneScale = CLUSTER_SIZE;
 
-    launch(
-                inputWidth,
-                inputHeight,
-                numInputChannel,
-                numInputGroup,
-                numOutputGroup,
-                inputHeightSPUnitSize,
-                inputWidthSPUnitSize,
-                sizeOutputTileWidthPerColFull,
-                sizeOutputTileHeight,
-                flagEnableRelu,
-                flagSparseInput,
-                flagSparseOutput,
-                op,
-                bias
-          );
+    for (auto& numInputChannel: vecInputChannel) {
+        launch(
+                    inputWidth,
+                    inputHeight,
+                    numInputChannel,
+                    numInputGroup,
+                    numOutputGroup,
+                    inputHeightSPUnitSize,
+                    inputWidthSPUnitSize,
+                    sizeOutputTileWidthPerColFull,
+                    sizeOutputTileHeight,
+                    flagEnableRelu,
+                    flagSparseInput,
+                    flagSparseOutput,
+                    op,
+                    bias,
+                    false, //back to back
+                    true, //perf test
+                    prob,
+                    pruneScale
+
+              );
+    }
 }
 #else
 #if defined(PERF_TEST)
 TEST_F (testFixture, perf_test_conv_sparse_128x128x3x3x32x16COL)
 {
-    unsigned char inputWidth = 16*PE_COLS;
+    unsigned char inputWidth = 8*2*PE_COLS;
     unsigned char inputHeight = 32;
     unsigned char numInputChannel = 128;
     unsigned char numInputGroup = 1;
     unsigned char numOutputGroup = 1;
     unsigned char inputHeightSPUnitSize = 1;
     unsigned char inputWidthSPUnitSize = 1;
-    unsigned char sizeOutputTileWidthPerColFull = 16;
+    unsigned char sizeOutputTileWidthPerColFull = 8;
     unsigned char sizeOutputTileHeight = 8;
     bool flagEnableRelu = false;
     bool flagSparseInput = true;
@@ -265,6 +274,50 @@ TEST_F (testFixture, perf_test_conv_sparse_128x128x3x3x32x16COL)
                   );
         }
      }
+}
+
+TEST_F (testFixture, depth_sensitivity)
+{
+    unsigned char inputWidth = 8*2*PE_COLS;
+    unsigned char inputHeight = 32;
+    std::vector<unsigned char> vecInputChannel = {32, 64, 96, 128};
+    unsigned char numInputGroup = 1;
+    unsigned char numOutputGroup = 1;
+    unsigned char inputHeightSPUnitSize = 1;
+    unsigned char inputWidthSPUnitSize = 1;
+    unsigned char sizeOutputTileWidthPerColFull = 8;
+    unsigned char sizeOutputTileHeight = 8;
+    bool flagEnableRelu = false;
+    bool flagSparseInput = true;
+    bool flagSparseOutput = true;
+    OPERATION op = CONVOLUTION;
+    float bias = 0.0f;
+    float prob = 1.0f;
+    float pruneScale = CLUSTER_SIZE;
+
+    for (auto& numInputChannel: vecInputChannel) {
+        launch(
+                    inputWidth,
+                    inputHeight,
+                    numInputChannel,
+                    numInputGroup,
+                    numOutputGroup,
+                    inputHeightSPUnitSize,
+                    inputWidthSPUnitSize,
+                    sizeOutputTileWidthPerColFull,
+                    sizeOutputTileHeight,
+                    flagEnableRelu,
+                    flagSparseInput,
+                    flagSparseOutput,
+                    op,
+                    bias,
+                    false, //back to back
+                    true, //perf test
+                    prob,
+                    pruneScale
+
+              );
+    }
 }
 
 TEST_F (testFixture, perf_test_max_pool_sparse_128x32x32)
