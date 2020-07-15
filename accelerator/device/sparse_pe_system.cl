@@ -567,7 +567,8 @@ void updateIABufferWriter (
 
 		//Modified buffer and buffers
 		#if defined(SPARSE_SYSTEM)
-			t_streamblock_address cacheIAStreamBlockAddress [2][256],
+			t_streamblock_address cacheIAStreamBlockAddress0 [IA_TBCOUNT_CACHE_SIZE],
+			t_streamblock_address cacheIAStreamBlockAddress1 [IA_TBCOUNT_CACHE_SIZE],
 		#else
 			unsigned short numTBPerStrip[2],
 		#endif
@@ -636,7 +637,8 @@ void getIABufferReaderOutput (
 
 		//Buffers to read from
 		#if defined(SPARSE_SYSTEM)
-			t_streamblock_address cacheIAStreamBlockAddress [2][256],
+			t_streamblock_address cacheIAStreamBlockAddress0 [IA_TBCOUNT_CACHE_SIZE],
+			t_streamblock_address cacheIAStreamBlockAddress1 [IA_TBCOUNT_CACHE_SIZE],
 		#else
 			unsigned short numTBPerStrip[],
 		#endif
@@ -673,7 +675,8 @@ void updateIABufferReader (
 
 		//Buffers to read from
 		#if defined(SPARSE_SYSTEM)
-			t_streamblock_address cacheIAStreamBlockAddress [2][256],
+			t_streamblock_address cacheIAStreamBlockAddress0 [IA_TBCOUNT_CACHE_SIZE],
+			t_streamblock_address cacheIAStreamBlockAddress1 [IA_TBCOUNT_CACHE_SIZE],
 		#else
 			unsigned short numTBPerStrip[],
 		#endif
@@ -739,7 +742,8 @@ __kernel void kernelIABuffer ()
 
 	//TODO: Determine whether the attribute for the TB count cache is correct
 	#if defined(SPARSE_SYSTEM)
-		t_streamblock_address cacheIAStreamBlockAddress [2][IA_TBCOUNT_CACHE_SIZE] __attribute__((numbanks(1)));
+		t_streamblock_address cacheIAStreamBlockAddress0 [IA_TBCOUNT_CACHE_SIZE] __attribute__((bankwidth(2)));
+		t_streamblock_address cacheIAStreamBlockAddress1 [IA_TBCOUNT_CACHE_SIZE] __attribute__((bankwidth(2)));
 	#else
 		t_streamblock_address numTBPerStrip [2];
 	#endif
@@ -879,7 +883,8 @@ __kernel void kernelIABuffer ()
 			regReaderContext,
 
 			#if defined(SPARSE_SYSTEM)
-				cacheIAStreamBlockAddress,
+				cacheIAStreamBlockAddress0,
+				cacheIAStreamBlockAddress1,
 			#else
 				numTBPerStrip,
 			#endif
@@ -962,7 +967,8 @@ __kernel void kernelIABuffer ()
 			writerBlockValid,
 
 			#if defined(SPARSE_SYSTEM)
-				cacheIAStreamBlockAddress,
+				cacheIAStreamBlockAddress0,
+				cacheIAStreamBlockAddress1,
 			#else
 				numTBPerStrip,
 			#endif	
@@ -980,7 +986,8 @@ __kernel void kernelIABuffer ()
 			readerBlockSent,
 
 			#if defined(SPARSE_SYSTEM)
-				cacheIAStreamBlockAddress,
+				cacheIAStreamBlockAddress0,
+				cacheIAStreamBlockAddress1,
 			#else
 				numTBPerStrip,
 			#endif	
@@ -1051,7 +1058,8 @@ void updateIABufferWriter (
 
 		//Modified buffer and buffers
 		#if defined(SPARSE_SYSTEM)
-			t_streamblock_address cacheIAStreamBlockAddress [2][256],
+			t_streamblock_address cacheIAStreamBlockAddress0 [IA_TBCOUNT_CACHE_SIZE],
+			t_streamblock_address cacheIAStreamBlockAddress1 [IA_TBCOUNT_CACHE_SIZE],
 		#else
 			unsigned short numTBPerStrip[],
 		#endif
@@ -1148,12 +1156,29 @@ void updateIABufferWriter (
 				pCurrentRegisters->iterAccess = 0;
 
 				#if defined(SPARSE_SYSTEM)
-					cacheIAStreamBlockAddress
-						[(pCurrentRegisters->accessBank) & 0x01]
-						[pCurrentRegisters->tbCountInfo.addressBase 
+					unsigned char depth = pCurrentRegisters->tbCountInfo.addressBase 
 							+ pCurrentRegisters->tbCountInfo.colContribution 
-							+ pCurrentRegisters->tbCountInfo.rowContribution] 
-						= numIATransferBlocks;
+							+ pCurrentRegisters->tbCountInfo.rowContribution;
+					if (((pCurrentRegisters->accessBank) & 0x01) == 0x00)
+					{
+						cacheIAStreamBlockAddress0[depth] = numIATransferBlocks;
+					}
+					else
+					{
+						cacheIAStreamBlockAddress1[depth] = numIATransferBlocks;
+					}
+					// cacheIAStreamBlockAddress
+					// 	[(pCurrentRegisters->accessBank) & 0x01]
+					// 	[pCurrentRegisters->tbCountInfo.addressBase 
+					// 		+ pCurrentRegisters->tbCountInfo.colContribution 
+					// 		+ pCurrentRegisters->tbCountInfo.rowContribution] 
+					// 	= numIATransferBlocks;
+					// cacheIAStreamBlockAddress
+					// 	[0]
+					// 	[pCurrentRegisters->tbCountInfo.addressBase 
+					// 		+ pCurrentRegisters->tbCountInfo.colContribution 
+					// 		+ pCurrentRegisters->tbCountInfo.rowContribution] 
+					// 	= numIATransferBlocks;
 				#else
 					numTBPerStrip[(pCurrentRegisters->accessBank) & 0x01] = numIATransferBlocks;
 				#endif
@@ -1242,7 +1267,8 @@ void getIABufferReaderOutput (
 
 		//Buffers to read from
 		#if defined(SPARSE_SYSTEM)
-			t_streamblock_address cacheIAStreamBlockAddress [2][256],
+			t_streamblock_address cacheIAStreamBlockAddress0 [IA_TBCOUNT_CACHE_SIZE],
+			t_streamblock_address cacheIAStreamBlockAddress1 [IA_TBCOUNT_CACHE_SIZE],
 		#else
 			unsigned short numTBPerStrip[],
 		#endif
@@ -1319,7 +1345,8 @@ void updateIABufferReader (
 
 		//Buffers to read from
 		#if defined(SPARSE_SYSTEM)
-			t_streamblock_address cacheIAStreamBlockAddress [2][256],
+			t_streamblock_address cacheIAStreamBlockAddress0 [IA_TBCOUNT_CACHE_SIZE],
+			t_streamblock_address cacheIAStreamBlockAddress1 [IA_TBCOUNT_CACHE_SIZE],
 		#else
 			unsigned short numTBPerStrip[],
 		#endif
@@ -1427,12 +1454,31 @@ void updateIABufferReader (
 			 * Access the number of IA cache number of access in the upcoming strip
 			 */
 			#if defined(SPARSE_SYSTEM)
-				pCurrentRegisters->numTBPerStrip = 
-					cacheIAStreamBlockAddress
-						[(pCurrentRegisters->accessBank) & 0x01] 
-						[pCurrentRegisters->tbCountInfo.addressBase 
+				unsigned char depth = pCurrentRegisters->tbCountInfo.addressBase 
 							+ pCurrentRegisters->tbCountInfo.colContribution 
-							+ pCurrentRegisters->tbCountInfo.rowContribution];
+							+ pCurrentRegisters->tbCountInfo.rowContribution;
+				if (((pCurrentRegisters->accessBank) & 0x01) == 0x00)
+				{
+					pCurrentRegisters->numTBPerStrip = 
+						cacheIAStreamBlockAddress0[depth];
+				}
+				else
+				{
+					pCurrentRegisters->numTBPerStrip = 
+						cacheIAStreamBlockAddress1[depth];
+				}
+				// pCurrentRegisters->numTBPerStrip = 
+				// 	cacheIAStreamBlockAddress
+				// 		[(pCurrentRegisters->accessBank) & 0x01] 
+				// 		[pCurrentRegisters->tbCountInfo.addressBase 
+				// 			+ pCurrentRegisters->tbCountInfo.colContribution 
+				// 			+ pCurrentRegisters->tbCountInfo.rowContribution];
+				// pCurrentRegisters->numTBPerStrip = 
+				// 	cacheIAStreamBlockAddress
+				// 		[0] 
+				// 		[pCurrentRegisters->tbCountInfo.addressBase 
+				// 			+ pCurrentRegisters->tbCountInfo.colContribution 
+				// 			+ pCurrentRegisters->tbCountInfo.rowContribution];
 				pCurrentRegisters->iTBInCW = 0;
 			#else
 				pCurrentRegisters->numTBPerStrip = numTBPerStrip [(pCurrentRegisters->accessBank) & 0x01]; 

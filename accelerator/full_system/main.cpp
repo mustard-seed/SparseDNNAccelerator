@@ -26,8 +26,8 @@
 #include "layerInstructionGenerator.hpp"
 
 //#define PLAY
-#define REPEAT 10
-//#define EMULATE
+#define REPEAT 1
+#define EMULATE
 #define PERF_TEST
 //#NOOP
 //#define PROFILE
@@ -185,48 +185,41 @@ protected:
 }; //testFixture
 
 #ifdef PLAY
-TEST_F (testFixture, depth_sensitivity)
+TEST_F (testFixture, back_to_back_identity_conv)
 {
-    unsigned char inputWidth = 8*2*PE_COLS;
-    unsigned char inputHeight = 32;
-    std::vector<unsigned char> vecInputChannel = {32, 64, 96, 128};
+    unsigned char inputWidth = 4;
+    unsigned char inputHeight = 4;
+    unsigned char numInputChannel = 8;
     unsigned char numInputGroup = 1;
     unsigned char numOutputGroup = 1;
     unsigned char inputHeightSPUnitSize = 1;
     unsigned char inputWidthSPUnitSize = 1;
-    unsigned char sizeOutputTileWidthPerColFull = 8;
-    unsigned char sizeOutputTileHeight = 8;
+    unsigned char sizeOutputTileWidthPerColFull = 2;
+    unsigned char sizeOutputTileHeight = 4;
     bool flagEnableRelu = false;
-    bool flagSparseInput = true;
-    bool flagSparseOutput = true;
+    bool flagSparseInput = false;
+    bool flagSparseOutput = false;
     OPERATION op = CONVOLUTION;
     float bias = 0.0f;
-    float prob = 1.0f;
-    float pruneScale = CLUSTER_SIZE;
+    bool flag2Layer = true;
 
-    for (auto& numInputChannel: vecInputChannel) {
-        launch(
-                    inputWidth,
-                    inputHeight,
-                    numInputChannel,
-                    numInputGroup,
-                    numOutputGroup,
-                    inputHeightSPUnitSize,
-                    inputWidthSPUnitSize,
-                    sizeOutputTileWidthPerColFull,
-                    sizeOutputTileHeight,
-                    flagEnableRelu,
-                    flagSparseInput,
-                    flagSparseOutput,
-                    op,
-                    bias,
-                    false, //back to back
-                    true, //perf test
-                    prob,
-                    pruneScale
-
-              );
-    }
+    launch(
+                inputWidth,
+                inputHeight,
+                numInputChannel,
+                numInputGroup,
+                numOutputGroup,
+                inputHeightSPUnitSize,
+                inputWidthSPUnitSize,
+                sizeOutputTileWidthPerColFull,
+                sizeOutputTileHeight,
+                flagEnableRelu,
+                flagSparseInput,
+                flagSparseOutput,
+                op,
+                bias,
+                flag2Layer
+          );
 }
 #else
 #if defined(PERF_TEST)
