@@ -1,5 +1,7 @@
 #include "layerInstructionGenerator.hpp"
+
 #include <cassert>
+#include <iostream>
 
 void instruction_generator(
         //Type of the operation
@@ -287,7 +289,7 @@ void instruction_generator(
                 sizeInputTileFullHeight : sizeInputTilePartialHeight;
     int maxIATileWidth = sizeInputTileFullWidthPerCol > sizeInputTilePartialWidthPerCol ?
                 sizeInputTileFullWidthPerCol : sizeInputTilePartialWidthPerCol;
-    int iaCacheRequirement = ia_cache_boundary_check(
+    int iaCacheRequirementInDramBlock = ia_cache_boundary_check(
                 //heightTile
                 maxIATileHeight,
                 //widthTile
@@ -295,7 +297,7 @@ void instruction_generator(
                 //numDramBlockPerDenseStrip,
                 memIA0DramBlockColStride
                 );
-    assert(iaCacheRequirement < IA_CACHE_DEPTH && "IA tile size is too big to fit inside the cache");
+    assert( iaCacheRequirementInDramBlock < IA_CACHE_DEPTH && "IA tile size is too big to fit inside the cache");
 
 #if defined(SPARSE_SYSTEM)
     int iaTBCountRequirement = ia_tbcount_cache_boundary_check(

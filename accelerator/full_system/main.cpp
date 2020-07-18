@@ -1231,8 +1231,8 @@ void testFixture::launch (
     inputHeightSPSize = inputHeightSPUnitSize*(_inputHeight-1) + 1;
     numOutputWidth = (op==MAX_POOL) ? inputWidthSPSize / 2 : inputWidthSPSize;
     numOutputHeight = (op==MAX_POOL) ? inputHeightSPSize / 2 : inputHeightSPSize;
-    verticalBorderPadding = (op==CONVOLUTION) ? 1 : 0;
-    horizontalBorderPadding  = (op==CONVOLUTION) ? 1 : 0;
+    verticalBorderPadding = (op==CONVOLUTION) ? ((stride-1) * inputWidthSPSize + kernelSize - stride)/2 : 0;
+    horizontalBorderPadding  = (op==CONVOLUTION) ? ((stride-1) * inputHeightSPSize + kernelSize - stride)/2 : 0;
     unsigned char numActiveColsPartialOutputTile = (op==CONVOLUTION) ?
                 1 : (numOutputWidth % PE_COLS);
     assert(numOutputChannels % _numGroupNext == 0);
@@ -1410,6 +1410,7 @@ void testFixture::launch (
     }
 
     signed int memDramBlockIAColStride = (pInput->getExternalMemoryAddressStride()) >> WIDE_SIZE_OFFSET;
+    std::cout <<"memDramBlockIAColStride: "<<memDramBlockIAColStride<<std::endl;
     signed int memDramBlockOAColStride = (pOutput->getExternalMemoryAddressStride()) >> WIDE_SIZE_OFFSET;
 
     signed int memDramBlockIARowStride = memDramBlockIAColStride*_inputWidth;
