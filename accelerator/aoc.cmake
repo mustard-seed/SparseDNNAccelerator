@@ -109,6 +109,15 @@ function (add_aoc_target)
             NORMAL_HW, and RELEASE_HW.")
     endif()
 
+    # Disable DDR burst-interleaving of global memory on A10PAC
+    if ( (NOT ("${add_aoc_target_TARGET_TYPE}" STREQUAL "EMULATION")) 
+      AND ("${add_aoc_target_BOARD_NAME}" MATCHES "A10PAC") )
+      list (APPEND occflags
+                     -no-interleaving=default
+                  )
+      message (STATUS "Disabling global memory burst-interleaving for HW compilation on PACs")
+    endif ()
+
     list(REMOVE_DUPLICATES add_aoc_target_SOURCES_LIST)
     list(SORT add_aoc_target_SOURCES_LIST)
 

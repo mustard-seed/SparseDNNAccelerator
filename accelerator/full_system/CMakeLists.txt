@@ -106,7 +106,7 @@ elseif (BOARD_NAME MATCHES "A10REF")
     list (APPEND PREPROCESSOR_DEFS -DARRIA10)
     message (STATUS "Linking against A10-Ref libraries")
 elseif (BOARD_NAME MATCHES "A10PAC")
-    add_definitions(-DARRIA10)
+    add_definitions(-DARRIA10 -DA10PAC)
     ##Add library directories for a10_pac
     list (APPEND PREPROCESSOR_DEFS -DARRIA10)
     message (STATUS "Linking against A10-Pac libraries")
