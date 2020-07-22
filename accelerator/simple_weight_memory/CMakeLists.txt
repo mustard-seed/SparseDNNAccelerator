@@ -162,6 +162,11 @@ file(GLOB_RECURSE kernel_files
      ${PROJECT_SOURCE_DIR}/device/sparse_pe_system.cl
 )
 
+list (APPEND kernel_files
+    ${PROJECT_SOURCE_DIR}/device/simple_weight_memory_test.cl
+    ${PROJECT_SOURCE_DIR}/device/sparse_pe_system.cl
+    )
+
 add_aoc_target (
     TARGET_NAME ${TEST_NAME}
     TARGET_TYPE EMULATION

@@ -174,11 +174,14 @@ set_target_properties (${TEST_NAME}_host PROPERTIES "CMAKE_CXX_FLAGS" "${CMAKE_C
 include (${PROJECT_SOURCE_DIR}/aoc.cmake)
 
 # Find the kernel source files. Note, GLOB isn't the recommended way. One needs to touch the CMakesList.txt to effect changes
-file(GLOB_RECURSE kernel_files
-#     ${PROJECT_SOURCE_DIR}/device/simple_weight_memory_test.cl
-     ${PROJECT_SOURCE_DIR}/device/sparse_pe_system.cl
-     ${PROJECT_SOURCE_DIR}/device/device_utils.cl
-)
+#file(GLOB_RECURSE kernel_files
+##     ${PROJECT_SOURCE_DIR}/device/simple_weight_memory_test.cl
+#     ${PROJECT_SOURCE_DIR}/device/sparse_pe_system.cl
+#     ${PROJECT_SOURCE_DIR}/device/device_utils.cl
+#)
+list (APPEND kernel_files
+    ${PROJECT_SOURCE_DIR}/device/sparse_pe_system.cl
+    ${PROJECT_SOURCE_DIR}/device/device_utils.cl)
 
 add_aoc_target (
     TARGET_NAME ${TEST_NAME}
