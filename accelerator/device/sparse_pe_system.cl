@@ -65,11 +65,11 @@ __kernel void kernelNoop ()
 __attribute__((max_global_work_dim(0)))
 __kernel void kernelIAMover (
 		// Memory port for input activations
-		VOLATILE __global const t_dram_block* restrict pIA,
+		volatile __global const t_dram_block* restrict pIA,
 
 		#if defined(SPARSE_SYSTEM)
 			// Memory port for TB count per strip
-			VOLATILE __global const t_streamblock_address* restrict pTBCount,
+			volatile __global const t_streamblock_address* restrict pTBCount,
 		#endif
 
 		//Memory port for transfer instructions
@@ -2167,10 +2167,10 @@ __kernel void kernelMisc ()
 #ifdef MEMORY_WRITER
 __attribute__((max_global_work_dim(0)))
 __kernel void kernelOAMover (
-		VOLATILE __global t_output_dram_block* restrict pOA,
+		volatile __global t_output_dram_block* restrict pOA,
 
 		#if defined(SPARSE_SYSTEM)
-			VOLATILE __global t_streamblock_address* restrict pTBCount,
+			volatile __global t_streamblock_address* restrict pTBCount,
 		#endif
 
 		VOLATILE __global const t_oa_mover_instruction* restrict pInstruction,

@@ -25,15 +25,13 @@
 #include "vectorType.hpp"
 #include "layerInstructionGenerator.hpp"
 
-//#define PLAY
-#define REPEAT 10
+#define PLAY
+#define REPEAT 1
 //#define EMULATE
-#define PERF_TEST
+//#define PERF_TEST
 //#NOOP
 //#define PROFILE
-#if defined(PROFILE)
 #include "CL/cl_ext_intelfpga.h"
-#endif
 
 #define FRAC_WIDTH 4
 #define INT_WIDTH 3
@@ -203,7 +201,9 @@ protected:
 #ifdef PLAY
 TEST_F (testFixture, back_to_back_identity_conv)
 {
-    unsigned char inputWidth = 4;
+    //Perform a dummy test first to clear the output buffer
+    std::cout <<"Performing the dummy test"<<std::endl;
+    unsigned char inputWidth = 2*PE_COLS;
     unsigned char inputHeight = 4;
     unsigned char numInputChannel = 8;
     unsigned char numInputGroup = 1;
@@ -216,8 +216,43 @@ TEST_F (testFixture, back_to_back_identity_conv)
     bool flagSparseInput = false;
     bool flagSparseOutput = false;
     OPERATION op = CONVOLUTION;
-    float bias = 0.0f;
+    float bias = 5.0f;
+
+    launch(
+                inputWidth,
+                inputHeight,
+                numInputChannel,
+                numInputGroup,
+                numOutputGroup,
+                inputHeightSPUnitSize,
+                inputWidthSPUnitSize,
+                sizeOutputTileWidthPerColFull,
+                sizeOutputTileHeight,
+                flagEnableRelu,
+                flagSparseInput,
+                flagSparseOutput,
+                op,
+                bias
+          );
+
+    //Then perform the actual back to back test
+    inputWidth = 2*PE_COLS;
+    inputHeight = 4;
+    numInputChannel = 8;
+    numInputGroup = 1;
+    numOutputGroup = 1;
+    inputHeightSPUnitSize = 1;
+    inputWidthSPUnitSize = 1;
+    sizeOutputTileWidthPerColFull = 2;
+    sizeOutputTileHeight = 4;
+    flagEnableRelu = false;
+    flagSparseInput = false;
+    flagSparseOutput = false;
+    op = CONVOLUTION;
+    bias = 0.0f;
     bool flag2Layer = true;
+
+    std::cout <<"Actual back-to-back test starts"<<std::endl;
 
     launch(
                 inputWidth,
