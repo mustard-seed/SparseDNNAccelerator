@@ -6,6 +6,14 @@ project (${PROJECT_NAME})
 
 set (CMAKE_BUILD_TYPE "Debug")
 add_subdirectory(googletest)
+
+#============================
+# YAML-CPP
+#============================
+set(YAML_CPP_BUILD_TESTS OFF CACHE BOOL "disable yaml tests")
+set(YAML_CPP_BUILD_TOOLS OFF CACHE BOOL "disable yaml tools")
+set(YAML_CPP_BUILD_CONTRIB OFF CACHE BOOL "disable yaml contrib")
+add_subdirectory(yaml-cpp)
 #add_subdirectory(weight_memory_test)
 add_subdirectory(prototype_pe_test)
 #add_subdirectory(toy_ping_pong)
