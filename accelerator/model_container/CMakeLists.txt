@@ -10,16 +10,11 @@ file (GLOB SOURCES
         ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp
   )
 
-# Headers
-file (GLOB HEADERS
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/*.hpp
-  )
-
 # Add the library
 add_library(model_container ${SOURCES})
 
 # Add the headers
-target_include_directories(model_container PUBLIC ${HEADERS})
+target_include_directories(model_container PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 # Add dependencies
 target_link_libraries(model_container
