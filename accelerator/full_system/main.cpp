@@ -60,11 +60,6 @@ Only available on certain Arria 10 and Stratix 10 boards
 __asm__(".symver _ZNSt6chrono3_V212system_clock3nowEv,_ZNSt6chrono12system_clock3nowEv@GLIBCXX_3.4.11");
 #endif
 
-typedef
-std::vector<cl_short, boost::alignment::aligned_allocator<cl_short, aocl_utils_cpp::AOCL_ALIGNMENT>>
-//std::vector<cl_short>
-t_aligned_short_vector;
-
 class testFixture : public ::testing::Test {
 protected:
     std::string binaryFile;
