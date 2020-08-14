@@ -24,8 +24,8 @@
 #ifndef AOCL_UTILS_H
 #define AOCL_UTILS_H
 
-#include "AOCLUtilsCpp/opencl.hpp"
-#include "AOCLUtilsCpp/options.hpp"
+#include "opencl.hpp"
+#include "options.hpp"
 
 #endif
 

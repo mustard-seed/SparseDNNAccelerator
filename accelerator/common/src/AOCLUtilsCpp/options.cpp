@@ -1,4 +1,4 @@
-#include "AOCLUtilsCpp/aocl_utils_cpp.hpp"
+#include "aocl_utils_cpp.hpp"
 #include <algorithm>
 #include <iostream>
 #include <stdlib.h>
