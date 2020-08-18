@@ -93,13 +93,13 @@
 #define MAX_SIMD_BLOCK_INDEX 0x0FF
 
 //Activation memory region offsets
-//In terms of DRAM blocks
-#define MEM_START_ACTIVATION_0 0x0
-#define MEM_START_ACTIVATION_1 (1 << 20)
+//in terms of DRAM blocks
 //TB count memory region offsets
 //In terms of TB counts (shorts)
-#define MEM_START_TB_0 0X0
-#define MEM_START_TB_1 (1 << 18)
+#define NUM_ACTIVATION_REGIONS 3
+#define MEM_ACTIVATION_REGION_SIZE_PER_SLICE (1 << 20)
+#define MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE (1 << 18)
+
 
 //TODO: Change COMPRESSION_WINDOW_SIZE, TRANSFER_SIZE, CLUSTER_SIZE, and related offsets and masks if compression configuration changes
 #define COMPRESSION_WINDOW_SIZE 8 //compression window size in terms of clusters

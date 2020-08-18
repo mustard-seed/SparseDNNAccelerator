@@ -75,13 +75,16 @@ __kernel void kernelIAMover (
 		//Memory port for transfer instructions
 		VOLATILE __global const t_ia_mover_instruction* restrict pInstruction,
 		//Number of transfer instructions
-		unsigned int numInstruction
+		unsigned int numInstruction,
+
+		//Starting offset to read the instruction from
+		unsigned int offsetInstruction
 	)
 {
 	for (unsigned int iInst=0; iInst<numInstruction; iInst++)
 	{
 		//Read the instruction
-		t_ia_mover_instruction inst = pInstruction[iInst];
+		t_ia_mover_instruction inst = pInstruction[iInst+offsetInstruction];
 
 		/*! Unpackethe concatenated fields of the instruction */
 		//Number of compute columns that are active in this transfer
@@ -180,6 +183,7 @@ __kernel void kernelIAMover (
 			unsigned short numTransferActions = dramBlockCount + 1;
 
 			EMULATOR_PRINT(("[kernelIAMover] START strip transfer. "
+						"offsetInstruction=%d, "
 						"iInst=%d, "
 						"iStrip=%d, "
 						"tileSPWidthxTileSPHeight=%d, "
@@ -191,6 +195,7 @@ __kernel void kernelIAMover (
 						"numActiveCols=%d, "
 						"addressIADramBlockDDR=%#010x, "
 						"destinationMisc=%#03x\n",
+						offsetInstruction,
 						iInst,
 						iter,
 						(unsigned int) inst.tileSPWidthxTileSPHeight, 
@@ -2174,13 +2179,15 @@ __kernel void kernelOAMover (
 		#endif
 
 		VOLATILE __global const t_oa_mover_instruction* restrict pInstruction,
-		unsigned int numInstruction
+		unsigned int numInstruction,
+		//Starting offset to read the instruction from
+		unsigned int offsetInstruction
 	)
 {
 	for (unsigned int iInst=0; iInst<numInstruction; iInst++)
 	{
 		/*! Read the instruction and decode the packed field*/
-		t_oa_mover_instruction inst = pInstruction[iInst];
+		t_oa_mover_instruction inst = pInstruction[offsetInstruction+iInst];
 		uint1_t outputMemSelect = (inst.memSelectCatSparseFlagCatSyncFlagCatNumActiveCols >> 7) & 0x01;
 		uint1_t enableSparsification = (inst.memSelectCatSparseFlagCatSyncFlagCatNumActiveCols >> 6) & 0x01;
 		uint1_t enableSendSync = (inst.memSelectCatSparseFlagCatSyncFlagCatNumActiveCols >> 4) & 0x01;
@@ -2215,6 +2222,7 @@ __kernel void kernelOAMover (
 			//int addrOA = inst.memOAStart + addrOAGroupContribution + addrOARowContribution + addrOAColContribution + addrOAPeColContribution;
 			int addrOA = inst.memOAStart + addrOARowContribution + addrOAColContribution + addrOAPeColContribution;
 			EMULATOR_PRINT(("[kernelOAMover] START strip transfer. "
+						"offsetInstruction=%d, "
 						"iInst=%d, "
 						"iCol=%d, " 
                         "iOutputWidthInColTile=%d, "
@@ -2222,6 +2230,7 @@ __kernel void kernelOAMover (
 						"enableSparsification=%#03x, "
 						"addrOA=%#08x, "
 						"numActivePeCols=%d\n",
+						offsetInstruction,
 						iInst, 
 						iCol,
 						iOutputWidthInColTile,

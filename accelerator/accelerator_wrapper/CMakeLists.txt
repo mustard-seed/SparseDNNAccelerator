@@ -19,7 +19,7 @@ target_include_directories(${LIBRARY_NAME}
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${PROJECT_SOURCE_DIR}/common/inc
         ${Boost_INCLUDE_DIRS}
-        ${PROJECT_SOURCE_DIR}/device/RTL
+        ${PROJECT_SOURCE_DIR}/device
     )
 target_compile_definitions(
     ${LIBRARY_NAME}
@@ -29,7 +29,7 @@ target_compile_definitions(
 
 set_target_properties (${LIBRARY_NAME} PROPERTIES "CMAKE_CXX_FLAGS" "${CMAKE_CXX_FLAGS}")
 
-add_executable(accelerator_wrapper_test ${CMAKE_CURRENT_SOURCE_DIR}/accelerator_wrapper_test.cpp)
-target_link_libraries(accelerator_wrapper_test ${LIBRARY_NAME})
-set_target_properties (accelerator_wrapper_test PROPERTIES "CMAKE_CXX_FLAGS" "${CMAKE_CXX_FLAGS}")
+#add_executable(accelerator_wrapper_test ${CMAKE_CURRENT_SOURCE_DIR}/accelerator_wrapper_test.cpp)
+#target_link_libraries(accelerator_wrapper_test ${LIBRARY_NAME})
+#set_target_properties (accelerator_wrapper_test PROPERTIES "CMAKE_CXX_FLAGS" "${CMAKE_CXX_FLAGS}")
 

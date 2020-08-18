@@ -1521,11 +1521,11 @@ void testFixture::launch (
                     vecMiscInstruction,
 
                     //signed int memIA0DramBlockStartIndex
-                    MEM_START_ACTIVATION_0,
+                    0 * MEM_ACTIVATION_REGION_SIZE_PER_SLICE,
                     //signed int memIA1DramBlockStartIndex
-                    MEM_START_ACTIVATION_0,
+                    0 * MEM_ACTIVATION_REGION_SIZE_PER_SLICE,
                     //signed int memOADramBlockStartIndex
-                    MEM_START_ACTIVATION_1,
+                    1 * MEM_ACTIVATION_REGION_SIZE_PER_SLICE,
                     //signed int memWeightDramBlockStartIndex
                     0,
                     //signed int memBiasStartIndex
@@ -1549,11 +1549,11 @@ void testFixture::launch (
 
                 #if defined(SPARSE_SYSTEM)
                     //memIATB0CountStart
-                    MEM_START_TB_0,
+                    0 * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE,
                     //memIATB0CountColStride,
                     1,
                     //memOATBCountStart
-                    MEM_START_TB_1,
+                    1 * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE,
                     //memOATBCountColStride
                     1,
                     //memWeightTBCountStart
@@ -1606,11 +1606,11 @@ void testFixture::launch (
                     vecMiscInstruction,
 
                     //signed int memIA0DramBlockStartIndex
-                    MEM_START_ACTIVATION_1,
+                    1 * MEM_ACTIVATION_REGION_SIZE_PER_SLICE,
                     //signed int memIA1DramBlockStartIndex
-                    MEM_START_ACTIVATION_1,
+                    1 * MEM_ACTIVATION_REGION_SIZE_PER_SLICE,
                     //signed int memOADramBlockStartIndex
-                    MEM_START_ACTIVATION_0,
+                    0 * MEM_ACTIVATION_REGION_SIZE_PER_SLICE,
                     //signed int memWeightDramBlockStartIndex
                     0,
                     //signed int memBiasStartIndex
@@ -1634,11 +1634,11 @@ void testFixture::launch (
 
                 #if defined(SPARSE_SYSTEM)
                     //memIATB0CountStart
-                    MEM_START_TB_1,
+                    1 * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE,
                     //memIATB0CountColStride,
                     1,
                     //memOATBCountStart
-                    MEM_START_TB_0,
+                    0 * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE,
                     //memOATBCountColStride
                     1,
                     //memWeightTBCountStart
@@ -1690,11 +1690,11 @@ void testFixture::launch (
                     vecMiscInstruction,
 
                     //signed int memIA0DramBlockStartIndex
-                    MEM_START_ACTIVATION_0,
+                    0 * MEM_ACTIVATION_REGION_SIZE_PER_SLICE,
                     //signed int memIA1DramBlockStartIndex
-                    MEM_START_ACTIVATION_0,
+                    0 * MEM_ACTIVATION_REGION_SIZE_PER_SLICE,
                     //signed int memOADramBlockStartIndex
-                    MEM_START_ACTIVATION_1,
+                    1 * MEM_ACTIVATION_REGION_SIZE_PER_SLICE,
                     //signed int memWeightDramBlockStartIndex
                     0,
                     //signed int memBiasStartIndex
@@ -1718,11 +1718,11 @@ void testFixture::launch (
 
                 #if defined(SPARSE_SYSTEM)
                     //memIATB0CountStart
-                    MEM_START_TB_0,
+                    0 * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE,
                     //memIATB0CountColStride,
                     1,
                     //memOATBCountStart
-                    MEM_START_TB_1,
+                    1 * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE,
                     //memOATBCountColStride
                     1,
                     //memWeightTBCountStart
@@ -1857,14 +1857,14 @@ void testFixture::launch (
     {
         int oaSizeBytes = sizeof(typeof((pOutput->getTransferBlockVector()).at(0))) * (pOutput->getTransferBlockVector()).size();
         int oaOffset = ((op == CONVOLUTION) && (flagMultiLayerConv == true)) ?
-                MEM_START_ACTIVATION_0 * BURST_SIZE_BYTE : MEM_START_ACTIVATION_1 * BURST_SIZE_BYTE;
+                0 * MEM_ACTIVATION_REGION_SIZE_PER_SLICE * BURST_SIZE_BYTE : 1 * MEM_ACTIVATION_REGION_SIZE_PER_SLICE * BURST_SIZE_BYTE;
         assert(oaOffset+oaSizeBytes <= MAX_DRAM_BYTE_INPUT_ACTIVATION && "Too many output activation bytes to fit inside the global memory" );
         #if defined(SPARSE_SYSTEM)
             if (flagSparseOutput == true)
             {
                 int oaTBSizeBytes = sizeof(typeof((pOutput->getTransferBlockCountVector()).at(0))) * (pOutput->getTransferBlockCountVector()).size();
                 int oaTBOffset = ((op == CONVOLUTION) && (flagMultiLayerConv == true)) ?
-                        MEM_START_TB_0 * sizeof(t_streamblock_address) : MEM_START_TB_1 * sizeof(t_streamblock_address);
+                        0 * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE * sizeof(t_streamblock_address) : 1 * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE * sizeof(t_streamblock_address);
                 assert(oaTBOffset+oaTBSizeBytes <= MAX_DRAM_BYTE_INPUT_ACTIVATION_SB_COUNT && "Too many output activation TB counts to fit inside the global memory" );
             }
         #endif
@@ -1878,7 +1878,7 @@ void testFixture::launch (
         auto sizeTransferBlockElement = sizeof(typeof((pInput->getTransferBlockVector()).at(0)));
         auto valueVectorSizeBytes = sizeTransferBlockElement * numTransferBlocks;
 
-        int activationOffsetByte = MEM_START_ACTIVATION_0 * BURST_SIZE_BYTE;
+        int activationOffsetByte = 0 * MEM_ACTIVATION_REGION_SIZE_PER_SLICE * BURST_SIZE_BYTE;
 
         std::cout <<"Transfering "<<valueVectorSizeBytes<<" bytes into bufferActivationDramBlocks"<<std::endl;
         assert(activationOffsetByte+valueVectorSizeBytes <= MAX_DRAM_BYTE_INPUT_ACTIVATION && "Too many input activation bytes to fit inside the global memory" );
@@ -1909,7 +1909,7 @@ void testFixture::launch (
         auto sizeElement = sizeof(typeof((pInput->getTransferBlockCountVector()).at(0)));
         auto transferBytes = sizeElement * numElements;
 
-        int tbCountOffsetByte = MEM_START_TB_0 * sizeof(t_streamblock_address);
+        int tbCountOffsetByte = 0 * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE * sizeof(t_streamblock_address);
 
         std::cout <<"Transfering "<<transferBytes<<" bytes into bufferActivationTBCounts"<<std::endl;
         assert(tbCountOffsetByte+transferBytes <= MAX_DRAM_BYTE_INPUT_ACTIVATION_SB_COUNT && "Too many input activation TB count bytes to fit inside the global memory" );
@@ -2239,7 +2239,7 @@ void testFixture::launch (
 
     std::cout <<stepCount++<<". Retrieve the output."<<std::endl;
     int oaOffset = ((op == CONVOLUTION) && (flagMultiLayerConv == true)) ?
-                MEM_START_ACTIVATION_0 * BURST_SIZE_BYTE : MEM_START_ACTIVATION_1 * BURST_SIZE_BYTE;
+                0 * MEM_ACTIVATION_REGION_SIZE_PER_SLICE * BURST_SIZE_BYTE : 1 * MEM_ACTIVATION_REGION_SIZE_PER_SLICE * BURST_SIZE_BYTE;
     cl::Event eventReadOutput, eventReadOutputCount;
     status = clCQOAMover.enqueueReadBuffer(
         bufferActivationDramBlocks,
@@ -2256,7 +2256,7 @@ void testFixture::launch (
     if (flagSparseOutput == true)
     {
         int oaTBOffset = ((op == CONVOLUTION) && (flagMultiLayerConv == true)) ?
-                    MEM_START_TB_0 * sizeof(t_streamblock_address) : MEM_START_TB_1 * sizeof(t_streamblock_address);
+                    0 * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE * sizeof(t_streamblock_address) : 1 * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE * sizeof(t_streamblock_address);
         status = clCQOAMover.enqueueReadBuffer(
             bufferActivationTBCounts,
             CL_TRUE,

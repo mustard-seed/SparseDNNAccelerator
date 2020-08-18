@@ -38,6 +38,15 @@ namespace GraphRuntime {
     } t_layer_info;
 
     typedef struct {
+        //PE dimenions
+        int numPERows;
+        int numPECols;
+        int numClusterInCompressionBlock;
+        int numClusterInTransferBlock;
+        int numScalarInCluster;
+    } t_accelerator_info;
+
+    typedef struct {
         //Input blob information
         std::vector<t_blob_info> vecInputInfo;
 
@@ -46,6 +55,15 @@ namespace GraphRuntime {
 
         //Pointer to each layer's aligned/compressed and quantized weights
         std::vector<std::shared_ptr<AlignedTensor>> pWeights;
+
+        //Starting dram block index and the number of dram block of each weight tensor in the
+        //FPGA off-chip memory
+        //Tensor is in the same order as the pointers appear in the pWeights vector
+        std::vector<int> vecWeightDramBlockStart;
+        std::vector<int> vecBiasStart;
+#if defined(SPARSE_SYSTEM)
+        std::vector<int> vecWeightTBCountStart;
+#endif
 
         //Pointers to each layer's quantized biases
         std::vector<std::shared_ptr<t_aligned_short_vector>> pBiasVector;
@@ -119,23 +137,30 @@ namespace GraphRuntime {
             //Buffer members associated with the MK instruction kernel
             cl::Buffer bufferMKInstructions;
 
-            std::vector<t_aligned_dram_block_vector> vecInputBlobsInternal;
-            std::vector<t_aligned_dram_block_vector> vecOutputBlobsInternal;
+            std::vector<std::shared_ptr<AlignedTensor>> vecInputBlobsInternal;
+            std::vector<std::shared_ptr<AlignedTensor>> vecOutputBlobsInternal;
 
             std::vector<t_blob_info> vecInputBlobsInfo;
             std::vector<t_blob_info> vecOutputBlobsInfo;
 
+            std::vector<t_layer_info> vecActivationInfo;
+
+            t_accelerator_info acceleratorInfo;
+
             /*!
              * \brief loadGraph
              * \details Load the execution graph and transfer information to the accelerator
-             *          Also stores copies of the input/output blob information, and the IA/OA
+             *          Stores copies of the input/output blob information, and the IA/OA
              *          mover instructions start/length in the accelerator memory
              * \param _executionGraph The DNN graph to be executed
              */
             void loadGraph (t_execution_graph& _executionGraph);
         public:
             AcceleratorWrapper() = default;
-            AcceleratorWrapper(std::string _bitstreamFileName, t_execution_graph& _executionGraph, int _fpgaID);
+            AcceleratorWrapper(std::string _bitstreamFileName,
+                               t_execution_graph& _executionGraph,
+                               t_accelerator_info& _acceleratorInfo,
+                               int _fpgaID);
             ~AcceleratorWrapper() = default;
 
             /*!
@@ -144,7 +169,7 @@ namespace GraphRuntime {
              * \param floatBlob Single batch input blob in fp32, in HWC layout
              * \param intputBlobID The input blob id. Range: [0, num input blobs)
              */
-            void prepareInputBlob (std::vector<float>& floatBlob, int intputBlobID);
+            void prepareInputBlob (std::vector<float>& floatBlob, int inputBlobID);
 
             /*!
              * \brief extractOutputBlob
@@ -163,7 +188,5 @@ namespace GraphRuntime {
              * \details Perform inference using the content of the current inference buffers
              */
             void inference();
-
-
     };
 }
