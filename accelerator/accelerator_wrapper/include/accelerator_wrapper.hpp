@@ -34,7 +34,7 @@ namespace GraphRuntime {
         //Start index of the layer's OA mover instructions in the OA mover instruction vector
         int     offsetOAMoverInstruction;
         //Number of OA mover instructions
-        int     numOAInstructions;
+        int     numOAMoverInstructions;
     } t_layer_info;
 
     typedef struct {
@@ -143,9 +143,14 @@ namespace GraphRuntime {
             std::vector<t_blob_info> vecInputBlobsInfo;
             std::vector<t_blob_info> vecOutputBlobsInfo;
 
-            std::vector<t_layer_info> vecActivationInfo;
+            std::vector<t_layer_info> vecLayerInfo;
 
             t_accelerator_info acceleratorInfo;
+
+            std::vector<cl_double> vecInputTransferTime;
+            std::vector<cl_double> vecOutputTransferTime;
+            std::vector<cl_double> vecLayerExecutionTime;
+            int numRunExecuted;
 
             /*!
              * \brief loadGraph

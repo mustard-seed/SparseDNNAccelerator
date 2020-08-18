@@ -287,6 +287,7 @@ namespace GraphRuntime {
             }
         }
         vecInputBlobsInfo = _executionGraph.vecInputInfo;
+        vecInputTransferTime = std::vector<cl_double>(vecInputBlobsInfo.size(), 0.0);
 
         for (auto& outputInfo: _executionGraph.vecOutputInfo)
         {
@@ -326,8 +327,12 @@ namespace GraphRuntime {
             }
         }
         vecOutputBlobsInfo = _executionGraph.vecOutputInfo;
+        vecOutputTransferTime = std::vector<cl_double>(vecOutputBlobsInfo.size(), 0.0);
 
-        vecActivationInfo = _executionGraph.vecLayerInfo;
+        vecLayerInfo = _executionGraph.vecLayerInfo;
+        vecLayerExecutionTime = std::vector<cl_double>(vecLayerInfo.size(), 0.0);
+
+        numRunExecuted = 0;
 
         std::cout <<"Transferring the graph to the FPGA."<<std::endl;
         int stepCount = 0;
@@ -346,9 +351,6 @@ namespace GraphRuntime {
             #endif
             //volatile __global t_ia_mover_instruction* restrict pInstruction,
             kernelIAMover.setArg(argIdx, bufferIAMoverInstructions);
-            argIdx++;
-            //unsigned int numInstruction
-            kernelIAMover.setArg(argIdx, (cl_uint) (_executionGraph.vecIAMoverInstruction.size()) );
         }
 
         std::cout <<stepCount++<<". Setting kernel arguments for the IA Tile controller."<<std::endl;
@@ -399,8 +401,6 @@ namespace GraphRuntime {
             #endif
             //volatile __global t_oa_mover_instruction* restrict pInstruction,
             kernelOAMover.setArg(argIdx++, bufferOAMoverInstructions);
-            //unsigned int numInstruction
-            kernelOAMover.setArg(argIdx++, (cl_uint) (_executionGraph.vecOAMoverInstruction.size()) );
         }
 
         std::cout <<stepCount++<<". Setting kernel arguments for the OA tile controller."<<std::endl;
@@ -765,16 +765,196 @@ namespace GraphRuntime {
         /*
          *2. Transfer all input blobs to the FPGA
         */
+        {
+            int index = 0;
+            for (const auto& blobInfo : vecInputBlobsInfo)
+            {
+                cl::Event event;
+                auto pInput = vecInputBlobsInternal.at(index).get();
+
+                auto numTransferBlocks = (pInput->getTransferBlockVector()).size();
+                auto sizeTransferBlockElement = sizeof(typeof((pInput->getTransferBlockVector()).at(0)));
+                auto valueVectorSizeBytes = sizeTransferBlockElement * numTransferBlocks;
+
+                int activationOffsetByte = blobInfo.memoryRegionID * MEM_ACTIVATION_REGION_SIZE_PER_SLICE * BURST_SIZE_BYTE;
+                assert(valueVectorSizeBytes <= MEM_ACTIVATION_REGION_SIZE_PER_SLICE && "Too many input activation bytes to fit inside the global memory" );
+
+                status = clCQIAMover.enqueueWriteBuffer(bufferActivationDramBlocks, //buffer
+                                                         CL_TRUE, //blocking_write
+                                                         activationOffsetByte, //offset
+                                                         valueVectorSizeBytes, //size
+                                                         (pInput->getTransferBlockVector()).data(), //data pointer
+                                                         NULL, //dependency list
+                                                         &event //events generated
+                                                            );
+                aocl_utils_cpp::checkError(status, "Failed to write an input activation vector");
+                cl_ulong startTime = event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+                cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
+                vecInputTransferTime.at(index) += (cl_double)((endTime - startTime)*(cl_double)(1e-3));
+
+                #if defined(SPARSE_SYSTEM)
+                    if (blobInfo.flagCanBeSparse == true)
+                    {
+                        auto numElements = (pInput->getTransferBlockCountVector()).size();
+                        auto sizeElement = sizeof(typeof((pInput->getTransferBlockCountVector()).at(0)));
+                        auto transferBytes = sizeElement * numElements;
+
+                        int tbCountOffsetByte = blobInfo.memoryRegionID * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE * sizeof(t_streamblock_address);
+
+                        //std::cout <<"Transfering "<<transferBytes<<" bytes into bufferActivationTBCounts"<<std::endl;
+                        assert(transferBytes <= MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE && "Too many input activation TB count bytes to fit inside the global memory" );
+
+                        status = clCQIAMover.enqueueWriteBuffer(bufferActivationTBCounts, //buffer
+                                                             CL_TRUE, //blocking_write
+                                                             tbCountOffsetByte, //offset
+                                                             transferBytes, //size
+                                                             (pInput->getTransferBlockCountVector()).data(), //data pointer
+                                                             NULL, //dependency list
+                                                             NULL //events generated
+                                                            );
+                        aocl_utils_cpp::checkError(status, "Failed to write the input activation TB count");
+                    }
+                #endif
+                index++;
+            }
+        }
 
 
         /*
          *3. Ochestrate the layer execution
         */
+        std::vector<cl::Event> vecOAFinishes;
+        int numLayers = vecLayerInfo.size();
+        vecOAFinishes.resize(numLayers);
+
+        //The first layer is a special case
+        {
+            #if defined(SPARSE_SYSTEM)
+                cl_uint iaArgIdx = 3;
+                cl_uint oaArgIdx = 3;
+            #else
+                cl_uint iaArgIdx = 2;
+                cl_uint oaArgIdx = 2;
+            #endif
+
+            //unsigned int numInstruction
+            kernelIAMover.setArg(iaArgIdx++, (cl_uint) vecLayerInfo.at(0).numIAMoverInstruction);
+            //offsetInstruction
+            kernelIAMover.setArg(iaArgIdx, (cl_uint) vecLayerInfo.at(0).offsetIAMoverInstruction);
+
+            //unsigned int numInstruction,
+            kernelOAMover.setArg(oaArgIdx++, (cl_uint) vecLayerInfo.at(0).numOAMoverInstructions);
+            //unsigned int offsetInstruction
+            kernelOAMover.setArg(oaArgIdx++, (cl_uint) vecLayerInfo.at(0).offsetOAMoverInstruction);
+
+            status = clCQOAMover.enqueueTask(kernelOAMover, NULL, &(vecOAFinishes.at(0)));
+            aocl_utils_cpp::checkError(status, "Failed to launch kernelOAMover!");
+
+            status = clCQIAMover.enqueueTask(kernelIAMover, NULL, NULL);
+            aocl_utils_cpp::checkError(status, "Failed to launch kernelIAMover!");
+        }
+
+        for (int i=1; i<numLayers; i++)
+        {
+            #if defined(SPARSE_SYSTEM)
+                cl_uint iaArgIdx = 3;
+                cl_uint oaArgIdx = 3;
+            #else
+                cl_uint iaArgIdx = 2;
+                cl_uint oaArgIdx = 2;
+            #endif
+            //unsigned int numInstruction
+            kernelIAMover.setArg(iaArgIdx++, (cl_uint) vecLayerInfo.at(i).numIAMoverInstruction);
+            //offsetInstruction
+            kernelIAMover.setArg(iaArgIdx, (cl_uint) vecLayerInfo.at(i).offsetIAMoverInstruction);
+
+            //unsigned int numInstruction,
+            kernelOAMover.setArg(oaArgIdx++, (cl_uint) vecLayerInfo.at(i).numOAMoverInstructions);
+            //unsigned int offsetInstruction
+            kernelOAMover.setArg(oaArgIdx++, (cl_uint) vecLayerInfo.at(i).offsetOAMoverInstruction);
+
+            status = clCQOAMover.enqueueTask(kernelOAMover, NULL, &(vecOAFinishes.at(i)));
+            //status = clEnqueueTask(clCQOAMover(), kernelOAMover(), 0, NULL, &(vecOAFinishes[i])));
+            aocl_utils_cpp::checkError(status, "Failed to launch kernelOAMover!");
+
+            //The creation of the following waitList vector seems redundant
+            //but it is needed to keep the OpenCL C++ API happy.
+            //Worry: Is the event copied into the vector in sync with the original event?
+            std::vector<cl::Event> waitList = {vecOAFinishes.at(i-1)};
+            status = clCQIAMover.enqueueTask(kernelIAMover, &waitList, NULL);
+            aocl_utils_cpp::checkError(status, "Failed to launch kernelIAMover!");
+        }
+
+        clCQOAMover.finish();
+
 
         /*
          *4. Transfer output blobs from the FPGA to the host
         */
+        {
+            int index = 0;
+            for (const auto& blobInfo : vecOutputBlobsInfo)
+            {
+                cl::Event event;
+                auto pOutput = vecOutputBlobsInternal.at(index).get();
 
+                auto numTransferBlocks = (pOutput->getTransferBlockVector()).size();
+                auto sizeTransferBlockElement = sizeof(typeof((pOutput->getTransferBlockVector()).at(0)));
+                auto valueVectorSizeBytes = sizeTransferBlockElement * numTransferBlocks;
+
+                int activationOffsetByte = blobInfo.memoryRegionID * MEM_ACTIVATION_REGION_SIZE_PER_SLICE * BURST_SIZE_BYTE;
+                assert(valueVectorSizeBytes <= MEM_ACTIVATION_REGION_SIZE_PER_SLICE && "Too many output activation bytes to read from global memory" );
+
+                status = clCQOAMover.enqueueReadBuffer(bufferActivationDramBlocks, //buffer
+                                                         CL_TRUE, //blocking_write
+                                                         activationOffsetByte, //offset
+                                                         valueVectorSizeBytes, //size
+                                                         (pOutput->getTransferBlockVector()).data(), //data pointer
+                                                         NULL, //dependency list
+                                                         &event //events generated
+                                                            );
+                aocl_utils_cpp::checkError(status, "Failed to read an output activation vector");
+                cl_ulong startTime = event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+                cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
+                vecOutputTransferTime.at(index) += (cl_double)((endTime - startTime)*(cl_double)(1e-3));
+
+                #if defined(SPARSE_SYSTEM)
+                    if (blobInfo.flagCanBeSparse == true)
+                    {
+                        auto numElements = (pOutput->getTransferBlockCountVector()).size();
+                        auto sizeElement = sizeof(typeof((pOutput->getTransferBlockCountVector()).at(0)));
+                        auto transferBytes = sizeElement * numElements;
+
+                        int tbCountOffsetByte = blobInfo.memoryRegionID * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE * sizeof(t_streamblock_address);
+
+                        assert(transferBytes <= MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE && "Too many output activation TB count bytes to be read from global memory" );
+
+                        status = clCQOAMover.enqueueWriteBuffer(bufferActivationTBCounts, //buffer
+                                                             CL_TRUE, //blocking_write
+                                                             tbCountOffsetByte, //offset
+                                                             transferBytes, //size
+                                                             (pOutput->getTransferBlockCountVector()).data(), //data pointer
+                                                             NULL, //dependency list
+                                                             NULL //events generated
+                                                            );
+                        aocl_utils_cpp::checkError(status, "Failed to read the output activation TB count");
+                    }
+                #endif
+                index++;
+            }
+        }
+
+        //Update runtime of eacy layer
+        {
+            int index = 0;
+            for (const auto& event : vecOAFinishes)
+            {
+                cl_ulong startTime = event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+                cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
+                vecLayerExecutionTime.at(index++) += (cl_double)((endTime - startTime)*(cl_double)(1e-3));
+            }
+        }
+        numRunExecuted++;
     }
 
 
