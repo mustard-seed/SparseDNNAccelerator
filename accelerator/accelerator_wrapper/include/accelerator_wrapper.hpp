@@ -44,13 +44,13 @@ namespace GraphRuntime {
         //Output blob information
         std::vector<t_blob_info> vecOutputInfo;
 
-        //Aligned/compressed and quantized weights
-        std::shared_ptr<AlignedTensor> pWeights;
+        //Pointer to each layer's aligned/compressed and quantized weights
+        std::vector<std::shared_ptr<AlignedTensor>> pWeights;
 
-        //Quantized biases
-        t_aligned_short_vector biasVector;
+        //Pointers to each layer's quantized biases
+        std::vector<std::shared_ptr<t_aligned_short_vector>> pBiasVector;
 
-        //Instructions
+        //Instructions of layers
         t_aligned_ia_mover_instruction_vector vecIAMoverInstruction;
         t_aligned_ia_tile_controller_instruction_vector vecIATileControllerInstruction;
         t_aligned_oa_mover_instruction_vector vecOAMoverInstruction;
@@ -119,11 +119,11 @@ namespace GraphRuntime {
             //Buffer members associated with the MK instruction kernel
             cl::Buffer bufferMKInstructions;
 
-            //
-        public:
-            AcceleratorWrapper() = default;
-            AcceleratorWrapper(std::string _fileName);
-            ~AcceleratorWrapper() = default;
+            std::vector<t_aligned_dram_block_vector> vecInputBlobsInternal;
+            std::vector<t_aligned_dram_block_vector> vecOutputBlobsInternal;
+
+            std::vector<t_blob_info> vecInputBlobsInfo;
+            std::vector<t_blob_info> vecOutputBlobsInfo;
 
             /*!
              * \brief loadGraph
@@ -133,6 +133,36 @@ namespace GraphRuntime {
              * \param _executionGraph The DNN graph to be executed
              */
             void loadGraph (t_execution_graph& _executionGraph);
+        public:
+            AcceleratorWrapper() = default;
+            AcceleratorWrapper(std::string _bitstreamFileName, t_execution_graph& _executionGraph, int _fpgaID);
+            ~AcceleratorWrapper() = default;
+
+            /*!
+             * \brief pprepareInputBlob
+             * \details Quantize and compress an input blob of the neural network
+             * \param floatBlob Single batch input blob in fp32, in HWC layout
+             * \param intputBlobID The input blob id. Range: [0, num input blobs)
+             */
+            void prepareInputBlob (std::vector<float>& floatBlob, int intputBlobID);
+
+            /*!
+             * \brief extractOutputBlob
+             * \details Decompress and dequantize an outout blob of the neural network
+             * \param outputBlobID The outout blob id. Range: [0, num output blobs)
+             * \return The output tensor in HWC layout as fp32
+             */
+            std::vector<float> extractOutputBlob (int outputBlobID);
+
+
+            std::vector<t_blob_info> getInputBlobsInfo();
+            std::vector<t_blob_info> getOutputBlobsInfo();
+
+            /*!
+             * \brief inference
+             * \details Perform inference using the content of the current inference buffers
+             */
+            void inference();
 
 
     };
