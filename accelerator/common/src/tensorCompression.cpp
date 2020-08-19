@@ -89,8 +89,18 @@ AlignedTensor::AlignedTensor(
     //==========================================================
     //Compute the memory stride and allocate space in the vectors
     if (isKernel) {
-        unsigned int tempStride = width*height*((unsigned int) numTransferBlockPerChannelGroup);
-        externalMemoryAddressStride = (1 + (tempStride - 1)/ WIDE_SIZE)*WIDE_SIZE;
+        externalMemoryAddressStride = calculateExternalMemoryAddressStride(
+                    _channel, //channelsPerGroup
+                    1, //group
+                    height, //height
+                    width, //width
+                    maxScalarIndexInCluster+1, //clusterSize
+                    maxClusterIndexInTransferBlock+1, //transferBlockSize
+                    1, //compressionWindowSize, unused
+                    WIDE_SIZE, //numTransferBlockPerDramBlock
+                    true, //isKernel
+                    true //isDense
+                    );
         valueVector.resize(externalMemoryAddressStride*num3DTensors);
         numChannelGroups = 1;
         maxScalarIndexInChannelGroup = _channel - 1;
@@ -101,8 +111,18 @@ AlignedTensor::AlignedTensor(
         assert( channel % (maxScalarIndexInChannelGroup + 1) == 0 );
         assert (num3DTensors == 1);
         numChannelGroups = channel / (maxScalarIndexInChannelGroup + 1);
-        unsigned int tempStride = numTransferBlockPerChannelGroup;
-        externalMemoryAddressStride = (1 + (tempStride - 1)/ WIDE_SIZE)*WIDE_SIZE;
+        externalMemoryAddressStride = calculateExternalMemoryAddressStride(
+                    _maxScalarIndexInChannelGroup+1, //channelsPerGroup
+                    numChannelGroups, //group
+                    height, //height
+                    width, //width
+                    maxScalarIndexInCluster+1, //clusterSize
+                    maxClusterIndexInTransferBlock+1, //transferBlockSize
+                    1, //compressionWindowSize, unused
+                    WIDE_SIZE, //numTransferBlockPerDramBlock
+                    false, //isKernel
+                    true //isDense
+                    );
         valueVector.resize( width * height * numChannelGroups * externalMemoryAddressStride);
     }
 }
@@ -304,11 +324,18 @@ FlexibleDirectCompressedTensor::FlexibleDirectCompressedTensor (
     //==========================================================
     //Compute the memory stride and allocate space in the vectors
     if (isKernel) {
-        unsigned int numCompressionBlocksInChannel =
-                1 + (channel - 1) / ((_maxClusterIndexInCompressionBlock + 1) * (_maxScalarIndexInCluster + 1));
-        unsigned int tempStride = width*height*((unsigned int) numTransferBlocksPerCompressionBlock* (unsigned int) numCompressionBlocksInChannel);
-        //externalMemoryAddressStride = lcm(tempStride, (unsigned int) WIDE_SIZE); //DRAM stride needs to be a multiple of DRAM width and the storage requirement per filter
-        externalMemoryAddressStride = (unsigned int) std::ceil( ((float) (tempStride) ) / ((float) (WIDE_SIZE)) ) * WIDE_SIZE;
+        externalMemoryAddressStride = calculateExternalMemoryAddressStride(
+                    _channel, //channelsPerGroup
+                    1, //group
+                    height, //height
+                    width, //width
+                    maxScalarIndexInCluster+1, //clusterSize
+                    maxClusterIndexInTransferBlock+1, //transferBlockSize
+                    maxClusterIndexInCompressionBlock+1, //compressionWindowSize, unused
+                    WIDE_SIZE, //numTransferBlockPerDramBlock
+                    true, //isKernel
+                    false //isDense
+                    );
         valueVector.resize(externalMemoryAddressStride*num3DTensors);
         streamBlockAddressVector.resize(num3DTensors);
         numChannelGroups = 1;
@@ -320,11 +347,18 @@ FlexibleDirectCompressedTensor::FlexibleDirectCompressedTensor (
         assert( channel % (maxScalarIndexInChannelGroup + 1) == 0 );
         assert (num3DTensors == 1);
         numChannelGroups = channel / (maxScalarIndexInChannelGroup + 1);
-        unsigned int numCompressionBlocksInChannelGroup =
-                (unsigned int) std::ceil ( (float) (maxScalarIndexInChannelGroup + 1)
-                               / (float) ((maxScalarIndexInCluster + 1) * (maxClusterIndexInCompressionBlock + 1)) );
-        unsigned int tempStride = (numCompressionBlocksInChannelGroup * numTransferBlocksPerCompressionBlock);
-        externalMemoryAddressStride = (unsigned int) std::ceil( ((float) (tempStride) ) / ((float) (WIDE_SIZE)) ) * WIDE_SIZE;
+        externalMemoryAddressStride = calculateExternalMemoryAddressStride(
+                    maxScalarIndexInChannelGroup+1, //channelsPerGroup
+                    numChannelGroups, //group
+                    height, //height
+                    width, //width
+                    maxScalarIndexInCluster+1, //clusterSize
+                    maxClusterIndexInTransferBlock+1, //transferBlockSize
+                    maxClusterIndexInCompressionBlock+1, //compressionWindowSize, unused
+                    WIDE_SIZE, //numTransferBlockPerDramBlock
+                    false, //isKernel
+                    false //isDense
+                    );
         valueVector.resize( width * height * numChannelGroups * externalMemoryAddressStride);
         streamBlockAddressVector.resize(width * height * numChannelGroups);
     }
@@ -719,6 +753,61 @@ void FlexibleDirectCompressedTensor::decodeTensor(
             } // if a compression block has been formed
         }  //for-loop. Expands atream block
         //=====================================================
+    }
+}
+
+unsigned int calculateExternalMemoryAddressStride(
+        unsigned int channelsPerGroup,
+        unsigned int group,
+        unsigned int height,
+        unsigned int width,
+        unsigned int clusterSize,
+        unsigned int transferBlockSize,
+        unsigned int compressionWindowSize,
+        unsigned int numTransferBlockPerDramBlock,
+        bool isKernel,
+        bool isDense)
+{
+    if (isDense == true)
+    {
+        unsigned int numScalarPerTransferBlock = clusterSize * transferBlockSize;
+        unsigned int numTransferBlockPerChannelGroup = 1 + ( channelsPerGroup -1) / numScalarPerTransferBlock;
+        unsigned int tempStride = 0;
+        if (isKernel)
+        {
+            assert(group==1 && "The group parameter should be 1 if the tensor is a weight tensor.");
+            tempStride = width*height*numTransferBlockPerChannelGroup;
+        }
+        else
+        {
+            tempStride = numTransferBlockPerChannelGroup;
+
+        }
+        return (1 + (tempStride - 1)/ numTransferBlockPerDramBlock) * numTransferBlockPerDramBlock;
+    }
+    else
+    {
+        //Compute the number of transfer blocks in a compression block
+        //Need an extra one at the end to account for the bitmask
+        // which occupies its own transfer block
+        unsigned int numTransferBlocksPerCompressionBlock
+                = 1 + (compressionWindowSize - 1 + transferBlockSize) / transferBlockSize;
+        unsigned int tempStride = 0;
+        if (isKernel)
+        {
+            assert(group==1 && "The group parameter should be 1 if the tensor is a weight tensor.");
+            unsigned int numCompressionBlocksInChannel =
+                    1 + (channelsPerGroup*group - 1) / (compressionWindowSize * clusterSize);
+            tempStride = width*height*((unsigned int) numTransferBlocksPerCompressionBlock* (unsigned int) numCompressionBlocksInChannel);
+            externalMemoryAddressStride = (unsigned int) std::ceil( ((float) (tempStride) ) / ((float) (WIDE_SIZE)) ) * WIDE_SIZE;
+        }
+        else
+        {
+            unsigned int numCompressionBlocksInChannelGroup =
+                    1 + (channelsPerGroup - 1) / (compressionWindowSize * clusterSize);
+            tempStride = (numCompressionBlocksInChannelGroup * numTransferBlocksPerCompressionBlock);
+        }
+        return (1 + (tempStride - 1) / numTransferBlockPerDramBlock) * numTransferBlockPerDramBlock;
     }
 }
 

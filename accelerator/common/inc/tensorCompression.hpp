@@ -3,6 +3,34 @@
 #include "vectorType.hpp"
 #include "floatFixedPointConversion.hpp"
 
+/*!
+ * \brief calculateExternalMemoryAddressStride
+ * \details Helper function. Caculates the strip stride of compressed and quantized tensor in
+ * FPGA memory in terms of transfer blocks
+ * \param channelsPerGroup
+ * \param group
+ * \param height
+ * \param width
+ * \param clusterSize
+ * \param transferBlockSize
+ * \param compressionWindowSize
+ * \param numTransferBlockPerDramBlock
+ * \param isKernel
+ * \param isDense
+ * \return
+ */
+unsigned int calculateExternalMemoryAddressStride(
+        unsigned int channelsPerGroup,
+        unsigned int group,
+        unsigned int height,
+        unsigned int width,
+        unsigned int clusterSize,
+        unsigned int transferBlockSize,
+        unsigned int compressionWindowSize,
+        unsigned int numTransferBlockPerDramBlock,
+        bool isKernel,
+        bool isDense);
+
 class AlignedTensor {
   protected:
     //Vectos holding the vector values;
