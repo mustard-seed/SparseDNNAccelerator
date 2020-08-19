@@ -2,6 +2,8 @@
 #include "params.hpp"
 #include "floatFixedPointConversion.hpp"
 
+#include <chrono>
+
 /**
 CL INTEL FPGA MEM BANKS
 Only available on certain Arria 10 and Stratix 10 boards
@@ -51,9 +53,11 @@ namespace GraphRuntime {
     }
 
     AcceleratorWrapper::AcceleratorWrapper(std::string _bitstreamFileName,
-                                           t_execution_graph& _executionGraph,
-                                           t_accelerator_info& _acceleratorInfo,
-                                           int _fpgaID)
+                                           t_accelerator_info _acceleratorInfo,
+                                           int _fpgaID) :
+        minInferenceDuration(std::numeric_limits<double>::max()),
+        maxInferenceDuration(0.00),
+        averageInferenceDuration(0.00)
     {
         cl_int status = CL_SUCCESS;
 
@@ -239,12 +243,35 @@ namespace GraphRuntime {
         std::cout <<"AOCL setup compelete"<<std::endl;
 
         acceleratorInfo = _acceleratorInfo;
+    }
+
+    AcceleratorWrapper::AcceleratorWrapper(std::string _bitstreamFileName,
+                                           t_execution_graph& _executionGraph,
+                                           t_accelerator_info& _acceleratorInfo,
+                                           int _fpgaID) :
+        AcceleratorWrapper(_bitstreamFileName, _acceleratorInfo, _fpgaID)
+    {
+        resetGraph();
 
         //Load the network, allocate buffers, and transfer the instructions
         loadGraph(_executionGraph);
 
-        std::cout <<"Accelerator setup complete."<<std::endl;
     } // AcceleratorWrapper parametrized constructor
+
+    void AcceleratorWrapper::resetGraph()
+    {
+        vecInputBlobsInfo.clear();
+        vecInputBlobsInternal.clear();
+        vecOutputBlobsInfo.clear();
+        vecOutputBlobsInternal.clear();
+        vecInputTransferTime.clear();
+        vecOutputTransferTime.clear();
+        vecLayerExecutionTime.clear();
+        numRunExecuted = 0;
+        minInferenceDuration = std::numeric_limits<double>::max();
+        maxInferenceDuration = 0.0;
+        averageInferenceDuration = 0.00;
+    }
 
     void AcceleratorWrapper::loadGraph (t_execution_graph& _executionGraph)
     {
@@ -746,6 +773,7 @@ namespace GraphRuntime {
 
     void AcceleratorWrapper::inference()
     {
+        auto beginTime = std::chrono::system_clock::now();
         cl_int status = CL_SUCCESS;
         /*
           1. Launch all kernels, except for the IA mover and the OA mover
@@ -955,6 +983,25 @@ namespace GraphRuntime {
             }
         }
         numRunExecuted++;
+
+        auto endTime = std::chrono::system_clock::now();
+
+        //Updat clocks
+        std::chrono::duration<double> timeElapsed = endTime - beginTime;
+        double elapsedCount = timeElapsed.count();
+        averageInferenceDuration = (averageInferenceDuration*(numRunExecuted-1) + elapsedCount) / numRunExecuted;
+        maxInferenceDuration = std::max(elapsedCount, maxInferenceDuration);
+        minInferenceDuration = std::min(elapsedCount, minInferenceDuration);
+
+    }
+
+    std::string AcceleratorWrapper::reportRuntime()
+    {
+        //TODO: finish implementing this
+        std::ostringstream buffer;
+        buffer <<"===========Performance counts ========="<<std::endl;
+
+
     }
 
 

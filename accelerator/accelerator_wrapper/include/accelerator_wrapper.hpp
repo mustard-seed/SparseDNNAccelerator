@@ -22,6 +22,7 @@ namespace GraphRuntime {
         unsigned int width;
         unsigned int numFracBits;
         bool flagCanBeSparse;
+        std::string blobName;
     } t_blob_info;
 
     typedef struct {
@@ -152,6 +153,18 @@ namespace GraphRuntime {
             std::vector<cl_double> vecLayerExecutionTime;
             int numRunExecuted;
 
+            double minInferenceDuration, maxInferenceDuration, averageInferenceDuration;
+
+
+        public:
+            AcceleratorWrapper() = default;
+            AcceleratorWrapper(std::string _bitstremFileName, t_accelerator_info _acceleratorInfo, int _fpgaID);
+            AcceleratorWrapper(std::string _bitstreamFileName,
+                               t_execution_graph& _executionGraph,
+                               t_accelerator_info& _acceleratorInfo,
+                               int _fpgaID);
+            ~AcceleratorWrapper() = default;
+
             /*!
              * \brief loadGraph
              * \details Load the execution graph and transfer information to the accelerator
@@ -160,13 +173,8 @@ namespace GraphRuntime {
              * \param _executionGraph The DNN graph to be executed
              */
             void loadGraph (t_execution_graph& _executionGraph);
-        public:
-            AcceleratorWrapper() = default;
-            AcceleratorWrapper(std::string _bitstreamFileName,
-                               t_execution_graph& _executionGraph,
-                               t_accelerator_info& _acceleratorInfo,
-                               int _fpgaID);
-            ~AcceleratorWrapper() = default;
+
+            void resetGraph();
 
             /*!
              * \brief pprepareInputBlob
@@ -193,5 +201,7 @@ namespace GraphRuntime {
              * \details Perform inference using the content of the current inference buffers
              */
             void inference();
+
+            std::string reportRuntime();
     };
 }
