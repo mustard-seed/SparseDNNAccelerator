@@ -3,6 +3,7 @@
 #include "floatFixedPointConversion.hpp"
 
 #include <chrono>
+#include <iomanip>
 
 /**
 CL INTEL FPGA MEM BANKS
@@ -1000,9 +1001,73 @@ namespace GraphRuntime {
         //TODO: finish implementing this
         std::ostringstream buffer;
         buffer <<"===========Performance counts ========="<<std::endl;
+        buffer <<std::setw(30)<<std::left<<"Number of inferences: ";
+        buffer <<std::setw(30)<<std::left<<std::to_string(numRunExecuted)<<std::endl;
+        buffer <<std::setw(30)<<std::left<<"Average Inference Latency (us): ";
+        buffer <<std::setw(30)<<std::left<<std::to_string(averageInferenceDuration * 1000000.0)<<std::endl;
+        buffer <<std::setw(30)<<std::left<<"Maximum Inference Latency (us): ";
+        buffer <<std::setw(30)<<std::left<<std::to_string(maxInferenceDuration * 1000000.0)<<std::endl;
+        buffer <<std::setw(30)<<std::left<<"Minimum Inference Latency (us): ";
+        buffer <<std::setw(30)<<std::left<<std::to_string(minInferenceDuration * 1000000.0)<<std::endl;
 
-
+        const int maxName = 29;
+        if (numRunExecuted > 0)
+        {
+            //Print average input blob transfer time
+            buffer <<"===========Input blob transfer time"<<std::endl;
+            buffer <<std::setw(30)<<std::left<<"Input Blob Name";
+            buffer <<std::setw(30)<<std::left<<"Average transfer latency (us)"<<std::endl;
+            for (unsigned int i=0; i<vecInputBlobsInfo.size(); i++)
+            {
+                auto blobInfo = vecInputBlobsInfo.at(i);
+                auto blobTime = vecInputTransferTime.at(i);
+                std::string name = blobInfo.blobName;
+                if (name.length() > maxName)
+                {
+                    name = name.substr(0, maxName-4);
+                    name += "...";
+                }
+                double averageTimeUs = blobTime / ((double) numRunExecuted) * 1000000.0;
+                buffer <<std::setw(30)<<std::left<<name;
+                buffer <<std::setw(30)<<std::left<<std::to_string(averageTimeUs)<<std::endl;
+            }
+            //Print average layer transfer time
+            buffer <<"===========Layer inference time"<<std::endl;
+            buffer <<std::setw(30)<<std::left<<"Layer Name";
+            buffer <<std::setw(30)<<std::left<<"Average latency (us)"<<std::endl;
+            for (unsigned int i=0; i<vecLayerExecutionTime.size(); i++)
+            {
+                auto layerInfo = vecLayerInfo.at(i);
+                auto layerTime = vecLayerExecutionTime.at(i);
+                std::string name = layerInfo.layerName;
+                if (name.length() > maxName)
+                {
+                    name = name.substr(0, maxName-4);
+                    name += "...";
+                }
+                double averageTimeUs = layerTime / ((double) numRunExecuted) * 1000000.0;
+                buffer <<std::setw(30)<<std::left<<name;
+                buffer <<std::setw(30)<<std::left<<std::to_string(averageTimeUs)<<std::endl;
+            }
+            //Print average outout blob transfer time
+            buffer <<"===========Output blob transfer time"<<std::endl;
+            buffer <<std::setw(30)<<std::left<<"Output Blob Name";
+            buffer <<std::setw(30)<<std::left<<"Average transfer latency (us)"<<std::endl;
+            for (unsigned int i=0; i<vecOutputBlobsInfo.size(); i++)
+            {
+                auto blobInfo = vecOutputBlobsInfo.at(i);
+                auto blobTime = vecOutputTransferTime.at(i);
+                std::string name = blobInfo.blobName;
+                if (name.length() > maxName)
+                {
+                    name = name.substr(0, maxName-4);
+                    name += "...";
+                }
+                double averageTimeUs = blobTime / ((double) numRunExecuted) * 1000000.0;
+                buffer <<std::setw(30)<<std::left<<name;
+                buffer <<std::setw(30)<<std::left<<std::to_string(averageTimeUs)<<std::endl;
+            }
+        }
+        return buffer.str();
     }
-
-
 }
