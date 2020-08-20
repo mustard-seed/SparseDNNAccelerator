@@ -122,11 +122,9 @@ protected:
 }; //testFixture
 
 #ifdef PLAY
-TEST_F (testFixture, back_to_back_identity_conv)
+TEST_F (testFixture, conv_dense_input_dense_output_plain)
 {
-    //Perform a dummy test first to clear the output buffer
-    std::cout <<"Performing the dummy test"<<std::endl;
-    unsigned char inputWidth = 2*PE_COLS;
+    unsigned char inputWidth = 4;
     unsigned char inputHeight = 4;
     unsigned char numInputChannel = 8;
     unsigned char numInputGroup = 1;
@@ -139,7 +137,7 @@ TEST_F (testFixture, back_to_back_identity_conv)
     bool flagSparseInput = false;
     bool flagSparseOutput = false;
     OPERATION op = CONVOLUTION;
-    float bias = 5.0f;
+    float bias = 0.0f;
 
     launch(
                 inputWidth,
@@ -157,44 +155,8 @@ TEST_F (testFixture, back_to_back_identity_conv)
                 op,
                 bias
           );
-
-    //Then perform the actual back to back test
-    inputWidth = 2*PE_COLS;
-    inputHeight = 4;
-    numInputChannel = 8;
-    numInputGroup = 1;
-    numOutputGroup = 1;
-    inputHeightSPUnitSize = 1;
-    inputWidthSPUnitSize = 1;
-    sizeOutputTileWidthPerColFull = 2;
-    sizeOutputTileHeight = 4;
-    flagEnableRelu = false;
-    flagSparseInput = false;
-    flagSparseOutput = false;
-    op = CONVOLUTION;
-    bias = 0.0f;
-    bool flag2Layer = true;
-
-    std::cout <<"Actual back-to-back test starts"<<std::endl;
-
-    launch(
-                inputWidth,
-                inputHeight,
-                numInputChannel,
-                numInputGroup,
-                numOutputGroup,
-                inputHeightSPUnitSize,
-                inputWidthSPUnitSize,
-                sizeOutputTileWidthPerColFull,
-                sizeOutputTileHeight,
-                flagEnableRelu,
-                flagSparseInput,
-                flagSparseOutput,
-                op,
-                bias,
-                flag2Layer
-          );
 }
+
 #else
 #if defined(PERF_TEST)
 TEST_F (testFixture, perf_test_conv_sparse_128x128x3x3x32x16COL)
@@ -1170,7 +1132,7 @@ void testFixture::launch (
                     COMPRESSION_WINDOW_SIZE, //compressionWindowSize
                     WIDE_SIZE, //numTransferBlockPerDramBlock
                     false, //isKernel
-                    flagSparseInput
+                    !flagSparseInput //isDense
                 ) >> WIDE_SIZE_OFFSET;
     std::cout <<"memDramBlockIAColStride: "<<memDramBlockIAColStride<<std::endl;
 
@@ -1184,7 +1146,7 @@ void testFixture::launch (
                 COMPRESSION_WINDOW_SIZE, //compressionWindowSize
                 WIDE_SIZE, //numTransferBlockPerDramBlock
                 false, //isKernel
-                flagSparseOutput
+                !flagSparseOutput //isDense
             ) >> WIDE_SIZE_OFFSET;
     std::cout <<"memDramBlockOAColStride: "<<memDramBlockOAColStride<<std::endl;
 
@@ -1678,9 +1640,13 @@ void testFixture::launch (
         accelerator.inference();
     }
 
+
     //Retrieve the outputs
     std::cout <<stepCount++<<". Decode and retrieve the output."<<std::endl;
     std::vector<float> outputFloatVector = accelerator.extractOutputBlob(0);
+
+    std::cout <<stepCount++<<". Runtime stats."<<std::endl;
+    std::cout <<accelerator.reportRuntime();
 
 
     //Decompress the output, and check against the input if necessary

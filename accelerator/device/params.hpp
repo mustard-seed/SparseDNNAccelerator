@@ -1,7 +1,7 @@
 #ifndef PARAMS_DEFINED
 #define PARAMS_DEFINED
 
-//#define SPARSE_SYSTEM
+#define SPARSE_SYSTEM
 //#define IA_PING_PONG
 /**
  * Global memory settings

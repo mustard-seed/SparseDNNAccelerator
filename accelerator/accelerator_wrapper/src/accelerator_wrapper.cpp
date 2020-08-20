@@ -1053,7 +1053,7 @@ namespace GraphRuntime {
                     name = name.substr(0, maxName-4);
                     name += "...";
                 }
-                double averageTimeUs = blobTime / ((double) numRunExecuted) * 1000000.0;
+                double averageTimeUs = blobTime / ((double) numRunExecuted);
                 buffer <<std::setw(30)<<std::left<<name;
                 buffer <<std::setw(30)<<std::left<<std::to_string(averageTimeUs)<<std::endl;
             }
@@ -1071,7 +1071,7 @@ namespace GraphRuntime {
                     name = name.substr(0, maxName-4);
                     name += "...";
                 }
-                double averageTimeUs = layerTime / ((double) numRunExecuted) * 1000000.0;
+                double averageTimeUs = layerTime / ((double) numRunExecuted);
                 buffer <<std::setw(30)<<std::left<<name;
                 buffer <<std::setw(30)<<std::left<<std::to_string(averageTimeUs)<<std::endl;
             }
@@ -1089,7 +1089,7 @@ namespace GraphRuntime {
                     name = name.substr(0, maxName-4);
                     name += "...";
                 }
-                double averageTimeUs = blobTime / ((double) numRunExecuted) * 1000000.0;
+                double averageTimeUs = blobTime / ((double) numRunExecuted);
                 buffer <<std::setw(30)<<std::left<<name;
                 buffer <<std::setw(30)<<std::left<<std::to_string(averageTimeUs)<<std::endl;
             }
