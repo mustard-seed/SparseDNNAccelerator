@@ -271,6 +271,9 @@ namespace GraphRuntime {
         minInferenceDuration = std::numeric_limits<double>::max();
         maxInferenceDuration = 0.0;
         averageInferenceDuration = 0.00;
+        launchIATileController = false;
+        launchMKController = false;
+        launchWMover = false;
     }
 
     void AcceleratorWrapper::loadGraph (t_execution_graph& _executionGraph)
@@ -388,7 +391,10 @@ namespace GraphRuntime {
             argIdx++;
 
             //unsigned int numInstruction
-            kernelIATileController.setArg(argIdx, (cl_uint) (_executionGraph.vecIATileControllerInstruction.size()) );
+            unsigned int numInustruction = _executionGraph.vecIATileControllerInstruction.size();
+            kernelIATileController.setArg(argIdx, (cl_uint) (numInustruction) );
+
+            launchIATileController = numInustruction > 0 ? true : false;
         }
 
         std::cout <<stepCount++<<". Setting kernel arguments for the Filter mover."<<std::endl;
@@ -405,7 +411,9 @@ namespace GraphRuntime {
                 kernelWMover.setArg(argIdx++, bufferWMoverWTBCounts);
             #endif //SPARSE_SYSTEM
             //unsigned int numInstruction
+            unsigned int numInustruction = _executionGraph.vecWMoverInstruction.size();
             kernelWMover.setArg(argIdx++, (cl_uint) (_executionGraph.vecWMoverInstruction.size()) );
+            launchWMover = numInustruction > 0 ? true: false;
         }
 
         std::cout <<stepCount++<<". Setting kernel arguments for the Miscellaneous controller."<<std::endl;
@@ -414,7 +422,9 @@ namespace GraphRuntime {
             //__global t_misc_instruction* restrict pInstruction,
             kernelMKInstructionMover.setArg(argIdx++, bufferMKInstructions);
             //unsigned int numInstruction
+            unsigned int numInustruction = _executionGraph.vecMiscInstruction.size();
             kernelMKInstructionMover.setArg(argIdx++, (cl_uint) (_executionGraph.vecMiscInstruction.size()) );
+            launchMKController = numInustruction > 0 ? true: false;
         }
 
         std::cout <<stepCount++<<". Setting kernel arguments for the OA mover."<<std::endl;
@@ -472,23 +482,26 @@ namespace GraphRuntime {
             auto sizeElement = sizeof(typeof(_executionGraph.vecIATileControllerInstruction.at(0)));
             auto transferBytes = sizeElement * numElements;
 
-            std::cout <<"Transfering "<<transferBytes<<" bytes into bufferIATileControllerInstructions"<<std::endl;
-            assert(transferBytes <= MAX_DRAM_BYTE_INPUT_TILE_CONTROLLER_INSTRUCTION && "Too many IA Tile instructions to fit inside the global memory" );
+            if (transferBytes > 0)
+            {
+                std::cout <<"Transfering "<<transferBytes<<" bytes into bufferIATileControllerInstructions"<<std::endl;
+                assert(transferBytes <= MAX_DRAM_BYTE_INPUT_TILE_CONTROLLER_INSTRUCTION && "Too many IA Tile instructions to fit inside the global memory" );
 
-            status = clCQIATileController.enqueueWriteBuffer(bufferIATileControllerInstructions, //buffer
-                                                 CL_TRUE, //blocking_write
-                                                 0, //offset
-                                                 transferBytes, //size
-                                                 _executionGraph.vecIATileControllerInstruction.data(), //data pointer
-                                                 NULL, //dependency list
-                                                 &event //events generated
-                                                );
-            aocl_utils_cpp::checkError(status, "Failed to write the IA tile controller instructions");
-            clCQIATileController.finish();
-            cl_ulong startTime = event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-            cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-            cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*(cl_double)(1e-3));
-            std::cout <<"Transfer the IA tile controller instructions tensor took "<<elapsedTimeUs<<" us"<<std::endl;
+                status = clCQIATileController.enqueueWriteBuffer(bufferIATileControllerInstructions, //buffer
+                                                                 CL_TRUE, //blocking_write
+                                                                 0, //offset
+                                                                 transferBytes, //size
+                                                                 _executionGraph.vecIATileControllerInstruction.data(), //data pointer
+                                                                 NULL, //dependency list
+                                                                 &event //events generated
+                                                                 );
+                aocl_utils_cpp::checkError(status, "Failed to write the IA tile controller instructions");
+                clCQIATileController.finish();
+                cl_ulong startTime = event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+                cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
+                cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*(cl_double)(1e-3));
+                std::cout <<"Transfer the IA tile controller instructions tensor took "<<elapsedTimeUs<<" us"<<std::endl;
+            }
         }
 
         std::cout <<stepCount++<<". Transfer the OA Mover instructions"<<std::endl;
@@ -543,8 +556,6 @@ namespace GraphRuntime {
             std::cout <<"Transfer the OA tile controller instructions tensor took "<<elapsedTimeUs<<" us"<<std::endl;
         }
 
-        //If the operation is CONVOLUTION,
-        //then transfer the WMover instructions, the weights, the weight TB count, and the biases
         std::cout <<stepCount++<<". Transfer the W Mover instructions"<<std::endl;
         {
             cl::Event event;
@@ -552,24 +563,27 @@ namespace GraphRuntime {
             auto sizeElement = sizeof(typeof(_executionGraph.vecWMoverInstruction.at(0)));
             auto transferBytes = sizeElement * numElements;
 
-            std::cout <<"Transfering "<<transferBytes<<" bytes into bufferWMoverInstructions"<<std::endl;
-            assert(transferBytes <= MAX_DRAM_BYTE_WEIGHT_MOVER_INSTRUCTION && "Too many Weight Mover instructions to fit inside the global memory" );
+            if (transferBytes > 0)
+            {
+                std::cout <<"Transfering "<<transferBytes<<" bytes into bufferWMoverInstructions"<<std::endl;
+                assert(transferBytes <= MAX_DRAM_BYTE_WEIGHT_MOVER_INSTRUCTION && "Too many Weight Mover instructions to fit inside the global memory" );
 
 
-            status = clCQWMover.enqueueWriteBuffer(bufferWMoverInstructions, //buffer
-                                                 CL_TRUE, //blocking_write
-                                                 0, //offset
-                                                 transferBytes, //size
-                                                 _executionGraph.vecWMoverInstruction.data(), //data pointer
-                                                 NULL, //dependency list
-                                                 &event //events generated
-                                                );
-            aocl_utils_cpp::checkError(status, "Failed to write the W Mover instructions");
-            clCQWMover.finish();
-            cl_ulong startTime = event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-            cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-            cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*(cl_double)(1e-3));
-            std::cout <<"Transfer the W Mover instructions tensor took "<<elapsedTimeUs<<" us"<<std::endl;
+                status = clCQWMover.enqueueWriteBuffer(bufferWMoverInstructions, //buffer
+                                                       CL_TRUE, //blocking_write
+                                                       0, //offset
+                                                       transferBytes, //size
+                                                       _executionGraph.vecWMoverInstruction.data(), //data pointer
+                                                       NULL, //dependency list
+                                                       &event //events generated
+                                                       );
+                aocl_utils_cpp::checkError(status, "Failed to write the W Mover instructions");
+                clCQWMover.finish();
+                cl_ulong startTime = event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+                cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
+                cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*(cl_double)(1e-3));
+                std::cout <<"Transfer the W Mover instructions tensor took "<<elapsedTimeUs<<" us"<<std::endl;
+            }
         }
 
         std::cout <<stepCount++<<". Transfer the filter biases"<<std::endl;
@@ -683,23 +697,26 @@ namespace GraphRuntime {
             auto sizeElement = sizeof(typeof(_executionGraph.vecMiscInstruction.at(0)));
             auto transferBytes = sizeElement * numElements;
 
-            std::cout <<"Transfering "<<transferBytes<<" bytes into bufferMKInstructions"<<std::endl;
-            assert(transferBytes <= MAX_DRAM_BYTE_MISC_CONTROLLER_INSTRUCTION && "Too many MK instructions to fit inside the global memory" );
+            if (transferBytes > 0)
+            {
+                std::cout <<"Transfering "<<transferBytes<<" bytes into bufferMKInstructions"<<std::endl;
+                assert(transferBytes <= MAX_DRAM_BYTE_MISC_CONTROLLER_INSTRUCTION && "Too many MK instructions to fit inside the global memory" );
 
-            status = clCQMKController.enqueueWriteBuffer(bufferMKInstructions, //buffer
-                                                 CL_TRUE, //blocking_write
-                                                 0, //offset
-                                                 transferBytes, //size
-                                                 _executionGraph.vecMiscInstruction.data(), //data pointer
-                                                 NULL, //dependency list
-                                                 &event //events generated
-                                                );
-            aocl_utils_cpp::checkError(status, "Failed to write the MK controller instructions");
-            clCQMKController.finish();
-            cl_ulong startTime = event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-            cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-            cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*(cl_double)(1e-3));
-            std::cout <<"Transfer the MK controller instructions tensor took "<<elapsedTimeUs<<" us"<<std::endl;
+                status = clCQMKController.enqueueWriteBuffer(bufferMKInstructions, //buffer
+                                                             CL_TRUE, //blocking_write
+                                                             0, //offset
+                                                             transferBytes, //size
+                                                             _executionGraph.vecMiscInstruction.data(), //data pointer
+                                                             NULL, //dependency list
+                                                             &event //events generated
+                                                             );
+                aocl_utils_cpp::checkError(status, "Failed to write the MK controller instructions");
+                clCQMKController.finish();
+                cl_ulong startTime = event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+                cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
+                cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*(cl_double)(1e-3));
+                std::cout <<"Transfer the MK controller instructions tensor took "<<elapsedTimeUs<<" us"<<std::endl;
+            }
         }
     }
 
@@ -778,14 +795,24 @@ namespace GraphRuntime {
         /*
           1. Launch all kernels, except for the IA mover and the OA mover
         */
-        status = clCQIATileController.enqueueTask(kernelIATileController, NULL);
-        aocl_utils_cpp::checkError(status, "Failed to launch kernelIATileController!");
+       //TODO: add conditional checks to see whether we need to launch some of the kernels
+        if (launchIATileController)
+        {
+            status = clCQIATileController.enqueueTask(kernelIATileController, NULL);
+            aocl_utils_cpp::checkError(status, "Failed to launch kernelIATileController!");
+        }
 
-        status = clCQWMover.enqueueTask(kernelWMover, NULL);
-        aocl_utils_cpp::checkError(status, "Failed to launch kernelWMover!");
+        if (launchWMover)
+        {
+            status = clCQWMover.enqueueTask(kernelWMover, NULL);
+            aocl_utils_cpp::checkError(status, "Failed to launch kernelWMover!");
+        }
 
-        status = clCQMKController.enqueueTask(kernelMKInstructionMover, NULL);
-        aocl_utils_cpp::checkError(status, "Failed to launch kernelMKInstructionMover!");
+        if (launchMKController)
+        {
+            status = clCQMKController.enqueueTask(kernelMKInstructionMover, NULL);
+            aocl_utils_cpp::checkError(status, "Failed to launch kernelMKInstructionMover!");
+        }
 
         status = clCQOATileController.enqueueTask(KernelOATileController, NULL);
         aocl_utils_cpp::checkError(status, "Failed to launch KernelOATileController!");

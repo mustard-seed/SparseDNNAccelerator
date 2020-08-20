@@ -155,6 +155,8 @@ namespace GraphRuntime {
 
             double minInferenceDuration, maxInferenceDuration, averageInferenceDuration;
 
+            bool launchIATileController, launchWMover, launchMKController;
+
 
         public:
             AcceleratorWrapper() = default;
