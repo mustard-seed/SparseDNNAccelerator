@@ -54,6 +54,7 @@ namespace GraphRuntime {
     }
 
     AcceleratorWrapper::AcceleratorWrapper(std::string _bitstreamFileName,
+                                           std::string _platformName,
                                            t_accelerator_info _acceleratorInfo,
                                            int _fpgaID) :
         minInferenceDuration(std::numeric_limits<double>::max()),
@@ -63,11 +64,8 @@ namespace GraphRuntime {
         cl_int status = CL_SUCCESS;
 
         binaryFile = _bitstreamFileName;
-        #if defined(EMULATE)
-            clPlatform = aocl_utils_cpp::findPlatform("Intel(R) FPGA Emulation Platform for OpenCL(TM)");
-        #else
-            clPlatform = aocl_utils_cpp::findPlatform("Intel(R) FPGA SDK for OpenCL(TM)");
-        #endif
+        clPlatform = aocl_utils_cpp::findPlatform(_platformName);
+
         //Setup and platform and the context
         std::vector<cl::Device> devices;
         status = clPlatform.getDevices(CL_DEVICE_TYPE_ALL, &devices);
@@ -247,10 +245,11 @@ namespace GraphRuntime {
     }
 
     AcceleratorWrapper::AcceleratorWrapper(std::string _bitstreamFileName,
+                                           std::string _platformName,
                                            t_execution_graph& _executionGraph,
                                            t_accelerator_info& _acceleratorInfo,
                                            int _fpgaID) :
-        AcceleratorWrapper(_bitstreamFileName, _acceleratorInfo, _fpgaID)
+        AcceleratorWrapper(_bitstreamFileName,  _platformName, _acceleratorInfo, _fpgaID)
     {
         resetGraph();
 

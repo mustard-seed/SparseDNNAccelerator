@@ -158,8 +158,9 @@ namespace GraphRuntime {
 
         public:
             AcceleratorWrapper() = default;
-            AcceleratorWrapper(std::string _bitstremFileName, t_accelerator_info _acceleratorInfo, int _fpgaID);
+            AcceleratorWrapper(std::string _bitstremFileName, std::string _platformName, t_accelerator_info _acceleratorInfo, int _fpgaID);
             AcceleratorWrapper(std::string _bitstreamFileName,
+                               std::string _platformName,
                                t_execution_graph& _executionGraph,
                                t_accelerator_info& _acceleratorInfo,
                                int _fpgaID);

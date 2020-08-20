@@ -719,6 +719,13 @@ void testFixture::SetUp()
     binaryFile = "smallBuffer.aocx";
 #endif
 #endif
+
+#if defined(EMULATE)
+    std::string platformName = "Intel(R) FPGA Emulation Platform for OpenCL(TM)";
+#else
+    std::string platformName = "Intel(R) FPGA SDK for OpenCL(TM)";
+#endif
+
     GraphRuntime::t_accelerator_info acceleratorInfo =
         {   .numPERows=PE_ROWS,
             .numPECols=PE_COLS,
@@ -726,7 +733,7 @@ void testFixture::SetUp()
             .numClusterInTransferBlock=TRANSFER_SIZE,
             .numScalarInCluster=CLUSTER_SIZE
         };
-   accelerator = GraphRuntime::AcceleratorWrapper(binaryFile, acceleratorInfo, 0);
+   accelerator = GraphRuntime::AcceleratorWrapper(binaryFile, platformName, acceleratorInfo, 0);
 }
 
 std::vector<float> testFixture::generateInputTensor(
