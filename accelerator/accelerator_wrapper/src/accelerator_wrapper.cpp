@@ -984,7 +984,7 @@ namespace GraphRuntime {
 
                         assert(transferBytes <= MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE && "Too many output activation TB count bytes to be read from global memory" );
 
-                        status = clCQOAMover.enqueueWriteBuffer(bufferActivationTBCounts, //buffer
+                        status = clCQOAMover.enqueueReadBuffer(bufferActivationTBCounts, //buffer
                                                              CL_TRUE, //blocking_write
                                                              tbCountOffsetByte, //offset
                                                              transferBytes, //size
