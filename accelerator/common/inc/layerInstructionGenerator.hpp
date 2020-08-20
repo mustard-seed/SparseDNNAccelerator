@@ -64,8 +64,8 @@ void instruction_generator (//Type of the operation
 
         unsigned char flagSparseOutput,
         unsigned char flagSparseInput,
-        unsigned char flagInputSync,
-        unsigned char flagOutputSync,
+//        unsigned char flagInputSync,
+//        unsigned char flagOutputSync,
         unsigned char flagRelu,
         unsigned char outputShiftBits,
         unsigned char flagOutputShiftLeft,

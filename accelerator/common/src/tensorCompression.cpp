@@ -799,7 +799,6 @@ unsigned int calculateExternalMemoryAddressStride(
             unsigned int numCompressionBlocksInChannel =
                     1 + (channelsPerGroup*group - 1) / (compressionWindowSize * clusterSize);
             tempStride = width*height*((unsigned int) numTransferBlocksPerCompressionBlock* (unsigned int) numCompressionBlocksInChannel);
-            externalMemoryAddressStride = (unsigned int) std::ceil( ((float) (tempStride) ) / ((float) (WIDE_SIZE)) ) * WIDE_SIZE;
         }
         else
         {

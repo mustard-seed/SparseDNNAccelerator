@@ -24,10 +24,11 @@
 #include "tensorCompression.hpp"
 #include "vectorType.hpp"
 #include "layerInstructionGenerator.hpp"
+#include "accelerator_wrapper.hpp"
 
-#define PLAY
+//#define PLAY
 #define REPEAT 1
-//#define EMULATE
+#define EMULATE
 //#define PERF_TEST
 //#NOOP
 //#define PROFILE
@@ -40,86 +41,13 @@
 #define WEIGHT_SEED 1234
 #define INPUT_SEED   7653
 
-/**
-CL INTEL FPGA MEM BANKS
-Only available on certain Arria 10 and Stratix 10 boards
- */
-#if defined(A10PAC)
-    #define MEM_BANK_ACTIVATION CL_CHANNEL_1_INTELFPGA
-    #define MEM_BANK_WEIGHT     CL_CHANNEL_2_INTELFPGA
-    #define MEM_BANK_BIAS       CL_CHANNEL_2_INTELFPGA
-    #define MEM_BANK_INSTRUCTIONS   CL_CHANNEL_2_INTELFPGA
-#else
-    #define MEM_BANK_ACTIVATION 0x0
-    #define MEM_BANK_WEIGHT     0x0
-    #define MEM_BANK_BIAS       0x0
-    #define MEM_BANK_INSTRUCTIONS   0x0
-#endif 
-
-#if defined(C5SOC) //Hack for ARMv7, otherwise chrono won't work
-__asm__(".symver _ZNSt6chrono3_V212system_clock3nowEv,_ZNSt6chrono12system_clock3nowEv@GLIBCXX_3.4.11");
-#endif
-
 class testFixture : public ::testing::Test {
 protected:
+    //The accelerator
+    GraphRuntime::AcceleratorWrapper accelerator;
+
+    //aocx file
     std::string binaryFile;
-    cl::Program program;
-    cl::Platform clPlatform;
-    cl::Context clContext;
-    cl::Device clDevice;
-
-    //Command queues
-    cl::CommandQueue clCQIAMover;
-    cl::CommandQueue clCQOAMover;
-    cl::CommandQueue clCQWMover;
-    cl::CommandQueue clCQIATileController;
-    cl::CommandQueue clCQOATileController;
-    cl::CommandQueue clCQMKController;
-    #if defined(NOOP)
-    cl::CommandQueue clCQNoop;
-    #endif
-
-    //The kernels
-    cl::Kernel kernelIAMover;
-    cl::Kernel kernelOAMover;
-    cl::Kernel kernelWMover;
-    cl::Kernel kernelMKInstructionMover;
-    cl::Kernel kernelIATileController;
-    cl::Kernel KernelOATileController;
-    #if defined(NOOP)
-    cl::Kernel kernelNoop;
-    #endif
-
-    //Buffer members associated with the IA Mover kernel
-    cl::Buffer bufferIAMoverInstructions;
-    cl::Buffer bufferActivationDramBlocks;
-#if defined(SPARSE_SYSTEM)
-    cl::Buffer bufferActivationTBCounts;
-#endif
-
-    //Buffer members associated with the IA tile controller
-    cl::Buffer bufferIATileControllerInstructions;
-
-    //Buffer members associated with the OA Mover kernel
-    cl::Buffer bufferOAMoverInstructions;
-//    cl::Buffer bufferOAMoverOADramBlocks;
-//#if defined(SPARSE_SYSTEM)
-//    cl::Buffer bufferOAMoverOATBCounts;
-//#endif
-
-    //Buffer members associated with the OA tile controller
-    cl::Buffer bufferOATileControllerInstructions;
-
-    //Buffer members associated with the W Mover kernel
-    cl::Buffer bufferWMoverInstructions;
-    cl::Buffer bufferWMoverWDramBlocks;
-    cl::Buffer bufferWMoverBias;
-#if defined(SPARSE_SYSTEM)
-    cl::Buffer bufferWMoverWTBCounts;
-#endif
-
-    //Buffer members associated with the MK instruction kernel
-    cl::Buffer bufferMKInstructions;
 
     void SetUp() override;
 
@@ -135,14 +63,14 @@ protected:
      *        _numInputChannel must be divisible by _numGroupCurrentLayer
      * \return The tensor generated
      */
-    std::vector<fixedPointNumber> generateInputTensor (
+    std::vector<float> generateInputTensor (
                 unsigned char _inputWidth,
                 unsigned char _inputHeight,
                 unsigned char _numInputChannel,
                 unsigned char _numGroupCurrentLayer
             );
 
-    std::vector<fixedPointNumber> generateSparseInput (unsigned char _inputWidth,
+    std::vector<float> generateSparseInput (unsigned char _inputWidth,
                 unsigned char _inputHeight,
                 unsigned char _numInputChannel,
                 unsigned char _numGroupCurrentLayer,
@@ -783,197 +711,25 @@ int main(int argc, char* argv[]) {
 
 void testFixture::SetUp()
 {
-   cl_int status = CL_SUCCESS;
 #ifdef C5SOC
     binaryFile = "device_utils.aocx";
-    clPlatform = aocl_utils_cpp::findPlatform("Intel(R) FPGA SDK for OpenCL(TM)");
 #else
     binaryFile = "sparse_pe_system.aocx";
 #if defined(EMULATE)
-    clPlatform = aocl_utils_cpp::findPlatform("Intel(R) FPGA Emulation Platform for OpenCL(TM)");
-    //Hacke
     binaryFile = "smallBuffer.aocx";
-#else
-    clPlatform = aocl_utils_cpp::findPlatform("Intel(R) FPGA SDK for OpenCL(TM)");
 #endif
 #endif
-
-    //Setup and platform and the context
-    std::vector<cl::Device> devices;
-    status = clPlatform.getDevices(CL_DEVICE_TYPE_ALL, &devices);
-    aocl_utils_cpp::checkError(status, "Failed to query the devices");
-    clDevice = devices[0];
-    #if defined(C5SOC)
-        clContext = cl::Context({clDevice}
-                                ,NULL
-                                ,&aocl_utils_cpp::oclContextCallback
-                                ,NULL
-                                ,&status);
-    #else
-        clContext = cl::Context(clDevice
-                                ,NULL
-                                ,&aocl_utils_cpp::oclContextCallback
-                                ,NULL
-                                ,&status);
-        aocl_utils_cpp::checkError(status, "Failed to create context");
-    #endif
-
-    //Parse the binary and invoke the kernel
-    program = aocl_utils_cpp::createProgramFromBinary(
-                clContext,
-                binaryFile.c_str(),
-                {clDevice}
-                );
-    status = program.build({clDevice});
-    aocl_utils_cpp::checkError(status, "Failed to build program");
-
-    //Instantiate the host-side kernel objects
-    kernelIAMover = cl::Kernel(program, "kernelIAMover", &status);
-    aocl_utils_cpp::checkError(status, "Failed to create kernelIAMover!");
-
-    kernelWMover = cl::Kernel(program, "kernelWMover", &status);
-    aocl_utils_cpp::checkError(status, "Failed to create kernelWMover!");
-
-    kernelOAMover = cl::Kernel(program, "kernelOAMover", &status);
-    aocl_utils_cpp::checkError(status, "Failed to create kernelOutputWriter!");
-
-    kernelIATileController = cl::Kernel(program, "kernelIATileController", &status);
-    aocl_utils_cpp::checkError(status, "Failed to create kernelIATileController!");
-
-    KernelOATileController = cl::Kernel(program, "kernelOATileController", &status);
-    aocl_utils_cpp::checkError(status, "Failed to create kernelOATileController!");
-
-    kernelMKInstructionMover = cl::Kernel(program, "kernelMiscControlMover", &status);
-    aocl_utils_cpp::checkError(status, "Failed to create kernelMiscControlMover!");
-
-#if defined(NOOP)
-    kernelNoop = cl::Kernel(program, "kernelNoop", &status);
-    aocl_utils_cpp::checkError(status, "Failed to create kernelNoop!");
-#endif
-    //Instantiate the command queues
-    clCQIAMover = cl::CommandQueue(
-                clContext,
-                clDevice,
-                CL_QUEUE_PROFILING_ENABLE,
-                &status
-                );
-    aocl_utils_cpp::checkError(status, "Failed to setup the command queue clCQIAMover!");
-
-    clCQOAMover = cl::CommandQueue(
-                clContext,
-                clDevice,
-                CL_QUEUE_PROFILING_ENABLE,
-                &status
-                );
-    aocl_utils_cpp::checkError(status, "Failed to setup the command queue clCQOAMover!");
-
-    clCQWMover = cl::CommandQueue(
-                clContext,
-                clDevice,
-                CL_QUEUE_PROFILING_ENABLE,
-                &status
-                );
-    aocl_utils_cpp::checkError(status, "Failed to setup the command queue clCQWMover!");
-
-    clCQIATileController = cl::CommandQueue(
-                clContext,
-                clDevice,
-                CL_QUEUE_PROFILING_ENABLE,
-                &status
-                );
-    aocl_utils_cpp::checkError(status, "Failed to setup the command queue clCQIATileController!");
-
-    clCQOATileController = cl::CommandQueue(
-                clContext,
-                clDevice,
-                CL_QUEUE_PROFILING_ENABLE,
-                &status
-                );
-    aocl_utils_cpp::checkError(status, "Failed to setup the command queue clCQOATileController!");
-
-    clCQMKController = cl::CommandQueue(
-                clContext,
-                clDevice,
-                CL_QUEUE_PROFILING_ENABLE,
-                &status
-                );
-    aocl_utils_cpp::checkError(status, "Failed to setup the command queue clMKController!");
-
-#if defined(NOOP)
-    clCQNoop = cl::CommandQueue(
-                clContext,
-                clDevice,
-                CL_QUEUE_PROFILING_ENABLE,
-                &status
-                );
-    aocl_utils_cpp::checkError(status, "Failed to setup the command queue clCQNoop!");
-#endif
-    //Instantiate the buffers
-    cl_ulong maxBufferSizeByte = clDevice.getInfo<CL_DEVICE_MAX_MEM_ALLOC_SIZE> (&status);
-    aocl_utils_cpp::checkError(status, "Failed to query the maximum buffer size in bytes!");
-
-    typedef struct {
-        cl_ulong bufferSizeByte;
-        cl::Buffer& bufferObject;
-        cl_mem_flags memFlag;
-        std::string bufferName;
-    } t_buffer_setup_info;
-
-    std::vector<t_buffer_setup_info> vecBufferInfo;
-
-    cl_ulong weightMoverInstructionBufferSize = maxBufferSizeByte < MAX_DRAM_BYTE_WEIGHT_MOVER_INSTRUCTION ? maxBufferSizeByte : MAX_DRAM_BYTE_WEIGHT_MOVER_INSTRUCTION;
-    vecBufferInfo.push_back({weightMoverInstructionBufferSize, bufferWMoverInstructions, CL_MEM_READ_ONLY | MEM_BANK_INSTRUCTIONS, "bufferWMoverInstructions"});
-
-    cl_ulong inputWeightBufferSize = maxBufferSizeByte < MAX_DRAM_BYTE_INPUT_WEIGHT ? maxBufferSizeByte : MAX_DRAM_BYTE_INPUT_WEIGHT;
-    vecBufferInfo.push_back({inputWeightBufferSize, bufferWMoverWDramBlocks, CL_MEM_READ_ONLY | MEM_BANK_WEIGHT, "bufferWMoverWDramBlocks"});
-
-    cl_ulong inputBiasSize = maxBufferSizeByte < MAX_DRAM_BYTE_INPUT_BIAS ? maxBufferSizeByte : MAX_DRAM_BYTE_INPUT_BIAS;
-    vecBufferInfo.push_back({inputBiasSize, bufferWMoverBias, CL_MEM_READ_ONLY | MEM_BANK_BIAS, "bufferWMoverBias"});
-
-    cl_ulong activationSize = maxBufferSizeByte < MAX_DRAM_BYTE_INPUT_ACTIVATION ? maxBufferSizeByte : MAX_DRAM_BYTE_INPUT_ACTIVATION;
-    vecBufferInfo.push_back({activationSize, bufferActivationDramBlocks, CL_MEM_READ_WRITE | MEM_BANK_ACTIVATION, "bufferActivationDramBlocks"});
-
-    cl_ulong inputIAMoverInstructionSize = maxBufferSizeByte < MAX_DRAM_BYTE_INPUT_MOVER_INSTRUCTION ? maxBufferSizeByte : MAX_DRAM_BYTE_INPUT_MOVER_INSTRUCTION;
-    vecBufferInfo.push_back({inputIAMoverInstructionSize, bufferIAMoverInstructions, CL_MEM_READ_ONLY | MEM_BANK_INSTRUCTIONS, "bufferIAMoverInstructions"});
-
-    cl_ulong inputIATileControllerInstructionSize = maxBufferSizeByte < MAX_DRAM_BYTE_INPUT_TILE_CONTROLLER_INSTRUCTION ? maxBufferSizeByte : MAX_DRAM_BYTE_INPUT_TILE_CONTROLLER_INSTRUCTION;
-    vecBufferInfo.push_back({inputIATileControllerInstructionSize, bufferIATileControllerInstructions, CL_MEM_READ_ONLY | MEM_BANK_INSTRUCTIONS, "bufferIATileControllerInstructions"});
-
-    cl_ulong outputOAMoverInstructionSize = maxBufferSizeByte < MAX_DRAM_BYTE_OUTPUT_MOVER_INSTRUCTION ? maxBufferSizeByte : MAX_DRAM_BYTE_OUTPUT_MOVER_INSTRUCTION;
-    vecBufferInfo.push_back({outputOAMoverInstructionSize, bufferOAMoverInstructions, CL_MEM_READ_ONLY | MEM_BANK_INSTRUCTIONS, "bufferOAMoverInstructions"});
-
-    cl_ulong outoutOATileControllerInstructionSize = maxBufferSizeByte < MAX_DRAM_BYTE_OUTPUT_TILE_CONTROLLER_INSTRUCTION ? maxBufferSizeByte : MAX_DRAM_BYTE_OUTPUT_TILE_CONTROLLER_INSTRUCTION;
-    vecBufferInfo.push_back({outoutOATileControllerInstructionSize, bufferOATileControllerInstructions, CL_MEM_READ_ONLY | MEM_BANK_INSTRUCTIONS, "bufferOATileControllerInstructions"});
-
-    cl_ulong mkInstructionSize = maxBufferSizeByte < MAX_DRAM_BYTE_MISC_CONTROLLER_INSTRUCTION ? maxBufferSizeByte : MAX_DRAM_BYTE_MISC_CONTROLLER_INSTRUCTION;
-    vecBufferInfo.push_back({mkInstructionSize, bufferMKInstructions, CL_MEM_READ_ONLY | MEM_BANK_INSTRUCTIONS, "bufferMKInstructions"});
-
-#if defined(SPARSE_SYSTEM)
-    //If the device is PAC, place the TB count on the same memory bank as the instructions
-    cl_ulong inputWeightSBSize = maxBufferSizeByte < MAX_DRAM_BYTE_INPUT_WEIGHT_SB_COUNT ? maxBufferSizeByte : MAX_DRAM_BYTE_INPUT_WEIGHT_SB_COUNT;
-    vecBufferInfo.push_back({inputWeightSBSize, bufferWMoverWTBCounts, CL_MEM_READ_ONLY | MEM_BANK_INSTRUCTIONS, "bufferWMoverWTBCounts"});
-
-    cl_ulong activationTBCountSize = maxBufferSizeByte < MAX_DRAM_BYTE_INPUT_ACTIVATION_SB_COUNT ? maxBufferSizeByte : MAX_DRAM_BYTE_INPUT_ACTIVATION_SB_COUNT;
-    vecBufferInfo.push_back({activationTBCountSize, bufferActivationTBCounts, CL_MEM_READ_WRITE | MEM_BANK_INSTRUCTIONS, "bufferActivationTBCounts"});
-#endif
-
-    for (auto& info : vecBufferInfo)
-    {
-        cl_int localStatus = CL_SUCCESS;
-        std::cout <<"Setting the buffer "<<info.bufferName<<". Size (bytes): "<<info.bufferSizeByte<<std::endl;
-        info.bufferObject = cl::Buffer (
-                    clContext,
-                    info.memFlag,
-                    info.bufferSizeByte,
-                    NULL,
-                    &localStatus
-                );
-        aocl_utils_cpp::checkError(status, "Failed to setup the buffer!");
-    }
-    std::cout <<"AOCL setup compelete"<<std::endl;
+    GraphRuntime::t_accelerator_info acceleratorInfo =
+        {   .numPERows=PE_ROWS,
+            .numPECols=PE_COLS,
+            .numClusterInCompressionBlock=COMPRESSION_WINDOW_SIZE,
+            .numClusterInTransferBlock=TRANSFER_SIZE,
+            .numScalarInCluster=CLUSTER_SIZE
+        };
+   accelerator = GraphRuntime::AcceleratorWrapper(binaryFile, acceleratorInfo, 0);
 }
 
-std::vector<fixedPointNumber> testFixture::generateInputTensor (
+std::vector<float> testFixture::generateInputTensor(
             unsigned char _inputWidth,
             unsigned char _inputHeight,
             unsigned char _numInputChannel,
@@ -982,7 +738,7 @@ std::vector<fixedPointNumber> testFixture::generateInputTensor (
 {
     assert(_numInputChannel % _numGroupCurrentLayer == 0);
     unsigned char numICPerGroup = _numInputChannel / _numGroupCurrentLayer;
-    std::vector<fixedPointNumber> inputFPVector;
+    std::vector<float> inputVector;
     for (unsigned char g=0; g<_numGroupCurrentLayer;g++)
     {
         for (unsigned char h=0; h<_inputHeight; h++)
@@ -994,16 +750,16 @@ std::vector<fixedPointNumber> testFixture::generateInputTensor (
                     unsigned char globalChannel = g*numICPerGroup+c;
                     signed char fpBits = (w % 2 == 0) ? globalChannel : -1*((signed char) globalChannel);
                     fixedPointNumber fpNumber(fpBits, FRAC_WIDTH, INT_WIDTH);
-                    inputFPVector.push_back(fpNumber);
+                    inputVector.push_back(fpNumber.convert2Float());
                 }
             }
         }
     }
 
-    return inputFPVector;
+    return inputVector;
 }
 
-std::vector<fixedPointNumber> testFixture::generateSparseInput(
+std::vector<float> testFixture::generateSparseInput(
             unsigned char _inputWidth,
             unsigned char _inputHeight,
             unsigned char _numInputChannel,
@@ -1016,7 +772,7 @@ std::vector<fixedPointNumber> testFixture::generateSparseInput(
      std::bernoulli_distribution bernDistribution(denseProb);
      assert(_numInputChannel % _numGroupCurrentLayer == 0);
      unsigned char numICPerGroup = _numInputChannel / _numGroupCurrentLayer;
-     std::vector<fixedPointNumber> inputFPVector;
+     std::vector<float> inputVector;
      bool writePositive = true;
      for (unsigned char g=0; g<_numGroupCurrentLayer;g++)
      {
@@ -1041,13 +797,13 @@ std::vector<fixedPointNumber> testFixture::generateSparseInput(
                          writePositive = !writePositive;
                      }
                      fixedPointNumber fpNumber(fpBits, FRAC_WIDTH, INT_WIDTH);
-                     inputFPVector.push_back(fpNumber);
+                     inputVector.push_back(fpNumber.convert2Float());
                  }
              }
          }
      }
 
-     return inputFPVector;
+     return inputVector;
 }
 
 std::vector<fixedPointNumber> testFixture::generateWeights (
@@ -1186,6 +942,9 @@ void testFixture::launch (
     bool flagSparseInput;
     bool flagSparseOutput;
 
+    /*
+     * Dervied the parameters required for generating instructions
+    */
     switch (op) {
         case CONVOLUTION: {
             assert(_numInputChannel % _numInputGroup == 0);
@@ -1285,7 +1044,7 @@ void testFixture::launch (
     assert(numOutputChannels % _numGroupNext == 0);
     numOutputChannelPerGroup = numOutputChannels / _numGroupNext;
 
-    /* Generate the dense, fixed point tensors
+    /* Generate the dense, floating point tensors
      * */
     int stepCount = 1;
     std::cout <<stepCount++<<". Preparing the test tensors. Test operation type is "<<op<<std::endl;
@@ -1307,7 +1066,7 @@ void testFixture::launch (
               <<"Number of output groups: "<<(unsigned int)_numGroupNext<<std::endl
               <<"Number of groups in current layer: "<<(unsigned int)numGroupCurrentLayer<<std::endl;
 
-    std::vector<fixedPointNumber> inputTensorDense;
+    std::vector<float> inputTensorDense;
     if (_flagPerformanceTest == true)
     {
        inputTensorDense = generateSparseInput(_inputWidth, _inputHeight, _numInputChannel, numGroupCurrentLayer, denseProb, pruneScale);
@@ -1317,6 +1076,7 @@ void testFixture::launch (
         inputTensorDense = generateInputTensor(_inputWidth, _inputHeight, _numInputChannel, numGroupCurrentLayer);
     }
 
+    //Generate qunatized weight tensors
     std::vector<fixedPointNumber> inputWeightDense;
     if (op == CONVOLUTION)
     {
@@ -1329,10 +1089,11 @@ void testFixture::launch (
             inputWeightDense = generateWeights((unsigned char) kernelSize, _numInputChannel, numGroupCurrentLayer);
         }
     }
+    //Generate biases
     t_accumulator fixedBias = (t_accumulator) (round(_bias * (float) (1 << (FRAC_WIDTH + FRAC_WIDTH)) ));
-    t_aligned_short_vector biasVector (_numInputChannel, fixedBias);
+    auto pBiasVector = std::make_shared<t_aligned_short_vector>(_numInputChannel, fixedBias);
 
-    /* 2. Allocate the aligned tensors and compress them if necessary
+    /* 2. Allocate the aligned weight tensors and compress them if necessary
      * */
     std::cout <<stepCount++<<". Allocate, align, and compress the test tensors."<<std::endl;
 
@@ -1341,73 +1102,13 @@ void testFixture::launch (
     unsigned short maxClusterIndexInTransferBlock = TRANSFER_SIZE-1;
     unsigned short maxScalarIndexInCluster = CLUSTER_SIZE-1;
 
-    std::unique_ptr<AlignedTensor> pInput, pWeights, pOutput;
-
-    //Prepare the input
-    if (flagSparseInput == true)
-    {
-        pInput.reset(new FlexibleDirectCompressedTensor(
-                        inputTensorDense,
-                        1, //_num3DTensors
-                        _numInputChannel,
-                        _inputWidth,
-                        _inputHeight,
-                        maxScalarIndexInChannelGroup,
-                        maxClusterIndexInCompressionBlock,
-                        maxClusterIndexInTransferBlock,
-                        maxScalarIndexInCluster,
-                        false //isKernel
-                    ) );
-    }
-    else
-    {
-        pInput.reset( new AlignedTensor(
-                        inputTensorDense,
-                        1, //_num3DTensors
-                        _numInputChannel,
-                        _inputWidth,
-                        _inputHeight,
-                        maxScalarIndexInChannelGroup,
-                        maxClusterIndexInTransferBlock,
-                        maxScalarIndexInCluster,
-                        false //isKernel
-                    ) );
-    }
-
-    //Prepare the output
-    if (flagSparseOutput == true)
-    {
-        pOutput.reset(new FlexibleDirectCompressedTensor(
-                    1, //_num3DTensors
-                    numOutputChannels, //_channel
-                    numOutputWidth, //_width
-                    numOutputHeight, //_height
-                    numOutputChannelPerGroup-1, //_maxScalarIndexInChannelGroup
-                    maxClusterIndexInCompressionBlock,
-                    maxClusterIndexInTransferBlock,
-                    maxScalarIndexInCluster,
-                    false //isKernel
-                    ) );
-    }
-    else
-    {
-        pOutput.reset( new AlignedTensor(
-                    1, //_num3DTensors
-                    numOutputChannels, //_channel
-                    numOutputWidth, //_width
-                    numOutputHeight, //_height
-                    numOutputChannelPerGroup-1, //_maxScalarIndexInChannelGroup
-                    maxClusterIndexInTransferBlock,
-                    maxScalarIndexInCluster,
-                    false //isKernel
-                    ));
-    }
+    std::shared_ptr<AlignedTensor> pWeight;
 
     //Prepare weights
     if (op==CONVOLUTION)
     {
 #if defined(SPARSE_SYSTEM)
-        pWeights.reset(new FlexibleDirectCompressedTensor (
+        pWeight.reset(new FlexibleDirectCompressedTensor (
                     inputWeightDense,
                     _numInputChannel, //_num3DTensors
                     maxScalarIndexInChannelGroup+1, //channel
@@ -1420,7 +1121,7 @@ void testFixture::launch (
                     true //isKernel
                 ) );
 #else
-        pWeights.reset( new AlignedTensor (
+        pWeight.reset( new AlignedTensor (
                     inputWeightDense,
                     _numInputChannel, //_num3DTensors
                     maxScalarIndexInChannelGroup+1, //channel
@@ -1433,32 +1134,53 @@ void testFixture::launch (
                 ));
 #endif
     }
-    std::cout <<stepCount++<<". Generate the instructions"<<std::endl;
 
     /*
-     * 3. Generate the instructions
-     * */
-    t_aligned_ia_mover_instruction_vector vecIAMoverInstruction;
-    t_aligned_ia_tile_controller_instruction_vector vecIATileControllerInstruction;
-    t_aligned_oa_mover_instruction_vector vecOAMoverInstruction;
-    t_aligned_oa_tile_controller_instruction_vector vecOATileControllerInstruction;
-    t_aligned_weight_mover_instruction_vector vecWMoverInstruction;
-    t_aligned_misc_instruction_vector vecMiscInstruction;
+     * 3. Generate the executiong graph
+    */
+    std::cout <<stepCount++<<". Generate the execution graph"<<std::endl;
+
+    GraphRuntime::t_execution_graph graph;
 
     signed int memDramBlockFilterStride;
     //assign memDramBlockFilterStride conditionally, otherwise there might be seg fault.
     if (op == CONVOLUTION)
     {
-        memDramBlockFilterStride = (pWeights->getExternalMemoryAddressStride()) >> WIDE_SIZE_OFFSET;
+        memDramBlockFilterStride = (pWeight->getExternalMemoryAddressStride()) >> WIDE_SIZE_OFFSET;
     }
     else
     {
         memDramBlockFilterStride = 0;
     }
 
-    signed int memDramBlockIAColStride = (pInput->getExternalMemoryAddressStride()) >> WIDE_SIZE_OFFSET;
+    signed int memDramBlockIAColStride = calculateExternalMemoryAddressStride(
+                    maxScalarIndexInChannelGroup+1, //channelsPerGroup
+                    _numInputChannel / (maxScalarIndexInChannelGroup+1), //group
+                    _inputHeight, //height
+                    _inputWidth, //width
+                    CLUSTER_SIZE, //clusterSize
+                    TRANSFER_SIZE, //transferBlockSize
+                    COMPRESSION_WINDOW_SIZE, //compressionWindowSize
+                    WIDE_SIZE, //numTransferBlockPerDramBlock
+                    false, //isKernel
+                    flagSparseInput
+                ) >> WIDE_SIZE_OFFSET;
     std::cout <<"memDramBlockIAColStride: "<<memDramBlockIAColStride<<std::endl;
-    signed int memDramBlockOAColStride = (pOutput->getExternalMemoryAddressStride()) >> WIDE_SIZE_OFFSET;
+
+    signed int memDramBlockOAColStride = calculateExternalMemoryAddressStride(
+                numOutputChannelPerGroup, //channelsPerGroup
+                _numGroupNext, //group
+                numOutputHeight, //height
+                numOutputWidth, //width
+                CLUSTER_SIZE, //clusterSize
+                TRANSFER_SIZE, //transferBlockSize
+                COMPRESSION_WINDOW_SIZE, //compressionWindowSize
+                WIDE_SIZE, //numTransferBlockPerDramBlock
+                false, //isKernel
+                flagSparseOutput
+            ) >> WIDE_SIZE_OFFSET;
+    std::cout <<"memDramBlockOAColStride: "<<memDramBlockOAColStride<<std::endl;
+
 
     signed int memDramBlockIARowStride = memDramBlockIAColStride*_inputWidth;
     signed int memDramBlockIAGroupStride = memDramBlockIARowStride * _inputHeight;
@@ -1501,8 +1223,26 @@ void testFixture::launch (
         instOutputShiftLeft = TRUE;
     }
 
+    //Intermediate buffers for IA mover instructions and OA mover instructions
+    t_aligned_ia_mover_instruction_vector vecIAMoverInstruction;
+    t_aligned_oa_mover_instruction_vector vecOAMoverInstruction;
+
+    int offsetIAMoverInstruction = 0;
+    int offsetOAMoverInstruction = 0;
+    int offsetWeightsDramBlock = 0;
+    int offsetBiasesDramBlock = 0;
+#if defined(SPARSE_SYSTEM)
+    int offsetWeightTBCount = 0;
+#endif
     if (op==CONVOLUTION && flagMultiLayerConv == true)
     {
+        /*
+         * If the test is back to back, then
+         * the input blob resides on region 0
+         * the intermediate blob resides on region 1
+         * the final blob resides on region 0
+         *
+        */
         //Number of compression block per intermediate channel group
         int numCBPerIMOAChannelGroup =
                 1 + (numInputChannel0 / numGroupCurrentLayer - 1) / (CLUSTER_SIZE * COMPRESSION_WINDOW_SIZE);
@@ -1515,10 +1255,10 @@ void testFixture::launch (
                     op,
                     vecIAMoverInstruction,
                     vecOAMoverInstruction,
-                    vecIATileControllerInstruction,
-                    vecOATileControllerInstruction,
-                    vecWMoverInstruction,
-                    vecMiscInstruction,
+                    graph.vecIATileControllerInstruction,
+                    graph.vecOATileControllerInstruction,
+                    graph.vecWMoverInstruction,
+                    graph.vecMiscInstruction,
 
                     //signed int memIA0DramBlockStartIndex
                     0 * MEM_ACTIVATION_REGION_SIZE_PER_SLICE,
@@ -1527,9 +1267,9 @@ void testFixture::launch (
                     //signed int memOADramBlockStartIndex
                     1 * MEM_ACTIVATION_REGION_SIZE_PER_SLICE,
                     //signed int memWeightDramBlockStartIndex
-                    0,
+                    offsetWeightsDramBlock,
                     //signed int memBiasStartIndex
-                    0,
+                    offsetBiasesDramBlock,
 
                     //input 0 strides
                     memDramBlockIAColStride,
@@ -1557,16 +1297,13 @@ void testFixture::launch (
                     //memOATBCountColStride
                     1,
                     //memWeightTBCountStart
-                    0,
+                    offsetWeightTBCount,
                 #endif
 
                     //flagSparseOutput,
                     TRUE,
                     instFlagSparseInput,
-                    //flagInputSync
-                    TRUE,
-                    //flagOutputSync
-                    TRUE,
+
                     //instFlagRelu,
                     FALSE,
                     instOutputShiftBits,
@@ -1594,16 +1331,60 @@ void testFixture::launch (
                     //numGroupsNextLayer
                     numGroupCurrentLayer
                     );
+        //Filling the rest of the information for the first layer
+        {
+            std::copy(vecIAMoverInstruction.begin(),
+                      vecIAMoverInstruction.end(),
+                      std::back_inserter(graph.vecIAMoverInstruction)
+                      );
+            std::copy(vecOAMoverInstruction.begin(),
+                      vecOAMoverInstruction.end(),
+                      std::back_inserter(graph.vecOAMoverInstruction)
+                      );
+            int numIAMoverInstructions = vecIAMoverInstruction.size();
+            int numOAMoverInstructions = vecOAMoverInstruction.size();
+            graph.vecLayerInfo.emplace_back(
+                GraphRuntime::t_layer_info {.layerName="layer0",
+                 .offsetIAMoverInstruction=offsetIAMoverInstruction,
+                 .numIAMoverInstruction=numIAMoverInstructions,
+                 .offsetOAMoverInstruction=offsetOAMoverInstruction,
+                 .numOAMoverInstructions=numOAMoverInstructions
+                 });
+            offsetIAMoverInstruction += numIAMoverInstructions;
+            offsetOAMoverInstruction += numOAMoverInstructions;
+
+            if (op == CONVOLUTION)
+            {
+                graph.vecWeightDramBlockStart.push_back(offsetWeightsDramBlock);
+                graph.vecBiasStart.push_back(offsetBiasesDramBlock);
+                #if defined(SPARSE_SYSTEM)
+                    graph.vecWeightTBCountStart.push_back(offsetWeightTBCount);
+                #endif
+                graph.pWeights.push_back(pWeight);
+                graph.pBiasVector.push_back(pBiasVector);
+                offsetWeightsDramBlock +=
+                        (pWeight->getExternalMemoryAddressStride() >> WIDE_SIZE_OFFSET)
+                        * numOutputChannels ;
+                offsetBiasesDramBlock += numOutputChannels;
+                #if defined(SPARSE_SYSTEM)
+                    offsetWeightTBCount += numOutputChannels;
+                #endif
+             }
+        }
+
+        vecIAMoverInstruction.clear();
+        vecOAMoverInstruction.clear();
+
 
         //2 SECOND set of instructions
         instruction_generator(
                     op,
                     vecIAMoverInstruction,
                     vecOAMoverInstruction,
-                    vecIATileControllerInstruction,
-                    vecOATileControllerInstruction,
-                    vecWMoverInstruction,
-                    vecMiscInstruction,
+                    graph.vecIATileControllerInstruction,
+                    graph.vecOATileControllerInstruction,
+                    graph.vecWMoverInstruction,
+                    graph.vecMiscInstruction,
 
                     //signed int memIA0DramBlockStartIndex
                     1 * MEM_ACTIVATION_REGION_SIZE_PER_SLICE,
@@ -1612,9 +1393,9 @@ void testFixture::launch (
                     //signed int memOADramBlockStartIndex
                     0 * MEM_ACTIVATION_REGION_SIZE_PER_SLICE,
                     //signed int memWeightDramBlockStartIndex
-                    0,
+                    offsetWeightsDramBlock,
                     //signed int memBiasStartIndex
-                    0,
+                    offsetBiasesDramBlock,
 
                     //input 0 strides
                     intermediateAColStride,
@@ -1642,16 +1423,13 @@ void testFixture::launch (
                     //memOATBCountColStride
                     1,
                     //memWeightTBCountStart
-                    0,
+                    offsetWeightTBCount,
                 #endif
 
                     instFlagSparseOutput,
                     //instFlagSparseInput,
                     TRUE,
-                    //flagInputSync
-                    FALSE,
-                    //flagOutputSync
-                    FALSE,
+
                     instFlagRelu,
                     instOutputShiftBits,
                     instOutputShiftLeft,
@@ -1677,6 +1455,46 @@ void testFixture::launch (
                     //numGroupsNextLayer
                     _numGroupNext
                     );
+        //Filling the rest of the information for the SECOND layer
+        {
+            std::copy(vecIAMoverInstruction.begin(),
+                      vecIAMoverInstruction.end(),
+                      std::back_inserter(graph.vecIAMoverInstruction)
+                      );
+            std::copy(vecOAMoverInstruction.begin(),
+                      vecOAMoverInstruction.end(),
+                      std::back_inserter(graph.vecOAMoverInstruction)
+                      );
+            int numIAMoverInstructions = vecIAMoverInstruction.size();
+            int numOAMoverInstructions = vecOAMoverInstruction.size();
+            graph.vecLayerInfo.emplace_back(
+                GraphRuntime::t_layer_info {.layerName="layer1",
+                 .offsetIAMoverInstruction=offsetIAMoverInstruction,
+                 .numIAMoverInstruction=numIAMoverInstructions,
+                 .offsetOAMoverInstruction=offsetOAMoverInstruction,
+                 .numOAMoverInstructions=numOAMoverInstructions
+                 });
+            offsetIAMoverInstruction += numIAMoverInstructions;
+            offsetOAMoverInstruction += numOAMoverInstructions;
+
+            if (op == CONVOLUTION)
+            {
+                graph.vecWeightDramBlockStart.push_back(offsetWeightsDramBlock);
+                graph.vecBiasStart.push_back(offsetBiasesDramBlock);
+                #if defined(SPARSE_SYSTEM)
+                    graph.vecWeightTBCountStart.push_back(offsetWeightTBCount);
+                #endif
+                graph.pWeights.push_back(pWeight);
+                graph.pBiasVector.push_back(pBiasVector);
+                offsetWeightsDramBlock +=
+                        (pWeight->getExternalMemoryAddressStride() >> WIDE_SIZE_OFFSET)
+                        * numOutputChannels ;
+                offsetBiasesDramBlock += numOutputChannels;
+                #if defined(SPARSE_SYSTEM)
+                    offsetWeightTBCount += numOutputChannels;
+                #endif
+             }
+        }
     } //multilayer-convolution
     else
     {
@@ -1684,10 +1502,10 @@ void testFixture::launch (
                     op,
                     vecIAMoverInstruction,
                     vecOAMoverInstruction,
-                    vecIATileControllerInstruction,
-                    vecOATileControllerInstruction,
-                    vecWMoverInstruction,
-                    vecMiscInstruction,
+                    graph.vecIATileControllerInstruction,
+                    graph.vecOATileControllerInstruction,
+                    graph.vecWMoverInstruction,
+                    graph.vecMiscInstruction,
 
                     //signed int memIA0DramBlockStartIndex
                     0 * MEM_ACTIVATION_REGION_SIZE_PER_SLICE,
@@ -1696,9 +1514,9 @@ void testFixture::launch (
                     //signed int memOADramBlockStartIndex
                     1 * MEM_ACTIVATION_REGION_SIZE_PER_SLICE,
                     //signed int memWeightDramBlockStartIndex
-                    0,
+                    offsetWeightsDramBlock,
                     //signed int memBiasStartIndex
-                    0,
+                    offsetBiasesDramBlock,
 
                     //input 0 strides
                     memDramBlockIAColStride,
@@ -1726,15 +1544,12 @@ void testFixture::launch (
                     //memOATBCountColStride
                     1,
                     //memWeightTBCountStart
-                    0,
+                    offsetWeightTBCount,
                 #endif
 
                     instFlagSparseOutput,
                     instFlagSparseInput,
-                    //flagInputSync
-                    0x0,
-                    //flagOutputSync
-                    0x0,
+
                     instFlagRelu,
                     instOutputShiftBits,
                     instOutputShiftLeft,
@@ -1761,555 +1576,108 @@ void testFixture::launch (
                     //numGroupsNextLayer
                     _numGroupNext
                     );
-    }
+        //Filling the rest of the information for the single layer
+        {
+            std::copy(vecIAMoverInstruction.begin(),
+                      vecIAMoverInstruction.end(),
+                      std::back_inserter(graph.vecIAMoverInstruction)
+                      );
+            std::copy(vecOAMoverInstruction.begin(),
+                      vecOAMoverInstruction.end(),
+                      std::back_inserter(graph.vecOAMoverInstruction)
+                      );
+            int numIAMoverInstructions = vecIAMoverInstruction.size();
+            int numOAMoverInstructions = vecOAMoverInstruction.size();
+            graph.vecLayerInfo.emplace_back(
+                GraphRuntime::t_layer_info {.layerName="layer1",
+                 .offsetIAMoverInstruction=offsetIAMoverInstruction,
+                 .numIAMoverInstruction=numIAMoverInstructions,
+                 .offsetOAMoverInstruction=offsetOAMoverInstruction,
+                 .numOAMoverInstructions=numOAMoverInstructions
+                 });
+            offsetIAMoverInstruction += numIAMoverInstructions;
+            offsetOAMoverInstruction += numOAMoverInstructions;
 
-
-
-    std::cout <<"Number of IA Mover instructions: "<<vecIAMoverInstruction.size()<<std::endl;
-    std::cout <<"Number of IA tile controller instructions: "<<vecIATileControllerInstruction.size()<<std::endl;
-    std::cout <<"Number of OA Mover instructions: "<<vecOAMoverInstruction.size()<<std::endl;
-    std::cout <<"Number of OA tile contrller instructions: "<<vecOATileControllerInstruction.size()<<std::endl;
-    std::cout <<"Number of W Mover instructions: "<<vecWMoverInstruction.size()<<std::endl;
-    std::cout <<"Number of MK controller instructions: "<<vecMiscInstruction.size()<<std::endl;
-
-    std::cout <<stepCount++<<". Setting kernel arguments for the IA Mover."<<std::endl;
-    {
-        cl_uint argIdx = 0;
-        //volatile __global t_dram_block* restrict pIA
-        kernelIAMover.setArg(argIdx, bufferActivationDramBlocks);
-        argIdx++;
-        #if defined(SPARSE_SYSTEM)
-            //volatile __global t_streamblock_address* restrict pTBCount,
-            kernelIAMover.setArg(argIdx, bufferActivationTBCounts);
-            argIdx++;
-        #endif
-        //volatile __global t_ia_mover_instruction* restrict pInstruction,
-        kernelIAMover.setArg(argIdx, bufferIAMoverInstructions);
-        argIdx++;
-        //unsigned int numInstruction
-       kernelIAMover.setArg(argIdx, (cl_uint) vecIAMoverInstruction.size());
-    }
-
-    std::cout <<stepCount++<<". Setting kernel arguments for the IA Tile controller."<<std::endl;
-    {
-        cl_uint argIdx = 0;
-        //__global volatile t_ia_tile_controller_instruction* restrict pInstruction,
-        kernelIATileController.setArg(argIdx, bufferIATileControllerInstructions);
-        argIdx++;
-
-        //unsigned int numInstruction
-        kernelIATileController.setArg(argIdx, (cl_uint) vecIATileControllerInstruction.size());
-    }
-
-    std::cout <<stepCount++<<". Setting kernel arguments for the Filter mover."<<std::endl;
-    {
-        cl_uint argIdx = 0;
-        //volatile __global t_weight_mover_instruction* restrict pInst,
-        kernelWMover.setArg(argIdx++, bufferWMoverInstructions);
-        //volatile __global t_dram_block* restrict pW,
-        kernelWMover.setArg(argIdx++, bufferWMoverWDramBlocks);
-        //vola<tile __global t_accumulator* restrict pBias,
-        kernelWMover.setArg(argIdx++, bufferWMoverBias);
-        #if defined(SPARSE_SYSTEM)
-            //volatile __global t_streamblock_address* restrict pFilterTBCount,
-            kernelWMover.setArg(argIdx++, bufferWMoverWTBCounts);
-        #endif //SPARSE_SYSTEM
-        //unsigned int numInstruction
-        kernelWMover.setArg(argIdx++, (cl_uint) vecWMoverInstruction.size());
-    }
-
-    std::cout <<stepCount++<<". Setting kernel arguments for the Miscellaneous controller."<<std::endl;
-    {
-        cl_uint argIdx=0;
-        //__global t_misc_instruction* restrict pInstruction,
-        kernelMKInstructionMover.setArg(argIdx++, bufferMKInstructions);
-        //unsigned int numInstruction
-        kernelMKInstructionMover.setArg(argIdx++, (cl_uint)vecMiscInstruction.size());
-    }
-
-    std::cout <<stepCount++<<". Setting kernel arguments for the OA mover."<<std::endl;
-    {
-        cl_uint argIdx=0;
-        //volatile __global t_output_dram_block* restrict pOA,
-        kernelOAMover.setArg(argIdx++, bufferActivationDramBlocks);
-        #if defined(SPARSE_SYSTEM)
-            //volatile __global t_streamblock_address* restrict pTBCount,
-            kernelOAMover.setArg(argIdx++, bufferActivationTBCounts);
-        #endif
-        //volatile __global t_oa_mover_instruction* restrict pInstruction,
-        kernelOAMover.setArg(argIdx++, bufferOAMoverInstructions);
-        //unsigned int numInstruction
-        kernelOAMover.setArg(argIdx++, (cl_uint) vecOAMoverInstruction.size());
-    }
-
-    std::cout <<stepCount++<<". Setting kernel arguments for the OA tile controller."<<std::endl;
-    {
-        cl_uint argIdx=0;
-        //volatile  __global t_oa_tile_controller_instruction* restrict pInst,
-        KernelOATileController.setArg(argIdx++, bufferOATileControllerInstructions);
-        //unsigned int numInstructions
-        KernelOATileController.setArg(argIdx++, (cl_uint) vecOATileControllerInstruction.size());
-    }
-
-    cl_int status;
-
-    //Also check the output activation size
-    {
-        int oaSizeBytes = sizeof(typeof((pOutput->getTransferBlockVector()).at(0))) * (pOutput->getTransferBlockVector()).size();
-        int oaOffset = ((op == CONVOLUTION) && (flagMultiLayerConv == true)) ?
-                0 * MEM_ACTIVATION_REGION_SIZE_PER_SLICE * BURST_SIZE_BYTE : 1 * MEM_ACTIVATION_REGION_SIZE_PER_SLICE * BURST_SIZE_BYTE;
-        assert(oaOffset+oaSizeBytes <= MAX_DRAM_BYTE_INPUT_ACTIVATION && "Too many output activation bytes to fit inside the global memory" );
-        #if defined(SPARSE_SYSTEM)
-            if (flagSparseOutput == true)
+            if (op == CONVOLUTION)
             {
-                int oaTBSizeBytes = sizeof(typeof((pOutput->getTransferBlockCountVector()).at(0))) * (pOutput->getTransferBlockCountVector()).size();
-                int oaTBOffset = ((op == CONVOLUTION) && (flagMultiLayerConv == true)) ?
-                        0 * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE * sizeof(t_streamblock_address) : 1 * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE * sizeof(t_streamblock_address);
-                assert(oaTBOffset+oaTBSizeBytes <= MAX_DRAM_BYTE_INPUT_ACTIVATION_SB_COUNT && "Too many output activation TB counts to fit inside the global memory" );
-            }
-        #endif
-    }
-
-    //Transfer the input
-    std::cout <<stepCount++<<". Transfer the input activations "<<std::endl;
-    {
-        cl::Event event;
-        auto numTransferBlocks = (pInput->getTransferBlockVector()).size();
-        auto sizeTransferBlockElement = sizeof(typeof((pInput->getTransferBlockVector()).at(0)));
-        auto valueVectorSizeBytes = sizeTransferBlockElement * numTransferBlocks;
-
-        int activationOffsetByte = 0 * MEM_ACTIVATION_REGION_SIZE_PER_SLICE * BURST_SIZE_BYTE;
-
-        std::cout <<"Transfering "<<valueVectorSizeBytes<<" bytes into bufferActivationDramBlocks"<<std::endl;
-        assert(activationOffsetByte+valueVectorSizeBytes <= MAX_DRAM_BYTE_INPUT_ACTIVATION && "Too many input activation bytes to fit inside the global memory" );
-
-        status = clCQIAMover.enqueueWriteBuffer(bufferActivationDramBlocks, //buffer
-                                             CL_TRUE, //blocking_write
-                                             activationOffsetByte, //offset
-                                             valueVectorSizeBytes, //size
-                                             (pInput->getTransferBlockVector()).data(), //data pointer
-                                             NULL, //dependency list
-                                             &event //events generated
-                                            );
-        aocl_utils_cpp::checkError(status, "Failed to write the input activation vector");
-        clCQIAMover.finish();
-        cl_ulong startTime = event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-        cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-        cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*(cl_double)(1e-3));
-        std::cout <<"Transfer the input actvation tensor took "<<elapsedTimeUs<<" us"<<std::endl;
-    } // Transfer the input
-
-#if defined(SPARSE_SYSTEM)
-    if (flagSparseInput == true)
-    {
-        std::cout <<stepCount++<<". Transfer the input activation TB count "<<std::endl;
-
-        cl::Event event;
-        auto numElements = (pInput->getTransferBlockCountVector()).size();
-        auto sizeElement = sizeof(typeof((pInput->getTransferBlockCountVector()).at(0)));
-        auto transferBytes = sizeElement * numElements;
-
-        int tbCountOffsetByte = 0 * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE * sizeof(t_streamblock_address);
-
-        std::cout <<"Transfering "<<transferBytes<<" bytes into bufferActivationTBCounts"<<std::endl;
-        assert(tbCountOffsetByte+transferBytes <= MAX_DRAM_BYTE_INPUT_ACTIVATION_SB_COUNT && "Too many input activation TB count bytes to fit inside the global memory" );
-
-        status = clCQIAMover.enqueueWriteBuffer(bufferActivationTBCounts, //buffer
-                                             CL_TRUE, //blocking_write
-                                             tbCountOffsetByte, //offset
-                                             transferBytes, //size
-                                             (pInput->getTransferBlockCountVector()).data(), //data pointer
-                                             NULL, //dependency list
-                                             &event //events generated
-                                            );
-        aocl_utils_cpp::checkError(status, "Failed to write the input activation TB count");
-        clCQIAMover.finish();
-        cl_ulong startTime = event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-        cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-        cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*(cl_double)(1e-3));
-        std::cout <<"Transfer the input activation TB count took "<<elapsedTimeUs<<" us"<<std::endl;
-    }
-#endif
-
-    std::cout <<stepCount++<<". Transfer the IA Mover instructions"<<std::endl;
-    {
-        cl::Event event;
-        auto numElements = vecIAMoverInstruction.size();
-        auto sizeElement = sizeof(typeof(vecIAMoverInstruction.at(0)));
-        auto transferBytes = sizeElement * numElements;
-
-        std::cout <<"Transfering "<<transferBytes<<" bytes into bufferIAMoverInstructions"<<std::endl;
-        assert(transferBytes <= MAX_DRAM_BYTE_INPUT_MOVER_INSTRUCTION && "Too many IA mover instructions to fit inside the global memory" );
-
-        status = clCQIAMover.enqueueWriteBuffer(bufferIAMoverInstructions, //buffer
-                                             CL_TRUE, //blocking_write
-                                             0, //offset
-                                             transferBytes, //size
-                                             vecIAMoverInstruction.data(), //data pointer
-                                             NULL, //dependency list
-                                             &event //events generated
-                                            );
-        aocl_utils_cpp::checkError(status, "Failed to write the IA mover instructions");
-        clCQIAMover.finish();
-        cl_ulong startTime = event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-        cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-        cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*(cl_double)(1e-3));
-        std::cout <<"Transfer the IA mover instructions tensor took "<<elapsedTimeUs<<" us"<<std::endl;
-    }
-
-    if (op == CONVOLUTION)
-    {
-        std::cout <<stepCount++<<". Transfer the IA Tile Controller instructions"<<std::endl;
-        cl::Event event;
-        auto numElements = vecIATileControllerInstruction.size();
-        auto sizeElement = sizeof(typeof(vecIATileControllerInstruction.at(0)));
-        auto transferBytes = sizeElement * numElements;
-
-        std::cout <<"Transfering "<<transferBytes<<" bytes into bufferIATileControllerInstructions"<<std::endl;
-        assert(transferBytes <= MAX_DRAM_BYTE_INPUT_TILE_CONTROLLER_INSTRUCTION && "Too many IA Tile instructions to fit inside the global memory" );
-
-        status = clCQIATileController.enqueueWriteBuffer(bufferIATileControllerInstructions, //buffer
-                                             CL_TRUE, //blocking_write
-                                             0, //offset
-                                             transferBytes, //size
-                                             vecIATileControllerInstruction.data(), //data pointer
-                                             NULL, //dependency list
-                                             &event //events generated
-                                            );
-        aocl_utils_cpp::checkError(status, "Failed to write the IA tile controller instructions");
-        clCQIATileController.finish();
-        cl_ulong startTime = event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-        cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-        cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*(cl_double)(1e-3));
-        std::cout <<"Transfer the IA tile controller instructions tensor took "<<elapsedTimeUs<<" us"<<std::endl;
-    }
-
-
-    std::cout <<stepCount++<<". Transfer the OA Mover instructions"<<std::endl;
-    {
-        cl::Event event;
-        auto numElements = vecOAMoverInstruction.size();
-        auto sizeElement = sizeof(typeof(vecOAMoverInstruction.at(0)));
-        auto transferBytes = sizeElement * numElements;
-
-        std::cout <<"Transfering "<<transferBytes<<" bytes into bufferOAMoverInstructions"<<std::endl;
-        assert(transferBytes <= MAX_DRAM_BYTE_OUTPUT_MOVER_INSTRUCTION && "Too many OA mover instructions to fit inside the global memory" );
-
-        status = clCQOAMover.enqueueWriteBuffer(bufferOAMoverInstructions, //buffer
-                                             CL_TRUE, //blocking_write
-                                             0, //offset
-                                             transferBytes, //size
-                                             vecOAMoverInstruction.data(), //data pointer
-                                             NULL, //dependency list
-                                             &event //events generated
-                                            );
-        aocl_utils_cpp::checkError(status, "Failed to write the OA mover instructions");
-        clCQOAMover.finish();
-        cl_ulong startTime = event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-        cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-        cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*(cl_double)(1e-3));
-        std::cout <<"Transfer the OA mover instructions tensor took "<<elapsedTimeUs<<" us"<<std::endl;
-    }
-
-    std::cout <<stepCount++<<". Transfer the OA Tile Controller instructions"<<std::endl;
-    {
-        cl::Event event;
-        auto numElements = vecOATileControllerInstruction.size();
-        auto sizeElement = sizeof(typeof(vecOATileControllerInstruction.at(0)));
-        auto transferBytes = sizeElement * numElements;
-
-        std::cout <<"Transfering "<<transferBytes<<" bytes into bufferOAMoverInstructions"<<std::endl;
-        assert(transferBytes <= MAX_DRAM_BYTE_OUTPUT_TILE_CONTROLLER_INSTRUCTION && "Too many OA TILE instructions to fit inside the global memory" );
-
-        status = clCQOATileController.enqueueWriteBuffer(bufferOATileControllerInstructions, //buffer
-                                             CL_TRUE, //blocking_write
-                                             0, //offset
-                                             transferBytes, //size
-                                             vecOATileControllerInstruction.data(), //data pointer
-                                             NULL, //dependency list
-                                             &event //events generated
-                                            );
-        aocl_utils_cpp::checkError(status, "Failed to write the IA tile controller instructions");
-        clCQOATileController.finish();
-        cl_ulong startTime = event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-        cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-        cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*(cl_double)(1e-3));
-        std::cout <<"Transfer the OA tile controller instructions tensor took "<<elapsedTimeUs<<" us"<<std::endl;
-    }
-
-    //If the operation is CONVOLUTION,
-    //then transfer the WMover instructions, the weights, the weight TB count, and the biases
-    if (op == CONVOLUTION)
-    {
-        std::cout <<stepCount++<<". Transfer the W Mover instructions"<<std::endl;
-        {
-            cl::Event event;
-            auto numElements = vecWMoverInstruction.size();
-            auto sizeElement = sizeof(typeof(vecWMoverInstruction.at(0)));
-            auto transferBytes = sizeElement * numElements;
-
-            std::cout <<"Transfering "<<transferBytes<<" bytes into bufferWMoverInstructions"<<std::endl;
-            assert(transferBytes <= MAX_DRAM_BYTE_WEIGHT_MOVER_INSTRUCTION && "Too many Weight Mover instructions to fit inside the global memory" );
-
-
-            status = clCQWMover.enqueueWriteBuffer(bufferWMoverInstructions, //buffer
-                                                 CL_TRUE, //blocking_write
-                                                 0, //offset
-                                                 transferBytes, //size
-                                                 vecWMoverInstruction.data(), //data pointer
-                                                 NULL, //dependency list
-                                                 &event //events generated
-                                                );
-            aocl_utils_cpp::checkError(status, "Failed to write the W Mover instructions");
-            clCQWMover.finish();
-            cl_ulong startTime = event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-            cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-            cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*(cl_double)(1e-3));
-            std::cout <<"Transfer the W Mover instructions tensor took "<<elapsedTimeUs<<" us"<<std::endl;
+                graph.vecWeightDramBlockStart.push_back(offsetWeightsDramBlock);
+                graph.vecBiasStart.push_back(offsetBiasesDramBlock);
+                #if defined(SPARSE_SYSTEM)
+                    graph.vecWeightTBCountStart.push_back(offsetWeightTBCount);
+                #endif
+                graph.pWeights.push_back(pWeight);
+                graph.pBiasVector.push_back(pBiasVector);
+                offsetWeightsDramBlock +=
+                        (pWeight->getExternalMemoryAddressStride() >> WIDE_SIZE_OFFSET)
+                        * numOutputChannels ;
+                offsetBiasesDramBlock += numOutputChannels;
+                #if defined(SPARSE_SYSTEM)
+                    offsetWeightTBCount += numOutputChannels;
+                #endif
+             }
         }
+    } //Instruction generation
 
-        std::cout <<stepCount++<<". Transfer the filter biases"<<std::endl;
-        {
-            cl::Event event;
-            auto numElements = biasVector.size();
-            auto sizeElement = sizeof(typeof(biasVector.at(0)));
-            auto transferBytes = sizeElement * numElements;
+    /*Prepare the input/output blobs
+     * Note: For THIS demo, if a test case have the multiple input blobs (e.g. concatenation, eltwise-add)
+     * then the inputs have identical values.
+     * Moreoever, there is only one copy of the input on the FPGA memory.
+     * In general, this simplification does not hold.
+    */
+    graph.vecInputInfo.emplace_back(GraphRuntime::t_blob_info{
+                                        .memoryRegionID=0,
+                                        .channelPerGroup=numInputChannel0 / numGroupCurrentLayer,
+                                        .group=numGroupCurrentLayer,
+                                        .height=_inputHeight,
+                                        .width=_inputWidth,
+                                        .numFracBits=FRAC_WIDTH,
+                                        .flagCanBeSparse=flagSparseInput,
+                                        .blobName="input"
+                                    });
+    int oaRegion = ((op == CONVOLUTION) && (flagMultiLayerConv == true)) ? 0 : 1;
+    graph.vecOutputInfo.emplace_back(
+                GraphRuntime::t_blob_info{
+                    .memoryRegionID=oaRegion,
+                    .channelPerGroup=numOutputChannelPerGroup,
+                    .group= numOutputChannels / numOutputChannelPerGroup,
+                    .height= numOutputHeight,
+                    .width= numOutputWidth,
+                    .numFracBits=FRAC_WIDTH,
+                    .flagCanBeSparse=flagSparseOutput,
+                    .blobName="output"
+                }
+                );
 
-            std::cout <<"Transfering "<<transferBytes<<" bytes into bufferWMoverBias"<<std::endl;
-            assert(transferBytes <= MAX_DRAM_BYTE_INPUT_BIAS && "Too many biases to fit inside the global memory" );
+    std::cout <<"Number of IA Mover instructions: "<<graph.vecIAMoverInstruction.size()<<std::endl;
+    std::cout <<"Number of IA tile controller instructions: "<<graph.vecIATileControllerInstruction.size()<<std::endl;
+    std::cout <<"Number of OA Mover instructions: "<<graph.vecOAMoverInstruction.size()<<std::endl;
+    std::cout <<"Number of OA tile contrller instructions: "<<graph.vecOATileControllerInstruction.size()<<std::endl;
+    std::cout <<"Number of W Mover instructions: "<<graph.vecWMoverInstruction.size()<<std::endl;
+    std::cout <<"Number of MK controller instructions: "<<graph.vecMiscInstruction.size()<<std::endl;
 
-            status = clCQWMover.enqueueWriteBuffer(bufferWMoverBias, //buffer
-                                                 CL_TRUE, //blocking_write
-                                                 0, //offset
-                                                 transferBytes, //size
-                                                 biasVector.data(), //data pointer
-                                                 NULL, //dependency list
-                                                 &event //events generated
-                                                );
-            aocl_utils_cpp::checkError(status, "Failed to write the filter biases");
-            clCQWMover.finish();
-            cl_ulong startTime = event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-            cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-            cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*(cl_double)(1e-3));
-            std::cout <<"Transfer the filter biases took "<<elapsedTimeUs<<" us"<<std::endl;
-        }
+    //Load the graph to the FPGA
+    std::cout <<stepCount++<<". Load the graph to the FPGA."<<std::endl;
+    accelerator.resetGraph();
+    accelerator.loadGraph(graph);
 
-        std::cout <<stepCount++<<". Transfer the filter weights"<<std::endl;
-        {
-            cl::Event event;
-            auto numElements =  (pWeights->getTransferBlockVector()).size();
-            auto sizeElement = sizeof(typeof((pWeights->getTransferBlockVector()).at(0)));
-            auto transferBytes = sizeElement * numElements;
+    //Setup the input blobs
+    std::cout <<stepCount++<<". Setup the input blobs."<<std::endl;
+    accelerator.prepareInputBlob(inputTensorDense, 0);
 
-            std::cout <<"Transfering "<<transferBytes<<" bytes into bufferWMoverWDramBlocks"<<std::endl;
-            assert(transferBytes <= MAX_DRAM_BYTE_INPUT_WEIGHT && "Too many weights to fit inside the global memory" );
-
-            status = clCQWMover.enqueueWriteBuffer(bufferWMoverWDramBlocks, //buffer
-                                                 CL_TRUE, //blocking_write
-                                                 0, //offset
-                                                 transferBytes, //size
-                                                 (pWeights->getTransferBlockVector()).data(), //data pointer
-                                                 NULL, //dependency list
-                                                 &event //events generated
-                                                );
-            aocl_utils_cpp::checkError(status, "Failed to write the filter weight tensors");
-            clCQWMover.finish();
-            cl_ulong startTime = event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-            cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-            cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*(cl_double)(1e-3));
-            std::cout <<"Transfer the filter weight tensors took "<<elapsedTimeUs<<" us"<<std::endl;
-        }
-
-#if defined(SPARSE_SYSTEM)
-        {
-            std::cout <<stepCount++<<". Transfer the filter weight TB counts"<<std::endl;
-            cl::Event event;
-            auto numElements =  (pWeights->getTransferBlockCountVector()).size();
-            auto sizeElement = sizeof(typeof((pWeights->getTransferBlockCountVector()).at(0)));
-            auto transferBytes = sizeElement * numElements;
-
-            std::cout <<"Transfering "<<transferBytes<<" bytes into bufferWMoverWTBCounts"<<std::endl;
-            assert(transferBytes <= MAX_DRAM_BYTE_INPUT_WEIGHT_SB_COUNT && "Too many weight TB counts to fit inside the global memory" );
-
-            status = clCQWMover.enqueueWriteBuffer(bufferWMoverWTBCounts, //buffer
-                                                 CL_TRUE, //blocking_write
-                                                 0, //offset
-                                                 transferBytes, //size
-                                                 (pWeights->getTransferBlockCountVector()).data(), //data pointer
-                                                 NULL, //dependency list
-                                                 &event //events generated
-                                                );
-            aocl_utils_cpp::checkError(status, "Failed to write the filter weight TB counts");
-            clCQWMover.finish();
-            cl_ulong startTime = event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-            cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-            cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*(cl_double)(1e-3));
-            std::cout <<"Transfer the filter weight TB counts took "<<elapsedTimeUs<<" us"<<std::endl;
-        }
-#endif
-    }
-    else
-    {
-        std::cout <<stepCount++<<". Transfer the MK controller instructions"<<std::endl;
-        {
-            cl::Event event;
-            auto numElements = vecMiscInstruction.size();
-            auto sizeElement = sizeof(typeof(vecMiscInstruction.at(0)));
-            auto transferBytes = sizeElement * numElements;
-
-            std::cout <<"Transfering "<<transferBytes<<" bytes into bufferMKInstructions"<<std::endl;
-            assert(transferBytes <= MAX_DRAM_BYTE_MISC_CONTROLLER_INSTRUCTION && "Too many MK instructions to fit inside the global memory" );
-
-            status = clCQMKController.enqueueWriteBuffer(bufferMKInstructions, //buffer
-                                                 CL_TRUE, //blocking_write
-                                                 0, //offset
-                                                 transferBytes, //size
-                                                 vecMiscInstruction.data(), //data pointer
-                                                 NULL, //dependency list
-                                                 &event //events generated
-                                                );
-            aocl_utils_cpp::checkError(status, "Failed to write the MK controller instructions");
-            clCQMKController.finish();
-            cl_ulong startTime = event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-            cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-            cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*(cl_double)(1e-3));
-            std::cout <<"Transfer the MK controller instructions tensor took "<<elapsedTimeUs<<" us"<<std::endl;
-        }
-    }
-
-    //Launch the kernels
-    std::cout<<stepCount++<<". Launch the kernels."<<std::endl;
-    cl_ulong proccessDuration = 0;
+    //Perform inference
+    std::cout<<stepCount++<<". Perform inferences."<<std::endl;
     for (int i=0; i<REPEAT; i++)
     {
-        cl::Event eventIAMover, eventWMover, eventOAMover, eventMKController, eventIATileController, eventOATileController;
-
-        status = clCQIAMover.enqueueTask(kernelIAMover, NULL);
-        aocl_utils_cpp::checkError(status, "Failed to launch kernelIAMover!");
-
-        status = clCQIATileController.enqueueTask(kernelIATileController, NULL);
-        aocl_utils_cpp::checkError(status, "Failed to launch kernelIATileController!");
-
-        status = clCQWMover.enqueueTask(kernelWMover, NULL);
-        aocl_utils_cpp::checkError(status, "Failed to launch kernelWMover!");
-
-        status = clCQMKController.enqueueTask(kernelMKInstructionMover, NULL);
-        aocl_utils_cpp::checkError(status, "Failed to launch kernelMKInstructionMover!");
-
-        status = clCQOATileController.enqueueTask(KernelOATileController, NULL);
-        aocl_utils_cpp::checkError(status, "Failed to launch KernelOATileController!");
-
-        status = clCQOAMover.enqueueTask(kernelOAMover, NULL, &eventOAMover);
-        aocl_utils_cpp::checkError(status, "Failed to launch kernelOAMover!");
-
-        clCQOAMover.finish();
-
-        cl_ulong processStart = eventOAMover.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-        cl_ulong processEnd = eventOAMover.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-        proccessDuration += (processEnd - processStart);
-     }
-     proccessDuration /= REPEAT;
-
-    //auto processEnd = std::chrono::system_clock::now();
-
-    cl_double proccessDurationUs = ((cl_double) proccessDuration) * (cl_double)(1e-3);
-    //auto duration = std::chrono::duration_cast<std::chrono::microseconds>(processEnd-processStart).count();
-    //double averageDuration = (double)(duration) / (double)(REPEAT);
-#if defined(C5SOC)
-    //Hack for ARMv7
-    //averageDuration = averageDuration * 1000.0;
-#endif
-
-
-#if defined(PROFILE)
-    std::cout <<stepCount++<<". Attempting to retrieve autorun profiling data."<<std::endl;
-    status = clGetProfileDataDeviceIntelFPGA(
-              clDevice(),
-              program(),
-              CL_TRUE,
-              CL_TRUE,
-              CL_FALSE,
-              0,
-              NULL,
-              NULL,
-              NULL
-                );
-    aocl_utils_cpp::checkError(status, "Failed to retrieve profiling information!");
-#endif
-
-    std::cout <<stepCount++<<". Retrieve the output."<<std::endl;
-    int oaOffset = ((op == CONVOLUTION) && (flagMultiLayerConv == true)) ?
-                0 * MEM_ACTIVATION_REGION_SIZE_PER_SLICE * BURST_SIZE_BYTE : 1 * MEM_ACTIVATION_REGION_SIZE_PER_SLICE * BURST_SIZE_BYTE;
-    cl::Event eventReadOutput, eventReadOutputCount;
-    status = clCQOAMover.enqueueReadBuffer(
-        bufferActivationDramBlocks,
-        CL_TRUE,
-        oaOffset,
-        sizeof(typeof((pOutput->getTransferBlockVector()).at(0))) * (pOutput->getTransferBlockVector()).size(),
-        (pOutput->getTransferBlockVector()).data(),
-        NULL,
-        &eventReadOutput
-    );
-    aocl_utils_cpp::checkError(status, "Failed to read output values!");
-
-#if defined(SPARSE_SYSTEM)
-    if (flagSparseOutput == true)
-    {
-        int oaTBOffset = ((op == CONVOLUTION) && (flagMultiLayerConv == true)) ?
-                    0 * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE * sizeof(t_streamblock_address) : 1 * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE * sizeof(t_streamblock_address);
-        status = clCQOAMover.enqueueReadBuffer(
-            bufferActivationTBCounts,
-            CL_TRUE,
-            oaTBOffset,
-            sizeof(typeof((pOutput->getTransferBlockCountVector()).at(0))) * (pOutput->getTransferBlockCountVector()).size(),
-            (pOutput->getTransferBlockCountVector()).data(),
-            NULL,
-            &eventReadOutputCount
-        );
-        aocl_utils_cpp::checkError(status, "Failed to read output TB count!");
+        accelerator.inference();
     }
-#endif
-    cl_ulong outputValueTransferStart = eventReadOutput.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-    cl_ulong outputValueTransferEnd = eventReadOutput.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-    cl_double outputValueTransferDuration = (cl_double)((outputValueTransferEnd - outputValueTransferStart) * (cl_double)(1e-3));
 
-    cl_ulong outputCountTransferStart = eventReadOutputCount.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-    cl_ulong outputCountTransferEnd = eventReadOutputCount.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-    cl_double outputCountTransferDuration = (cl_double)((outputCountTransferEnd - outputCountTransferStart) * (cl_double)(1e-3));
+    //Retrieve the outputs
+    std::cout <<stepCount++<<". Decode and retrieve the output."<<std::endl;
+    std::vector<float> outputFloatVector = accelerator.extractOutputBlob(0);
 
-    std::cout <<"Average Convolution time:  (us): "<<proccessDurationUs<<std::endl;
-    std::cout <<"Output transfer time (us): "<<outputValueTransferDuration<<std::endl;
-#if defined(SPARSE_SYSTEM)
-    std::cout <<"Output count transfer time (us): "<<outputCountTransferDuration<<std::endl;
-#endif
 
-#if defined(NOOP)
-    //Test the noop time
+    //Decompress the output, and check against the input if necessary
     {
-        std::cout <<stepCount++<<". Measure NOOP time"<<std::endl;
-        cl_double duration = 0;
-        cl::Event eventNoop;
-
-        status = clCQNoop.enqueueTask(kernelNoop, NULL, &eventNoop);
-        aocl_utils_cpp::checkError(status, "Failed to launch kernelNoop!");
-
-        clCQNoop.finish();
-
-        cl_ulong processStart = eventNoop.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-        cl_ulong processEnd = eventNoop.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-        duration = ((cl_double)(processEnd - processStart)) * ((cl_double)(1e-3));
-        std::cout <<"Noop time (us): "<<duration<<std::endl;
-
-    }
-#endif
-
-    //TODO: Decompress the output, and check against the input if necessary
-    {
-        std::cout <<stepCount++<<". Decode the output"<<std::endl;
-        std::vector<fixedPointNumber> outputFPVector;
-
-        pOutput->decodeTensor(outputFPVector, FRAC_WIDTH, INT_WIDTH);
-
         if (_flagPerformanceTest == false)
         {
             std::cout <<stepCount++<<". Check the output"<<std::endl;
@@ -2326,7 +1694,7 @@ void testFixture::launch (
                             unsigned int outputCoord =
                                     iGroup*numOutputHeight*numOutputWidth*numOutputChannelPerGroup
                                     +iRow*numOutputWidth*numOutputChannelPerGroup + iCol*numOutputChannelPerGroup + iCh;
-                            fixedPointNumber actualFP = outputFPVector.at(outputCoord);
+                            float actualFloat = outputFloatVector.at(outputCoord);
 
                             //Compute the expected output
                             float unitFloat = 1.0f / (1 << FRAC_WIDTH);
@@ -2371,6 +1739,7 @@ void testFixture::launch (
                             }//switch (op)
 
                             fixedPointNumber expectedFP(expectedFloat, FRAC_WIDTH, INT_WIDTH);
+                            fixedPointNumber actualFP(actualFloat, FRAC_WIDTH, INT_WIDTH);
 
                             signed char actualBits = actualFP.getBits();
                             signed char expectedBits = expectedFP.getBits();

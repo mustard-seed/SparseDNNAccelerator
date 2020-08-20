@@ -68,8 +68,8 @@ void instruction_generator(
         unsigned char flagSparseInput,
         //Whether the IA mover kernel should wait for the output to commit before moving
         //on to the next tensor
-        unsigned char flagInputSync,
-        unsigned char flagOutputSync,
+        //unsigned char flagInputSync,
+        //unsigned char flagOutputSync,
         unsigned char flagRelu,
         unsigned char outputShiftBits,
         unsigned char flagOutputShiftLeft,
@@ -392,9 +392,10 @@ void instruction_generator(
                         ( (iOutputGroup+1) == numGroupsNextLayer)
                         && ((iterPTile+1) == numOutputTileY)
                         && ((iterQTile+1) == numOutputTileX);
-                unsigned char actualFlagOutputSync = (flagOutputSync == 0x01) ?
-                            ((isLastOutputTile == true) ? 0x1 : 0x0)
-                            : 0x0;
+//                unsigned char actualFlagOutputSync = (flagOutputSync == 0x01) ?
+//                            ((isLastOutputTile == true) ? 0x1 : 0x0)
+//                            : 0x0;
+                unsigned char actualFlagOutputSync = 0x0;
                 instructionOA.memSelectCatSparseFlagCatSyncFlagCatNumActiveCols =
                         ((t_uchar) numActiveCols & 0x0F)
                         | ((((t_uchar) actualFlagOutputSync) & 0x01) << 0x04)
@@ -466,9 +467,10 @@ void instruction_generator(
                             && ( iterInputGroup0 == (numIAMoverGroup0-1))
                             && ((iterPTile+1) == numOutputTileY)
                             && ((iterQTile+1) == numOutputTileX);
-                    unsigned char actualFlagInputSync = (flagInputSync == 0x01) ?
-                                ((isLastInputTile == true) ? 0x1 : 0x0)
-                                : 0x0;
+//                    unsigned char actualFlagInputSync = (flagInputSync == 0x01) ?
+//                                ((isLastInputTile == true) ? 0x1 : 0x0)
+//                                : 0x0;
+                    unsigned char actualFlagInputSync = 0x0;
                     //Set the transport target. 0x0 means convolution, 0x1 means MISC
                     unsigned char flagTarget= (op == CONVOLUTION) ?  0x00 : 0x01;
                     instructionIA.memRegionCatSparseFlagCatDestinationCatSyncCatNumActiveCols = (t_uchar)
@@ -609,9 +611,10 @@ void instruction_generator(
                                 && ((iterPTile+1) == numOutputTileY)
                                 && ((iterQTile+1) == numOutputTileX);
 
-                        unsigned char actualFlagInputSync = (flagInputSync == 0x01) ?
-                                    ((isLastInputTile == true) ? 0x1 : 0x0)
-                                    : 0x0;
+//                        unsigned char actualFlagInputSync = (flagInputSync == 0x01) ?
+//                                    ((isLastInputTile == true) ? 0x1 : 0x0)
+//                                    : 0x0;
+                        unsigned char actualFlagInputSync = 0x0;
 
                         instructionIA.memRegionCatSparseFlagCatDestinationCatSyncCatNumActiveCols = (t_uchar)
                                 ( ( ((t_uchar) numActiveCols)& 0x0F)
