@@ -116,6 +116,7 @@ namespace GraphRuntime {
         int getKernelStride();
         int getKernelSize();
         int getInputBorderPadding();
+        float getDivisor();
     };
 
     class EltAddLayer: public Layer {

@@ -244,6 +244,11 @@ namespace GraphRuntime {
         return node["inputBorderPadding"].as<int>();
     }
 
+    float AveragePoolLayer::getDivisor()
+    {
+        return node["divisor"].as<float>();
+    }
+
     EltAddLayer::EltAddLayer(const YAML::Node &_node)
         :Layer(_node)
     {
