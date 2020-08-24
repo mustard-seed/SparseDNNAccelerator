@@ -1,4 +1,5 @@
-#pragma once
+#ifndef ACCELERATOR_WRAPPER
+#define ACCELERATOR_WRAPPER
 #include <vector>
 #include <iostream>
 #include <string>
@@ -209,3 +210,4 @@ namespace GraphRuntime {
             std::string reportRuntime();
     };
 }
+#endif

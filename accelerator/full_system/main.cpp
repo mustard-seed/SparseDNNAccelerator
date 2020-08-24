@@ -28,11 +28,10 @@
 
 //#define PLAY
 #define REPEAT 1
-#define EMULATE
+//#define EMULATE
 //#define PERF_TEST
 //#NOOP
 //#define PROFILE
-#include "CL/cl_ext_intelfpga.h"
 
 #define FRAC_WIDTH 4
 #define INT_WIDTH 3
@@ -1229,6 +1228,15 @@ void testFixture::launch (
                     graph.vecWMoverInstruction,
                     graph.vecMiscInstruction,
 
+                    // bool flagIA0ShiftLeft,
+                    true,
+                    // unsigned int numIA0ShiftAmount,
+                    0,
+                    // bool flagIA1ShiftLeft,
+                    true,
+                    // unsigned int numIA1ShiftAmount,
+                    0,
+
                     //signed int memIA0DramBlockStartIndex
                     0 * MEM_ACTIVATION_REGION_SIZE_PER_SLICE,
                     //signed int memIA1DramBlockStartIndex
@@ -1355,6 +1363,15 @@ void testFixture::launch (
                     graph.vecWMoverInstruction,
                     graph.vecMiscInstruction,
 
+                    // bool flagIA0ShiftLeft,
+                    true,
+                    // unsigned int numIA0ShiftAmount,
+                    0,
+                    // bool flagIA1ShiftLeft,
+                    true,
+                    // unsigned int numIA1ShiftAmount,
+                    0,
+
                     //signed int memIA0DramBlockStartIndex
                     1 * MEM_ACTIVATION_REGION_SIZE_PER_SLICE,
                     //signed int memIA1DramBlockStartIndex
@@ -1475,6 +1492,15 @@ void testFixture::launch (
                     graph.vecOATileControllerInstruction,
                     graph.vecWMoverInstruction,
                     graph.vecMiscInstruction,
+
+                    // bool flagIA0ShiftLeft,
+                    true,
+                    // unsigned int numIA0ShiftAmount,
+                    0,
+                    // bool flagIA1ShiftLeft,
+                    true,
+                    // unsigned int numIA1ShiftAmount,
+                    0,
 
                     //signed int memIA0DramBlockStartIndex
                     0 * MEM_ACTIVATION_REGION_SIZE_PER_SLICE,

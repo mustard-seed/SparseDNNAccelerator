@@ -15,6 +15,11 @@ void instruction_generator(
         t_aligned_weight_mover_instruction_vector & vecWeightMoverInstruction,
         t_aligned_misc_instruction_vector & vecMiscInstruction,
 
+        bool flagIA0ShiftLeft,
+        unsigned int numIA0ShiftAmount,
+        bool flagIA1ShiftLeft,
+        unsigned int numIA1ShiftAmount,
+
         //Starting location of activation tensors in the OpenCL Buffer
         //IA and OA occupies the same OpenCL buffer
 
@@ -479,6 +484,10 @@ void instruction_generator(
                              | ((((t_uchar) flagTarget) & 0x01) << 0x05)
                              | ((((t_uchar) flagSparseInput) & 0x01) << 0x06) //Sparse flag for the input tensor
                             );
+                    t_uchar flagLeftShiftCatShiftAmount = flagIA0ShiftLeft ?
+                                (0x08 | (0x07 & numIA0ShiftAmount))
+                              : (0x00 | (0x07 & numIA0ShiftAmount));
+                    instructionIA.flagLeftShiftCatShiftAmount = flagLeftShiftCatShiftAmount;
                     instructionIA.memBlockStart = (t_int) (
                                 memIA0DramBlockStartIndex
                                 + memIA0DramBlockGroupStride * iterInputGroup0
@@ -622,6 +631,10 @@ void instruction_generator(
                                  | ((((t_uchar) 0x01) & 0x01) << 0x05) //Compute engine is MISC
                                  | ((((t_uchar) 0x0) & 0x01) << 0x06) //Sparse flag for the input tensor. Will be dense
                                 );
+                        t_uchar flagLeftShiftCatShiftAmount = flagIA1ShiftLeft ?
+                                    (0x08 | (0x07 & numIA1ShiftAmount))
+                                  : (0x00 | (0x07 & numIA1ShiftAmount));
+                        instructionIA.flagLeftShiftCatShiftAmount = flagLeftShiftCatShiftAmount;
                         instructionIA.memBlockStart = (t_int) (
                                     memIA1DramBlockStartIndex
                                     + memIA1DramBlockGroupStride * iterInputGroup1

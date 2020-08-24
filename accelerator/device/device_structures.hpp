@@ -117,6 +117,10 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
     //Bit [7]: Flag for selecting the memory region to read from
     t_uchar memRegionCatSparseFlagCatDestinationCatSyncCatNumActiveCols;
 
+    //Bit [2:0] Shift amount
+    //Bit [3] Flag for left/right shift. 0 for right, 1 for left
+    t_uchar flagLeftShiftCatShiftAmount;
+
     //Arch parameter: Starting index of the input dram block in the input memory region
     t_int memBlockStart;
     //Arch parameter: Column stride of input activation strips in dram block in the input memory region

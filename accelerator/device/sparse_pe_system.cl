@@ -97,6 +97,8 @@ __kernel void kernelIAMover (
 		t_flag sparseInput = (inst.memRegionCatSparseFlagCatDestinationCatSyncCatNumActiveCols >> 0x06) & 0x01;
 		//Flag for which memory region to fetch the input and TB from. TODO: remove this if not necessary.
 		t_flag memRegion = (inst.memRegionCatSparseFlagCatDestinationCatSyncCatNumActiveCols >> 0x07) & 0x01;
+		
+		unsigned char flagLeftShiftCatShiftAmount = inst.flagLeftShiftCatShiftAmount;
 		//Amount of input padding needed on the four sides
 		uint2_t tileLeftPadding = inst.concatPadding & 0x03;
 		uint2_t tileRightPadding = (inst.concatPadding >> 0x02) & 0x03;
@@ -194,6 +196,7 @@ __kernel void kernelIAMover (
 						"numTBInStrip=%d, "
 						"numActiveCols=%d, "
 						"addressIADramBlockDDR=%#010x, "
+						"flagLeftShiftCatShiftAmount=%#04x"
 						"destinationMisc=%#03x\n",
 						offsetInstruction,
 						iInst,
@@ -206,6 +209,7 @@ __kernel void kernelIAMover (
 						numTBInStrip,
 						numActiveCols,
 						(unsigned int) addressIADramBlockDDR,
+						(unsigned int) flagLeftShiftCatShiftAmount,
 						(unsigned int) destinationMisc));
 
 			for (unsigned short iterTransfer=0; iterTransfer<numTransferActions; iterTransfer++)
@@ -226,7 +230,19 @@ __kernel void kernelIAMover (
 					{
 						// iaBlock.dramBlock = (memRegion == 0x0) ? 
 						// 	pIA1[addressIADramBlockDDR] : pIA2[addressIADramBlockDDR];
-						iaBlock.dramBlock = pIA[addressIADramBlockDDR];
+						t_dram_block rawBlock = pIA[addressIADramBlockDDR];
+						#pragma unroll
+						for (unsigned char i=0; i<WIDE_SIZE; i++)
+						{
+							#pragma unroll
+							for (unsigned char j=0; j<(TRANSFER_SIZE*CLUSTER_SIZE); j++)
+							{
+								iaBlock.dramBlock.transferBlocks[i].values[j]= modifyCharOutput(
+										rawBlock.transferBlocks[i].values[j],
+										flagLeftShiftCatShiftAmount
+									);
+							}
+						}
 						addressIADramBlockDDR++;
 					}
 					else  //Strip is padding

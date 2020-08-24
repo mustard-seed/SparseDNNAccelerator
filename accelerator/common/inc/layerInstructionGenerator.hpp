@@ -14,6 +14,11 @@ void instruction_generator (//Type of the operation
         t_aligned_weight_mover_instruction_vector & vecWeightMoverInstruction,
         t_aligned_misc_instruction_vector & vecMiscInstruction,
 
+        bool flagIA0ShiftLeft,
+        unsigned int numIA0ShiftAmount,
+        bool flagIA1ShiftLeft,
+        unsigned int numIA1ShiftAmount,
+
         //Starting location of activation tensors in the OpenCL Buffer
         //IA and OA occupies the same OpenCL buffer
 
