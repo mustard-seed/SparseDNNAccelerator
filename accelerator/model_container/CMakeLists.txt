@@ -18,6 +18,7 @@ target_include_directories(model_container PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/in
 
 # Add dependencies
 target_link_libraries(model_container
+    PUBLIC
     yaml-cpp
   )
 
