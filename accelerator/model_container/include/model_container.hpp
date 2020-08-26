@@ -78,6 +78,7 @@ namespace GraphRuntime {
         int getInputBorderPadding();
         int getTransConvPadding();
         bool getBiasFlag();
+        int getWeightFracBits();
 
         /*
          * Parameter Related Flag

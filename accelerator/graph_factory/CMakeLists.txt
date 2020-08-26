@@ -47,6 +47,7 @@ endif()
 #########################
 file(GLOB LIB_SRC
         ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp
+        ${PROJECT_SOURCE_DIR}/common/src/*
 )
 
 ####################################################################
@@ -61,6 +62,7 @@ add_library(${LIB_NAME}
 target_include_directories(${LIB_NAME}
     PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${PROJECT_SOURCE_DIR}/common/inc
     ${Boost_INCLUDE_DIRS})
 target_link_libraries(${LIB_NAME}
     PUBLIC

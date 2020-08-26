@@ -32,7 +32,7 @@ TEST_F(testFixture, miniResNet)
     std::string inoutFile = "testTrace_inout.yaml";
     std::map<std::string, std::string> traceName2BlobName;
     traceName2BlobName.insert(std::pair<std::string, std::string>("quantstub_0", "input"));
-    traceName2BlobName.insert(std::pair<std::string, std::string>("dequantstub_0", "output"));
+    traceName2BlobName.insert(std::pair<std::string, std::string>("dequantstub_15", "output"));
     launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
 }
 

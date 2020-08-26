@@ -181,6 +181,12 @@ namespace GraphRuntime {
     {
         return node["inputTransConvPadding"].as<int>();
     }
+
+    int ConvLayer::getWeightFracBits()
+    {
+        return node["weightFracBits"].as<int>();
+    }
+
     bool ConvLayer::getBiasFlag()
     {
         return node["hasBias"].as<bool>();
