@@ -2,7 +2,7 @@
 #define _LAYER_INSTRUCTION_GENERATOR_HPP_
 #include "vectorType.hpp"
 
-enum OPERATION {CONVOLUTION, MAX_POOL, ELT_ADD, CONCATENATION};
+enum OPERATION {CONVOLUTION, MAX_POOL, ELT_ADD, CONCATENATION, AVG_POOL};
 void instruction_generator (//Type of the operation
         OPERATION op,
 

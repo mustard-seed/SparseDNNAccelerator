@@ -4,6 +4,7 @@
 #include "floatFixedPointConversion.hpp"
 
 #include <memory>
+#include <cmath>
 
 using namespace std;
 using namespace GraphRuntime;
@@ -11,6 +12,10 @@ using namespace GraphRuntime;
 /*!
  * Some helper functions
  */
+typedef struct {
+    int tileSizePerUnitFull;
+    int numUnitsWhenPartial;
+} t_tile_pair;
 /*!
  * \brief calculateTileWidthPerUnit
  * \details calculate the best tile size per unit (e.g. PE column/row)
@@ -20,7 +25,7 @@ using namespace GraphRuntime;
  * \param _isWidth[bool]
  * \return
  */
-int calculateTileSizePerUnit(const ConvLayer& _convLayer, int _numUnits, bool _isWidth);
+t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer, int _numUnits, bool _isWidth);
 
 namespace GraphRuntime {
     GraphFactory::GraphFactory(std::string _traceFileName, std::string _parameterFileName)
@@ -108,8 +113,13 @@ namespace GraphRuntime {
             unsigned int numOutputChannelPerGroup = numOutputChannels / (pLayer->getNextNumberGroups());
             unsigned int numOutputWidth = pLayer->getOutputWidth();
             unsigned int numOutputHeight = pLayer->getOutputHeight();
+            unsigned int numInputHeight0 = pLayer->getInputHeights().at(0);
+            unsigned int numInputHeight1 = 0; //override
+            unsigned int numInputWidth0 = pLayer->getInputWidths().at(0);
+            unsigned int numInputWidth1 = 0; //override
             unsigned char numGroupCurrentLayer = pLayer->getCurrentNumberGroups();
             unsigned int numInputChannelPerGroup0 = numInputChannel0 / numGroupCurrentLayer;
+            unsigned int numInputChannelPerGroup1 = 0; //override
 
             unsigned char verticalBorderPadding = 0; //override this later
             unsigned char horizontalBorderPadding = 0; //override this later
@@ -120,8 +130,9 @@ namespace GraphRuntime {
 
             unsigned char inputHeightSPUnitSize = 1; //override if transpose conv
             unsigned char inputWidthSPUnitSize = 1; //override if transpose conv
-            unsigned char sizeOutputTileWidthPerCol = 1; //override
-            unsigned char sizeOutputTileHeight = 1; //override
+            unsigned char sizeOutputTileFullWidthPerCol = 1; //override
+            unsigned char numActiveColsPartialOutputTile = 1; //override
+            unsigned char sizeOutputTileFullHeight = 1; //override
 
             //Arguments related to pSum binary-point shifting
             unsigned char outputShiftBits = 0; //override
@@ -134,10 +145,16 @@ namespace GraphRuntime {
             bool input1ShiftLeft = true;
 
             //Input memory regions
-            unsigned int input0MemoryRegion = 0;
-            unsigned int input1MemoryRegion = 1;
+            unsigned int input0MemoryRegion = pLayer->getInputMemoryLocations().at(0);
+            unsigned int input1MemoryRegion = 0;
             //Output memory regions
-            unsigned int outputMemoryRegion = 2;
+            unsigned int outputMemoryRegion = pLayer->getOutputMemoryLocation();
+
+            //Memory strides
+            signed int memDramBlockIA0ColStride = 0;
+            signed int memDramBlockIA1ColStride = 0;
+            signed int memDramBlockOAColStride = 0;
+            signed int memDramBlockFilterStride = 0; //override
 
 #if defined(SPARSE_SYSTEM)
             bool flagSparseInput = pLayer->getInputSparseFlag();
@@ -146,13 +163,20 @@ namespace GraphRuntime {
             bool flagSparseInput = false;
             bool flagSparseOutput = false;
 #endif
-            bool isComputeLayer = true;
+            bool isComputeLayer = true; //override
+            OPERATION op = ::CONVOLUTION; //override
+            std::string layerName;
             switch (layerType) {
                 case CONVOLUTION: {
                     auto pLayerLocal = dynamic_pointer_cast<ConvLayer>(pLayer);
+                    layerName = "conv_"+to_string(pLayerLocal->getLayerID());
+
                     numInputChannel1 = 0;
-                    sizeOutputTileWidthPerCol = calculateTileSizePerUnit(*pLayerLocal.get(), PE_COLS, true);
-                    sizeOutputTileHeight = calculateTileSizePerUnit(*pLayerLocal.get(), 1, false);
+                    t_tile_pair widthTileInfo = calculateTileSizePerUnit(*pLayerLocal.get(), PE_COLS, true);
+                    sizeOutputTileFullWidthPerCol = widthTileInfo.tileSizePerUnitFull;
+                    numActiveColsPartialOutputTile = widthTileInfo.numUnitsWhenPartial;
+                    t_tile_pair heightTileInfo = calculateTileSizePerUnit(*pLayerLocal.get(), 1, false);
+                    sizeOutputTileFullHeight = heightTileInfo.tileSizePerUnitFull;
                     kernelSize = pLayerLocal->getKernelSize();
                     stride = pLayerLocal->getKernelStride();
                     verticalBorderPadding = pLayerLocal->getInputBorderPadding();
@@ -161,7 +185,7 @@ namespace GraphRuntime {
                     //output precision control
                     int weightFracBits = pLayerLocal->getWeightFracBits();
                     int inputFracBits = pLayerLocal->getInputFracBits().at(0);
-                    int outputFracBits = pLayerLocal->getOutputFracBits().at(0);
+                    int outputFracBits = pLayerLocal->getOutputFracBits();
                     int pSumFracBits = weightFracBits + inputFracBits;
                     if (pSumFracBits > outputFracBits)
                     {
@@ -187,7 +211,7 @@ namespace GraphRuntime {
                     std::shared_ptr<AlignedTensor> pWeight;
                     #if defined(SPARSE_SYSTEM)
                         pWeight.reset(new FlexibleDirectCompressedTensor (
-                                    pLayerLocal->getWeights(),
+                                    fixedPointWeight,
                                     numOutputChannels, //_num3DTensors
                                     numInputChannelPerGroup0, //channel
                                     (unsigned char) kernelSize, //width
@@ -200,7 +224,7 @@ namespace GraphRuntime {
                                 ) );
                     #else
                         pWeight.reset( new AlignedTensor (
-                                            pLayerLocal->getWeights(),
+                                            fixedPointWeight,
                                             numOutputChannels, //_num3DTensors
                                             numInputChannelPerGroup0, //channel
                                             (unsigned char) kernelSize, //width
@@ -225,27 +249,133 @@ namespace GraphRuntime {
                         }
                     }
 
+                    //update weight count vecotr, bias count vector and offsets
+                    pGraph->vecWeightDramBlockStart.push_back(offsetWeightsDramBlock);
+                    pGraph->vecBiasStart.push_back(offsetBiasesDramBlock);
+                    #if defined(SPARSE_SYSTEM)
+                        pGraph->vecWeightTBCountStart.push_back(offsetWeightTBCount);
+                    #endif
+                    pGraph->pWeights.push_back(pWeight);
+                    pGraph->pBiasVector.push_back(pBiasVector);
+                    offsetWeightsDramBlock +=
+                            (pWeight->getExternalMemoryAddressStride() >> WIDE_SIZE_OFFSET) * numOutputChannels;
+                    offsetBiasesDramBlock += numOutputChannels;
+                    #if defined(SPARSE_SYSTEM)
+                        offsetWeightTBCount += numOutputChannels;
+                    #endif
+
                 } //CONVOLUTION
                 break;
                 case ELTADD: {
+                    op = ELT_ADD;
                     auto pLayerLocal = dynamic_pointer_cast<EltAddLayer>(pLayer);
+                    numInputHeight1 = pLayerLocal->getInputHeights().at(1);
+                    numInputWidth1 = pLayerLocal->getInputWidths().at(1);
                     numInputChannel1 = pLayerLocal->getInputChannels().at(1);
+                    numInputChannelPerGroup1 = numInputChannel1 / numGroupCurrentLayer;
+
+                    sizeOutputTileFullWidthPerCol = 1;
+                    numActiveColsPartialOutputTile = numOutputWidth % PE_COLS;
+                    sizeOutputTileFullHeight = 1;
+
+                    //Align input bits
+                    int inputFracBits0 = pLayerLocal->getInputFracBits().at(0);
+                    int inputFracBits1 = pLayerLocal->getInputFracBits().at(1);
+                    int outputFracBits = pLayerLocal->getOutputFracBits();
+                    int pSumFracBits = 0;
+                    if (inputFracBits1 > inputFracBits0)
+                    {
+                        input0ShiftBits = 0;
+                        input0ShiftLeft = TRUE;
+                        input1ShiftBits = inputFracBits1 - inputFracBits0;
+                        input1ShiftLeft = FALSE;
+                        pSumFracBits = inputFracBits0;
+                    }
+                    else
+                    {
+                        input0ShiftBits = inputFracBits0 - inputFracBits1;
+                        input0ShiftLeft = FALSE;
+                        input1ShiftBits = 0;
+                        input1ShiftLeft = TRUE;
+                        pSumFracBits = inputFracBits1;
+                    }
+
+                    //Figure out output bits
+                    if (pSumFracBits > outputFracBits)
+                    {
+                        outputShiftBits = pSumFracBits - outputFracBits;
+                        outputShiftLeft = FALSE;
+                    }
+                    else
+                    {
+                        outputShiftBits = outputFracBits - pSumFracBits;
+                        outputShiftLeft = TRUE;
+                    }
+
+                    //Input memory regions
+                    input1MemoryRegion = pLayerLocal->getInputMemoryLocations().at(1);
+
+                    isComputeLayer = true;
+                    layerName = "eltadd_"+to_string(pLayerLocal->getLayerID());
                 } //ELTADD
                 break;
                 case MAXPOOL: {
+                    op = MAX_POOL;
                     auto pLayerLocal = dynamic_pointer_cast<MaxPoolLayer>(pLayer);
                     kernelSize = pLayerLocal->getKernelSize();
                     stride = pLayerLocal->getKernelStride();
+                    verticalBorderPadding = pLayerLocal->getInputBorderPadding();
+                    horizontalBorderPadding = pLayerLocal->getInputBorderPadding();
+                    numActiveColsPartialOutputTile = numOutputWidth % PE_COLS;
 
-                     //TODO: add precision stuff
+                    //TODO: add precision stuff
+                    int inputFracBits = pLayerLocal->getInputFracBits().at(0);
+                    int outputFacBits = pLayerLocal->getOutputFracBits();
+                    if (inputFracBits > outputFacBits)
+                    {
+                        outputFacBits = inputFracBits - outputFacBits;
+                        outputShiftLeft = FALSE;
+                    }
+                    else
+                    {
+                        outputFacBits = outputFacBits - inputFracBits;
+                        outputShiftLeft = TRUE;
+                    }
+
+                    isComputeLayer = true;
+                    layerName = "maxpool_"+to_string(pLayerLocal->getLayerID());
                 } //MAXPOOL
                 break;
                 case AVGPOOL:{
+                    op = AVG_POOL;
                     auto pLayerLocal = dynamic_pointer_cast<AveragePoolLayer>(pLayer);
                     kernelSize = pLayerLocal->getKernelSize();
                     stride = pLayerLocal->getKernelStride();
+                    verticalBorderPadding = pLayerLocal->getInputBorderPadding();
+                    horizontalBorderPadding = pLayerLocal->getInputBorderPadding();
+                    numActiveColsPartialOutputTile = numOutputWidth % PE_COLS;
                     //TODO: add precision stuff
                     //TODO: Modify the shift direction and amounts, to simulate the effect of the integer divisor
+                    int divisorShift = (int) std::ceil(log2(pLayerLocal->getDivisor()));
+                    assert ( (divisorShift >=0) && "Average pool divisor is less than 1");
+
+                    int inputFracBits = pLayerLocal->getInputFracBits().at(0);
+                    int outputFacBits = pLayerLocal->getOutputFracBits();
+
+                    int tentativeLeftShift = outputFacBits - inputFracBits - divisorShift;
+                    if (tentativeLeftShift >= 0)
+                    {
+                        outputShiftLeft = TRUE;
+                        outputShiftBits = tentativeLeftShift;
+                    }
+                    else
+                    {
+                        outputShiftLeft = FALSE;
+                        outputShiftBits = ((-1) * tentativeLeftShift);
+                    }
+
+                    isComputeLayer = true;
+                    layerName = "avgpool_"+to_string(pLayerLocal->getLayerID());
 
                 } //AVGPOOL
                 break;
@@ -254,16 +384,16 @@ namespace GraphRuntime {
                     auto pLayerLocal = dynamic_pointer_cast<QuantLayer>(pLayer);
                     //Add an input
                     pGraph->vecInputInfo.emplace_back(
-                                t_blob_info(
-                                    .memoryRegionID=pLayerLocal->getOutputMemoryLocation() ,
+                                t_blob_info{
+                                    .memoryRegionID=pLayerLocal->getOutputMemoryLocation(),
                                     .channelPerGroup=numOutputChannels / (pLayerLocal->getNextNumberGroups()),
                                     .group=pLayerLocal->getNextNumberGroups(),
                                     .height=pLayerLocal->getOutputHeight(),
                                     .width=pLayerLocal->getOutputWidth(),
-                                    .numFracBits=pLayerLocal->getInputFracBits(),
+                                    .numFracBits=pLayerLocal->getOutputFracBits(),
                                     .flagCanBeSparse=flagSparseOutput,
                                     .blobName="quant_"+to_string(pLayerLocal->getLayerID())
-                                    )
+                                    }
                                 );
                 } //QUANT
                 break;
@@ -272,7 +402,7 @@ namespace GraphRuntime {
                     auto pLayerLocal = dynamic_pointer_cast<DeQuantLayer>(pLayer);
                     //Add an output
                     pGraph->vecOutputInfo.emplace_back(
-                                t_blob_info(
+                                t_blob_info{
                                     .memoryRegionID=pLayerLocal->getInputMemoryLocations().at(0),
                                     .channelPerGroup=numOutputChannelPerGroup,
                                     .group=pLayerLocal->getCurrentNumberGroups(),
@@ -281,24 +411,242 @@ namespace GraphRuntime {
                                     .numFracBits=pLayerLocal->getInputFracBits().at(0),
                                     .flagCanBeSparse=flagSparseInput,
                                     .blobName="dequant_"+to_string(pLayerLocal->getLayerID())
-                                    )
+                                    }
                                 );
                 } //DEQUANT
                 break;
-            }
+            } //switch
 
-            unsigned int inputHeightSPSize;
-            unsigned int inputWidthSPSize;
+            // Generate instruction if this is a computation layer
+            if (isComputeLayer == true)
+            {
+                unsigned int inputHeightSPSize = inputHeightSPUnitSize*(numInputHeight0-1) + 1;
+                unsigned int inputWidthSPSize = inputWidthSPUnitSize*(numInputWidth0-1) + 1;
+                char instFlagSparseInput = flagSparseInput ? TRUE : FALSE;
+                char instFlagSparseOutput = flagSparseOutput ? TRUE : FALSE;
+                char instEnableRelu = pLayer->getOutputReluFlag() ? TRUE : FALSE;
+
+                //strides
+                memDramBlockIA0ColStride = calculateExternalMemoryAddressStride(
+                            numInputChannelPerGroup0, //channelsPerGroup
+                            numGroupCurrentLayer, //group
+                            numInputHeight0, //height
+                            numInputWidth0, //width
+                            CLUSTER_SIZE, //clusterSize
+                            TRANSFER_SIZE, //transferBlockSize
+                            COMPRESSION_WINDOW_SIZE, //compressionWindowSize
+                            WIDE_SIZE, //numTransferBlockPerDramBlock
+                            false, //isKernel
+                            !flagSparseInput //isDense
+                      ) >> WIDE_SIZE_OFFSET;
+
+                memDramBlockOAColStride = calculateExternalMemoryAddressStride(
+                                numOutputChannelPerGroup, //channelsPerGroup
+                                pLayer->getNextNumberGroups(), //group
+                                numOutputHeight, //height
+                                numOutputWidth, //width
+                                CLUSTER_SIZE, //clusterSize
+                                TRANSFER_SIZE, //transferBlockSize
+                                COMPRESSION_WINDOW_SIZE, //compressionWindowSize
+                                WIDE_SIZE, //numTransferBlockPerDramBlock
+                                false, //isKernel
+                                !flagSparseOutput //isDense
+                            ) >> WIDE_SIZE_OFFSET;
+
+                if (pLayer->getInputMemoryLocations().size() > 1)
+                {
+                    memDramBlockIA1ColStride = calculateExternalMemoryAddressStride(
+                                numInputChannelPerGroup1, //channelsPerGroup
+                                numGroupCurrentLayer, //group
+                                numInputHeight1, //height
+                                numInputWidth1, //width
+                                CLUSTER_SIZE, //clusterSize
+                                TRANSFER_SIZE, //transferBlockSize
+                                COMPRESSION_WINDOW_SIZE, //compressionWindowSize
+                                WIDE_SIZE, //numTransferBlockPerDramBlock
+                                false, //isKernel
+                                !flagSparseInput //isDense
+                          ) >> WIDE_SIZE_OFFSET;
+                }
+                else
+                {
+                    memDramBlockIA1ColStride = 0;
+                }
+
+                t_aligned_ia_mover_instruction_vector vecIAMoverInstruction;
+                t_aligned_oa_mover_instruction_vector vecOAMoverInstruction;
+                instruction_generator (//Type of the operation
+                        //OPERATION op,
+                        op,
+
+                        //t_aligned_ia_mover_instruction_vector & vecIAMoverInstruction,
+                        vecIAMoverInstruction,
+                        //t_aligned_oa_mover_instruction_vector & vecOAMoverInstruction,
+                        vecOAMoverInstruction,
+                        //t_aligned_ia_tile_controller_instruction_vector & vecIATileControlInstruction,
+                        pGraph->vecIATileControllerInstruction,
+                        //t_aligned_oa_tile_controller_instruction_vector & vecOATileControlInstruction,
+                        pGraph->vecOATileControllerInstruction,
+                        //t_aligned_weight_mover_instruction_vector & vecWeightMoverInstruction,
+                        pGraph->vecWMoverInstruction,
+                        //t_aligned_misc_instruction_vector & vecMiscInstruction,
+                        pGraph->vecMiscInstruction,
+
+                        //bool flagIA0ShiftLeft,
+                        input0ShiftLeft,
+                        //unsigned int numIA0ShiftAmount,
+                        input0ShiftBits,
+                        //bool flagIA1ShiftLeft,
+                        input1ShiftLeft,
+                        //unsigned int numIA1ShiftAmount,
+                        input1ShiftBits,
+
+                        //signed int memIA0DramBlockStartIndex,
+                        input0MemoryRegion * MEM_ACTIVATION_REGION_SIZE_PER_SLICE,
+                        //signed int memIA1DramBlockStartIndex,
+                        input1MemoryRegion * MEM_ACTIVATION_REGION_SIZE_PER_SLICE,
+
+                        //signed int memOADramBlockStartIndex,
+                        outputMemoryRegion * MEM_ACTIVATION_REGION_SIZE_PER_SLICE,
+
+                        //memWeightDramBlockStartIndex,
+                        offsetWeightsDramBlock,
+                        //signed int memBiasStartIndex,
+                        offsetBiasesDramBlock,
+
+                        //signed int memIA0DramBlockColStride,
+                        memDramBlockIA0ColStride,
+                        //signed int memIA0DramBlockRowStride,
+                        memDramBlockIA0ColStride * numInputWidth0,
+                        //signed int _memIA0DramBlockGroupStride,
+                        memDramBlockIA1ColStride * numInputWidth0 * numInputHeight0,
+
+
+                        //signed int memIA1DramBlockColStride,
+                        memDramBlockIA1ColStride,
+                        //signed int memIA1DramBlockRowStride,
+                        memDramBlockIA1ColStride * numInputWidth1,
+                        //signed int _memIA1DramBlockGroupStride,
+                        memDramBlockIA1ColStride * numInputWidth1 * numInputHeight1,
+
+                        //signed int memOADramBlockColStride,
+                        memDramBlockOAColStride,
+
+                        //signed int memWeightDramBlockFilterStride,
+                        memDramBlockFilterStride,
+
+                        //TB count memory information. Only one input blob is supported for sparse operation
+                        #if defined(SPARSE_SYSTEM)
+                            //signed int memIATB0CountStart,
+                            input0MemoryRegion * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE,
+                            //unsigned int memIATB0CountColStride,
+                            1,
+                            //signed int memOATBCountStart,
+                            input1MemoryRegion * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE,
+                            //unsigned int memOATBCountColStride,
+                            1,
+                            //signed int memWeightTBCountStart,
+                            offsetWeightTBCount,
+                        #endif
+
+                        //unsigned char flagSparseOutput,
+                        instFlagSparseOutput,
+                        //unsigned char flagSparseInput,
+                        instFlagSparseInput,
+
+                        //unsigned char flagRelu,
+                        instEnableRelu,
+                        //unsigned char outputShiftBits,
+                        outputShiftBits,
+                        //unsigned char flagOutputShiftLeft,
+                        outputShiftLeft,
+
+                        //unsigned short inputSPWidth,
+                        inputWidthSPSize,
+                        //unsigned short inputSPHeight,
+                        inputHeightSPSize,
+
+                        //unsigned char inputSPWidthUnit,
+                        inputWidthSPUnitSize,
+                        //unsigned char inputSPHeightUnit,
+                        inputHeightSPUnitSize,
+
+                        //unsigned char inputWidthPadding,
+                        horizontalBorderPadding,
+                        //unsigned char inputHeightPadding,
+                        verticalBorderPadding,
+
+                        //unsigned char kernelSize,
+                        kernelSize,
+                        //unsigned char kernelStride,
+                        stride,
+
+                        //unsigned char _sizeOutputTileFullHeight,
+                        sizeOutputTileFullHeight,
+                        //unsigned char _sizeOutputTileFullWidthPerCol,
+                        sizeOutputTileFullWidthPerCol,
+                        //unsigned char _numActiveColsPartialOutputTile,
+                        numActiveColsPartialOutputTile,
+                        //unsigned short numInputChannels0,
+                        numInputChannel0,
+                        //unsigned short numInputChannels1,
+                        numInputChannel1,
+                        //unsigned short numGroupsCurrentLayer,
+                        numGroupCurrentLayer,
+                        //unsigned short numOutputChannels,
+                        numOutputChannels,
+                        //unsigned short numGroupsNextLayer
+                        pLayer->getNextNumberGroups()
+                        );
+
+                    //Filling the rest of the information for the first layer
+                   {
+                       std::copy(vecIAMoverInstruction.begin(),
+                                 vecIAMoverInstruction.end(),
+                                 std::back_inserter(pGraph->vecIAMoverInstruction)
+                                 );
+                       std::copy(vecOAMoverInstruction.begin(),
+                                 vecOAMoverInstruction.end(),
+                                 std::back_inserter(pGraph->vecOAMoverInstruction)
+                                 );
+                       int numIAMoverInstructions = vecIAMoverInstruction.size();
+                       int numOAMoverInstructions = vecOAMoverInstruction.size();
+                       pGraph->vecLayerInfo.emplace_back(
+                           GraphRuntime::t_layer_info {.layerName=layerName,
+                            .offsetIAMoverInstruction=offsetIAMoverInstruction,
+                            .numIAMoverInstruction=numIAMoverInstructions,
+                            .offsetOAMoverInstruction=offsetOAMoverInstruction,
+                            .numOAMoverInstructions=numOAMoverInstructions
+                            });
+                       offsetIAMoverInstruction += numIAMoverInstructions;
+                       offsetOAMoverInstruction += numOAMoverInstructions;
+                    }
+            } // if compute layer
+
         } // for layer
-
-
 
         return pGraph;
     }
 }
 
-int calculateTileSizePerUnit(const ConvLayer& _convLayer, int _numUnits, bool _isWidth)
+t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer, int _numUnits, bool _isWidth)
 {
-    return 4;
+    //TODO: To compute the tile size and the number of active roles properly, we need to develop an analytical model.
+    int tileSizePerUnitFull;
+    int numUnitsWhenPartial;
+    if (_isWidth)
+    {
+        int width = _convLayer.getOutputWidth();
+        tileSizePerUnitFull = ((width / PE_COLS) > 8) ? 8 : ((width / PE_COLS) > 8);
+        numUnitsWhenPartial = 1;
+    }
+    else
+    {
+        tileSizePerUnitFull = 8;
+        numUnitsWhenPartial = 1;
+    }
+
+    t_tile_pair result{.tileSizePerUnitFull=tileSizePerUnitFull, .numUnitsWhenPartial=numUnitsWhenPartial};
+    return result;
 }
 
