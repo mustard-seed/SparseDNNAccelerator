@@ -274,7 +274,27 @@ void instruction_generator(
             numDramBlocksToReduceMK = 2;
         }
         break;
-        default:
+        case AVG_POOL : {
+            assert(numOutputChannels == numInputChannels0);
+            assert(flagSparseInput == FALSE);
+            numIAMoverInputChannelsPerGroup0 = BURST_SIZE_BYTE;
+            numIAMoverInputChannelsPerGroup1 = 0;
+            numIAMoverGroup0 = (1 + (numInputChannels0-1) / BURST_SIZE_BYTE);
+            numIAMoverGroup1 = 0;
+            numActiveElementsInFullComputeFold = BURST_SIZE_BYTE;
+            numOAGroupsCurrentLayer = 1;
+            memIA0DramBlockGroupStride = 1;
+            numOutputChannelsBlob0MK = numInputChannels0;
+            numOutputChannelsBlob1MK = 0;
+            numOutputBlocksBlob0MK = 1+ (numOutputChannelsBlob0MK-1) / BURST_SIZE_BYTE;
+            numOutputBlocksBlob1MK = 0;
+            numDramBlocksToReduceMK = kernelSize * kernelSize;
+        }
+    break;
+        default: {
+            std::cout <<"Instruction generator: unsupported operation type: "<<op<<std::endl;
+            assert(false);
+        }
         break;
     }
     unsigned int numOutputChannelsPerGroupCurrentLayer =
@@ -467,11 +487,11 @@ void instruction_generator(
                 /*! Send the input IA instruction */
                 {
                     t_ia_mover_instruction instructionIA;
-                    bool isLastInputTile =
-                            (op == CONVOLUTION || op == MAX_POOL)
-                            && ( iterInputGroup0 == (numIAMoverGroup0-1))
-                            && ((iterPTile+1) == numOutputTileY)
-                            && ((iterQTile+1) == numOutputTileX);
+//                    bool isLastInputTile =
+//                            (op == CONVOLUTION || op == MAX_POOL)
+//                            && ( iterInputGroup0 == (numIAMoverGroup0-1))
+//                            && ((iterPTile+1) == numOutputTileY)
+//                            && ((iterQTile+1) == numOutputTileX);
 //                    unsigned char actualFlagInputSync = (flagInputSync == 0x01) ?
 //                                ((isLastInputTile == true) ? 0x1 : 0x0)
 //                                : 0x0;
@@ -613,12 +633,12 @@ void instruction_generator(
                     {
                         t_ia_mover_instruction instructionIA;
 
-                        bool isLastInputTile =
-                                    (op != CONVOLUTION)
-                                && (op != MAX_POOL)
-                                && ( iterInputGroup1 == (numIAMoverGroup1-1))
-                                && ((iterPTile+1) == numOutputTileY)
-                                && ((iterQTile+1) == numOutputTileX);
+//                        bool isLastInputTile =
+//                                    (op != CONVOLUTION)
+//                                && (op != MAX_POOL)
+//                                && ( iterInputGroup1 == (numIAMoverGroup1-1))
+//                                && ((iterPTile+1) == numOutputTileY)
+//                                && ((iterQTile+1) == numOutputTileX);
 
 //                        unsigned char actualFlagInputSync = (flagInputSync == 0x01) ?
 //                                    ((isLastInputTile == true) ? 0x1 : 0x0)
@@ -684,8 +704,9 @@ void instruction_generator(
                 //Transfer the MISC instruction
                 {
                     unsigned char opCodeField = 0X0;
-                    if (op == ELT_ADD)
+                    if ((op == ELT_ADD) || (op == AVG_POOL))
                     {
+                        //Like elmentwise addition, average pooling first requires adding the elements together
                         opCodeField = 0x0;
                     }
                     else if (op == MAX_POOL)

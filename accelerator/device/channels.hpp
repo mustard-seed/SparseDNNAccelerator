@@ -21,7 +21,7 @@ channel t_conv_drain_tagged channel_drain_conv[PE_ROWS][PE_COLS] __attribute__((
 channel unsigned char channel_drain_token[PE_ROWS][PE_COLS] __attribute__((depth(1)));
 
 #if defined(MISC_ENGINE)
-channel signed char channel_drain_misc[PE_COLS] __attribute__((depth(0)));
+channel t_accumulator channel_drain_misc[PE_COLS] __attribute__((depth(0)));
 channel t_dram_block channel_ia_wide_misc[PE_COLS] __attribute__((depth(0))); 
 channel t_misc_control_packet channel_misc_instruction[PE_COLS]  __attribute__((depth(0)));
 #endif

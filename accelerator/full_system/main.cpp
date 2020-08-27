@@ -27,7 +27,7 @@
 #include "accelerator_wrapper.hpp"
 
 //#define PLAY
-#define REPEAT 1
+#define REPEAT 10
 //#define EMULATE
 //#define PERF_TEST
 //#NOOP
@@ -66,7 +66,8 @@ protected:
                 unsigned char _inputWidth,
                 unsigned char _inputHeight,
                 unsigned char _numInputChannel,
-                unsigned char _numGroupCurrentLayer
+                unsigned char _numGroupCurrentLayer,
+                bool _alternateSign = true
             );
 
     std::vector<float> generateSparseInput (unsigned char _inputWidth,
@@ -121,21 +122,21 @@ protected:
 }; //testFixture
 
 #ifdef PLAY
-TEST_F (testFixture, conv_dense_input_dense_output_plain)
+TEST_F (testFixture, global_avg_pool_sparse_output_grouped)
 {
     unsigned char inputWidth = 4;
     unsigned char inputHeight = 4;
     unsigned char numInputChannel = 8;
     unsigned char numInputGroup = 1;
-    unsigned char numOutputGroup = 1;
+    unsigned char numOutputGroup = 2;
     unsigned char inputHeightSPUnitSize = 1;
     unsigned char inputWidthSPUnitSize = 1;
     unsigned char sizeOutputTileWidthPerColFull = 2;
     unsigned char sizeOutputTileHeight = 4;
     bool flagEnableRelu = false;
     bool flagSparseInput = false;
-    bool flagSparseOutput = false;
-    OPERATION op = CONVOLUTION;
+    bool flagSparseOutput = true;
+    OPERATION op = AVG_POOL;
     float bias = 0.0f;
 
     launch(
@@ -625,6 +626,41 @@ TEST_F (testFixture, concat_sparse_output_grouped)
           );
 }
 
+TEST_F (testFixture, global_avg_pool_sparse_output_grouped)
+{
+    unsigned char inputWidth = 4;
+    unsigned char inputHeight = 4;
+    unsigned char numInputChannel = 8;
+    unsigned char numInputGroup = 1;
+    unsigned char numOutputGroup = 2;
+    unsigned char inputHeightSPUnitSize = 1;
+    unsigned char inputWidthSPUnitSize = 1;
+    unsigned char sizeOutputTileWidthPerColFull = 2;
+    unsigned char sizeOutputTileHeight = 4;
+    bool flagEnableRelu = false;
+    bool flagSparseInput = false;
+    bool flagSparseOutput = true;
+    OPERATION op = AVG_POOL;
+    float bias = 0.0f;
+
+    launch(
+                inputWidth,
+                inputHeight,
+                numInputChannel,
+                numInputGroup,
+                numOutputGroup,
+                inputHeightSPUnitSize,
+                inputWidthSPUnitSize,
+                sizeOutputTileWidthPerColFull,
+                sizeOutputTileHeight,
+                flagEnableRelu,
+                flagSparseInput,
+                flagSparseOutput,
+                op,
+                bias
+          );
+}
+
 TEST_F (testFixture, back_to_back_identity_conv)
 {
     unsigned char inputWidth = 4;
@@ -701,7 +737,8 @@ std::vector<float> testFixture::generateInputTensor(
             unsigned char _inputWidth,
             unsigned char _inputHeight,
             unsigned char _numInputChannel,
-            unsigned char _numGroupCurrentLayer
+            unsigned char _numGroupCurrentLayer,
+            bool _alternateSign
         )
 {
     assert(_numInputChannel % _numGroupCurrentLayer == 0);
@@ -716,7 +753,8 @@ std::vector<float> testFixture::generateInputTensor(
                 for (unsigned char c=0; c<numICPerGroup; c++)
                 {
                     unsigned char globalChannel = g*numICPerGroup+c;
-                    signed char fpBits = (w % 2 == 0) ? globalChannel : -1*((signed char) globalChannel);
+                    signed char fpBits = ((w % 2 == 1) && _alternateSign)
+                            ? -1*((signed char) globalChannel) : globalChannel;
                     fixedPointNumber fpNumber(fpBits, FRAC_WIDTH, INT_WIDTH);
                     inputVector.push_back(fpNumber.convert2Float());
                 }
@@ -1000,11 +1038,36 @@ void testFixture::launch (
 #endif
         }
         break;
+        case AVG_POOL: {
+            assert ((_inputWidth == _inputHeight) && "Input width does not equal input height");
+            assert ((_inputHeight % 2 == 0) && "Input height is not divisible by 2");
+            numInputChannel0 = _numInputChannel;
+            numInputChannel1 = 0;
+            inputHeightSPUnitSize = 1;
+            inputWidthSPUnitSize = 1;
+            numGroupCurrentLayer = 1;
+            sizeOutputTileWidthPerCol = 1;
+            sizeOutputTileHeight = 1;
+            kernelSize = _inputWidth;
+            stride = 1;
+            numOutputChannels = numInputChannel0;
+
+            flagSparseInput = false;
+    #if defined(SPARSE_SYSTEM)
+            flagSparseOutput = _flagSparseOutput;
+    #else
+            flagSparseOutput = false;
+    #endif
+        }
+        break;
+        default:
+            std::cout<<"Unsupported operation type: "<<op<<std::endl;
+            assert(-1);
     } //switch
     inputWidthSPSize = inputWidthSPUnitSize*(_inputWidth-1) + 1;
     inputHeightSPSize = inputHeightSPUnitSize*(_inputHeight-1) + 1;
-    numOutputWidth = (op==MAX_POOL) ? inputWidthSPSize / 2 : inputWidthSPSize;
-    numOutputHeight = (op==MAX_POOL) ? inputHeightSPSize / 2 : inputHeightSPSize;
+    numOutputWidth = (op==MAX_POOL || op==AVG_POOL) ? inputWidthSPSize / kernelSize : inputWidthSPSize;
+    numOutputHeight = (op==MAX_POOL || op==AVG_POOL) ? inputHeightSPSize / kernelSize : inputHeightSPSize;
     verticalBorderPadding = (op==CONVOLUTION) ? ((stride-1) * inputWidthSPSize + kernelSize - stride)/2 : 0;
     horizontalBorderPadding  = (op==CONVOLUTION) ? ((stride-1) * inputHeightSPSize + kernelSize - stride)/2 : 0;
     unsigned char numActiveColsPartialOutputTile = (op==CONVOLUTION) ?
@@ -1041,7 +1104,8 @@ void testFixture::launch (
     }
     else
     {
-        inputTensorDense = generateInputTensor(_inputWidth, _inputHeight, _numInputChannel, numGroupCurrentLayer);
+        bool alternateSign = (op == AVG_POOL) ? false : true;
+        inputTensorDense = generateInputTensor(_inputWidth, _inputHeight, _numInputChannel, numGroupCurrentLayer, alternateSign);
     }
 
     //Generate qunatized weight tensors
@@ -1182,6 +1246,22 @@ void testFixture::launch (
         {
             instOutputShiftBits = 7 - OUTPUT_INT_WIDTH-FRAC_WIDTH;
             instOutputShiftLeft = TRUE;
+        }
+    }
+    else if (op == AVG_POOL)
+    {
+        int divisorShift = (int) std::ceil(log2(kernelSize*kernelSize));
+        assert ( (divisorShift >=0) && "Average pool divisor is less than 1");
+        int tentativeLeftShift = 7 - OUTPUT_INT_WIDTH - FRAC_WIDTH - divisorShift;
+        if (tentativeLeftShift >= 0)
+        {
+            instOutputShiftLeft = TRUE;
+            instOutputShiftBits = tentativeLeftShift;
+        }
+        else
+        {
+            instOutputShiftLeft = FALSE;
+            instOutputShiftBits = ((-1) * tentativeLeftShift);
         }
     }
     else
@@ -1733,6 +1813,11 @@ void testFixture::launch (
                                 case ELT_ADD: {
                                     unsigned char iChGlobal = iGroup*numOutputChannelPerGroup + iCh;
                                     expectedFloat = (iCol % 2 == 0) ? iChGlobal*unitFloat*2.0f : iChGlobal*unitFloat*(-2.0f);
+                                }
+                                break;
+                                case AVG_POOL: {
+                                    unsigned char iChGlobal = iGroup*numOutputChannelPerGroup + iCh;
+                                    expectedFloat = iChGlobal*unitFloat;
                                 }
                                 break;
                             }//switch (op)

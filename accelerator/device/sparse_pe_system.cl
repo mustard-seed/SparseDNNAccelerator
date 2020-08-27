@@ -2094,7 +2094,7 @@ __kernel void kernelMisc ()
 	int colID = get_compute_id(0);
 	while (true)
 	{
-		signed char reductionBlock[BURST_SIZE_BYTE];
+		t_accumulator reductionBlock[BURST_SIZE_BYTE];
 
 		t_misc_control_packet controlPacket = read_channel_intel(channel_misc_instruction[colID]);
 
@@ -2131,7 +2131,7 @@ __kernel void kernelMisc ()
 				{
 					//If max pooling, then intialize the values to the minimum, else zero
 					reductionBlock[iVal] = (opcode == 0x01) ? 
-						0x80 : 0x00;
+						0x8000 : 0x0000;
 				}
 			}
 
@@ -2142,13 +2142,13 @@ __kernel void kernelMisc ()
 				#pragma unroll
 				for (int iValue=0; iValue < BURST_SIZE_BYTE; iValue++)
 				{
-					signed char inputValue = inputDramBlock
+					t_accumulator inputValue = (t_accumulator) (inputDramBlock
 						.transferBlocks[iValue >> (VALUE_TO_CLUSTER_SHIFT + CLUSTER_TO_TRANSFER_SIZE_SHIFT)]
-						.values[iValue & VALUE_DIVIDED_BY_SIMD_SIZE_REMAINDER_MASK];
+						.values[iValue & VALUE_DIVIDED_BY_SIMD_SIZE_REMAINDER_MASK]);
 
-					signed char currentValue = reductionBlock[iValue];
+					t_accumulator currentValue = reductionBlock[iValue];
 
-					signed char newValue;
+					t_accumulator newValue;
 					if (opcode == 0x00)
 					{
 						newValue = inputValue + currentValue;
@@ -2520,9 +2520,8 @@ __kernel void kernelOABuffer ()
 				}
 				else
 				{
-					signed char miscOutput = read_channel_nb_intel(channel_drain_misc[colID], &readSuccess);
-					//OpenCL should handle sign extension
-					wideOutput = (t_accumulator) miscOutput;
+					wideOutput = read_channel_nb_intel(channel_drain_misc[colID], &readSuccess);
+
 				}
 				
 				
