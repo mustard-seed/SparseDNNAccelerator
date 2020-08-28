@@ -6,7 +6,7 @@
 #include <map>
 
 //#define PLAY
-//#define EMULATE
+#define EMULATE
 #define INFERENCE_REPEAT 10
 
 class testFixture : public ::testing::Test {
@@ -27,12 +27,12 @@ TEST_F(testFixture, miniResNet)
     /*
      *Test trace: https://drive.google.com/drive/folders/1k9m5-DMOAJaM3-psX6jmItSoer11TBqf?usp=sharing
     */
-    std::string traceFileName = "testTrace_trace.yaml";
-    std::string traceParameterFile = "testTrace_parameters.yaml";
-    std::string inoutFile = "testTrace_inout.yaml";
+    std::string traceFileName = "tinyTrace_trace.yaml";
+    std::string traceParameterFile = "tinyTrace_parameters.yaml";
+    std::string inoutFile = "tinyTrace_inout.yaml";
     std::map<std::string, std::string> traceName2BlobName;
-    traceName2BlobName.insert(std::pair<std::string, std::string>("quantstub_0", "input"));
-    traceName2BlobName.insert(std::pair<std::string, std::string>("dequantstub_15", "output"));
+    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
+    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_6", "output"));
     launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
 }
 
@@ -89,7 +89,7 @@ void testFixture::launch(std::string _traceFileName,
        int blobID = 0;
        for (const auto& inputInfo: vecInputInfo)
        {
-           std::string layerName = inputInfo.blobName;
+           std::string layerName = _traceName2BlobName[inputInfo.blobName];
            YAML::Node blob = rawBlobs[layerName];
            int size = inputInfo.group
                    * inputInfo.channelPerGroup
@@ -101,7 +101,7 @@ void testFixture::launch(std::string _traceFileName,
            {
                for (int h=0; h<inputInfo.height; h++)
                {
-                   for (int w=0; h<inputInfo.width; w++)
+                   for (int w=0; w<inputInfo.width; w++)
                    {
                        for (int c=0; c<inputInfo.channelPerGroup; c++)
                        {

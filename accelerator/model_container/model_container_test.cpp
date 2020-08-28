@@ -86,7 +86,7 @@ TEST(MODEL_CONTAINER_TEST, LoadTrace)
     //Spot check quant loading stats
     EXPECT_EQ(vecLayers.at(0)->getLayerType(), QUANT);
     EXPECT_EQ((dynamic_pointer_cast<Layer>(vecLayers.at(0)))->getOutputHeight(), 32);
-    EXPECT_EQ((dynamic_pointer_cast<Layer>(vecLayers.at(0)))->getOutputFracBits(), 4);
+    EXPECT_EQ((dynamic_pointer_cast<Layer>(vecLayers.at(0)))->getOutputFracBits(), 5);
 
     //Spot check dequant loading stats
     EXPECT_EQ(vecLayers.at(15)->getLayerType(), DEQUANT);

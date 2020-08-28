@@ -145,7 +145,7 @@ namespace GraphRuntime {
             bool input1ShiftLeft = true;
 
             //Input memory regions
-            unsigned int input0MemoryRegion = pLayer->getInputMemoryLocations().at(0);
+            unsigned int input0MemoryRegion = 0; //override
             unsigned int input1MemoryRegion = 0;
             //Output memory regions
             unsigned int outputMemoryRegion = pLayer->getOutputMemoryLocation();
@@ -170,6 +170,7 @@ namespace GraphRuntime {
                 case CONVOLUTION: {
                     auto pLayerLocal = dynamic_pointer_cast<ConvLayer>(pLayer);
                     layerName = "conv_"+to_string(pLayerLocal->getLayerID());
+
 
                     numInputChannel1 = 0;
                     t_tile_pair widthTileInfo = calculateTileSizePerUnit(*pLayerLocal.get(), PE_COLS, true);
@@ -264,6 +265,9 @@ namespace GraphRuntime {
                         offsetWeightTBCount += numOutputChannels;
                     #endif
 
+                    //Memory region
+                    input0MemoryRegion = pLayer->getInputMemoryLocations().at(0);
+
                 } //CONVOLUTION
                 break;
                 case ELTADD: {
@@ -313,6 +317,7 @@ namespace GraphRuntime {
                     }
 
                     //Input memory regions
+                    input0MemoryRegion = pLayer->getInputMemoryLocations().at(0);
                     input1MemoryRegion = pLayerLocal->getInputMemoryLocations().at(1);
 
                     isComputeLayer = true;
@@ -341,6 +346,9 @@ namespace GraphRuntime {
                         outputFacBits = outputFacBits - inputFracBits;
                         outputShiftLeft = TRUE;
                     }
+
+                    //Input memory regions
+                    input0MemoryRegion = pLayer->getInputMemoryLocations().at(0);
 
                     isComputeLayer = true;
                     layerName = "maxpool_"+to_string(pLayerLocal->getLayerID());
@@ -373,6 +381,9 @@ namespace GraphRuntime {
                         outputShiftLeft = FALSE;
                         outputShiftBits = ((-1) * tentativeLeftShift);
                     }
+
+                    //Input memory regions
+                    input0MemoryRegion = pLayer->getInputMemoryLocations().at(0);
 
                     isComputeLayer = true;
                     layerName = "avgpool_"+to_string(pLayerLocal->getLayerID());
@@ -637,7 +648,7 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer, int _numUnits, bool 
     if (_isWidth)
     {
         int width = _convLayer.getOutputWidth();
-        tileSizePerUnitFull = ((width / PE_COLS) > 8) ? 8 : ((width / PE_COLS) > 8);
+        tileSizePerUnitFull = ((width / PE_COLS) > 8) ? 8 : (width / PE_COLS);
         numUnitsWhenPartial = 1;
     }
     else
