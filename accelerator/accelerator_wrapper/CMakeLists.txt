@@ -1,5 +1,21 @@
 include (${PROJECT_SOURCE_DIR}/config.cmake)
 
+set (PREPROCESSOR_DEFS
+#        -DWEIGHT_MEMORY_TEST
+#        -DHW_DEBUG
+        FLEXIBLE_BITMASK_COMPRESSION
+        WEIGHT_MEMORY
+        MEMORY_READER
+        MEMORY_WRITER
+        WEIGHT_MEMORY_INTERCONNECT
+        ACTIVATION_MEMORY_INTERCONNECT
+        PE_SYSTEM
+        IA_MEMORY
+        OA_MEMORY
+        FULL_SYSTEM
+        MISC_ENGINE
+        )
+
 set (LIBRARY_NAME "accelerator_wrapper")
 ###########################################################
 #Intel FPGA OpenCL SDK Compile and linkage configurations

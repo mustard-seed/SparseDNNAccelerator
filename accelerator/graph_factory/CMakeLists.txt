@@ -68,6 +68,10 @@ target_link_libraries(${LIB_NAME}
     PUBLIC
     aocl_utils accelerator_wrapper model_container
     )
+#target_compile_definitions(${LIB_NAME}
+#    PUBLIC
+#    ${PREPROCESSOR_DEFS}
+#    )
 
 set_target_properties (${LIB_NAME} PROPERTIES "CMAKE_CXX_FLAGS" "${CMAKE_CXX_FLAGS}")
 
