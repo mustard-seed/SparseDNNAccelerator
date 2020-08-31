@@ -2445,13 +2445,13 @@ __kernel void kernelOABuffer ()
 				numOutputsPerStrip = controlPacket.numOutputsPerStrip;
 				numStripsToAccess = controlPacket.numStripsToAccess;
 				oaStridePerCol = controlPacket.iaStridePerCol;
-                isDrainBuffer = (controlPacket.controlBits >> 7) & 0x1;
+                isDrainBuffer = (controlPacket.controlBits >> 8) & 0x1;
 
 				//Information relevant for loading the cache only
-                accumulatorShiftDirCatShiftAmount = controlPacket.controlBits & 0xF;
-                enableRelu = (controlPacket.controlBits >> 6) & 0x1;
-                enableSparsification = ( controlPacket.controlBits >> 4) & 0x1;
-                flagSourceIsMisc = (controlPacket.controlBits >> 5) & 0x1;
+                accumulatorShiftDirCatShiftAmount = controlPacket.controlBits & 0x1F;
+                enableRelu = (controlPacket.controlBits >> 7) & 0x1;
+                enableSparsification = ( controlPacket.controlBits >> 6) & 0x1;
+                flagSourceIsMisc = (controlPacket.controlBits >> 6) & 0x1;
 
                 iStrip = 0;
 				
@@ -2697,7 +2697,7 @@ __kernel void kernelOATileController (
 	    	bufferPacketTagged.bufferPacket.numOutputsPerStrip = numActivePeRows;
 	    	bufferPacketTagged.bufferPacket.numStripsToAccess = numOutputTileHeightxWidth;
 	    	bufferPacketTagged.bufferPacket.iaStridePerCol = numOutputChannels;
-	    	bufferPacketTagged.bufferPacket.controlBits = outputModifierBits & 0x7F;
+	    	bufferPacketTagged.bufferPacket.controlBits = outputModifierBits;
 	    	bufferPacketTagged.maxColID = (numActivePeCols - 1);
 
 	    	write_channel_intel(channel_oa_noc_control[0], bufferPacketTagged);
@@ -2733,7 +2733,7 @@ __kernel void kernelOATileController (
 			bufferPacketTagged.bufferPacket.numOutputsPerStrip = numChannelsInGroupNextLayer;
 	    	bufferPacketTagged.bufferPacket.numStripsToAccess = numOutputTileHeightxWidth;
 	    	bufferPacketTagged.bufferPacket.iaStridePerCol = numOutputChannels;
-	    	bufferPacketTagged.bufferPacket.controlBits = (((unsigned char) 0x1) << 0x7 ) | (outputModifierBits & 0x7F);
+	    	bufferPacketTagged.bufferPacket.controlBits = (((unsigned short) 0x1) << 0x8 ) | ((unsigned short) outputModifierBits);
 	    	bufferPacketTagged.maxColID = (numActivePeCols - 1);
 
 	    	write_channel_intel(channel_oa_noc_control[0], bufferPacketTagged);
@@ -2841,8 +2841,8 @@ __kernel void kernelOAControlTee ()
 		teePacket.numLocalTileHeightxLocalTileWidth = controlPacketTagged.bufferPacket.numStripsToAccess;
 		teePacket.flagSourceCatFlagSparseFlagMaxColID = (
 				((unsigned char) (maxColID & 0x0F))
-				| (controlPacketTagged.bufferPacket.controlBits & 0x30));
-		uint1_t drainBuffer = (controlPacketTagged.bufferPacket.controlBits & 0x80) >> 7;
+				| (controlPacketTagged.bufferPacket.controlBits & 0x060));
+		uint1_t drainBuffer = (controlPacketTagged.bufferPacket.controlBits & 0x100) >> 8;
 		if (drainBuffer == TRUE)
 		{
 			//Write to the OA Tee
@@ -3083,7 +3083,7 @@ __kernel void kernelOATee ()
 					regIsLastTee = ((tempTeeControl.flagSourceCatFlagSparseFlagMaxColID & 0x0F) > colID) ? FALSE: TRUE;
 					regStripsInTile = tempTeeControl.numLocalTileHeightxLocalTileWidth;
 					iStripsInTile = 0;
-					regFlagSparse = tempTeeControl.flagSourceCatFlagSparseFlagMaxColID >> 4;
+					regFlagSparse = tempTeeControl.flagSourceCatFlagSparseFlagMaxColID >> 5;
 					//uint1_t tempFlagDrainMisc = tempTeeControl.flagSourceCatFlagSparseFlagMaxColID >> 5;
 
 					// if (tempFlagDrainMisc == TRUE)

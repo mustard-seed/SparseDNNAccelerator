@@ -884,6 +884,9 @@ namespace GraphRuntime {
 
         //The first layer is a special case
         {
+            #if defined(HOST_DEBUG)
+                std::cout<<"Launching layer "<<vecLayerInfo.at(0).layerName<<std::endl;
+            #endif
             #if defined(SPARSE_SYSTEM)
                 cl_uint iaArgIdx = 3;
                 cl_uint oaArgIdx = 3;
@@ -907,10 +910,15 @@ namespace GraphRuntime {
 
             status = clCQIAMover.enqueueTask(kernelIAMover, NULL, NULL);
             aocl_utils_cpp::checkError(status, "Failed to launch kernelIAMover!");
+
+            clCQOAMover.finish();
         }
 
         for (int i=1; i<numLayers; i++)
         {
+            #if defined(HOST_DEBUG)
+                std::cout<<"Launching layer "<<vecLayerInfo.at(i).layerName<<std::endl;
+            #endif
             #if defined(SPARSE_SYSTEM)
                 cl_uint iaArgIdx = 3;
                 cl_uint oaArgIdx = 3;
@@ -918,6 +926,7 @@ namespace GraphRuntime {
                 cl_uint iaArgIdx = 2;
                 cl_uint oaArgIdx = 2;
             #endif
+
             //unsigned int numInstruction
             kernelIAMover.setArg(iaArgIdx++, (cl_uint) vecLayerInfo.at(i).numIAMoverInstruction);
             //offsetInstruction
@@ -938,9 +947,14 @@ namespace GraphRuntime {
             std::vector<cl::Event> waitList = {vecOAFinishes.at(i-1)};
             status = clCQIAMover.enqueueTask(kernelIAMover, &waitList, NULL);
             aocl_utils_cpp::checkError(status, "Failed to launch kernelIAMover!");
+
+            clCQOAMover.finish();
         }
 
-        clCQOAMover.finish();
+        //clCQOAMover.finish();
+        #if defined(HOST_DEBUG)
+            std::cout<<"Done all layers."<<std::endl;
+        #endif
 
 
         /*

@@ -7,7 +7,7 @@
 
 //#define PLAY
 #define EMULATE
-#define INFERENCE_REPEAT 10
+#define INFERENCE_REPEAT 1
 
 class testFixture : public ::testing::Test {
 protected:
@@ -27,12 +27,12 @@ TEST_F(testFixture, miniResNet)
     /*
      *Test trace: https://drive.google.com/drive/folders/1k9m5-DMOAJaM3-psX6jmItSoer11TBqf?usp=sharing
     */
-    std::string traceFileName = "tinyTrace_trace.yaml";
-    std::string traceParameterFile = "tinyTrace_parameters.yaml";
-    std::string inoutFile = "tinyTrace_inout.yaml";
+    std::string traceFileName = "convTrace_trace.yaml";
+    std::string traceParameterFile = "convTrace_parameters.yaml";
+    std::string inoutFile = "convTrace_inout.yaml";
     std::map<std::string, std::string> traceName2BlobName;
     traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
-    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_6", "output"));
+    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_2", "output"));
     launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
 }
 
@@ -138,7 +138,7 @@ void testFixture::launch(std::string _traceFileName,
            {
                for (int h=0; h<blobInfo.height; h++)
                {
-                   for (int w=0; h<blobInfo.width; w++)
+                   for (int w=0; w<blobInfo.width; w++)
                    {
                        for (int c=0; c<blobInfo.channelPerGroup; c++)
                        {
@@ -148,7 +148,7 @@ void testFixture::launch(std::string _traceFileName,
                            float actual = actualResult.at(iter++);
                            EXPECT_FLOAT_EQ(actual, expected)
                                    <<"Inference output disagreement at [tensor, group, channel, height, col]: ["
-                                   <<blobID<<" "<<g<<" "<<c<<" "<<h<<" "<<w<<std::endl
+                                   <<blobID<<" "<<g<<" "<<c<<" "<<h<<" "<<w<<"]"<<std::endl
                                    <<"Expected: "<<expected<<std::endl
                                    <<"Actual: "<<actual<<std::endl;
                        }

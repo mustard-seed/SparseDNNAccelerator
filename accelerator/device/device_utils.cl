@@ -81,8 +81,8 @@ signed char modifyCharOutput (
         unsigned char shiftDirectionCatShiftAmount
         )
 {
-    uint1_t shiftLeft = (shiftDirectionCatShiftAmount >> 0x3) & 0x01;
-    unsigned char shiftAmount = shiftDirectionCatShiftAmount & 0x07;
+    uint1_t shiftLeft = (shiftDirectionCatShiftAmount >> 0x4) & 0x01;
+    unsigned char shiftAmount = shiftDirectionCatShiftAmount & 0x0F;
     uint1_t originalIsNonNegative = (input >= 0) ? TRUE : FALSE;
 
     //Handle the right shift

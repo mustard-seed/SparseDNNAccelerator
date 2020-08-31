@@ -27,8 +27,8 @@
 #include "accelerator_wrapper.hpp"
 
 //#define PLAY
-#define REPEAT 10
-//#define EMULATE
+#define REPEAT 1
+#define EMULATE
 //#define PERF_TEST
 //#NOOP
 //#define PROFILE

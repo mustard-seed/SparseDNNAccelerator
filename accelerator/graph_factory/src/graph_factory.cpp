@@ -156,6 +156,12 @@ namespace GraphRuntime {
             signed int memDramBlockOAColStride = 0;
             signed int memDramBlockFilterStride = 0; //override
 
+            int offsetWeightsDramBlockIncrement = 0; //override
+            int offsetBiasesDramBlockIncrement = 0; //override
+        #if defined(SPARSE_SYSTEM)
+            int offsetWeightTBCountIncrement = 0; //override
+        #endif
+
 #if defined(SPARSE_SYSTEM)
             bool flagSparseInput = pLayer->getInputSparseFlag();
             bool flagSparseOutput = pLayer->getOutputSparseFlag();
@@ -201,13 +207,26 @@ namespace GraphRuntime {
 
                     //Prepare the weights
                     //Convert the weights from float to fixed point
+                    //Also convert from CHW to HWC
                     std::vector<float> floatWeights = pLayerLocal->getWeights();
                     std::vector<fixedPointNumber> fixedPointWeight;
                     fixedPointWeight.resize(floatWeights.size());
-                    for (unsigned int i=0; i<floatWeights.size(); i++)
                     {
-                        fixedPointWeight.at(i) = fixedPointNumber(floatWeights.at(i), weightFracBits, 7-weightFracBits);
+                        unsigned int i=0;
+                        for (unsigned int h=0; h<kernelSize; h++)
+                        {
+                            for (unsigned int w=0; w<kernelSize; w++)
+                            {
+                                for (unsigned int c=0; c<numInputChannelPerGroup0; c++)
+                                {
+                                    unsigned int traceIdx = c*kernelSize*kernelSize + h*kernelSize + w;
+                                    fixedPointWeight.at(i++) = fixedPointNumber(floatWeights.at(traceIdx), weightFracBits, 7-weightFracBits);
+                                    //fixedPointWeight.at(i++) = fixedPointNumber(0.0f, weightFracBits, 7-weightFracBits);
+                                }
+                            }
+                        }
                     }
+
                     //Align and compress the weight tensor
                     std::shared_ptr<AlignedTensor> pWeight;
                     #if defined(SPARSE_SYSTEM)
@@ -230,7 +249,7 @@ namespace GraphRuntime {
                                             numInputChannelPerGroup0, //channel
                                             (unsigned char) kernelSize, //width
                                             (unsigned char) kernelSize, //height
-                                            maxScalarIndexInChannelGroup,
+                                            numInputChannelPerGroup0-1,
                                             maxClusterIndexInTransferBlock,
                                             maxScalarIndexInCluster,
                                             true //isKernel
@@ -258,11 +277,11 @@ namespace GraphRuntime {
                     #endif
                     pGraph->pWeights.push_back(pWeight);
                     pGraph->pBiasVector.push_back(pBiasVector);
-                    offsetWeightsDramBlock +=
+                    offsetWeightsDramBlockIncrement =
                             (pWeight->getExternalMemoryAddressStride() >> WIDE_SIZE_OFFSET) * numOutputChannels;
-                    offsetBiasesDramBlock += numOutputChannels;
+                    offsetBiasesDramBlockIncrement = numOutputChannels;
                     #if defined(SPARSE_SYSTEM)
-                        offsetWeightTBCount += numOutputChannels;
+                        offsetWeightTBCountIncrement = numOutputChannels;
                     #endif
 
                     //Memory region
@@ -632,6 +651,12 @@ namespace GraphRuntime {
                        offsetIAMoverInstruction += numIAMoverInstructions;
                        offsetOAMoverInstruction += numOAMoverInstructions;
                     }
+
+                    offsetWeightsDramBlock += offsetWeightsDramBlockIncrement;
+                    offsetBiasesDramBlock += offsetBiasesDramBlockIncrement;
+                    #if defined(SPARSE_SYSTEM)
+                        offsetWeightTBCount += offsetWeightTBCountIncrement;
+                    #endif
             } // if compute layer
 
         } // for layer

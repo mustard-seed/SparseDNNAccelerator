@@ -400,11 +400,11 @@ void instruction_generator(
                 unsigned char scaleShift = outputShiftBits;
                 unsigned char sourceIsMisc = (op != CONVOLUTION) ? 0x01 : 0x00;
                 instructionOAControl.flagSparseCatFlagReluCatFlagSourceCatShift = (t_uchar)
-                        (   ((t_uchar) (scaleShift & 0x07))
-                            | ((t_uchar) ((leftShift & 0x01) << 0x3))
-                            | (t_uchar)((flagRelu & 0x01) << 0x6)
-                            | (t_uchar)((flagSparseOutput & 0x01) << 0x04)
-                            | (t_uchar)((sourceIsMisc & 0x01) << 0x5) //drain source is convolution
+                        (   ((t_uchar) (scaleShift & 0x0F))
+                            | ((t_uchar) ((leftShift & 0x01) << 0x4))
+                            | (t_uchar)((flagRelu & 0x01) << 0x7)
+                            | (t_uchar)((flagSparseOutput & 0x01) << 0x05)
+                            | (t_uchar)((sourceIsMisc & 0x01) << 0x6) //drain source is convolution
                         );
                 vecOATileControlInstruction.push_back(instructionOAControl);
             }
@@ -505,8 +505,8 @@ void instruction_generator(
                              | ((((t_uchar) flagSparseInput) & 0x01) << 0x06) //Sparse flag for the input tensor
                             );
                     t_uchar flagLeftShiftCatShiftAmount = flagIA0ShiftLeft ?
-                                (0x08 | (0x07 & numIA0ShiftAmount))
-                              : (0x00 | (0x07 & numIA0ShiftAmount));
+                                (0x10 | (0x0F & numIA0ShiftAmount))
+                              : (0x00 | (0x0F & numIA0ShiftAmount));
                     instructionIA.flagLeftShiftCatShiftAmount = flagLeftShiftCatShiftAmount;
                     instructionIA.memBlockStart = (t_int) (
                                 memIA0DramBlockStartIndex

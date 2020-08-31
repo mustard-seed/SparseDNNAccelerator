@@ -117,8 +117,8 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
     //Bit [7]: Flag for selecting the memory region to read from
     t_uchar memRegionCatSparseFlagCatDestinationCatSyncCatNumActiveCols;
 
-    //Bit [2:0] Shift amount
-    //Bit [3] Flag for left/right shift. 0 for right, 1 for left
+    //Bit [3:0] Shift amount
+    //Bit [4] Flag for left/right shift. 0 for right, 1 for left
     t_uchar flagLeftShiftCatShiftAmount;
 
     //Arch parameter: Starting index of the input dram block in the input memory region
@@ -310,11 +310,11 @@ typedef struct __attribute__((packed)) __attribute__((aligned(16)))
     t_uchar numActiveCols;
 
     //Concatenated signal
-    //[2:0] number of bits to shift the convolution output
-    //[3] Shift direction. 1 for left shift, 0 for right shift
-    //[4] Enable sparsification. 1 for TRUE, 0 for otherwise
-    //[5] Source of the output. 0 for convolution engine, 1 for misc.
-    //[6] Enable Relu. 1 for TRUE, 0 for false
+    //[3:0] number of bits to shift the convolution output
+    //[4] Shift direction. 1 for left shift, 0 for right shift
+    //[5] Enable sparsification. 1 for TRUE, 0 for otherwise
+    //[6] Source of the output. 0 for convolution engine, 1 for misc.
+    //[7] Enable Relu. 1 for TRUE, 0 for false
     t_uchar flagSparseCatFlagReluCatFlagSourceCatShift;
     
 } t_oa_tile_controller_instruction;
@@ -431,13 +431,13 @@ typedef struct __attribute__((packed))
 
     /*
         Control bits
-        Bit 3:0: Shift direciton and the number of bits to shift the accumulator value from the convolution PE array. Only relevant for loading
-        Bit 4: Enable sparsification. Only relevant for the convolutional kernel during ending
-        Bit 5: Drainage source. 1: from the MISC kernel. 0: from the convolution kernel.
-        Bit 6: Enable Relu. Only relevant for loading
-        Bit 7: Load from engine (0) or drain the buffer (1)
+        Bit 4:0: Shift direciton and the number of bits to shift the accumulator value from the convolution PE array. Only relevant for loading
+        Bit 5: Enable sparsification. Only relevant for the convolutional kernel during ending
+        Bit 6: Drainage source. 1: from the MISC kernel. 0: from the convolution kernel.
+        Bit 7: Enable Relu. Only relevant for loading
+        Bit 8: Load from engine (0) or drain the buffer (1)
     */
-    unsigned char controlBits;
+    unsigned short controlBits;
 
 } t_output_tile_buffer_packet;
 
