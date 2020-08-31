@@ -2450,7 +2450,7 @@ __kernel void kernelOABuffer ()
 				//Information relevant for loading the cache only
                 accumulatorShiftDirCatShiftAmount = controlPacket.controlBits & 0x1F;
                 enableRelu = (controlPacket.controlBits >> 7) & 0x1;
-                enableSparsification = ( controlPacket.controlBits >> 6) & 0x1;
+                enableSparsification = ( controlPacket.controlBits >> 5) & 0x1;
                 flagSourceIsMisc = (controlPacket.controlBits >> 6) & 0x1;
 
                 iStrip = 0;
@@ -5302,7 +5302,7 @@ __kernel void kernelDensePE ()
 					);
 			if (success == true)
 			{
-				EMULATOR_PRINT(("[DENSE PE DRAIN (%d, %d)] Sent a value.\n", idy, idx));
+				EMULATOR_PRINT(("[DENSE PE DRAIN (%d, %d)] Sent a value. %#06x \n", idy, idx, drainTransportBlock.value));
 				sendNextPESuccess = TRUE;
 			}
 		}

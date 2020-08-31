@@ -207,23 +207,26 @@ namespace GraphRuntime {
 
                     //Prepare the weights
                     //Convert the weights from float to fixed point
-                    //Also convert from CHW to HWC
                     std::vector<float> floatWeights = pLayerLocal->getWeights();
                     std::vector<fixedPointNumber> fixedPointWeight;
                     fixedPointWeight.resize(floatWeights.size());
                     {
-                        unsigned int i=0;
-                        for (unsigned int h=0; h<kernelSize; h++)
+//                        unsigned int i=0;
+//                        for (unsigned int h=0; h<kernelSize; h++)
+//                        {
+//                            for (unsigned int w=0; w<kernelSize; w++)
+//                            {
+//                                for (unsigned int c=0; c<numInputChannelPerGroup0; c++)
+//                                {
+//                                    unsigned int traceIdx = c*kernelSize*kernelSize + h*kernelSize + w;
+//                                    fixedPointWeight.at(i++) = fixedPointNumber(floatWeights.at(traceIdx), weightFracBits, 7-weightFracBits);
+//                                    //fixedPointWeight.at(i++) = fixedPointNumber(0.0f, weightFracBits, 7-weightFracBits);
+//                                }
+//                            }
+//                        }
+                        for (unsigned int i=0; i<floatWeights.size(); i++)
                         {
-                            for (unsigned int w=0; w<kernelSize; w++)
-                            {
-                                for (unsigned int c=0; c<numInputChannelPerGroup0; c++)
-                                {
-                                    unsigned int traceIdx = c*kernelSize*kernelSize + h*kernelSize + w;
-                                    fixedPointWeight.at(i++) = fixedPointNumber(floatWeights.at(traceIdx), weightFracBits, 7-weightFracBits);
-                                    //fixedPointWeight.at(i++) = fixedPointNumber(0.0f, weightFracBits, 7-weightFracBits);
-                                }
-                            }
+                             fixedPointWeight.at(i) = fixedPointNumber(floatWeights.at(i), weightFracBits, 7-weightFracBits);
                         }
                     }
 

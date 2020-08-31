@@ -9,8 +9,8 @@ t_operand modifyOutput (
 		uint1_t enableRelu
 		)
 {
-    uint1_t shiftLeft = (shiftDirectionCatShiftAmount & 0x08) >> 0x3;
-    unsigned char shiftAmount = shiftDirectionCatShiftAmount & 0x07;
+    uint1_t shiftLeft = (shiftDirectionCatShiftAmount >> 0x4) & 0x01;
+    unsigned char shiftAmount = shiftDirectionCatShiftAmount & 0x0F;
     uint1_t preShiftIsNonNegative;
 
 
