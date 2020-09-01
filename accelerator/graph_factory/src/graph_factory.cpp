@@ -258,6 +258,8 @@ namespace GraphRuntime {
                                             true //isKernel
                                         ));
                     #endif
+                    //Filter stride
+                    memDramBlockFilterStride = (pWeight->getExternalMemoryAddressStride()) >> WIDE_SIZE_OFFSET;
 
                     //Prepare the fixed-point bias vector
                     std::shared_ptr<t_aligned_short_vector> pBiasVector = std::make_shared<t_aligned_short_vector>(numOutputChannels, 0x0);
@@ -289,6 +291,7 @@ namespace GraphRuntime {
 
                     //Memory region
                     input0MemoryRegion = pLayer->getInputMemoryLocations().at(0);
+
 
                 } //CONVOLUTION
                 break;

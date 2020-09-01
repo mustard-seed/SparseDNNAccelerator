@@ -146,7 +146,7 @@ void testFixture::launch(std::string _traceFileName,
                                    + h * blobInfo.width + w;
                            float expected = blob[rawIter].as<float>();
                            float actual = actualResult.at(iter++);
-                           EXPECT_FLOAT_EQ(actual, expected)
+                           EXPECT_TRUE(std::abs(actual -expected) <= 1.0 / ((float) (1 << blobInfo.numFracBits)))
                                    <<"Inference output disagreement at [tensor, group, channel, height, col]: ["
                                    <<blobID<<" "<<g<<" "<<c<<" "<<h<<" "<<w<<"]"<<std::endl
                                    <<"Expected: "<<expected<<std::endl
