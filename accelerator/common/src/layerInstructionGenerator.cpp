@@ -534,11 +534,11 @@ void instruction_generator(
                         instructionIA.tileSPWidth = (t_uchar) maxTN;
                         unsigned char inputTileLeftPadding = (iterNGlobal < inputWidthPadding) ?
                                     inputWidthPadding : 0;
-                        unsigned char inputTileRightPadding = ((iterNGlobal + maxTN) >= (inputWidthPadding + inputDenseWidth)) ?
+                        unsigned char inputTileRightPadding = ((iterNGlobal + maxTN) > (inputWidthPadding + inputDenseWidth)) ?
                                     inputWidthPadding : 0;
                         unsigned char inputTileTopPadding = (iterMGlobal < inputHeightPadding) ?
                                     inputHeightPadding : 0;
-                        unsigned char inputTileBottomPadding = ((iterMGlobal + maxTM) >= (inputHeightPadding + inputDenseHeight)) ?
+                        unsigned char inputTileBottomPadding = ((iterMGlobal + maxTM) > (inputHeightPadding + inputDenseHeight)) ?
                                     inputHeightPadding : 0;
                         instructionIA.concatPadding = (t_uchar) (
                                           (inputTileLeftPadding & 0x03)
@@ -652,8 +652,8 @@ void instruction_generator(
                                  | ((((t_uchar) 0x0) & 0x01) << 0x06) //Sparse flag for the input tensor. Will be dense
                                 );
                         t_uchar flagLeftShiftCatShiftAmount = flagIA1ShiftLeft ?
-                                    (0x08 | (0x07 & numIA1ShiftAmount))
-                                  : (0x00 | (0x07 & numIA1ShiftAmount));
+                                    (0x10 | (0x0F & numIA1ShiftAmount))
+                                  : (0x00 | (0x0F & numIA1ShiftAmount));
                         instructionIA.flagLeftShiftCatShiftAmount = flagLeftShiftCatShiftAmount;
                         instructionIA.memBlockStart = (t_int) (
                                     memIA1DramBlockStartIndex
