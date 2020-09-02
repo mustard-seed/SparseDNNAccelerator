@@ -4524,7 +4524,7 @@ __kernel void kernelOperandFilter ()
 					&readSuccess);
 			#endif
 			weightTBAvailable = (readSuccess == true) ? TRUE : FALSE;
-			nextWeightIsLast = FALSE;
+			nextWeightIsLast = FALSE;  //TODO: remove this?
 
 			if (readSuccess == true)
 			{
@@ -4661,7 +4661,8 @@ __kernel void kernelOperandFilter ()
 		{
 			weightFilterDone = TRUE;
 
-			validWeightMac = TRUE;
+			//TODO: Check the following line
+			validWeightMac = (regWeightBufferSize > 0) ? TRUE : FALSE;;
 		}
 
 		/*
@@ -4747,8 +4748,8 @@ __kernel void kernelOperandFilter ()
 		else if (activationFilterInstruction == OPERAND_FILTER_FILTER_SYNC)
 		{
 			activationFilterDone = TRUE;
-
-			validActivationMac = TRUE;
+			//TODO: Check the following line: 
+			validActivationMac =  (regActivationBufferSize > 0) ? TRUE : FALSE;
 		}
 
 		/*
@@ -4844,7 +4845,7 @@ __kernel void kernelOperandFilter ()
 					);
 			if (success == true)
 			{
-				EMULATOR_PRINT(("[Op Filter DRAIN (%d, %d)] Sent a value.\n", idy, idx));
+				EMULATOR_PRINT(("[Op Filter DRAIN (%d, %d)] Sent a value: %#06x\n", idy, idx, drainTransportBlock.value));
 				sendNextPESuccess = TRUE;
 			}
 		}

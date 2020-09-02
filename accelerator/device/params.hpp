@@ -2,7 +2,7 @@
 #define PARAMS_DEFINED
 
 #define HOST_DEBUG
-//#define SPARSE_SYSTEM
+#define SPARSE_SYSTEM
 //#define IA_PING_PONG
 /**
  * Global memory settings

@@ -578,7 +578,7 @@ namespace GraphRuntime {
                             //unsigned int memIATB0CountColStride,
                             1,
                             //signed int memOATBCountStart,
-                            input1MemoryRegion * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE,
+                            outputMemoryRegion * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE,
                             //unsigned int memOATBCountColStride,
                             1,
                             //signed int memWeightTBCountStart,
