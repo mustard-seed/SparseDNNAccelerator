@@ -27,6 +27,7 @@ t_operand modifyOutput (
 	}
 
     //Handle the right shift case
+    //Note the mask below makes sense if the accumulator is 16-bit
     unsigned char rndRightShift = shiftAmount - 1;
 	t_accumulator signExtensionMask = (preShiftIsNonNegative == TRUE) ?
 		0x00 : ~(0xFFFF >> rndRightShift);

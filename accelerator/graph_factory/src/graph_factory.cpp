@@ -320,7 +320,15 @@ namespace GraphRuntime {
                         input1ShiftLeft = FALSE;
                         pSumFracBits = inputFracBits0;
                     }
-                    else
+                    else if (inputFracBits1 == inputFracBits0)
+                    {
+                        input0ShiftBits = 0;
+                        input0ShiftLeft = TRUE;
+                        input1ShiftBits = 0;
+                        input1ShiftLeft = TRUE;
+                        pSumFracBits = inputFracBits0;
+                    }
+                    else // inputFracBits1 < inputFracBits0
                     {
                         input0ShiftBits = inputFracBits0 - inputFracBits1;
                         input0ShiftLeft = FALSE;
