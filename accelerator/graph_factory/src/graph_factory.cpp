@@ -687,12 +687,13 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer, int _numUnits, bool 
     if (_isWidth)
     {
         int width = _convLayer.getOutputWidth();
-        tileSizePerUnitFull = ((width / PE_COLS) > 8) ? 8 : (width / PE_COLS);
+        tileSizePerUnitFull = ((width / PE_COLS) > 4) ? 4 : (width / PE_COLS);
+        tileSizePerUnitFull = (tileSizePerUnitFull == 0) ? 1 : tileSizePerUnitFull;
         numUnitsWhenPartial = 1;
     }
     else
     {
-        tileSizePerUnitFull = 8;
+        tileSizePerUnitFull = 4;
         numUnitsWhenPartial = 1;
     }
 

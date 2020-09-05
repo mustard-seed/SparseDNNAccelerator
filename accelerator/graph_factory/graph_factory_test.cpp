@@ -5,9 +5,9 @@
 #include <vector>
 #include <map>
 
-#define PLAY
-#define EMULATE
-#define INFERENCE_REPEAT 1
+//#define PLAY
+//#define EMULATE
+#define INFERENCE_REPEAT 10
 
 class testFixture : public ::testing::Test {
 protected:
@@ -22,17 +22,17 @@ protected:
                 std::map<std::string, std::string> _traceName2BlobName);
 };
 #if defined(PLAY) //focus on one test
-TEST_F(testFixture, tinyNet)
+TEST_F(testFixture, resnet)
 {
     /*
      *Test trace: https://drive.google.com/drive/folders/1k9m5-DMOAJaM3-psX6jmItSoer11TBqf?usp=sharing
     */
-    std::string traceFileName = "tinyTrace_trace.yaml";
-    std::string traceParameterFile = "tinyTrace_parameters.yaml";
-    std::string inoutFile = "tinyTrace_inout.yaml";
+    std::string traceFileName = "testTrace_trace.yaml";
+    std::string traceParameterFile = "testTrace_parameters.yaml";
+    std::string inoutFile = "testTrace_inout.yaml";
     std::map<std::string, std::string> traceName2BlobName;
     traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
-    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_6", "output"));
+    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_15", "output"));
     launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
 }
 #else //run everything
@@ -93,6 +93,20 @@ TEST_F(testFixture, miniAvg)
     launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
 }
 
+TEST_F(testFixture, seq)
+{
+    /*
+     *Test trace: https://drive.google.com/drive/folders/1k9m5-DMOAJaM3-psX6jmItSoer11TBqf?usp=sharing
+    */
+    std::string traceFileName = "seq_trace.yaml";
+    std::string traceParameterFile = "seq_parameters.yaml";
+    std::string inoutFile = "seq_inout.yaml";
+    std::map<std::string, std::string> traceName2BlobName;
+    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
+    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_3", "output"));
+    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
+}
+
 TEST_F(testFixture, tinyNet)
 {
     /*
@@ -107,17 +121,17 @@ TEST_F(testFixture, tinyNet)
     launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
 }
 
-TEST_F(testFixture, seq)
+TEST_F(testFixture, resnet)
 {
     /*
      *Test trace: https://drive.google.com/drive/folders/1k9m5-DMOAJaM3-psX6jmItSoer11TBqf?usp=sharing
     */
-    std::string traceFileName = "seq_trace.yaml";
-    std::string traceParameterFile = "seq_parameters.yaml";
-    std::string inoutFile = "seq_inout.yaml";
+    std::string traceFileName = "testTrace_trace.yaml";
+    std::string traceParameterFile = "testTrace_parameters.yaml";
+    std::string inoutFile = "testTrace_inout.yaml";
     std::map<std::string, std::string> traceName2BlobName;
     traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
-    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_3", "output"));
+    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_15", "output"));
     launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
 }
 #endif
@@ -208,6 +222,9 @@ void testFixture::launch(std::string _traceFileName,
     {
         accelerator.inference();
     }
+
+    std::cout <<"Step "<<stepCount++<<": Performance counts"<<std::endl;
+    std::cout <<accelerator.reportRuntime();
 
     std::cout <<"Step "<<stepCount++<<": Extract output and perform checks"<<std::endl;
     {
