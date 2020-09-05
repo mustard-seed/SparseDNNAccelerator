@@ -398,6 +398,9 @@ void instruction_generator(
                 instructionOAControl.numActiveCols = (t_uchar) numActiveCols;
                 unsigned char leftShift = flagOutputShiftLeft;
                 unsigned char scaleShift = outputShiftBits;
+                assert ((((flagOutputShiftLeft == 0x00) && (outputShiftBits > 0))
+                        || ((flagOutputShiftLeft == 0x01) && (outputShiftBits >= 0)))
+                       && "If output shift direction is RIGHT, then the number of shift must be greater than 0");
                 unsigned char sourceIsMisc = (op != CONVOLUTION) ? 0x01 : 0x00;
                 instructionOAControl.flagSparseCatFlagReluCatFlagSourceCatShift = (t_uchar)
                         (   ((t_uchar) (scaleShift & 0x0F))
@@ -504,6 +507,9 @@ void instruction_generator(
                              | ((((t_uchar) flagTarget) & 0x01) << 0x05)
                              | ((((t_uchar) flagSparseInput) & 0x01) << 0x06) //Sparse flag for the input tensor
                             );
+                    assert ((((flagIA0ShiftLeft == false) && (numIA0ShiftAmount > 0))
+                            || ((flagIA0ShiftLeft == true) && (numIA0ShiftAmount >= 0)))
+                           && "If input shift direction is RIGHT, then the number of shift must be greater than 0");
                     t_uchar flagLeftShiftCatShiftAmount = flagIA0ShiftLeft ?
                                 (0x10 | (0x0F & numIA0ShiftAmount))
                               : (0x00 | (0x0F & numIA0ShiftAmount));
@@ -651,6 +657,9 @@ void instruction_generator(
                                  | ((((t_uchar) 0x01) & 0x01) << 0x05) //Compute engine is MISC
                                  | ((((t_uchar) 0x0) & 0x01) << 0x06) //Sparse flag for the input tensor. Will be dense
                                 );
+                        assert ((((flagIA1ShiftLeft == false) && (numIA1ShiftAmount > 0))
+                                || ((flagIA1ShiftLeft == true) && (numIA1ShiftAmount >= 0)))
+                               && "If input shift direction is RIGHT, then the number of shift must be greater than 0");
                         t_uchar flagLeftShiftCatShiftAmount = flagIA1ShiftLeft ?
                                     (0x10 | (0x0F & numIA1ShiftAmount))
                                   : (0x00 | (0x0F & numIA1ShiftAmount));
