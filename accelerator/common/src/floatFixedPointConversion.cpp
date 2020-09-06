@@ -4,14 +4,21 @@
 #include <algorithm>
 
 fixedPointNumber::fixedPointNumber (float _realNumber
-                                    ,char _fracWidth
-                                    ,char _intWidth){
+                                    ,signed char _fracWidth
+                                    ,signed char _intWidth){
     //Make sure the number of bits for magnitude and the sign can fit within 32
     assert (_fracWidth + _intWidth < 8);
 
     //Find the precision
-    resolution = 1.0f / (float) (1 << _fracWidth);
-    int fullBits = (int) round(_realNumber * (float) (1 << _fracWidth));
+    if (_fracWidth > 0)
+    {
+        resolution = 1.0f / (float) (1 << _fracWidth);
+    }
+    else
+    {
+        resolution = 1 << ((-1) * (_fracWidth));
+    }
+    int fullBits = (int) round(_realNumber / resolution);
     int totalWidth = _fracWidth + _intWidth;
     int minimum = -1 * (1 << totalWidth);
     int maximum = (1 << totalWidth) - 1;
@@ -31,14 +38,21 @@ fixedPointNumber::fixedPointNumber (float _realNumber
 }
 
 fixedPointNumber::fixedPointNumber (signed char _bits,
-                                    char _fracWidth,
-                                    char _intWidth)
+                                    signed char _fracWidth,
+                                    signed char _intWidth)
 {
-    assert (_fracWidth + _intWidth < 16);
+    assert (_fracWidth + _intWidth < 8);
     bits = _bits & (~ (0xFF << (_fracWidth + _intWidth + 1)) );
     fractionWidth = _fracWidth;
     integerWidth = _intWidth;
-    resolution = 1.0f / (float) (1 << _fracWidth);
+    if (_fracWidth > 0)
+    {
+        resolution = 1.0f / (float) (1 << _fracWidth);
+    }
+    else
+    {
+        resolution = 1 << ((-1) * (_fracWidth));
+    }
 }
 
 signed char fixedPointNumber::getBits() {
@@ -49,12 +63,12 @@ unsigned char fixedPointNumber::getMask() {
     return ~(0xFF << (fractionWidth + integerWidth + 1));
 }
 
-int fixedPointNumber::getFracWidth() {
+signed char fixedPointNumber::getFracWidth() {
     return fractionWidth;
 }
 
 
-int fixedPointNumber::getIntWidth() {
+signed char fixedPointNumber::getIntWidth() {
     return integerWidth;
 }
 

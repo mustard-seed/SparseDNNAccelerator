@@ -41,7 +41,9 @@ namespace GraphRuntime {
                        traceLayer["operationType"].as<string>());
 
            //cout <<"Detected layer type: "<<traceLayer["operationType"].as<string>()<<endl;
-
+#if defined(HOST_DEBUG)
+           cout <<"LayerType-ID: "<<traceLayer["operationType"].as<string>()<<"-"<<i<<endl;
+#endif
            std::string layerID = traceLayer["layerID"].as<string>();
            switch (opType) {
                case CONVOLUTION:
@@ -172,6 +174,9 @@ namespace GraphRuntime {
             bool isComputeLayer = true; //override
             OPERATION op = ::CONVOLUTION; //override
             std::string layerName;
+#if defined(HOST_DEBUG)
+           cout <<"Generating for Layer(ID): "<<pLayer->getLayerID()<<endl;
+#endif
             switch (layerType) {
                 case CONVOLUTION: {
                     auto pLayerLocal = dynamic_pointer_cast<ConvLayer>(pLayer);

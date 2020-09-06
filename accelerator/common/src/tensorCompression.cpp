@@ -219,8 +219,8 @@ unsigned int AlignedTensor::getExternalMemoryAddressStride()
 
 void AlignedTensor::decodeTensor(
         std::vector<fixedPointNumber> &_fixedPointVector,
-        char _fracWidth,
-        char _intWidth)
+        signed char _fracWidth,
+        signed char _intWidth)
 {
     fixedPointNumber fpZero(0.0f, _fracWidth, _intWidth);
 
@@ -550,8 +550,8 @@ t_aligned_streamblock_address_vector& FlexibleDirectCompressedTensor::getTransfe
 
 void FlexibleDirectCompressedTensor::decodeTensor(
         std::vector<fixedPointNumber> &_fixedPointVector
-        ,char _fracWidth
-        ,char _intWidth)
+        ,signed char _fracWidth
+        ,signed char _intWidth)
 {
     //Dimension of the uncompressed, un-vectorized tensor
     unsigned short num3DTensors = this->num3DTensors;

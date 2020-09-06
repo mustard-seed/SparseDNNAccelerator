@@ -39,13 +39,13 @@ namespace GraphRuntime {
         return result;
     }
 
-    std::vector<fixedPointNumber> quantize(std::vector<float> floatVector, char _fracWidth)
+    std::vector<fixedPointNumber> quantize(std::vector<float> floatVector, signed char _fracWidth)
     {
         //TODO: Maybe parallelize this?
         std::vector<fixedPointNumber> result;
         result.resize(floatVector.size());
         int index = 0;
-        char intWidth = 7 - _fracWidth;
+        signed char intWidth = 7 - _fracWidth;
         for (auto& fpVal: floatVector)
         {
             result.at(index++) = fixedPointNumber(fpVal, _fracWidth, intWidth);
@@ -772,8 +772,8 @@ namespace GraphRuntime {
         assert(outputBlobID < vecOutputBlobsInfo.size() && "outputBlobID is out of range.");
         t_blob_info blobInfo = vecOutputBlobsInfo.at(outputBlobID);
         std::vector<fixedPointNumber> quantizedResult;
-        int fracWidth = blobInfo.numFracBits;
-        int intWidth = 7-fracWidth;
+        signed char fracWidth = blobInfo.numFracBits;
+        signed char intWidth = 7-fracWidth;
         vecOutputBlobsInternal.at(outputBlobID)->decodeTensor(quantizedResult, fracWidth, intWidth);
         std::vector<float> result = convert2Float(quantizedResult);
         return result;

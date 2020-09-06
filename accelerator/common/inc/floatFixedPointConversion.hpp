@@ -4,22 +4,22 @@
 class fixedPointNumber {
     private:
         char bits;
-        char fractionWidth;
-        char integerWidth;
+        signed char fractionWidth;
+        signed char integerWidth;
         float resolution;
     public:
         fixedPointNumber () = default;
         fixedPointNumber (float _realNumber
-                          ,char _fracWidth
-                          ,char _intWidth);
+                          ,signed char _fracWidth
+                          ,signed char _intWidth);
         fixedPointNumber (signed char _bits,
-                          char _fracWidth,
-                          char _intWidth);
+                          signed char _fracWidth,
+                          signed char _intWidth);
 
         signed char getBits ();
         unsigned char getMask ();
-        int getFracWidth ();
-        int getIntWidth ();
+        signed char getFracWidth ();
+        signed char getIntWidth ();
 
         float convert2Float();
 };

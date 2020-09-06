@@ -96,8 +96,8 @@ class AlignedTensor {
     //Decode the aligned tenor values into a compact tensor of fixed-point numbers
     virtual void decodeTensor (
             std::vector<fixedPointNumber> & fixedPointVector,
-            char _fracWidth,
-            char _intWidth
+            signed char _fracWidth,
+            signed char _intWidth
             );
 
     t_aligned_transfer_block_vector& getTransferBlockVector();
@@ -154,8 +154,8 @@ public:
 
     void decodeTensor (
                 std::vector<fixedPointNumber> & _fixedPointVector,
-                char _fracWidth,
-                char _intWidth
+                signed char _fracWidth,
+                signed char _intWidth
                 ) override;
 
     t_aligned_streamblock_address_vector& getTransferBlockCountVector() override;
