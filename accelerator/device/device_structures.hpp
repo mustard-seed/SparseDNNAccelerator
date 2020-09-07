@@ -64,19 +64,35 @@ Types involved in operations
 ==================================================================
 */
 #ifdef INTELFPGA_CL
+#if (ACCUMULATOR_WIDTH == 32)
+typedef int t_accumulator;
+#elif (ACCUMULATOR_WIDTH == 16)
 typedef short t_accumulator;
+#else
+#error ACCUMULATOR_WIDTH should either be 32 or 16!
+#endif
 
 typedef struct {
     signed char cluster_values [CLUSTER_SIZE];
 } t_cluster;
+
+typedef short t_bias;
 #else
-typedef short t_accumulator;
+#if (ACCUMULATOR_WIDTH == 32)
+typedef signed int t_accumulator;
+#elif (ACCUMULATOR_WIDTH == 16)
+typedef signed short t_accumulator;
+#else
+#error ACCUMULATOR_WIDTH should either be 32 or 16!
+#endif
 
 typedef struct {
     cl_char cluster_values [CLUSTER_SIZE];
 } t_cluster;
 
 typedef cl_ushort t_streamblock_address;
+
+typedef signed short t_bias;
 #endif
 
 typedef struct {
@@ -360,7 +376,7 @@ typedef struct {
 typedef struct __attribute__((packed)) {
     unsigned short numOutputs;
     unsigned short numTransferBlocks;
-    t_accumulator bias; //short
+    t_bias bias; //short
     unsigned char maxPeCols; //Number of PE COLS that is activated
 
 } t_filter_streamer_control;

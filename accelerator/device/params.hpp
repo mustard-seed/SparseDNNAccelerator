@@ -75,7 +75,7 @@
 #define PACKET_SIZE 1
 
 #if defined(FULL_SYSTEM)
-	#define PE_ROWS 4
+	#define PE_ROWS 2
 	#define PE_COLS 2
 #else
 	#define PE_ROWS 2
@@ -154,6 +154,9 @@
 #define WIDE_SIZE_REMAINDER_MASK 0x0
 
 #define NUM_CLUSTER_IN_DRAM_SIZE BURST_SIZE_BYTE/CLUSTER_SIZE
+
+//Accumulator width
+#define ACCUMULATOR_WIDTH 16
 
 #define KERNEL_INDEX_CACHE_DEPTH 512
 #define KERNEL_INDEX_CACHE_DEPTH_MASK 0x1FF

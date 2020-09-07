@@ -345,7 +345,7 @@ __kernel void kernelWMover (
 		//Memory port for instructions
 		VOLATILE __global const t_weight_mover_instruction* restrict pInst,
 		VOLATILE __global const t_dram_block* restrict pW,
-		VOLATILE __global const t_accumulator* restrict pBias,
+		VOLATILE __global const t_bias* restrict pBias,
 		#if defined(SPARSE_SYSTEM)
 		 //Pointer to filter transfer block count
 		 VOLATILE __global const t_streamblock_address* restrict pFilterTBCount,
@@ -379,7 +379,7 @@ __kernel void kernelWMover (
 				unsigned short numTransferBlockInFilter = inst.numTBPerFilter;
 			#endif
 			
-			t_accumulator bias = pBias[addrBias];
+			t_bias bias = pBias[addrBias];
 
 			unsigned short numDramBlockInFilter = ((numTransferBlockInFilter-1) >> WIDE_SIZE_OFFSET) + 1;
 			
@@ -2130,8 +2130,15 @@ __kernel void kernelMisc ()
 				for (int iVal=0; iVal < BURST_SIZE_BYTE; iVal++)
 				{
 					//If max pooling, then intialize the values to the minimum, else zero
+					#if (ACCUMULATOR_WIDTH == 32)
+						t_accumulator min = 0x80000000;
+					#elif (ACCUMULATOR_WIDTH == 16)
+						t_accumulator min = 0x8000;
+					#else
+					#error ACCUMULATOR_WIDTH should either be 32 or 16!
+					#endif
 					reductionBlock[iVal] = (opcode == 0x01) ? 
-						0x8000 : 0x0000;
+						min : 0x0000;
 				}
 			}
 
@@ -3222,7 +3229,7 @@ __kernel void kernelFilterBuffer ()
 	//unsigned char maxOutputWidthTileSize[2]; //maxTQ 
 	unsigned short maxTransferBlockInFilter[2]; //maxCg
 	unsigned char maxPeCols[2];
-	t_accumulator cacheBias[2];
+	t_bias cacheBias[2];
 
 	//=================Write into cache variables=================
 	t_state stateWriteCache = STATE_FILTER_STREAMER_WRITE_CACHE_SETUP_CONTROL;
@@ -3326,7 +3333,7 @@ __kernel void kernelFilterBuffer ()
 			}
 			else
 			{
-				t_accumulator bias = cacheBias[(~regWriteSide) & 0x1];
+				t_bias bias = cacheBias[(~regWriteSide) & 0x1];
 				t_transfer_block tblock = bias2TransferBlock(bias);
 				weightBlockTagged.values = tblock;
 				//weightBlockTagged.isLast = false;
@@ -4773,7 +4780,7 @@ __kernel void kernelOperandFilter ()
 		if ( (weightFilterInstruction == OPERAND_FILTER_READ_BIAS) && (weightTBAvailable == TRUE) )
 		{
 			//GOTTCHA: MUST APPLY THE AND MASK AFTER NEGATION !!!
-			pSum[(~drainSide) & 0x01] = transferBlock2Bias(weightBlock.values);
+			pSum[(~drainSide) & 0x01] = (t_accumulator) transferBlock2Bias(weightBlock.values);
 		}
 		else if ( (validActivationMac == TRUE) && (validWeightMac == TRUE))
 		{
@@ -5224,7 +5231,7 @@ __kernel void kernelDensePE ()
 			 && (weightTBAvailable == TRUE))
 		{
 			//GOTTCHA: MUST APPLY THE AND MASK AFTER NEGATION !!!
-			pSum[(~drainSide) & 0x01] = transferBlock2Bias(nextWeightTB);
+			pSum[(~drainSide) & 0x01] = (t_accumulator) transferBlock2Bias(nextWeightTB);
 		}
 		else if ( (validActivationMac == TRUE) && (validWeightMac == TRUE))
 		{

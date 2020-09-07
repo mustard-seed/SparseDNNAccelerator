@@ -29,8 +29,15 @@ t_operand modifyOutput (
     //Handle the right shift case
     //Note the mask below makes sense if the accumulator is 16-bit
     unsigned char rndRightShift = shiftAmount - 1;
+    #if (ACCUMULATOR_WIDTH == 32)
+    t_accumulator accumulatorMask = 0xFFFFFFFF;
+    #elif (ACCUMULATOR_WIDTH == 16)
+    t_accumulator accumulatorMask = 0xFFFF;
+    #else
+    #error ACCUMULATOR_WIDTH should either be 32 or 16!
+    #endif
 	t_accumulator signExtensionMask = (preShiftIsNonNegative == TRUE) ?
-		0x00 : ~(0xFFFF >> rndRightShift);
+		0x00 : ~(accumulatorMask >> rndRightShift);
 
 	t_accumulator rightShiftAccumulatorWithRndBit = signExtensionMask | ((t_accumulator) (comparedAccumulator >> rndRightShift));
 
@@ -111,7 +118,7 @@ signed char modifyCharOutput (
 }
 
 #ifdef INTELFPGA_CL
-t_transfer_block bias2TransferBlock (t_accumulator bias)
+t_transfer_block bias2TransferBlock (t_bias bias)
 {
     t_transfer_block transferBlock;
     transferBlock.values[0] = bias & 0xFF;
@@ -122,11 +129,11 @@ t_transfer_block bias2TransferBlock (t_accumulator bias)
 
 }
 
-t_accumulator transferBlock2Bias (t_transfer_block block)
+t_bias transferBlock2Bias (t_transfer_block block)
 {
-    t_accumulator bias =
-        ( ((t_accumulator) block.values[0]) & 0xFF )
-        | (( ((t_accumulator) block.values[1]) & 0xFF ) << 8);
+    t_bias bias =
+        ( ((t_bias) block.values[0]) & 0xFF )
+        | (( ((t_bias) block.values[1]) & 0xFF ) << 8);
         //| (( ((t_accumulator) block.values[1].cluster_values[0]) & 0xFF ) << 16)
         //| (( ((t_accumulator) block.values[1].cluster_values[1]) & 0xFF ) << 24);
 
@@ -151,14 +158,14 @@ t_filter_streamer_control dramBlock2FilterStreamerControl (t_dram_block block)
     //Recover bias
     #if (NUM_SIMD_WORDS <= 4)
         control.bias
-            = ( ( ( (t_accumulator) (block.transferBlocks[1].values[0]) ) & 0xFF )
-                | ( (((t_accumulator) (block.transferBlocks[1].values[1])) & 0xFF) << 8));
+            = ( ( ( (t_bias) (block.transferBlocks[1].values[0]) ) & 0xFF )
+                | ( (((t_bias) (block.transferBlocks[1].values[1])) & 0xFF) << 8));
 
         control.maxPeCols = (unsigned char) block.transferBlocks[1].values[2];
     #else
         control.bias
-            = ( ( ( (t_accumulator) (block.transferBlocks[0].values[4]) ) & 0xFF )
-                | ( (((t_accumulator) (block.transferBlocks[0].values[5])) & 0xFF) << 8));
+            = ( ( ( (t_bias) (block.transferBlocks[0].values[4]) ) & 0xFF )
+                | ( (((t_bias) (block.transferBlocks[0].values[5])) & 0xFF) << 8));
 
         control.maxPeCols = (unsigned char) block.transferBlocks[0].values[6];
     #endif

@@ -39,9 +39,9 @@ signed char modifyCharOutput (
 		);
 
 #ifdef INTELFPGA_CL
-t_transfer_block bias2TransferBlock (t_accumulator bias);
+t_transfer_block bias2TransferBlock (t_bias bias);
 
-t_accumulator transferBlock2Bias (t_transfer_block block);
+t_bias transferBlock2Bias (t_transfer_block block);
 
 t_filter_streamer_control dramBlock2FilterStreamerControl (t_dram_block block);
 

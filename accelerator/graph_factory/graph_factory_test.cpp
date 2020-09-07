@@ -5,9 +5,9 @@
 #include <vector>
 #include <map>
 
-//#define PLAY
+#define PLAY
 //#define EMULATE
-#define INFERENCE_REPEAT 10
+#define INFERENCE_REPEAT 1
 
 class testFixture : public ::testing::Test {
 protected:
@@ -121,19 +121,19 @@ TEST_F(testFixture, tinyNet)
     launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
 }
 
-TEST_F(testFixture, resnet)
-{
-    /*
-     *Test trace: https://drive.google.com/drive/folders/1k9m5-DMOAJaM3-psX6jmItSoer11TBqf?usp=sharing
-    */
-    std::string traceFileName = "testTrace_trace.yaml";
-    std::string traceParameterFile = "testTrace_parameters.yaml";
-    std::string inoutFile = "testTrace_inout.yaml";
-    std::map<std::string, std::string> traceName2BlobName;
-    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
-    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_15", "output"));
-    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
-}
+//TEST_F(testFixture, resnet)
+//{
+//    /*
+//     *Test trace: https://drive.google.com/drive/folders/1k9m5-DMOAJaM3-psX6jmItSoer11TBqf?usp=sharing
+//    */
+//    std::string traceFileName = "testTrace_trace.yaml";
+//    std::string traceParameterFile = "testTrace_parameters.yaml";
+//    std::string inoutFile = "testTrace_inout.yaml";
+//    std::map<std::string, std::string> traceName2BlobName;
+//    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
+//    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_15", "output"));
+//    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
+//}
 #endif
 
 void testFixture::SetUp()

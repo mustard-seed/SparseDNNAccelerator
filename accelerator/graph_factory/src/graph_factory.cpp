@@ -676,6 +676,11 @@ namespace GraphRuntime {
                     #if defined(SPARSE_SYSTEM)
                         offsetWeightTBCount += offsetWeightTBCountIncrement;
                     #endif
+
+                    assert(offsetBiasesDramBlock <= MAX_DRAM_BYTE_INPUT_WEIGHT);
+                    #if defined(SPARSE_SYSTEM)
+                        assert(offsetWeightTBCount <= MAX_DRAM_BYTE_INPUT_WEIGHT_SB_COUNT);
+                    #endif
             } // if compute layer
 
         } // for layer
