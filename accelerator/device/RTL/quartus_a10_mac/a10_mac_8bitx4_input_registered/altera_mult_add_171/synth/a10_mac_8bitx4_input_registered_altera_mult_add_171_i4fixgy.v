@@ -35,10 +35,10 @@ module  a10_mac_8bitx4_input_registered_altera_mult_add_171_i4fixgy  (
             input [7:0] datab_1;
             input [7:0] datab_2;
             input [7:0] datab_3;
-            output [15:0] result;
+            output [17:0] result;
 
-            wire [15:0] sub_wire0;
-            wire [15:0] result = sub_wire0[15:0];    
+            wire [17:0] sub_wire0;
+            wire [17:0] result = sub_wire0[17:0];    
 
             wire [31:0] wire_dataa;   
             assign wire_dataa[7:0] = dataa_0;
@@ -115,7 +115,7 @@ module  a10_mac_8bitx4_input_registered_altera_mult_add_171_i4fixgy  (
                     altera_mult_add_component.number_of_multipliers = 4,
                     altera_mult_add_component.width_a = 8,
                     altera_mult_add_component.width_b = 8,
-                    altera_mult_add_component.width_result = 16,
+                    altera_mult_add_component.width_result = 18,
                     altera_mult_add_component.output_register = "CLOCK0",
                     altera_mult_add_component.output_aclr = "NONE",
                     altera_mult_add_component.output_sclr = "NONE",

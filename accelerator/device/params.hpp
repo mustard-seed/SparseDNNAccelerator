@@ -75,8 +75,8 @@
 #define PACKET_SIZE 1
 
 #if defined(FULL_SYSTEM)
-	#define PE_ROWS 2
-	#define PE_COLS 2
+	#define PE_ROWS 1
+	#define PE_COLS 1
 #else
 	#define PE_ROWS 2
 	#define PE_COLS 2
@@ -156,7 +156,16 @@
 #define NUM_CLUSTER_IN_DRAM_SIZE BURST_SIZE_BYTE/CLUSTER_SIZE
 
 //Accumulator width
-#define ACCUMULATOR_WIDTH 16
+#define ACCUMULATOR_WIDTH 32
+#if (ACCUMULATOR_WIDTH == 32)
+#define ACCUM_MASK 0x0FFFFFFFF
+#define MULT_MASK 0x0FFFFFFFF
+#elif (ACCUMULATOR_WIDTH == 16)
+#define ACCUM_MASK 0x0FFFF
+#define MULT_MASK 0x0FFFF
+#else
+#error Accumulator width should either be 32 bit or 16 bit
+#endif
 
 #define KERNEL_INDEX_CACHE_DEPTH 512
 #define KERNEL_INDEX_CACHE_DEPTH_MASK 0x1FF

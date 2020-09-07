@@ -8,7 +8,7 @@ module a10_mac_8bitx4_input_registered (
 		input  wire [7:0]  datab_1, // datab_1.datab_1
 		input  wire [7:0]  datab_2, // datab_2.datab_2
 		input  wire [7:0]  datab_3, // datab_3.datab_3
-		output wire [15:0] result   //  result.result
+		output wire [17:0] result   //  result.result
 	);
 endmodule
 

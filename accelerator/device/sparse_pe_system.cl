@@ -5068,13 +5068,13 @@ __attribute__((autorun))
 __kernel void kernelDensePE ()
 {
 	
-#ifdef FULL_SYSTEM
-	int idx = get_compute_id(1);
-	int idy = get_compute_id(0);
-#else
-	int idx = 0;
-	int idy = 0;
-#endif
+	#ifdef FULL_SYSTEM
+		int idx = get_compute_id(1);
+		int idy = get_compute_id(0);
+	#else
+		int idx = 0;
+		int idy = 0;
+	#endif
 	//====================registers===============
 	//Psum and drain parameters
 	t_accumulator pSum[2];
