@@ -121,8 +121,8 @@ signed char modifyCharOutput (
 t_transfer_block bias2TransferBlock (t_bias bias)
 {
     t_transfer_block transferBlock;
-    transferBlock.values[0] = bias & 0xFF;
-    transferBlock.values[1] = (bias >> 8) & 0xFF;
+    transferBlock.values[0] = bias & 0x0FF;
+    transferBlock.values[1] = (bias >> 8) & 0x0FF;
     //transferBlock.values[1].cluster_values[0] = (bias >> 16) & 0xFF;
     //transferBlock.values[1].cluster_values[1] = (bias >> 24) & 0xFF;
     return transferBlock;
@@ -137,7 +137,7 @@ t_bias transferBlock2Bias (t_transfer_block block)
         //| (( ((t_accumulator) block.values[1].cluster_values[0]) & 0xFF ) << 16)
         //| (( ((t_accumulator) block.values[1].cluster_values[1]) & 0xFF ) << 24);
 
-    return bias;
+    return (bias & 0xFFFF);
 }
 #endif
 

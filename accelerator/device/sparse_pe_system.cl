@@ -3501,7 +3501,7 @@ typedef struct __attribute__((packed)) {
 } t_simd_operand;
 
 t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
-	t_accumulator output = 0x0;
+	t_accumulator output = 0x00 & MULT_MASK;
 
 	//#ifdef DIRECT_COMPRESSION_SIMD
 		#pragma unroll
@@ -3509,7 +3509,7 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 			//output += input.data[i]*weights.data[i];
 			// use packed DSP blocks to improve efficiency
 			#if defined (ARRIA10)
-				output += (t_accumulator) a10_mac_8bitx4_input_registered(
+				output += MULT_MASK & ((t_accumulator) a10_mac_8bitx4_input_registered(
 					activations.values[i*4],
 					weights.values[i*4],
 					activations.values[i*4+1],
@@ -3518,9 +3518,9 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 					weights.values[i*4+2],
 					activations.values[i*4+3],
 					weights.values[i*4+3]
-					);
+					));
 			#elif defined (C5SOC)
-				output += (t_accumulator) c5_mac_8bitx4_input_registered(
+				output += MULT_MASK & ((t_accumulator) c5_mac_8bitx4_input_registered(
 						activations.values[i*4],
 						weights.values[i*4],
 						activations.values[i*4+1],
@@ -3529,7 +3529,7 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 						weights.values[i*4+2],
 						activations.values[i*4+3],
 						weights.values[i*4+3]
-						);
+						));
 			#else
 			#error Unsupported FPGA type!
 			#endif
@@ -4376,7 +4376,7 @@ __kernel void kernelOperandFilter ()
 	#pragma unroll
 	for (int i=0; i<2; i++)
 	{
-		pSum[i] = 0;
+		pSum[i] = 0x0 & ACCUM_MASK;
 		regIsMaxRow[i] = 0;
 	}
 	uint1_t drainSide = 0;
@@ -4504,7 +4504,7 @@ __kernel void kernelOperandFilter ()
 		t_flag nextIsMaxRow = regIsMaxRow[(~drainSide) & 0x01];
 
 		t_flag nextDrainIsMaxRow = regIsMaxRow[drainSide & 0x01];
-		t_accumulator nextDrainPSum = pSum[drainSide & 0x01];
+		t_accumulator nextDrainPSum = pSum[drainSide & 0x01] & ACCUM_MASK;
 		t_drain_state nextDrainInstruction = drainInstruction;
 
 		//t_bitmask nextMutualBitmask = regMutualBitmask;
@@ -4780,7 +4780,7 @@ __kernel void kernelOperandFilter ()
 		if ( (weightFilterInstruction == OPERAND_FILTER_READ_BIAS) && (weightTBAvailable == TRUE) )
 		{
 			//GOTTCHA: MUST APPLY THE AND MASK AFTER NEGATION !!!
-			pSum[(~drainSide) & 0x01] = (t_accumulator) transferBlock2Bias(weightBlock.values);
+			pSum[(~drainSide) & 0x01] = ACCUM_MASK & ((t_accumulator) transferBlock2Bias(weightBlock.values));
 		}
 		else if ( (validActivationMac == TRUE) && (validWeightMac == TRUE))
 		{
@@ -4798,7 +4798,7 @@ __kernel void kernelOperandFilter ()
 
 			t_accumulator tempPSum = madd(nextMacActivationBuffer, nextMacWeightBuffer);
 			//GOTTCHA: MUST APPLY THE AND MASK AFTER NEGATION !!!
-			pSum[(~drainSide) & 0x01] += tempPSum;
+			pSum[(~drainSide) & 0x01] += (MULT_MASK & tempPSum);
 		}
 
 		//=====================================
@@ -4844,7 +4844,7 @@ __kernel void kernelOperandFilter ()
 		{
 			bool success = false;
 			t_conv_drain_tagged drainTransportBlock;
-			drainTransportBlock.value = pSum[drainSide & 0x01];
+			drainTransportBlock.value = pSum[drainSide & 0x01] & ACCUM_MASK;
 			drainTransportBlock.isLast = (unsigned char) regIsMaxRow[drainSide & 0x01];
 			success = write_channel_nb_intel(
 					channel_drain_conv[idy][idx],
@@ -5083,7 +5083,7 @@ __kernel void kernelDensePE ()
 	#pragma unroll
 	for (int i=0; i<2; i++)
 	{
-		pSum[i] = 0;
+		pSum[i] = 0 & ACCUM_MASK;
 		regIsMaxRow[i] = 0;
 	}
 	uint1_t drainSide = 0;
@@ -5231,7 +5231,7 @@ __kernel void kernelDensePE ()
 			 && (weightTBAvailable == TRUE))
 		{
 			//GOTTCHA: MUST APPLY THE AND MASK AFTER NEGATION !!!
-			pSum[(~drainSide) & 0x01] = (t_accumulator) transferBlock2Bias(nextWeightTB);
+			pSum[(~drainSide) & 0x01] = ACCUM_MASK & ((t_accumulator) transferBlock2Bias(nextWeightTB));
 		}
 		else if ( (validActivationMac == TRUE) && (validWeightMac == TRUE))
 		{
@@ -5258,7 +5258,7 @@ __kernel void kernelDensePE ()
 
 			t_accumulator tempPSum = madd(simdActivation, simdWeight);
 			//GOTTCHA: MUST APPLY THE AND MASK AFTER NEGATION !!!
-			pSum[(~drainSide) & 0x01] += tempPSum;
+			pSum[(~drainSide) & 0x01] += (MULT_MASK & tempPSum);
 		}
 
 		/**
@@ -5302,7 +5302,7 @@ __kernel void kernelDensePE ()
 		{
 			bool success = false;
 			t_conv_drain_tagged drainTransportBlock;
-			drainTransportBlock.value = pSum[drainSide & 0x01];
+			drainTransportBlock.value = (pSum[drainSide & 0x01] & ACCUM_MASK);
 			drainTransportBlock.isLast = (unsigned char) regIsMaxRow[drainSide & 0x01];
 			success = write_channel_nb_intel(
 					channel_drain_conv[idy][idx],

@@ -275,7 +275,7 @@ namespace GraphRuntime {
                         for (int i=0; i<biasVector.size(); i++)
                         {
                             float bias = biasVector.at(i);
-                            pBiasVector->at(i) = (t_accumulator) (round(bias * (float) (1 << pSumFracBits )) );
+                            pBiasVector->at(i) = (t_bias) (round(bias * (float) (1 << pSumFracBits )) );
                         }
                     }
 
