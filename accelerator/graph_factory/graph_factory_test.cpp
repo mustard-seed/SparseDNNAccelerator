@@ -107,6 +107,20 @@ TEST_F(testFixture, seq)
     launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
 }
 
+TEST_F(testFixture, avglinear)
+{
+    /*
+     *Test trace: https://drive.google.com/drive/folders/1k9m5-DMOAJaM3-psX6jmItSoer11TBqf?usp=sharing
+    */
+    std::string traceFileName = "avglinear_trace.yaml";
+    std::string traceParameterFile = "avglinear_parameters.yaml";
+    std::string inoutFile = "avglinear_inout.yaml";
+    std::map<std::string, std::string> traceName2BlobName;
+    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
+    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_3", "output"));
+    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
+}
+
 TEST_F(testFixture, tinyNet)
 {
     /*
@@ -118,6 +132,20 @@ TEST_F(testFixture, tinyNet)
     std::map<std::string, std::string> traceName2BlobName;
     traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
     traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_6", "output"));
+    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
+}
+
+TEST_F(testFixture, restest)
+{
+    /*
+     *Test trace: https://drive.google.com/drive/folders/1k9m5-DMOAJaM3-psX6jmItSoer11TBqf?usp=sharing
+    */
+    std::string traceFileName = "restest_trace.yaml";
+    std::string traceParameterFile = "restest_parameters.yaml";
+    std::string inoutFile = "restest_inout.yaml";
+    std::map<std::string, std::string> traceName2BlobName;
+    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
+    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_8", "output"));
     launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
 }
 
