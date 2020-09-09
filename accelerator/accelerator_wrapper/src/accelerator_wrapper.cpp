@@ -1,9 +1,10 @@
 #include "accelerator_wrapper.hpp"
 #include "params.hpp"
 #include "floatFixedPointConversion.hpp"
+#include "timer.hpp"
 
-#include <chrono>
 #include <iomanip>
+#include <limits>
 
 /**
 CL INTEL FPGA MEM BANKS
@@ -21,9 +22,9 @@ Only available on certain Arria 10 and Stratix 10 boards
     #define MEM_BANK_INSTRUCTIONS   0x0
 #endif
 
-#if defined(C5SOC) //Hack for ARMv7, otherwise chrono won't work
-__asm__(".symver _ZNSt6chrono3_V212system_clock3nowEv,_ZNSt6chrono12system_clock3nowEv@GLIBCXX_3.4.11");
-#endif
+//#if defined(C5SOC) //Hack for ARMv7, otherwise chrono won't work
+//__asm__(".symver _ZNSt6chrono3_V212system_clock3nowEv,_ZNSt6chrono12system_clock3nowEv@GLIBCXX_3.4.11");
+//#endif
 
 namespace GraphRuntime {
     std::vector<float> convert2Float(std::vector<fixedPointNumber> fpVector)
@@ -790,7 +791,8 @@ namespace GraphRuntime {
 
     void AcceleratorWrapper::inference()
     {
-        auto beginTime = std::chrono::system_clock::now();
+        Timer t;
+        t.start();
         cl_int status = CL_SUCCESS;
         /*
           1. Launch all kernels, except for the IA mover and the OA mover
@@ -1025,14 +1027,13 @@ namespace GraphRuntime {
         }
         numRunExecuted++;
 
-        auto endTime = std::chrono::system_clock::now();
+        t.stop();
 
         //Updat clocks
-        std::chrono::duration<double> timeElapsed = endTime - beginTime;
-        double elapsedCount = timeElapsed.count();
-        averageInferenceDuration = (averageInferenceDuration*(numRunExecuted-1) + elapsedCount) / numRunExecuted;
-        maxInferenceDuration = std::max(elapsedCount, maxInferenceDuration);
-        minInferenceDuration = std::min(elapsedCount, minInferenceDuration);
+        double timeElapsed = (double) t.get_time_s();
+        averageInferenceDuration = (averageInferenceDuration*(numRunExecuted-1) + timeElapsed) / numRunExecuted;
+        maxInferenceDuration = std::max(timeElapsed, maxInferenceDuration);
+        minInferenceDuration = std::min(timeElapsed, minInferenceDuration);
 
     }
 
