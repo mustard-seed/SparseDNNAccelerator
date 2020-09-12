@@ -388,7 +388,7 @@ void instruction_generator(
                 instructionOAControl.numLocalTilePerColHxW = (t_uchar)(maxTQPerCol*maxTP);
                 instructionOAControl.numLocalChannels = (t_uchar)(numOutputChannels);
                 instructionOAControl.numDrainInstructions = (t_ushort) ( numComputeFoldPerGroup * numOAGroupsCurrentLayer);
-                instructionOAControl.numMemInstructions = (t_ushort) numGroupsNextLayer;
+                instructionOAControl.numMemInstructions = (t_uchar) numGroupsNextLayer;
                 instructionOAControl.numFoldsInGroupCurrentLayer = (t_uchar) numComputeFoldPerGroup;
                 instructionOAControl.numFullFoldsInCurrentLayer = (t_uchar) numFullComputeFoldPerGroup;
                 instructionOAControl.numActiveElementsInFullFold = (t_uchar) numActiveElementsInFullComputeFold;

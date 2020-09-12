@@ -305,7 +305,7 @@ typedef struct __attribute__((packed)) __attribute__((aligned(16)))
     //Number of compute drain instructions
     t_ushort numDrainInstructions;
     //Number of memory transfer instructions
-    t_ushort numMemInstructions;
+    t_uchar numMemInstructions;
 
     //Number of folds required per group to drain the current tile
     t_uchar numFoldsInGroupCurrentLayer;
@@ -445,6 +445,14 @@ typedef struct __attribute__((packed))
     //Stride between successive strip
     unsigned short iaStridePerCol;
 
+    //Number of memory transfer instructions, used for draining the cache only
+    unsigned char numGroupsNextLayer;
+
+    //Number of channels per group in the next layer, used for draining the cahce only
+    unsigned short numLocalChannelsPerNextGroup;
+
+
+    //TODO: Add bit for output access bank
     /*
         Control bits
         Bit 4:0: Shift direciton and the number of bits to shift the accumulator value from the convolution PE array. Only relevant for loading
@@ -452,6 +460,7 @@ typedef struct __attribute__((packed))
         Bit 6: Drainage source. 1: from the MISC kernel. 0: from the convolution kernel.
         Bit 7: Enable Relu. Only relevant for loading
         Bit 8: Load from engine (0) or drain the buffer (1)
+        Bit 9: Access bank
     */
     unsigned short controlBits;
 

@@ -2371,289 +2371,1231 @@ __kernel void kernelOAMover (
 #endif //MEMORY_WRITER 
 
 #ifdef OA_MEMORY
-#define OA_BUFFER_STATE_DECODE 0x1
-#define OA_BUFFER_STATE_NUM_ACCESS 0x2
-#define OA_BUFFER_UPDATE_STRIP 0x3
-#define OA_BUFFER_STATE_PADD 0x4 //NOP instructions
-#define OA_BUFFER_STATE_ACCESS 0x5
-#define OA_BUFFER_PAD_COUNT	 2
-//#define OA_BUFFER_PAD_COUNT	 20
+#define OA_BUFFER_ACCESS_STATE_DECODE 0x0
+#define OA_BUFFER_ACCESS_STATE_NUM_ACCESS 0x1
+#define OA_BUFFER_ACCESS_STATE_UPDATE_STRIP 0x2
+#define OA_BUFFER_ACCESS_STATE_ACCESS 0x3
+
+#define OA_BUFFER_DISPATCH_STATE_IDLE 0x0
+#define OA_BUFFER_DISPATCH_STATE_SEND_WRITER 0x1
+#define OA_BUFFER_DISPATCH_STATE_SEND_READER 0x2
+
+typedef struct __attribute__((packed)) {
+	//Starting address of the output strip that is to be accessed. Init = 0
+	unsigned short stripStartOutputIndex;
+	//Number of output per strip. Init = 0;
+	unsigned short numOutputsPerStrip;
+	//Number of strips to access in the access tile. Init = 0;
+	unsigned char numStripsToAccess;
+	//Stride between the start of successive strips in the cache. Init 0
+	unsigned short oaStridePerCol;
+	//Iterator of the number of strips that have been accessed. Init 0
+	unsigned char iStrip;
+	//Number of access interations
+	unsigned short numLoopsPerStip;
+	//Iterator of access interations. Init 0
+	unsigned short iLoopPerStip;
+	//Index in the OA cache. Init 0
+	unsigned short indexOutput; 
+
+	//Access bank
+	t_flag accessBank;
+} t_oa_buffer_access_info;
+
+typedef struct __attribute__((packed)) {
+	t_oa_buffer_access_info accessInfo;
+
+	//Init to FALSE
+	uint1_t flagSourceIsMisc;
+	//Init to 0
+	unsigned char accumulatorShiftDirCatShiftAmount;
+	//Init to FALSE
+	uint1_t enableRelu;
+} t_oa_buffer_writer_info;
+
+typedef struct __attribute__((packed)) {
+	t_oa_buffer_access_info accessInfo;
+
+	//Init to FALSE
+	uint1_t enableSparsification;
+	//Init to 0
+	unsigned short numClustersToDrain;
+	//Init to 0
+	unsigned short numWindowsToDrain;
+
+	//Init to 0
+	unsigned char countSurvivingClustersInWindow;
+	//Init to 0
+	unsigned char iClustersInWindowFetched;
+	//Init to 0
+	unsigned short iOutputChannelFetched;
+	//Init to 0
+	unsigned short iClustersFetched;
+	//Init to 0
+	unsigned char iGroupsFetched;
+	//Init to 0
+	unsigned char numGroupsNextLayer;
+	//Init to 0
+	unsigned short numChannelsInGroupNextLayer;
+	//Init to 
+	//Init to 0
+	t_bitmask mask;
+} t_oa_buffer_reader_info;
+
+/**
+ * State type for oa_buffer_writer, and oa_buffer_reader
+ */
+typedef uint2_t t_oa_buffer_access_state;
+/**
+ * State type for the instruction generator
+ */
+typedef uint2_t t_oa_buffer_dispatcher_state;
+
+
+void updateOABufferWriter (
+	//Inputs from the instruction dispatcher
+	t_output_tile_buffer_packet _control,
+	t_flag _validControl,
+
+	//Signals from the interface with the PE column
+	t_accumulator _wideOutputFromPE,
+	t_flag _requestValueFromPE,
+	t_flag _validValueFromPE,
+
+	//Signals from the interface with the MISC engine
+	t_accumulator _wideOutputFromMisc,
+	t_flag _requestValueFromMisc,
+	t_flag _validValueFromMisc,
+
+	//Modified buffers
+	char cacheOutputActivations[2][OA_CACHE_DEPTH][CLUSTER_SIZE],
+
+	//State variables
+	t_oa_buffer_writer_info *pRegisters,
+
+	//State
+	t_oa_buffer_access_state *pState,
+
+	//Auxillary
+	int colID
+	);
+
+void getOABufferWriterOutput (
+	//Current state
+	t_oa_buffer_access_state _currentState,
+
+	//Current context
+	t_oa_buffer_writer_info _currentContext,
+
+	//Interface with the dispatcher
+	t_flag* pOutAcceptInstruction,
+
+	//Interface with the PE column channel
+	t_flag* pOutAcceptDataFromPE,
+
+	//Interface with the MISC channel
+	t_flag* pOutAcceptDataFromMisc
+	);
+
+void updateOABufferReader (
+	//Inputs from the instruction dispatcher
+	t_output_tile_buffer_packet _control,
+	t_flag _validControl,
+
+	#if defined(SPARSE_SYSTEM)
+	//Interface with the compressor data channel
+	t_flag _writeSuccessCompressorData,
+	t_flag _requestWrite2CompressorData,
+
+	//Interface with the compressor info channel
+	t_flag _writeSuccessCompressorInfo,
+	t_flag _requestWrite2CompressorInfo,
+
+	#else
+	//Interface with the channel to OA tee
+	t_flag _writeSuccessOATee,
+	t_flag _requestWrite2OATee,
+	#endif
+
+	//State variables,
+	t_oa_buffer_reader_info *pRegisters,
+
+	//State,
+	t_oa_buffer_access_state *pState,
+
+	//Auxillary
+	int colID
+	);
+
+void getOABufferReaderOutput (
+	//Current state
+	t_oa_buffer_access_state _currentState,
+	//Current context
+	t_oa_buffer_reader_info _currentContext,
+
+	//Interface with the dispatcher
+	t_flag* pOutAcceptInstruction,
+
+	//Buffer, read only
+	const char cacheOutputActivations[2][OA_CACHE_DEPTH][CLUSTER_SIZE],
+
+	#if defined(SPARSE_SYSTEM)
+	//Interface with the channel to compressor cluster data
+	t_flag* pToCompressorClusterValid,
+	t_cluster* pToCompressorClusterData,
+
+	//Interface with the channel to compressor info
+	t_flag* pToCompressorInfoValid,
+	t_output_cluster_info* pToCompressorInfoData
+	#else
+	//Interface with the channel to OA Tee
+	t_flag* pToOATeeValid,
+	t_output_cluster_tagged* pToOATeeData
+	#endif
+	);
+
+void updateOABufferDispatcher (
+		//instruction channel interface
+		t_flag _inInstructionValid,
+		t_output_tile_buffer_packet _inControl,
+
+		//accessor interface
+		t_flag _inReaderReady,
+		t_flag _inWriterReady,
+
+		//context
+		t_oa_buffer_dispatcher_state* pState,
+		t_output_tile_buffer_packet* pControlBuffer,
+
+		//sync,
+		bool _unblockReader,
+
+		//Auxillary
+		int colID
+	);
+
+
+void getOABufferDispatcherOutput (
+		//Current state
+		t_oa_buffer_dispatcher_state _currentState,
+		//sync,
+		bool _unblockReader,
+
+		//Instruction buffer
+		t_output_tile_buffer_packet _controlBuffer,
+
+		//instruction channel interface
+		t_flag* pOutReadyForInstruction,
+
+		//accessor interface
+		t_flag* pOutValidReaderInstruction,
+		t_flag* pOutValidWriterInstruction,
+		t_output_tile_buffer_packet* pOutReaderControl,
+		t_output_tile_buffer_packet* pOutWriterControl,
+
+		//Auxillary
+		int colID
+	);
+
 __attribute__((max_global_work_dim(0)))
 __attribute__((autorun))
 __attribute__((num_compute_units(PE_COLS)))
 __kernel void kernelOABuffer ()
 {
-	//TODO: weak review
-	typedef uint3_t t_state;
-
 	int colID = get_compute_id(0);
-	char cacheOutputActivations[OA_CACHE_DEPTH][CLUSTER_SIZE] __attribute__((
+
+	/**
+	 * Activation buffer
+	 * TODO: might need to change the indexing in order to get the BRAM arrangement
+	 */
+	char cacheOutputActivations[2][OA_CACHE_DEPTH][CLUSTER_SIZE] __attribute__((
                    numbanks(CLUSTER_SIZE), singlepump));
 
-	/*
-	 *Loop carried variables
-	*/
-	t_state currentState = OA_BUFFER_STATE_DECODE;
+	/**
+	 * Writer state and registers
+	 */
+	t_oa_buffer_writer_info regWriterContext = {
+		.accessInfo = {
+			.stripStartOutputIndex = 0,
+			.numOutputsPerStrip = 0,
+			.numStripsToAccess = 0,
+			.oaStridePerCol = 0,
+			.iStrip = 0,
+			.numLoopsPerStip = 0,
+			.iLoopPerStip = 0,
+			.indexOutput = 0,
+			.accessBank = 0x0
+		},
+		.flagSourceIsMisc = FALSE,
+		.accumulatorShiftDirCatShiftAmount = 0x0,
+		.enableRelu = FALSE
+	};
+	t_oa_buffer_access_state regWriterState = OA_BUFFER_ACCESS_STATE_DECODE;
 
-	//Starting address of the output strip that is to be accessed
-	unsigned short stripStartOutputIndex = 0X0;
-	//Number of output per strip
-	unsigned short numOutputsPerStrip = 0X0;
-	//Number of strips to access in the access tile
-	unsigned short numStripsToAccess = 0x0;
-	//Stride between the start of successive strips in the cache
-	unsigned short oaStridePerCol = 0x0;
-	
-	uint1_t isDrainBuffer = FALSE;
-	uint1_t flagSourceIsMisc = FALSE; 
+	/**
+	 * Reader state and registers 
+	 */
+	t_oa_buffer_reader_info regReaderContext = {
+		.accessInfo = {
+			.stripStartOutputIndex = 0,
+			.numOutputsPerStrip = 0,
+			.numStripsToAccess = 0,
+			.oaStridePerCol = 0,
+			.iStrip = 0,
+			.numLoopsPerStip = 0,
+			.iLoopPerStip = 0,
+			.indexOutput = 0,
+			.accessBank = 0x0
+		},
+		.enableSparsification = FALSE,
+		.numClustersToDrain = 0,
+		.numWindowsToDrain = 0,
+		.countSurvivingClustersInWindow = 0,
+		.iClustersInWindowFetched = 0,
+		.iOutputChannelFetched = 0,
+		.iClustersFetched = 0,
+		.iGroupsFetched = 0,
+		.numGroupsNextLayer = 0,
+		.numChannelsInGroupNextLayer = 0
+	};
 
-	//Information relevant for loading the cache only
-	unsigned char accumulatorShiftDirCatShiftAmount = 0x0;
-	uint1_t enableRelu = FALSE;
-	uint1_t enableSparsification = FALSE;
-	unsigned short numClustersToDrain = 0;
-	unsigned short numWindowsToDrain = 0;
-
-	//Loop-carried variables 
-	unsigned char countSurvivingClustersInWindow = 0;
-	unsigned char iClustersInWindowFetched = 0;
-	unsigned short iOutputChannelFetched = 0;
-	unsigned short iClustersFetched = 0;
-	t_bitmask mask;
 	#pragma unroll
 	for (int i=0; i<NUM_BITMASK_BYTES; i++)
 	{
-		mask.bytes[i] = 0x0;
+		regReaderContext.mask.bytes[i] = 0x0;
 	}
+	t_oa_buffer_access_state regReaderState = OA_BUFFER_ACCESS_STATE_DECODE;
 
-	unsigned short iStrip = 0;
-	unsigned short numLoopsPerStip = 0;
+	/**
+	 * Dispatcher state and registers
+	 */
+	t_output_tile_buffer_packet regDispatcherInstructionBuffer;
+	t_oa_buffer_dispatcher_state regDispatcherState = OA_BUFFER_DISPATCH_STATE_IDLE;
 
-	unsigned char delayCount = 0;
-	unsigned short iLoopPerStip = 0;
-	unsigned short indexOutput = 0;
 
+	//Runtime logic
+	#pragma ivdep
+	while (true) {
+		/**
+		 * oa buffer instruction channel <===> dispatcher
+		 */
+		t_flag dispatcherReadyForInstruction = FALSE;
+		t_flag dispatcherInstructionValid = FALSE;
+		t_output_tile_buffer_packet dispatcherNewInstruction;
 
-	//#pragma ivdep
-	while (true)
-	{
-		t_state nextState = currentState;
+		/**
+		 * dispatcher <==> writer
+		 */
+		t_flag writerInstructionValid = FALSE;
+		t_flag writerInstructionRequest = FALSE;
+		t_output_tile_buffer_packet writerNewInstruction;
 
-		if (currentState == OA_BUFFER_STATE_DECODE)
+		/**
+		 * dispatcher <==> reader
+		 */
+		t_flag readerInstructionValid = FALSE;
+		t_flag readerInstructionRequest = FALSE;
+		t_output_tile_buffer_packet readerNewInstruction;
+
+		/**
+		 * writer <===> channel from Pe
+		 */
+		t_flag writerBlockFromPEValid = FALSE;
+		t_flag writerBlockFromPERequest = FALSE;
+		t_accumulator writerBlockFromPEData;
+
+		/**
+		 * writer <==> channel from Misc
+		 */
+		t_flag writerBlockFromMiscValid = FALSE;
+		t_flag writerBlockFromMiscRequest = FALSE;
+		t_accumulator writerBlockFromMiscData;
+
+		#if defined(SPARSE_SYSTEM)
+		/**
+		 * reader <==> channel to compressor data
+		 */
+		t_flag readerBlockToCompressorClusterValid = FALSE;
+		t_flag readerBlockToCompressorClusterSent = FALSE;
+		t_cluster readerBlockToCompressorClusterData;
+
+		/**
+		 * reader <==> channel to compressor info
+		 */
+		t_flag readerBlockToCompressorInfoValid = FALSE;
+		t_flag readerBlockToCompressorInfoSent = FALSE;
+		t_output_cluster_info readerBlockToCompressorInfoData;
+		#else
+		/**
+		 * reader <===> channel to OA tee
+		 */
+		t_flag readerBlockToOATeeValid = FALSE;
+		t_flag readerBlockToOATeeSent = FALSE;
+		t_output_cluster_tagged readerBlockToOATeeData;
+		#endif
+
+		/**
+		 * Reader-writer synchornization
+		 */
+		bool unblockReader = 
+			(regWriterState == OA_BUFFER_ACCESS_STATE_DECODE)
+			|| (regWriterContext.accessInfo.accessBank != ((regDispatcherInstructionBuffer.controlBits >> 0x9) & 0x01));
+
+		/**
+		 * Derive current interface outputs from the modules
+		 */
+		getOABufferWriterOutput (
+			//Current state
+			regWriterState,
+
+			//t_oa_buffer_writer_info _currentContext,
+			regWriterContext,
+
+			//t_flag* pOutAcceptInstruction,
+			&writerInstructionRequest,
+
+			//t_flag* pOutAcceptDataFromPE,
+			&writerBlockFromPERequest,
+
+			//t_flag* pOutAcceptDataFromMisc
+			&writerBlockFromMiscRequest
+			);
+
+		getOABufferReaderOutput (
+			//t_oa_buffer_access_state _currentState,
+			regReaderState,
+			
+			//t_oa_buffer_reader_info _currentContext,
+			regReaderContext,
+
+			//t_flag* pOutAcceptInstruction,
+			&readerInstructionRequest,
+
+			//const char cacheOutputActivations[2][OA_CACHE_DEPTH][CLUSTER_SIZE],
+			cacheOutputActivations,
+
+			#if defined(SPARSE_SYSTEM)
+			//t_flag* pToCompressorClusterValid,
+			&readerBlockToCompressorClusterValid,
+			//t_cluster* pToCompressorClusterData,
+			&readerBlockToCompressorClusterData,
+
+			//t_flag* pToCompressorInfoValid,
+			&readerBlockToCompressorInfoValid,
+			//t_output_cluster_info* pToCompressorInfoData,
+			&readerBlockToCompressorInfoData
+			#else
+
+			//t_flag* pToOATeeValid,
+			&readerBlockToOATeeValid,
+			//t_output_cluster_tagged* pToOATeeData,
+			&readerBlockToOATeeData
+			#endif
+			);
+
+		getOABufferDispatcherOutput (
+			//t_oa_buffer_dispatcher_state _currentState,
+			regDispatcherState,
+			//bool _unblockReader,
+			unblockReader,
+
+			//t_output_tile_buffer_packet _controlBuffer,
+			regDispatcherInstructionBuffer,
+
+			//t_flag* pOutReadyForInstruction,
+			&dispatcherReadyForInstruction,
+
+			//t_flag* pOutValidReaderInstruction,
+			&readerInstructionValid,
+			//t_flag* pOutValidWriterInstruction,
+			&writerInstructionValid,
+			//t_output_tile_buffer_packet* pOutReaderControl,
+			&readerNewInstruction,
+			//t_output_tile_buffer_packet* pOutWriterControl,
+			&writerNewInstruction,
+
+			//Auxillary
+			colID
+		);
+
+		/**
+		 * Interface with the channels
+		 */
+		//Dispatcher <==> instruction channel
+		if (dispatcherReadyForInstruction == TRUE)
 		{
-			bool readSuccess = false;
-
-			t_output_tile_buffer_packet controlPacket =
-				read_channel_nb_intel(channel_control_to_oa_buffer_local[colID], &readSuccess);
-
-			if (readSuccess)
+			bool success = false;
+			dispatcherNewInstruction =
+				read_channel_nb_intel(channel_control_to_oa_buffer_local[colID], &success);
+			if (success == true)
 			{
-				stripStartOutputIndex = controlPacket.startOutputIndex;
-				numOutputsPerStrip = controlPacket.numOutputsPerStrip;
-				numStripsToAccess = controlPacket.numStripsToAccess;
-				oaStridePerCol = controlPacket.iaStridePerCol;
-                isDrainBuffer = (controlPacket.controlBits >> 8) & 0x1;
+				dispatcherInstructionValid = TRUE;
+			}
+		}
 
-				//Information relevant for loading the cache only
-                accumulatorShiftDirCatShiftAmount = controlPacket.controlBits & 0x1F;
-                enableRelu = (controlPacket.controlBits >> 7) & 0x1;
-                enableSparsification = ( controlPacket.controlBits >> 5) & 0x1;
-                flagSourceIsMisc = (controlPacket.controlBits >> 6) & 0x1;
+		//Writer <===> data channel from PE
+		if (writerBlockFromPERequest == TRUE)
+		{
+			bool success = false;
+			t_conv_drain_tagged wideOutputTagged = 
+				read_channel_nb_intel(channel_drain_conv[0][colID], &success);
+			if (success == true)
+			{
+				writerBlockFromPEData = wideOutputTagged.value;
+				writerBlockFromPEValid = TRUE;
+			}
+		}
 
-                iStrip = 0;
-				
-				nextState = OA_BUFFER_STATE_NUM_ACCESS;
+		//Writer <===> data channel from Misc
+		if (writerBlockFromMiscRequest == TRUE)
+		{
+			bool success = false;
+			writerBlockFromMiscData = 
+				read_channel_nb_intel(channel_drain_misc[colID], &success);
+			if (success == true)
+			{
+				writerBlockFromMiscValid = TRUE;
+			}
+		}
 
-				EMULATOR_PRINT(("[kernelOABuffer %d] START processing instruction. "
-						"isDrainBuffer=%#03x, stripStartOutputIndex=%d, numOutputsPerStrip=%d, "
-						"numStripsToAccess=%d, enableRelu=%#03x, enableSparsification=%#03x, flagSourceIsMisc=%#03x \n\n", 
-						colID, (unsigned char) isDrainBuffer, stripStartOutputIndex, numOutputsPerStrip,
-						numStripsToAccess, ((unsigned char) enableRelu), ((unsigned char)enableSparsification), ((unsigned char) flagSourceIsMisc)));
+		#if defined(SPARSE_SYSTEM)
+			//Reader <===> compressor info
+			if (readerBlockToCompressorInfoValid == TRUE)
+			{
+				bool success = 
+					write_channel_nb_intel(channel_output_buffer_to_compressor_info[colID], readerBlockToCompressorInfoData);
+				if (success == true)
+				{
+					readerBlockToCompressorInfoSent = TRUE;
+				}
 			}
 
-		}
-		else if (currentState == OA_BUFFER_STATE_NUM_ACCESS)
-		{
-			numClustersToDrain = 1 + ((numOutputsPerStrip - 1) >> VALUE_TO_CLUSTER_SHIFT);
-			numWindowsToDrain = 1 + ((numClustersToDrain - 1) >> CLUSTER_TO_WINDOW_SHIFT);
+			//Reader <===> compressor data
+			if (readerBlockToCompressorClusterValid == TRUE)
+			{
+				bool success = 
+					write_channel_nb_intel(channel_output_buffer_to_compressor_data[colID], readerBlockToCompressorClusterData);
+				if (success == true)
+				{
+					readerBlockToCompressorClusterSent = TRUE;
+				}
+			}
+		#else
 
-			//Loop-carried variables 
-			countSurvivingClustersInWindow = 0;
-			iClustersInWindowFetched = 0;
-			iOutputChannelFetched = 0;
-			iClustersFetched = 0;
+			//Reader <===> OA tee
+			if (readerBlockToOATeeValid == TRUE)
+			{
+				bool success = 
+					write_channel_nb_intel(channel_oa_buffer_to_oa_tee[colID], readerBlockToOATeeData);
+				if (success == true)
+				{
+					readerBlockToOATeeSent = TRUE;
+				}
+			}
+		#endif
+
+		/**
+		 * State update
+		 */
+		//Update the writer
+		updateOABufferWriter (
+			//t_output_tile_buffer_packet _control,
+			writerNewInstruction,
+			//t_flag _validControl,
+			writerInstructionValid,
+
+			//t_accumulator _wideOutputFromPE,
+			writerBlockFromPEData,
+			//t_flag _requestValueFromPE,
+			writerBlockFromPERequest,
+			//t_flag _validValueFromPE,
+			writerBlockFromPEValid,
+
+			//t_accumulator _wideOutputFromMisc,
+			writerBlockFromMiscData,
+			//t_flag _requestValueFromMisc,
+			writerBlockFromMiscRequest,
+			//t_flag _validValueFromMisc,
+			writerBlockFromMiscValid,
+
+			//char cacheOutputActivations[OA_CACHE_DEPTH][CLUSTER_SIZE][2],
+			cacheOutputActivations,
+
+			//t_oa_buffer_writer_info *pRegisters,
+			&regWriterContext,
+
+			//t_oa_buffer_access_state *pState,
+			&regWriterState,
+
+			//int colID
+			colID
+			);
+
+
+		//Update the reader
+		updateOABufferReader (
+			//t_output_tile_buffer_packet _control,
+			readerNewInstruction,
+			//t_flag _validControl,
+			readerInstructionValid,
+
+			#if defined(SPARSE_SYSTEM)
+				//t_flag _writeSuccessCompressorData,
+				readerBlockToCompressorClusterSent,
+				//t_flag _requestWrite2CompressorData,
+				readerBlockToCompressorClusterValid,
+
+				//t_flag _writeSuccessCompressorInfo,
+				readerBlockToCompressorInfoSent,
+				//t_flag _requestWrite2CompressorInfo,
+				readerBlockToCompressorInfoValid,
+
+			#else
+				//t_flag _writeSuccessOATee,
+				readerBlockToOATeeSent,
+				//t_flag _requestWrite2OATee,
+				readerBlockToOATeeValid,
+			#endif
+
+			//t_oa_buffer_reader_info *pRegisters,
+			&regReaderContext,
+
+			//t_oa_buffer_access_state *pState,
+			&regReaderState,
+
+			//int colID
+			colID
+			);
+
+		//Update the dispatcher
+		updateOABufferDispatcher (
+			//t_flag _inInstructionValid,
+			dispatcherInstructionValid,
+			//t_output_tile_buffer_packet _inControl,
+			dispatcherNewInstruction,
+
+			//t_flag _inReaderReady,
+			readerInstructionRequest,
+			//t_flag _inWriterReady,
+			writerInstructionRequest,
+
+			//t_oa_buffer_dispatcher_state* pState,
+			&regDispatcherState,
+			//t_output_tile_buffer_packet* pControlBuffer,
+			&regDispatcherInstructionBuffer,
+
+			//bool _unblockReader,
+			unblockReader,
+
+			//int colID
+			colID
+		);
+	} // while-loop
+}
+
+void updateOABufferWriter (
+	//Inputs from the instruction dispatcher
+	t_output_tile_buffer_packet _control,
+	t_flag _validControl,
+
+	//Signals from the interface with the PE column
+	t_accumulator _wideOutputFromPE,
+	t_flag _requestValueFromPE,
+	t_flag _validValueFromPE,
+
+	//Signals from the interface with the MISC engine
+	t_accumulator _wideOutputFromMisc,
+	t_flag _requestValueFromMisc,
+	t_flag _validValueFromMisc,
+
+	//Modified buffers
+	char cacheOutputActivations[2][OA_CACHE_DEPTH][CLUSTER_SIZE],
+
+	//State variables
+	t_oa_buffer_writer_info *pRegisters,
+
+	//State
+	t_oa_buffer_access_state *pState,
+
+	//Auxillary
+	int colID
+	)
+{
+	switch (*pState) {
+		case (OA_BUFFER_ACCESS_STATE_DECODE) : {
+			//Obtain new instruction and update the context
+			if (_validControl == TRUE)
+			{
+				//Accessor update
+				(*pRegisters).accessInfo.stripStartOutputIndex = _control.startOutputIndex;
+				(*pRegisters).accessInfo.numOutputsPerStrip = _control.numOutputsPerStrip;
+				(*pRegisters).accessInfo.numStripsToAccess = _control.numStripsToAccess;
+				(*pRegisters).accessInfo.oaStridePerCol = _control.iaStridePerCol;
+				(*pRegisters).accessInfo.iStrip = 0x0;
+				(*pRegisters).accessInfo.accessBank = (_control.controlBits >> 9) & 0x01;
+
+				//Update registers specific to the writer
+				(*pRegisters).flagSourceIsMisc = (_control.controlBits >> 6) & 0x1;
+				(*pRegisters).accumulatorShiftDirCatShiftAmount = _control.controlBits & 0x1F;
+				(*pRegisters).enableRelu = (_control.controlBits >> 7) & 0x1;
+
+
+				//State update
+				*pState = OA_BUFFER_ACCESS_STATE_NUM_ACCESS;
+
+				EMULATOR_PRINT(("[kernelOABuffer WRITER %d] START processing instruction. "
+						"stripStartOutputIndex=%d, "
+						"numOutputsPerStrip=%d, "
+						"numStripsToAccess=%d, "
+						"oaStridePerCol=%d, "
+						"enableRelu=%#03x, "
+						"accessBank=%#03x, "
+						"accumulatorShiftDirCatShiftAmount=%#07x, "
+						"flagSourceIsMisc=%#03x \n\n", 
+						colID, 
+						_control.startOutputIndex, 
+						_control.numOutputsPerStrip,
+						_control.numStripsToAccess,
+						_control.iaStridePerCol,
+						(unsigned char) (*pRegisters).enableRelu,
+						(unsigned char) (*pRegisters).accessInfo.accessBank,
+						(*pRegisters).accumulatorShiftDirCatShiftAmount, 
+						(unsigned char) (*pRegisters).flagSourceIsMisc));
+			} //if, _validControl is TRUE
+		}
+		break;
+		case (OA_BUFFER_ACCESS_STATE_NUM_ACCESS) : {
+			(*pRegisters).accessInfo.numLoopsPerStip = (*pRegisters).accessInfo.numOutputsPerStrip;
+			(*pRegisters).accessInfo.iLoopPerStip = 0x0;
+			(*pRegisters).accessInfo.indexOutput = (*pRegisters).accessInfo.stripStartOutputIndex;
+			*pState =  OA_BUFFER_ACCESS_STATE_ACCESS;
+
+		}
+		break;
+		case (OA_BUFFER_ACCESS_STATE_UPDATE_STRIP) : {
+			//Default state transition
+			*pState = OA_BUFFER_ACCESS_STATE_NUM_ACCESS;
+			(*pRegisters).accessInfo.iStrip += 0x01;
+			(*pRegisters).accessInfo.stripStartOutputIndex += (*pRegisters).accessInfo.oaStridePerCol;
+			if ((*pRegisters).accessInfo.iStrip == (*pRegisters).accessInfo.numStripsToAccess)
+			{
+				*pState = OA_BUFFER_ACCESS_STATE_DECODE;
+				EMULATOR_PRINT(("[kernelOABuffer WRITER %d] Finished processing processing instruction.\n", 
+					colID));
+			}
+		}
+		break;
+		case (OA_BUFFER_ACCESS_STATE_ACCESS) : {
+			t_accumulator wideOutput = ((*pRegisters).flagSourceIsMisc == TRUE) ?
+				_wideOutputFromMisc : _wideOutputFromPE;
+			t_flag readSuccess = ((*pRegisters).flagSourceIsMisc == TRUE) ?
+				_validValueFromMisc : _validValueFromPE;
+
+			if (readSuccess == TRUE)
+			{
+				t_operand shortOutput = modifyOutput(
+					wideOutput, 
+					(*pRegisters).accumulatorShiftDirCatShiftAmount, 
+					(*pRegisters).enableRelu
+					);
+				//cacheOutputActivations[indexOutput] = shortOutput;
+				cacheOutputActivations
+					[(*pRegisters).accessInfo.accessBank & 0x01] 
+					[(*pRegisters).accessInfo.indexOutput >> VALUE_TO_CLUSTER_SHIFT]
+					[(*pRegisters).accessInfo.indexOutput & VALUE_DIVIDED_BY_CLUSTER_SIZE_REMAINDER_MASK]
+					= shortOutput;
+
+				EMULATOR_PRINT(("[kernelOABuffer %d] Read and processed value from PE/Misc. "
+					 "Value: %#04x, %d out of %d values read.\n\n", 
+					 colID, 
+					 shortOutput, 
+					 (*pRegisters).accessInfo.indexOutput, 
+					 (*pRegisters).accessInfo.numOutputsPerStrip));
+				//Loop variable updates
+				(*pRegisters).accessInfo.indexOutput += 0x1;
+				(*pRegisters).accessInfo.iLoopPerStip += 0x1;
+
+				if ((*pRegisters).accessInfo.iLoopPerStip == (*pRegisters).accessInfo.numLoopsPerStip)
+	            {
+	                *pState = OA_BUFFER_ACCESS_STATE_UPDATE_STRIP;
+	            }
+			}	
+		}	
+		break;
+		default:
+		break;
+	} // switch
+} //updateOABufferWriter
+
+void getOABufferWriterOutput (
+	//Current state
+	t_oa_buffer_access_state _currentState,
+
+	//Current context
+	t_oa_buffer_writer_info _currentContext,
+
+	//Interface with the dispatcher
+	t_flag* pOutAcceptInstruction,
+
+	//Interface with the PE column channel
+	t_flag* pOutAcceptDataFromPE,
+
+	//Interface with the MISC channel
+	t_flag* pOutAcceptDataFromMisc
+	)
+{
+	//Defaults
+	*pOutAcceptInstruction = FALSE;
+	*pOutAcceptDataFromPE = FALSE;
+	*pOutAcceptDataFromMisc = FALSE;
+
+	switch (_currentState) {
+		case (OA_BUFFER_ACCESS_STATE_DECODE): {
+			*pOutAcceptInstruction = TRUE;
+		}
+		break;
+		case (OA_BUFFER_ACCESS_STATE_ACCESS): {
+			if (_currentContext.flagSourceIsMisc == TRUE) {
+				*pOutAcceptDataFromMisc = TRUE;
+			}
+			else
+			{
+				*pOutAcceptDataFromPE = TRUE;
+			}
+		}
+		default:
+		break;
+	} // switch _currentState
+} //getOABufferWriterOutput
+
+void updateOABufferReader (
+	//Inputs from the instruction dispatcher
+	t_output_tile_buffer_packet _control,
+	t_flag _validControl,
+
+	#if defined(SPARSE_SYSTEM)
+	//Interface with the compressor data channel
+	t_flag _writeSuccessCompressorData,
+	t_flag _requestWrite2CompressorData,
+
+	//Interface with the compressor info channel
+	t_flag _writeSuccessCompressorInfo,
+	t_flag _requestWrite2CompressorInfo,
+
+	#else
+	//Interface with the channel to OA tee
+	t_flag _writeSuccessOATee,
+	t_flag _requestWrite2OATee,
+	#endif
+
+	//State variables,
+	t_oa_buffer_reader_info *pRegisters,
+
+	//State,
+	t_oa_buffer_access_state *pState,
+
+	//Auxillary
+	int colID
+	)
+{
+	switch (*pState) {
+		case (OA_BUFFER_ACCESS_STATE_DECODE): {
+			//Obtain new instruction and update the context
+			if (_validControl == TRUE)
+			{
+				//Accessor update
+				(*pRegisters).accessInfo.stripStartOutputIndex = 0x0;
+				(*pRegisters).accessInfo.numOutputsPerStrip = _control.numOutputsPerStrip;
+				(*pRegisters).accessInfo.numStripsToAccess = _control.numStripsToAccess;
+				(*pRegisters).accessInfo.oaStridePerCol = _control.iaStridePerCol;
+				(*pRegisters).accessInfo.iStrip = 0x0;
+				(*pRegisters).accessInfo.accessBank = (_control.controlBits >> 9) & 0x01;
+
+				//Update registers specific to the reader
+				(*pRegisters).enableSparsification = (_control.controlBits >> 5) & 0x1;
+
+				(*pRegisters).numGroupsNextLayer = _control.numGroupsNextLayer;
+				(*pRegisters).numChannelsInGroupNextLayer = _control.numLocalChannelsPerNextGroup;
+				(*pRegisters).iGroupsFetched = 0x0;
+
+				//State update
+				*pState = OA_BUFFER_ACCESS_STATE_NUM_ACCESS;
+
+				EMULATOR_PRINT(("[kernelOABuffer READER %d] START processing instruction. "
+						"stripStartOutputIndex=%d, "
+						"numOutputsPerStrip=%d, "
+						"numStripsToAccess=%d, "
+						"oaStridePerCol=%d, "
+						"enableSparsification=%#03x, "
+						"numGroupsNextLayer=%#06x, "
+						"numChannelsInGroupNextLayer=%#06x, "
+						"accessBank=%#03x \n\n ",
+						colID, 
+						_control.startOutputIndex, 
+						_control.numOutputsPerStrip,
+						_control.numStripsToAccess,
+						_control.iaStridePerCol,
+						(unsigned char) (*pRegisters).enableSparsification, 
+						(*pRegisters).numGroupsNextLayer,
+						(*pRegisters).numChannelsInGroupNextLayer,
+						(unsigned char) (*pRegisters).accessInfo.accessBank));
+			} //if, _validControl is TRUE
+		} //OA_BUFFER_ACCESS_STATE_DECODE
+		break;
+		case (OA_BUFFER_ACCESS_STATE_NUM_ACCESS): {
+			(*pRegisters).numClustersToDrain = 1 
+				+ (((*pRegisters).accessInfo.numOutputsPerStrip - 1) >> VALUE_TO_CLUSTER_SHIFT);
+			(*pRegisters).numWindowsToDrain = 1 
+				+ (((*pRegisters).numClustersToDrain - 1) >> CLUSTER_TO_WINDOW_SHIFT);
+
+			(*pRegisters).countSurvivingClustersInWindow = 0x0;
+			(*pRegisters).iClustersInWindowFetched = 0x0;
+			(*pRegisters).iOutputChannelFetched = 0x0;
+			(*pRegisters).iClustersFetched = 0x0;
+
+			(*pRegisters).accessInfo.iLoopPerStip = 0x0;
+			(*pRegisters).accessInfo.indexOutput = (*pRegisters).accessInfo.stripStartOutputIndex;
+
 			#pragma unroll
 			for (int i=0; i<NUM_BITMASK_BYTES; i++)
 			{
-				mask.bytes[i] = 0x0;
+				(*pRegisters).mask.bytes[i] = 0x0;
 			}
 
-			//Loop control
 			#if defined(SPARSE_SYSTEM)
-				numLoopsPerStip = (isDrainBuffer == TRUE) ?
-					(numClustersToDrain + numWindowsToDrain) 
-					: numOutputsPerStrip;
+				(*pRegisters).accessInfo.numLoopsPerStip = 
+					((*pRegisters).numClustersToDrain + (*pRegisters).numWindowsToDrain); 
 			#else
-                numLoopsPerStip = (isDrainBuffer == TRUE) ?
-                    (numClustersToDrain)
-                    : numOutputsPerStrip;
+				(*pRegisters).accessInfo.numLoopsPerStip = (*pRegisters).numClustersToDrain;
 			#endif
 
-			iLoopPerStip = 0;
-			indexOutput = stripStartOutputIndex;
-
-			nextState = OA_BUFFER_STATE_ACCESS;
-		}
-		else if (currentState == OA_BUFFER_STATE_PADD)
-		{
-			delayCount++;
-			if (delayCount >= OA_BUFFER_PAD_COUNT)
+			(*pState) = OA_BUFFER_ACCESS_STATE_ACCESS;
+		} //OA_BUFFER_ACCESS_STATE_NUM_ACCESS
+		break;
+		case (OA_BUFFER_ACCESS_STATE_UPDATE_STRIP): {
+			//Default state transition
+			*pState = OA_BUFFER_ACCESS_STATE_NUM_ACCESS;
+			(*pRegisters).accessInfo.iStrip += 0x01;
+			(*pRegisters).accessInfo.stripStartOutputIndex += (*pRegisters).accessInfo.oaStridePerCol;
+			if ((*pRegisters).accessInfo.iStrip == (*pRegisters).accessInfo.numStripsToAccess)
 			{
-				nextState = OA_BUFFER_STATE_DECODE;
+				(*pRegisters).accessInfo.iStrip = 0x00;
+				(*pRegisters).iGroupsFetched += 0x1;
+				(*pRegisters).accessInfo.stripStartOutputIndex = (*pRegisters).numChannelsInGroupNextLayer * (*pRegisters).iGroupsFetched;
+				if ((*pRegisters).iGroupsFetched == (*pRegisters).numGroupsNextLayer)
+				{
+					*pState = OA_BUFFER_ACCESS_STATE_DECODE;
+					EMULATOR_PRINT(("[kernelOABuffer READER %d] Finished processing processing instruction.\n", 
+						colID));
+				}
 			}
-		}
-		else if (currentState == OA_BUFFER_STATE_ACCESS)
-		{
-			if (isDrainBuffer == FALSE) //Case: draining the array
-			{
-				bool readSuccess = false;
-				t_accumulator wideOutput;
-
-				if (flagSourceIsMisc == FALSE)
+		} //OA_BUFFER_ACCESS_STATE_UPDATE_STRIP
+		break;
+		case (OA_BUFFER_ACCESS_STATE_ACCESS): {
+			#if defined(SPARSE_SYSTEM)
+				if (((*pRegisters).iClustersInWindowFetched < COMPRESSION_WINDOW_SIZE) && ((*pRegisters).iClustersFetched < (*pRegisters).numClustersToDrain))
 				{
-					t_conv_drain_tagged wideOutputTagged;
-					wideOutputTagged = read_channel_nb_intel(channel_drain_conv[0][colID], &readSuccess);
-					wideOutput = wideOutputTagged.value;
-				}
-				else
-				{
-					wideOutput = read_channel_nb_intel(channel_drain_misc[colID], &readSuccess);
-
-				}
-				
-				
-				if (readSuccess == true) {
-					t_operand shortOutput = modifyOutput(wideOutput, accumulatorShiftDirCatShiftAmount, enableRelu);
-					//cacheOutputActivations[indexOutput] = shortOutput;
-					cacheOutputActivations[indexOutput >> VALUE_TO_CLUSTER_SHIFT][indexOutput & VALUE_DIVIDED_BY_CLUSTER_SIZE_REMAINDER_MASK] = shortOutput;
-
-					EMULATOR_PRINT(("[kernelOABuffer %d] Read and processed value from PE. Value: %#04x, %d out of %d values read.\n\n", 
-					colID, shortOutput, indexOutput, numOutputsPerStrip));
-					//Loop variable updates
-					indexOutput++;
-					iLoopPerStip++;
-
-				}
-			} //Case: draining the array
-
-			else //Case: Stream the buffered output to the cache
-			{
-				#if defined(SPARSE_SYSTEM)
-					//If we haven't finished streaming a window or haven't drained the current group
-					if ((iClustersInWindowFetched < COMPRESSION_WINDOW_SIZE) && (iClustersFetched < numClustersToDrain))
+					if ((_requestWrite2CompressorData == TRUE) && (_writeSuccessCompressorData == TRUE))
 					{
-						bool keep = (enableSparsification == FALSE);
-						t_cluster cluster;
-						//bool writeSuccess = true;
+						(*pRegisters).mask.bytes[(*pRegisters).iClustersInWindowFetched >> 0x3] 
+							|= ((unsigned char) 1) << ((*pRegisters).iClustersInWindowFetched & 0x07);
 
-						//Fetch all the values in the cluster
-						#pragma unroll
-						for (unsigned char i=0; i<CLUSTER_SIZE; i++)
-						{
-							unsigned short index = indexOutput + i;
-							unsigned short tempOC = iOutputChannelFetched + i;
-							char tempValue = (tempOC >= numOutputsPerStrip) ?
-								0x0 : cacheOutputActivations[index >> VALUE_TO_CLUSTER_SHIFT][i];
-							cluster.cluster_values[i] = tempValue;
-							keep = keep || (tempValue != 0x0);
-						}
-
-						if (keep == true)
-						{
-							write_channel_intel(channel_output_buffer_to_compressor_data[colID], cluster);
-							//mask |= ((unsigned char) 1) << iClustersInWindowFetched;
-							mask.bytes[iClustersInWindowFetched >> 0x3] |= ((unsigned char) 1) << (iClustersInWindowFetched & 0x07);
-							countSurvivingClustersInWindow++;
-						}
-
-						iClustersFetched++;
-						iClustersInWindowFetched++;
-
-						//Gotcha
-						iOutputChannelFetched += CLUSTER_SIZE;
-						indexOutput += CLUSTER_SIZE;
-						iLoopPerStip++;
-
+						(*pRegisters).countSurvivingClustersInWindow += 0x01;
 					}
-					else //Send mask along with other informatin
+
+					if (((_requestWrite2CompressorData == TRUE) && (_writeSuccessCompressorData == TRUE))
+											|| (_requestWrite2CompressorData == FALSE)
+						)
 					{
-						//bool writeSuccess = false;
-						t_output_cluster_info info;
-						#pragma unroll
+						(*pRegisters).iClustersFetched += 0x1;
+						(*pRegisters).iClustersInWindowFetched += 0x1;
+						(*pRegisters).iOutputChannelFetched += CLUSTER_SIZE;
+
+						(*pRegisters).accessInfo.indexOutput += CLUSTER_SIZE;
+						(*pRegisters).accessInfo.iLoopPerStip += 0x01;
+					}
+				}
+				else //Send mask along with other informatin
+				{
+					if (_writeSuccessCompressorInfo == TRUE)
+					{
 						for (int i=0; i<NUM_BITMASK_BYTES; i++)
 						{
-							info.bitmask.bytes[i] = mask.bytes[i];
-							mask.bytes[i] = 0x0;
+							(*pRegisters).mask.bytes[i] = 0x0;
 						}
-						unsigned char isLastInStrip = (iClustersFetched == numClustersToDrain) ? 0x1 : 0x0;
-						info.statusBits = (countSurvivingClustersInWindow & 0x3F)
-							| ((isLastInStrip & 0x1) << 0x6)
-							| ( (((unsigned char) enableSparsification) & 0x1) << 0x7);
-						
-						write_channel_intel(channel_output_buffer_to_compressor_info[colID], info);
-						countSurvivingClustersInWindow = 0;
-						iClustersInWindowFetched = 0;
-						iLoopPerStip++;
+						(*pRegisters).countSurvivingClustersInWindow = 0x0;
+						(*pRegisters).iClustersInWindowFetched = 0x0;
+						(*pRegisters).accessInfo.iLoopPerStip += 0x01;
 					}
-				#else //DENSE_SYSTEM
-					t_output_cluster_tagged taggedCluster;
-					//fetch the cluster
+				}
+			#else //SPARSE_SYSTEM
+				if (_writeSuccessOATee == TRUE) {
+
+					(*pRegisters).iClustersFetched += 0x1;
+					(*pRegisters).iOutputChannelFetched += CLUSTER_SIZE;
+					(*pRegisters).accessInfo.indexOutput += CLUSTER_SIZE;
+					(*pRegisters).accessInfo.iLoopPerStip += 0x01;
+				}
+			#endif
+
+			if ((*pRegisters).accessInfo.iLoopPerStip == (*pRegisters).accessInfo.numLoopsPerStip)
+            {
+                *pState = OA_BUFFER_ACCESS_STATE_UPDATE_STRIP;
+            }
+		} //OA_BUFFER_ACCESS_STATE_ACCESS
+		break;
+		default:
+		break;
+	} //switch, *pState
+} //updateOABufferReader
+
+void getOABufferReaderOutput (
+	//Current state
+	t_oa_buffer_access_state _currentState,
+	//Current context
+	t_oa_buffer_reader_info _currentContext,
+
+	//Interface with the dispatcher
+	t_flag* pOutAcceptInstruction,
+
+	//Buffer, read only
+	const char cacheOutputActivations[2][OA_CACHE_DEPTH][CLUSTER_SIZE],
+
+	#if defined(SPARSE_SYSTEM)
+	//Interface with the channel to compressor cluster data
+	t_flag* pToCompressorClusterValid,
+	t_cluster* pToCompressorClusterData,
+
+	//Interface with the channel to compressor info
+	t_flag* pToCompressorInfoValid,
+	t_output_cluster_info* pToCompressorInfoData
+	#else
+	//Interface with the channel to OA Tee
+	t_flag* pToOATeeValid,
+	t_output_cluster_tagged* pToOATeeData
+	#endif
+	)
+{
+	//Defaults:
+	*pOutAcceptInstruction = FALSE;
+	#if defined(SPARSE_SYSTEM)
+		*pToCompressorClusterValid = FALSE;
+		*pToCompressorInfoValid = FALSE;
+	#else
+		*pToOATeeValid = FALSE;
+	#endif
+
+
+	switch (_currentState) {
+		case (OA_BUFFER_ACCESS_STATE_DECODE): {
+			*pOutAcceptInstruction = TRUE;
+		}
+		break;
+		case (OA_BUFFER_ACCESS_STATE_ACCESS): {
+			#if defined(SPARSE_SYSTEM)
+				//If we haven't finished streaming a window or haven't drained the current group
+				if ((_currentContext.iClustersInWindowFetched < COMPRESSION_WINDOW_SIZE) && (_currentContext.iClustersFetched < _currentContext.numClustersToDrain))
+				{
+					bool keep = (_currentContext.enableSparsification == FALSE);
+					t_cluster cluster;
+					//bool writeSuccess = true;
+
+					//Fetch all the values in the cluster
 					#pragma unroll
 					for (unsigned char i=0; i<CLUSTER_SIZE; i++)
 					{
-						unsigned short index = indexOutput + i;
-						unsigned short tempOC = iOutputChannelFetched + i;
-						char tempValue = (tempOC >= numOutputsPerStrip) ?
-								0x0 : cacheOutputActivations[index >> VALUE_TO_CLUSTER_SHIFT][i];
-						taggedCluster.cluster.cluster_values[i] = tempValue;
+						unsigned short index = _currentContext.accessInfo.indexOutput + i;
+						unsigned short tempOC = _currentContext.iOutputChannelFetched + i;
+						char tempValue = (tempOC >= _currentContext.accessInfo.numOutputsPerStrip) ?
+							0x0 
+							: cacheOutputActivations[_currentContext.accessInfo.accessBank & 0x01]
+									[index >> VALUE_TO_CLUSTER_SHIFT]
+									[i];
+						cluster.cluster_values[i] = tempValue;
+						keep = keep || (tempValue != 0x0);
 					}
 
-					unsigned short tempIClustersFetched = iClustersFetched+1;
-					bool isLastInStrip = (tempIClustersFetched == numClustersToDrain) ? true : false;
-					taggedCluster.isLastInStrip = isLastInStrip;
+					if (keep == true)
+					{
 
-					write_channel_intel(channel_oa_buffer_to_oa_tee[colID], taggedCluster);
+						*pToCompressorClusterValid = TRUE;
+						*pToCompressorClusterData = cluster;
+					}
+				}
+				else //Send mask along with other informatin
+				{
+					//bool writeSuccess = false;
+					t_output_cluster_info info;
+					#pragma unroll
+					for (int i=0; i<NUM_BITMASK_BYTES; i++)
+					{
+						info.bitmask.bytes[i] = _currentContext.mask.bytes[i];
+					}
+					unsigned char isLastInStrip = (_currentContext.iClustersFetched == _currentContext.numClustersToDrain) ? 0x1 : 0x0;
+					info.statusBits = (_currentContext.countSurvivingClustersInWindow & 0x3F)
+						| ((isLastInStrip & 0x1) << 0x6)
+						| ( (((unsigned char) _currentContext.enableSparsification) & 0x1) << 0x7);
+					
+					*pToCompressorInfoValid = TRUE;
+					*pToCompressorInfoData = info;
+				}
+			#else //SPARSE_SYSTEM
+				t_output_cluster_tagged taggedCluster;
+				//fetch the cluster
+				#pragma unroll
+				for (unsigned char i=0; i<CLUSTER_SIZE; i++)
+				{
+					unsigned short index = _currentContext.accessInfo.indexOutput + i;
+					unsigned short tempOC = _currentContext.iOutputChannelFetched + i;
+					char tempValue = (tempOC >= _currentContext.accessInfo.numOutputsPerStrip) ?
+							0x0 
+							: cacheOutputActivations[_currentContext.accessInfo.accessBank & 0x01][index >> VALUE_TO_CLUSTER_SHIFT][i];
+					taggedCluster.cluster.cluster_values[i] = tempValue;
+				}
 
-					iClustersFetched++;
+				unsigned short tempIClustersFetched = _currentContext.iClustersFetched+1;
+				bool isLastInStrip = (tempIClustersFetched == _currentContext.numClustersToDrain) ? true : false;
+				taggedCluster.isLastInStrip = isLastInStrip;
 
-					iOutputChannelFetched += CLUSTER_SIZE;
-					indexOutput += CLUSTER_SIZE;
-					iLoopPerStip++;
-
-				#endif //SPARSE_SYSTEM
-			} //Case: Stream the buffered output to the cache
-
-            if (iLoopPerStip == numLoopsPerStip)
-            {
-                nextState = OA_BUFFER_UPDATE_STRIP;
-            }
+				*pToOATeeValid = TRUE;
+				*pToOATeeData = taggedCluster;
+			#endif
 		}
-		else if (currentState == OA_BUFFER_UPDATE_STRIP)
-		{
-			nextState = OA_BUFFER_STATE_NUM_ACCESS;
-			iStrip++;
-			stripStartOutputIndex += oaStridePerCol;
-			if (iStrip == numStripsToAccess)
-			{
-				delayCount = 0;
-				nextState = OA_BUFFER_STATE_PADD;
-				EMULATOR_PRINT(("[kernelOABuffer %d] Finished processing processing instruction.\n", colID));
+		break;
+		default:
+		break;
+	} //switch, _currentState
+}
+
+void updateOABufferDispatcher (
+		//instruction channel interface
+		t_flag _inInstructionValid,
+		t_output_tile_buffer_packet _inControl,
+
+		//accessor interface
+		t_flag _inReaderReady,
+		t_flag _inWriterReady,
+
+		//context
+		t_oa_buffer_dispatcher_state* pState,
+		t_output_tile_buffer_packet* pControlBuffer,
+
+		//sync,
+		bool _unblockReader,
+
+		//Auxillary
+		int colID
+	)
+{
+	switch (*pState) {
+		case (OA_BUFFER_DISPATCH_STATE_IDLE): {
+			if (_inInstructionValid == TRUE) {
+				*pControlBuffer = _inControl;
+
+				//Depends on the drain/fill bit of the control packet
+				//we might transition to OA_BUFFER_DISPATCH_STATE_SEND_WRITER
+				//or OA_BUFFER_DISPATCH_STATE_SEND_READER
+				if (((_inControl.controlBits >> 0x8) & 0x01) == 0x01)
+				{
+					//Drain/read from the buffer
+					*pState = OA_BUFFER_DISPATCH_STATE_SEND_READER;
+
+				}
+				else
+				{
+					*pState  = OA_BUFFER_DISPATCH_STATE_SEND_WRITER;
+				}
 			}
-		}
+		} //OA_BUFFER_DISPATCH_STATE_IDLE
+		break;
+		case (OA_BUFFER_DISPATCH_STATE_SEND_WRITER): {
+			if (_inWriterReady == TRUE)
+			{
+				*pState = OA_BUFFER_DISPATCH_STATE_IDLE;
+				EMULATOR_PRINT(("[kernelOABuffer Dispatcher %d] Sent instruction to WRITER.\n",
+							colID));
+			}
 
-		currentState = nextState;
-	} //end while
-} //kernelOABuffer
+		} //OA_BUFFER_DISPATCH_STATE_SEND_WRITER
+		break;
+		case (OA_BUFFER_DISPATCH_STATE_SEND_READER): {
+			if ((_inReaderReady == TRUE) && (_unblockReader == true))
+			{
+				//State transition out of  OA_BUFFER_DISPATCH_STATE_SEND_READER 
+				//needs to take consideration of the synchornization flag.
+				*pState = OA_BUFFER_DISPATCH_STATE_IDLE;
+				EMULATOR_PRINT(("[kernelOABuffer Dispatcher %d] Sent instruction to READER.\n",
+							colID));
+			}
+
+		} //OA_BUFFER_DISPATCH_STATE_SEND_WRITER
+		break;
+		default:
+		break;
+	}
+} //updateOABufferDispatcher
+
+void getOABufferDispatcherOutput (
+		//Current state
+		t_oa_buffer_dispatcher_state _currentState,
+		//sync,
+		bool _unblockReader,
+
+		//Instruction buffer
+		t_output_tile_buffer_packet _controlBuffer,
+
+		//instruction channel interface
+		t_flag* pOutReadyForInstruction,
+
+		//accessor interface
+		t_flag* pOutValidReaderInstruction,
+		t_flag* pOutValidWriterInstruction,
+		t_output_tile_buffer_packet* pOutReaderControl,
+		t_output_tile_buffer_packet* pOutWriterControl,
+
+		//Auxillary
+		int colID
+	)
+{
+	/**
+	 * Default values
+	 */
+	*pOutReadyForInstruction = FALSE;
+	*pOutValidWriterInstruction = FALSE;
+	*pOutValidReaderInstruction = FALSE;
+
+	/**
+	 * Tile control packet interface signal
+	 */
+	if (_currentState == OA_BUFFER_DISPATCH_STATE_IDLE)
+	{
+		*pOutReadyForInstruction = TRUE;
+	}
+
+	/**
+	 * Writer control interface
+	 */
+	if (_currentState == OA_BUFFER_DISPATCH_STATE_SEND_WRITER)
+	{
+		*pOutValidWriterInstruction = TRUE;
+		*pOutWriterControl = _controlBuffer;
+	}
+
+	/**
+	 * Reader control interface.
+	 * Send instruction to the reader once the writer has finished loading the data
+	 */
+	if (_currentState == OA_BUFFER_DISPATCH_STATE_SEND_READER)
+	{
+		if (_unblockReader == true)
+		{
+			*pOutValidReaderInstruction = TRUE;
+			*pOutReaderControl = _controlBuffer;
+		}
+			
+	}
+} //getOABufferDispatcherOutput
+
 
 __attribute__((max_global_work_dim(0)))
 __kernel void kernelOATileController (
@@ -2661,96 +3603,136 @@ __kernel void kernelOATileController (
 	unsigned int numInstructions
 	)
 {
-	for (unsigned int iInst=0; iInst<numInstructions; iInst++)
+	/*!
+		The activities in one instruction cycle consists of
+		sending one OA write instruciton, and then sending all the IA read instructions
+		that stream from the OA buffer.
+		To faciliate double buffering,
+		The first cycle consists only of sending the OA write instruction,
+		and the last cycle consists only of sending the OA read instruction
+	*/
+	unsigned int numInstructionCycles = numInstructions + 1;
+	unsigned int iInst = 0;
+	uint1_t writeSideIndex = 0;
+
+	t_oa_tile_controller_instruction regInstruction;
+	for (unsigned int iInstructionCycle=0; iInstructionCycle<numInstructionCycles; iInstructionCycle++)
 	{
-		/*
-		1. Read the instruction and decode it
-		*/
-		t_oa_tile_controller_instruction inst = pInst[iInst];
+		/**
+		 * 1. Send the streaming (cache--> dram) command, if possible
+		 */
+		t_oa_tile_controller_instruction readInstruction = regInstruction;
+		if (iInstructionCycle > 0)
+		{
+			EMULATOR_PRINT(("[kernelOATileController] START sending the write-to-memory instruction for instruction cycle %d\n\n", 
+				iInstructionCycle));
+			unsigned char numOutputTileHeightxWidth = readInstruction.numLocalTilePerColHxW;
+			unsigned char numFoldsInGroupCurrentLayer = readInstruction.numFoldsInGroupCurrentLayer;
+		    unsigned char numFullFoldsInGroupCurrentLayer = readInstruction.numFullFoldsInCurrentLayer;
+		    unsigned char numActiveElementsInFullFold = readInstruction.numActiveElementsInFullFold;
+		    unsigned char numActiveRowsInPartialFolds = readInstruction.numActiveElementsInPartialFold;
 
-		//t_output_tile_controller_packet controlPacket = read_channel_intel(channel_output_writer_to_oa_controller);
-		unsigned char numOutputTileHeightxWidth = inst.numLocalTilePerColHxW;
-		unsigned char numFoldsInGroupCurrentLayer = inst.numFoldsInGroupCurrentLayer;
-	    unsigned char numFullFoldsInGroupCurrentLayer = inst.numFullFoldsInCurrentLayer;
-	    unsigned char numActiveElementsInFullFold = inst.numActiveElementsInFullFold;
-	    unsigned char numActiveRowsInPartialFolds = inst.numActiveElementsInPartialFold;
+		    unsigned short numChannelsInGroupCurrentLayer = readInstruction.numLocalChannelsPerCurrentGroup;
+		    unsigned short numChannelsInGroupNextLayer = readInstruction.numLocalChannelsPerNextGroup;
+		    unsigned char outputModifierBits = readInstruction.flagSparseCatFlagReluCatFlagSourceCatShift;
+		    unsigned char numActivePeCols = readInstruction.numActiveCols;
 
-	    unsigned short numChannelsInGroupCurrentLayer = inst.numLocalChannelsPerCurrentGroup;
-	    unsigned short numChannelsInGroupNextLayer = inst.numLocalChannelsPerNextGroup;
-	    unsigned char outputModifierBits = inst.flagSparseCatFlagReluCatFlagSourceCatShift;
-	    unsigned char numActivePeCols = inst.numActiveCols;
+		    unsigned short numOutputChannels = readInstruction.numLocalChannels;
 
-	    unsigned short numOutputChannels = inst.numLocalChannels;
-
-	    /*
-	    2. Send instruction to drain from the PE array
-	    */
-	    unsigned short iChannelCurrentLayer = 0;
-	    unsigned short iChannelInGroup = 0;
-	    unsigned short iFoldInGroup = 0;
-	    //unsigned short iOutputTileHxWDrain = 0;
-
-	   	EMULATOR_PRINT(("[kernelOATileController] START sending the drain-from-array instruction for instruction %d\n\n", 
-				iInst));
-
-	    for  (unsigned short i=0; i < inst.numDrainInstructions; i++)
-	    {
-	    	unsigned char numActivePeRows = (iFoldInGroup < numFullFoldsInGroupCurrentLayer) ?
-	    		numActiveElementsInFullFold : numActiveRowsInPartialFolds;
-	    	unsigned short startOutputIndex = iChannelCurrentLayer+iChannelInGroup;
-
-	    	t_output_tile_buffer_packet_tagged bufferPacketTagged;
-	    	bufferPacketTagged.bufferPacket.startOutputIndex = startOutputIndex;
-	    	bufferPacketTagged.bufferPacket.numOutputsPerStrip = numActivePeRows;
-	    	bufferPacketTagged.bufferPacket.numStripsToAccess = numOutputTileHeightxWidth;
-	    	bufferPacketTagged.bufferPacket.iaStridePerCol = numOutputChannels;
-	    	bufferPacketTagged.bufferPacket.controlBits = outputModifierBits;
-	    	bufferPacketTagged.maxColID = (numActivePeCols - 1);
-
-	    	write_channel_intel(channel_oa_noc_control[0], bufferPacketTagged);
-
-	    	/*
-	    	Parameter updates
-	    	*/
-
-    		iFoldInGroup++;
-    		iChannelInGroup += numActivePeRows;
-    		if (iFoldInGroup == numFoldsInGroupCurrentLayer)
-    		{
-    			iFoldInGroup = 0;
-    			iChannelCurrentLayer += numChannelsInGroupCurrentLayer; 
-    			iChannelInGroup = 0;
-    		}
-	    } //while-loop.  Send instruction to drain from the PE array
-	    EMULATOR_PRINT(("[kernelOATileController] FINISHED sending the drain-from-array instruction for tile%d\n\n", 
-				iInst));
-
-	    /*
-	    3. Send instructions to stream cached data
-	    */
-	   	EMULATOR_PRINT(("[kernelOATileController] START sending the write-to-memory instruction for tile %d\n\n", 
-				iInst));
-	    unsigned short iChannelNextLayer = 0;
-
-	    for  (unsigned short i=0; i<inst.numMemInstructions; i++)
-	    {
-	    	unsigned short startOutputIndex = iChannelNextLayer;
-	    	t_output_tile_buffer_packet_tagged bufferPacketTagged;
-	    	bufferPacketTagged.bufferPacket.startOutputIndex = startOutputIndex;
+		    t_output_tile_buffer_packet_tagged bufferPacketTagged;
+	    	bufferPacketTagged.bufferPacket.startOutputIndex = 0x0;
 			bufferPacketTagged.bufferPacket.numOutputsPerStrip = numChannelsInGroupNextLayer;
 	    	bufferPacketTagged.bufferPacket.numStripsToAccess = numOutputTileHeightxWidth;
 	    	bufferPacketTagged.bufferPacket.iaStridePerCol = numOutputChannels;
-	    	bufferPacketTagged.bufferPacket.controlBits = (((unsigned short) 0x1) << 0x8 ) | ((unsigned short) outputModifierBits);
+	    	bufferPacketTagged.bufferPacket.controlBits = 
+	    		( (((unsigned short) (~writeSideIndex)) & 0x01) << 0x9)
+	    		| (((unsigned short) 0x1) << 0x8 ) 
+	    		| ((unsigned short) outputModifierBits);
+
+	    	bufferPacketTagged.bufferPacket.numGroupsNextLayer = readInstruction.numMemInstructions;
+	    	bufferPacketTagged.bufferPacket.numLocalChannelsPerNextGroup = readInstruction.numLocalChannelsPerNextGroup;
+
 	    	bufferPacketTagged.maxColID = (numActivePeCols - 1);
 
+
 	    	write_channel_intel(channel_oa_noc_control[0], bufferPacketTagged);
+	    	EMULATOR_PRINT(("[kernelOATileController] FINISHED sending the write-to-memory instruction for instruction cycle %d\n\n", 
+				iInstructionCycle));
+		}
 
-	    	iChannelNextLayer += numChannelsInGroupNextLayer;
-	    } //while-loop. Send instructions to stream cached data
-	    EMULATOR_PRINT(("[kernelOATileController] FINISH sending the write-to-memory instruction for tile %d\n\n", 
-				iInst));
+		/*
+			2. Send the drain (compute --> cache) command
+		*/
+		if (iInstructionCycle < numInstructions)
+		{
+			t_oa_tile_controller_instruction inst = pInst[iInst];
 
-	} // iterate over instructions
+			//t_output_tile_buffer_packet controlPacket = read_channel_intel(channel_output_writer_to_oa_controller);
+			unsigned char numOutputTileHeightxWidth = inst.numLocalTilePerColHxW;
+			unsigned char numFoldsInGroupCurrentLayer = inst.numFoldsInGroupCurrentLayer;
+		    unsigned char numFullFoldsInGroupCurrentLayer = inst.numFullFoldsInCurrentLayer;
+		    unsigned char numActiveElementsInFullFold = inst.numActiveElementsInFullFold;
+		    unsigned char numActiveRowsInPartialFolds = inst.numActiveElementsInPartialFold;
+
+		    unsigned short numChannelsInGroupCurrentLayer = inst.numLocalChannelsPerCurrentGroup;
+		    unsigned short numChannelsInGroupNextLayer = inst.numLocalChannelsPerNextGroup;
+		    unsigned char outputModifierBits = inst.flagSparseCatFlagReluCatFlagSourceCatShift;
+		    unsigned char numActivePeCols = inst.numActiveCols;
+
+		    unsigned short numOutputChannels = inst.numLocalChannels;
+
+		    /*
+		    2. Send instruction to drain from the PE array
+		    */
+		    unsigned short iChannelCurrentLayer = 0;
+		    unsigned short iChannelInGroup = 0;
+		    unsigned short iFoldInGroup = 0;
+		    //unsigned short iOutputTileHxWDrain = 0;
+
+		   	EMULATOR_PRINT(("[kernelOATileController] START sending the drain-from-array instruction for instruction cycle %d\n\n", 
+					iInstructionCycle));
+
+		    for  (unsigned short i=0; i < inst.numDrainInstructions; i++)
+		    {
+		    	unsigned char numActivePeRows = (iFoldInGroup < numFullFoldsInGroupCurrentLayer) ?
+		    		numActiveElementsInFullFold : numActiveRowsInPartialFolds;
+		    	unsigned short startOutputIndex = iChannelCurrentLayer+iChannelInGroup;
+
+		    	t_output_tile_buffer_packet_tagged bufferPacketTagged;
+		    	bufferPacketTagged.bufferPacket.startOutputIndex = startOutputIndex;
+		    	bufferPacketTagged.bufferPacket.numOutputsPerStrip = numActivePeRows;
+		    	bufferPacketTagged.bufferPacket.numStripsToAccess = numOutputTileHeightxWidth;
+		    	bufferPacketTagged.bufferPacket.iaStridePerCol = numOutputChannels;
+		    	bufferPacketTagged.bufferPacket.controlBits = 
+		    		( (((unsigned short) writeSideIndex) & 0x01) << 0x9)
+		    		| ((unsigned short) outputModifierBits);
+		    	bufferPacketTagged.maxColID = (numActivePeCols - 1);
+
+		    	write_channel_intel(channel_oa_noc_control[0], bufferPacketTagged);
+
+		    	/*
+		    	Parameter updates
+		    	*/
+
+	    		iFoldInGroup++;
+	    		iChannelInGroup += numActivePeRows;
+	    		if (iFoldInGroup == numFoldsInGroupCurrentLayer)
+	    		{
+	    			iFoldInGroup = 0;
+	    			iChannelCurrentLayer += numChannelsInGroupCurrentLayer; 
+	    			iChannelInGroup = 0;
+	    		}
+		    } //while-loop.  Send instruction to drain from the PE array
+		    EMULATOR_PRINT(("[kernelOATileController] FINISHED sending the drain-from-array instruction for instruction cycle %d\n\n", 
+					iInstructionCycle));
+
+		    regInstruction = inst;
+		    iInst++;
+		} // Send the drain (compute --> cache) command
+
+	    //SWAP the read side and the write side
+		writeSideIndex = (~writeSideIndex) & 0x01;
+	} // iterate over instructions cycles
 }
 
 
