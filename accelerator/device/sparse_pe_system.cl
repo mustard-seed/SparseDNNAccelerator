@@ -2468,7 +2468,7 @@ void updateOABufferWriter (
 	t_flag _validValueFromMisc,
 
 	//Modified buffers
-	char cacheOutputActivations[2][OA_CACHE_DEPTH][CLUSTER_SIZE],
+	char cacheOutputActivations[2*OA_CACHE_DEPTH][CLUSTER_SIZE],
 
 	//State variables
 	t_oa_buffer_writer_info *pRegisters,
@@ -2537,7 +2537,7 @@ void getOABufferReaderOutput (
 	t_flag* pOutAcceptInstruction,
 
 	//Buffer, read only
-	const char cacheOutputActivations[2][OA_CACHE_DEPTH][CLUSTER_SIZE],
+	const char cacheOutputActivations[2*OA_CACHE_DEPTH][CLUSTER_SIZE],
 
 	#if defined(SPARSE_SYSTEM)
 	//Interface with the channel to compressor cluster data
@@ -2608,8 +2608,8 @@ __kernel void kernelOABuffer ()
 	 * Activation buffer
 	 * TODO: might need to change the indexing in order to get the BRAM arrangement
 	 */
-	char cacheOutputActivations[2][OA_CACHE_DEPTH][CLUSTER_SIZE] __attribute__((
-                   numbanks(CLUSTER_SIZE), singlepump));
+	char cacheOutputActivations[2*OA_CACHE_DEPTH][CLUSTER_SIZE] __attribute__((
+                   numbanks(CLUSTER_SIZE), bankwidth(1), singlepump));
 
 	/**
 	 * Writer state and registers
@@ -3009,7 +3009,7 @@ void updateOABufferWriter (
 	t_flag _validValueFromMisc,
 
 	//Modified buffers
-	char cacheOutputActivations[2][OA_CACHE_DEPTH][CLUSTER_SIZE],
+	char cacheOutputActivations[2*OA_CACHE_DEPTH][CLUSTER_SIZE],
 
 	//State variables
 	t_oa_buffer_writer_info *pRegisters,
@@ -3091,6 +3091,9 @@ void updateOABufferWriter (
 			t_flag readSuccess = ((*pRegisters).flagSourceIsMisc == TRUE) ?
 				_validValueFromMisc : _validValueFromPE;
 
+			int addressBase = (((*pRegisters).accessInfo.accessBank & 0x01) == 0x00) ?
+					0x0 : OA_CACHE_DEPTH;
+
 			if (readSuccess == TRUE)
 			{
 				t_operand shortOutput = modifyOutput(
@@ -3100,8 +3103,7 @@ void updateOABufferWriter (
 					);
 				//cacheOutputActivations[indexOutput] = shortOutput;
 				cacheOutputActivations
-					[(*pRegisters).accessInfo.accessBank & 0x01] 
-					[(*pRegisters).accessInfo.indexOutput >> VALUE_TO_CLUSTER_SHIFT]
+					[addressBase + ((*pRegisters).accessInfo.indexOutput >> VALUE_TO_CLUSTER_SHIFT)]
 					[(*pRegisters).accessInfo.indexOutput & VALUE_DIVIDED_BY_CLUSTER_SIZE_REMAINDER_MASK]
 					= shortOutput;
 
@@ -3359,7 +3361,7 @@ void getOABufferReaderOutput (
 	t_flag* pOutAcceptInstruction,
 
 	//Buffer, read only
-	const char cacheOutputActivations[2][OA_CACHE_DEPTH][CLUSTER_SIZE],
+	const char cacheOutputActivations[2*OA_CACHE_DEPTH][CLUSTER_SIZE],
 
 	#if defined(SPARSE_SYSTEM)
 	//Interface with the channel to compressor cluster data
@@ -3400,6 +3402,9 @@ void getOABufferReaderOutput (
 					t_cluster cluster;
 					//bool writeSuccess = true;
 
+					int addressBase = ((_currentContext.accessInfo.accessBank & 0x01) == 0x00) ?
+						0x0 : OA_CACHE_DEPTH;
+
 					//Fetch all the values in the cluster
 					#pragma unroll
 					for (unsigned char i=0; i<CLUSTER_SIZE; i++)
@@ -3408,8 +3413,8 @@ void getOABufferReaderOutput (
 						unsigned short tempOC = _currentContext.iOutputChannelFetched + i;
 						char tempValue = (tempOC >= _currentContext.accessInfo.numOutputsPerStrip) ?
 							0x0 
-							: cacheOutputActivations[_currentContext.accessInfo.accessBank & 0x01]
-									[index >> VALUE_TO_CLUSTER_SHIFT]
+							: cacheOutputActivations
+									[addressBase + (index >> VALUE_TO_CLUSTER_SHIFT)]
 									[i];
 						cluster.cluster_values[i] = tempValue;
 						keep = keep || (tempValue != 0x0);
@@ -3441,6 +3446,9 @@ void getOABufferReaderOutput (
 				}
 			#else //SPARSE_SYSTEM
 				t_output_cluster_tagged taggedCluster;
+
+				int addressBase = (((*pRegisters).accessInfo.accessBank & 0x01) == 0x00) ?
+						0x0 : OA_CACHE_DEPTH;
 				//fetch the cluster
 				#pragma unroll
 				for (unsigned char i=0; i<CLUSTER_SIZE; i++)
@@ -3449,7 +3457,8 @@ void getOABufferReaderOutput (
 					unsigned short tempOC = _currentContext.iOutputChannelFetched + i;
 					char tempValue = (tempOC >= _currentContext.accessInfo.numOutputsPerStrip) ?
 							0x0 
-							: cacheOutputActivations[_currentContext.accessInfo.accessBank & 0x01][index >> VALUE_TO_CLUSTER_SHIFT][i];
+							: cacheOutputActivations
+								[addressBase + (index >> VALUE_TO_CLUSTER_SHIFT)][i];
 					taggedCluster.cluster.cluster_values[i] = tempValue;
 				}
 
