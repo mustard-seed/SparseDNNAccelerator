@@ -474,7 +474,8 @@ typedef struct __attribute__((packed))
 
 typedef struct __attribute__((packed))
 {
-    unsigned short numLocalTileHeightxLocalTileWidth;
+    unsigned char numLocalTileHeightxLocalTileWidth;
+    unsigned char numGroups;
 
     //Bit [3:0] Maximum column ID
     //Bit [4] Flag for sparse draining sparse input (1 for true)

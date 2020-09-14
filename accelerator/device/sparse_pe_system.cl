@@ -3242,6 +3242,11 @@ void updateOABufferReader (
 						(*pRegisters).numChannelsInGroupNextLayer,
 						(unsigned char) (*pRegisters).accessInfo.accessBank));
 			} //if, _validControl is TRUE
+			// else
+			// {
+			// 	EMULATOR_PRINT(("[kernelOABuffer READER %d] WAITING for instruction. \n\n", 
+			// 					colID));
+			// }
 		} //OA_BUFFER_ACCESS_STATE_DECODE
 		break;
 		case (OA_BUFFER_ACCESS_STATE_NUM_ACCESS): {
@@ -3304,6 +3309,11 @@ void updateOABufferReader (
 
 						(*pRegisters).countSurvivingClustersInWindow += 0x01;
 					}
+					// else
+					// {
+					// 	EMULATOR_PRINT(("[kernelOABuffer READER %d] WAITING to send data to the compressor data channel.\n\n",
+					// 					colID));
+					// }
 
 					if (((_requestWrite2CompressorData == TRUE) && (_writeSuccessCompressorData == TRUE))
 											|| (_requestWrite2CompressorData == FALSE)
@@ -3329,6 +3339,11 @@ void updateOABufferReader (
 						(*pRegisters).iClustersInWindowFetched = 0x0;
 						(*pRegisters).accessInfo.iLoopPerStip += 0x01;
 					}
+					// else
+					// {
+					// 	EMULATOR_PRINT(("[kernelOABuffer READER %d] WAITING to send data to the compressor info channel.\n\n",
+					// 					colID));
+					// }
 				}
 			#else //SPARSE_SYSTEM
 				if (_writeSuccessOATee == TRUE) {
@@ -3338,6 +3353,11 @@ void updateOABufferReader (
 					(*pRegisters).accessInfo.indexOutput += CLUSTER_SIZE;
 					(*pRegisters).accessInfo.iLoopPerStip += 0x01;
 				}
+				// else
+				// 	{
+				// 		EMULATOR_PRINT(("[kernelOABuffer READER %d] WAITING to send data to the OA Tee channel.\n\n",
+				// 						colID));
+				// 	}
 			#endif
 
 			if ((*pRegisters).accessInfo.iLoopPerStip == (*pRegisters).accessInfo.numLoopsPerStip)
@@ -3447,7 +3467,7 @@ void getOABufferReaderOutput (
 			#else //SPARSE_SYSTEM
 				t_output_cluster_tagged taggedCluster;
 
-				int addressBase = (((*pRegisters).accessInfo.accessBank & 0x01) == 0x00) ?
+				int addressBase = ((_currentContext.accessInfo.accessBank & 0x01) == 0x00) ?
 						0x0 : OA_CACHE_DEPTH;
 				//fetch the cluster
 				#pragma unroll
@@ -3620,75 +3640,27 @@ __kernel void kernelOATileController (
 		The first cycle consists only of sending the OA write instruction,
 		and the last cycle consists only of sending the OA read instruction
 	*/
-	unsigned int numInstructionCycles = numInstructions + 1;
-	unsigned int iInst = 0;
 	uint1_t writeSideIndex = 0;
 
-	t_oa_tile_controller_instruction regInstruction;
-	for (unsigned int iInstructionCycle=0; iInstructionCycle<numInstructionCycles; iInstructionCycle++)
+	for (unsigned int iInstruction=0; iInstruction<numInstructions; iInstruction++)
 	{
 		/**
 		 * 1. Send the streaming (cache--> dram) command, if possible
 		 */
-		t_oa_tile_controller_instruction readInstruction = regInstruction;
-		if (iInstructionCycle > 0)
-		{
-			EMULATOR_PRINT(("[kernelOATileController] START sending the write-to-memory instruction for instruction cycle %d\n\n", 
-				iInstructionCycle));
-			unsigned char numOutputTileHeightxWidth = readInstruction.numLocalTilePerColHxW;
-			unsigned char numFoldsInGroupCurrentLayer = readInstruction.numFoldsInGroupCurrentLayer;
-		    unsigned char numFullFoldsInGroupCurrentLayer = readInstruction.numFullFoldsInCurrentLayer;
-		    unsigned char numActiveElementsInFullFold = readInstruction.numActiveElementsInFullFold;
-		    unsigned char numActiveRowsInPartialFolds = readInstruction.numActiveElementsInPartialFold;
+		t_oa_tile_controller_instruction inst = pInst[iInstruction];
+		unsigned char numOutputTileHeightxWidth = inst.numLocalTilePerColHxW;
+		unsigned char numFoldsInGroupCurrentLayer = inst.numFoldsInGroupCurrentLayer;
+	    unsigned char numFullFoldsInGroupCurrentLayer = inst.numFullFoldsInCurrentLayer;
+	    unsigned char numActiveElementsInFullFold = inst.numActiveElementsInFullFold;
+	    unsigned char numActiveRowsInPartialFolds = inst.numActiveElementsInPartialFold;
 
-		    unsigned short numChannelsInGroupCurrentLayer = readInstruction.numLocalChannelsPerCurrentGroup;
-		    unsigned short numChannelsInGroupNextLayer = readInstruction.numLocalChannelsPerNextGroup;
-		    unsigned char outputModifierBits = readInstruction.flagSparseCatFlagReluCatFlagSourceCatShift;
-		    unsigned char numActivePeCols = readInstruction.numActiveCols;
+	    unsigned short numChannelsInGroupCurrentLayer = inst.numLocalChannelsPerCurrentGroup;
+	    unsigned short numChannelsInGroupNextLayer = inst.numLocalChannelsPerNextGroup;
+	    unsigned char outputModifierBits = inst.flagSparseCatFlagReluCatFlagSourceCatShift;
+	    unsigned char numActivePeCols = inst.numActiveCols;
 
-		    unsigned short numOutputChannels = readInstruction.numLocalChannels;
-
-		    t_output_tile_buffer_packet_tagged bufferPacketTagged;
-	    	bufferPacketTagged.bufferPacket.startOutputIndex = 0x0;
-			bufferPacketTagged.bufferPacket.numOutputsPerStrip = numChannelsInGroupNextLayer;
-	    	bufferPacketTagged.bufferPacket.numStripsToAccess = numOutputTileHeightxWidth;
-	    	bufferPacketTagged.bufferPacket.iaStridePerCol = numOutputChannels;
-	    	bufferPacketTagged.bufferPacket.controlBits = 
-	    		( (((unsigned short) (~writeSideIndex)) & 0x01) << 0x9)
-	    		| (((unsigned short) 0x1) << 0x8 ) 
-	    		| ((unsigned short) outputModifierBits);
-
-	    	bufferPacketTagged.bufferPacket.numGroupsNextLayer = readInstruction.numMemInstructions;
-	    	bufferPacketTagged.bufferPacket.numLocalChannelsPerNextGroup = readInstruction.numLocalChannelsPerNextGroup;
-
-	    	bufferPacketTagged.maxColID = (numActivePeCols - 1);
-
-
-	    	write_channel_intel(channel_oa_noc_control[0], bufferPacketTagged);
-	    	EMULATOR_PRINT(("[kernelOATileController] FINISHED sending the write-to-memory instruction for instruction cycle %d\n\n", 
-				iInstructionCycle));
-		}
-
-		/*
-			2. Send the drain (compute --> cache) command
-		*/
-		if (iInstructionCycle < numInstructions)
-		{
-			t_oa_tile_controller_instruction inst = pInst[iInst];
-
-			//t_output_tile_buffer_packet controlPacket = read_channel_intel(channel_output_writer_to_oa_controller);
-			unsigned char numOutputTileHeightxWidth = inst.numLocalTilePerColHxW;
-			unsigned char numFoldsInGroupCurrentLayer = inst.numFoldsInGroupCurrentLayer;
-		    unsigned char numFullFoldsInGroupCurrentLayer = inst.numFullFoldsInCurrentLayer;
-		    unsigned char numActiveElementsInFullFold = inst.numActiveElementsInFullFold;
-		    unsigned char numActiveRowsInPartialFolds = inst.numActiveElementsInPartialFold;
-
-		    unsigned short numChannelsInGroupCurrentLayer = inst.numLocalChannelsPerCurrentGroup;
-		    unsigned short numChannelsInGroupNextLayer = inst.numLocalChannelsPerNextGroup;
-		    unsigned char outputModifierBits = inst.flagSparseCatFlagReluCatFlagSourceCatShift;
-		    unsigned char numActivePeCols = inst.numActiveCols;
-
-		    unsigned short numOutputChannels = inst.numLocalChannels;
+	    unsigned short numOutputChannels = inst.numLocalChannels;
+		{		
 
 		    /*
 		    2. Send instruction to drain from the PE array
@@ -3698,8 +3670,8 @@ __kernel void kernelOATileController (
 		    unsigned short iFoldInGroup = 0;
 		    //unsigned short iOutputTileHxWDrain = 0;
 
-		   	EMULATOR_PRINT(("[kernelOATileController] START sending the drain-from-array instruction for instruction cycle %d\n\n", 
-					iInstructionCycle));
+		   	EMULATOR_PRINT(("[kernelOATileController] START sending the drain-from-array instruction for instruction %d\n\n", 
+					iInstruction));
 
 		    for  (unsigned short i=0; i < inst.numDrainInstructions; i++)
 		    {
@@ -3732,12 +3704,34 @@ __kernel void kernelOATileController (
 	    			iChannelInGroup = 0;
 	    		}
 		    } //while-loop.  Send instruction to drain from the PE array
-		    EMULATOR_PRINT(("[kernelOATileController] FINISHED sending the drain-from-array instruction for instruction cycle %d\n\n", 
-					iInstructionCycle));
-
-		    regInstruction = inst;
-		    iInst++;
+		    EMULATOR_PRINT(("[kernelOATileController] FINISHED sending the drain-from-array instruction for instruction %d\n\n", 
+					iInstruction));
 		} // Send the drain (compute --> cache) command
+
+		{
+			EMULATOR_PRINT(("[kernelOATileController] START sending the write-to-memory instruction for instruction %d\n\n", 
+				iInstruction));
+
+		    t_output_tile_buffer_packet_tagged bufferPacketTagged;
+	    	bufferPacketTagged.bufferPacket.startOutputIndex = 0x0;
+			bufferPacketTagged.bufferPacket.numOutputsPerStrip = numChannelsInGroupNextLayer;
+	    	bufferPacketTagged.bufferPacket.numStripsToAccess = numOutputTileHeightxWidth;
+	    	bufferPacketTagged.bufferPacket.iaStridePerCol = numOutputChannels;
+	    	bufferPacketTagged.bufferPacket.controlBits = 
+	    		( (((unsigned short) (writeSideIndex)) & 0x01) << 0x9)
+	    		| (((unsigned short) 0x1) << 0x8 ) 
+	    		| ((unsigned short) outputModifierBits);
+
+	    	bufferPacketTagged.bufferPacket.numGroupsNextLayer = inst.numMemInstructions;
+	    	bufferPacketTagged.bufferPacket.numLocalChannelsPerNextGroup = inst.numLocalChannelsPerNextGroup;
+
+	    	bufferPacketTagged.maxColID = (numActivePeCols - 1);
+
+
+	    	write_channel_intel(channel_oa_noc_control[0], bufferPacketTagged);
+	    	EMULATOR_PRINT(("[kernelOATileController] FINISHED sending the write-to-memory instruction for instruction cycle %d\n\n", 
+				iInstruction));
+		}
 
 	    //SWAP the read side and the write side
 		writeSideIndex = (~writeSideIndex) & 0x01;
@@ -3756,7 +3750,11 @@ __kernel void kernelCompressorOranizer()
 	while (true)
 	{
 		//Read the information first
+		// EMULATOR_PRINT(("[kernelCompressorOranizer %d] WAITING to READ from the compressor info channel.\n\n",
+		// 								colID));
 		t_output_cluster_info info = read_channel_intel(channel_output_buffer_to_compressor_info[colID]);
+		// EMULATOR_PRINT(("[kernelCompressorOranizer %d] FINISHED READING from the compressor info channel.\n\n",
+		// 								colID));
 		t_bitmask bitmask = info.bitmask;
 		//TODO: What if the compression window size is greater than 32?
 		unsigned char numSurvivingClusters = info.statusBits & 0x3F;
@@ -3798,7 +3796,11 @@ __kernel void kernelCompressorOranizer()
 				}
 				else
 				{
+					// EMULATOR_PRINT(("[kernelCompressorOranizer %d] WAITING to READ from the compressor data channel.\n\n",
+					// 					colID));
 					clusterTagged.cluster = read_channel_intel(channel_output_buffer_to_compressor_data[colID]);
+					// EMULATOR_PRINT(("[kernelCompressorOranizer %d] FINISHED READING from the compressor data channel.\n\n",
+					// 					colID));
 				}
 				iClusterSent++;
 			}
@@ -3813,7 +3815,11 @@ __kernel void kernelCompressorOranizer()
 
 			clusterTagged.isLastInStrip = (isLastWindowInStrip && (iLoop == (numLoops - 1))) ? true : false;
 
+			// EMULATOR_PRINT(("[kernelCompressorOranizer %d] WAITING to WRITE to the oa tee.\n\n",
+			// 							colID));
 			write_channel_intel(channel_compressor_to_tee[colID], clusterTagged);
+			// EMULATOR_PRINT(("[kernelCompressorOranizer %d] FINISHED WRITING to the oa tee.\n\n",
+			// 							colID));
 		}
 	}
 }
@@ -3837,6 +3843,7 @@ __kernel void kernelOAControlTee ()
 		//Send instruction to the OA tee, if this is a drain command
 		t_output_tile_tee_packet teePacket;
 		teePacket.numLocalTileHeightxLocalTileWidth = controlPacketTagged.bufferPacket.numStripsToAccess;
+		teePacket.numGroups = controlPacketTagged.bufferPacket.numGroupsNextLayer;
 		teePacket.flagSourceCatFlagSparseFlagMaxColID = (
 				((unsigned char) (maxColID & 0x0F))
 				| (controlPacketTagged.bufferPacket.controlBits & 0x060));
@@ -3876,8 +3883,11 @@ __kernel void kernelOATee ()
 	int colID = get_compute_id(0);
 
 	//Registers
+	//Registers of the number of groups
+	unsigned char regNumGroups = 0;
+	unsigned char iGroup = 0;
 	//Register of the number of strips that we need to drain from this computing column
-	unsigned short regStripsInTile = 0;
+	unsigned char regStripsInTile = 0;
 	//Iterator that keeps track of the number of strips that we have drained from the computing column
 	unsigned short iStripsInTile = 0;
 	//Flag that indicates whether this computing column is the right-most in this drain transfer
@@ -4079,8 +4089,10 @@ __kernel void kernelOATee ()
 				if (readSuccess == true)
 				{
 					regIsLastTee = ((tempTeeControl.flagSourceCatFlagSparseFlagMaxColID & 0x0F) > colID) ? FALSE: TRUE;
-					regStripsInTile = tempTeeControl.numLocalTileHeightxLocalTileWidth;
+					regNumGroups = (unsigned char) tempTeeControl.numGroups;
+					regStripsInTile = (unsigned char) tempTeeControl.numLocalTileHeightxLocalTileWidth;
 					iStripsInTile = 0;
+					iGroup = 0;
 					regFlagSparse = tempTeeControl.flagSourceCatFlagSparseFlagMaxColID >> 5;
 					//uint1_t tempFlagDrainMisc = tempTeeControl.flagSourceCatFlagSparseFlagMaxColID >> 5;
 
@@ -4099,25 +4111,19 @@ __kernel void kernelOATee ()
 			break;
 			case (OA_TEE_INSTRUCTION_LOOP_UPDATE) :
 			{
+				tempInstruction = OA_TEE_INSTRUCTION_DRAIN_CONV;
+
 				iClustersInStrip = 0;
 				//iColDrained = 0;
 				iStripsInTile++;
 				if (iStripsInTile == regStripsInTile)
 				{
-					tempInstruction = OA_TEE_INSTRUCTION_DECODE_COMMAND;
-				}
-				else
-				{
-
-					// if (regFlagDrainMisc == TRUE)
-					// {
-					// 	tempInstruction = OA_TEE_INSTRUCTION_DRAIN_MISC;
-					// }
-					// else
-					// {
-					// 	tempInstruction = OA_TEE_INSTRUCTION_DRAIN_CONV;
-					// }
-					tempInstruction = OA_TEE_INSTRUCTION_DRAIN_CONV;
+					iStripsInTile = 0;
+					iGroup++;
+					if (iGroup == regNumGroups)
+					{
+						tempInstruction = OA_TEE_INSTRUCTION_DECODE_COMMAND;
+					}
 				}
 				
 			} //OA_TEE_INSTRUCTION_LOOP_UPDATE

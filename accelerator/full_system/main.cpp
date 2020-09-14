@@ -122,47 +122,13 @@ protected:
 }; //testFixture
 
 #ifdef PLAY
-//TEST_F (testFixture, conv_dense_input_dense_output_plain)
-//{
-//    unsigned char inputWidth = 4;
-//    unsigned char inputHeight = 4;
-//    unsigned char numInputChannel = 8;
-//    unsigned char numInputGroup = 1;
-//    unsigned char numOutputGroup = 1;
-//    unsigned char inputHeightSPUnitSize = 1;
-//    unsigned char inputWidthSPUnitSize = 1;
-//    unsigned char sizeOutputTileWidthPerColFull = 2;
-//    unsigned char sizeOutputTileHeight = 4;
-//    bool flagEnableRelu = false;
-//    bool flagSparseInput = false;
-//    bool flagSparseOutput = false;
-//    OPERATION op = CONVOLUTION;
-//    float bias = 0.0f;
-
-//    launch(
-//                inputWidth,
-//                inputHeight,
-//                numInputChannel,
-//                numInputGroup,
-//                numOutputGroup,
-//                inputHeightSPUnitSize,
-//                inputWidthSPUnitSize,
-//                sizeOutputTileWidthPerColFull,
-//                sizeOutputTileHeight,
-//                flagEnableRelu,
-//                flagSparseInput,
-//                flagSparseOutput,
-//                op,
-//                bias
-//          );
-//}
-TEST_F (testFixture, conv_dense_input_dense_output_grouped)
+TEST_F (testFixture, back_to_back_identity_conv)
 {
     unsigned char inputWidth = 4;
     unsigned char inputHeight = 4;
     unsigned char numInputChannel = 8;
-    unsigned char numInputGroup = 2;
-    unsigned char numOutputGroup = 2;
+    unsigned char numInputGroup = 1;
+    unsigned char numOutputGroup = 1;
     unsigned char inputHeightSPUnitSize = 1;
     unsigned char inputWidthSPUnitSize = 1;
     unsigned char sizeOutputTileWidthPerColFull = 2;
@@ -172,6 +138,7 @@ TEST_F (testFixture, conv_dense_input_dense_output_grouped)
     bool flagSparseOutput = false;
     OPERATION op = CONVOLUTION;
     float bias = 0.0f;
+    bool flag2Layer = true;
 
     launch(
                 inputWidth,
@@ -187,7 +154,8 @@ TEST_F (testFixture, conv_dense_input_dense_output_grouped)
                 flagSparseInput,
                 flagSparseOutput,
                 op,
-                bias
+                bias,
+                flag2Layer
           );
 }
 
