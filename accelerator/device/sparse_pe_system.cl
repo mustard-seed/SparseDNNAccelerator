@@ -2371,8 +2371,7 @@ __kernel void kernelOAMover (
 #endif //MEMORY_WRITER 
 
 #ifdef OA_MEMORY
-#if (defined(ARRIA10) || defined(STRATIX10)) && defined(OA_PING_PONG)
-
+#if ((defined(ARRIA10) || defined(STRATIX10)) && defined(OA_PING_PONG))
 #define OA_BUFFER_ACCESS_STATE_DECODE 0x0
 #define OA_BUFFER_ACCESS_STATE_NUM_ACCESS 0x1
 #define OA_BUFFER_ACCESS_STATE_UPDATE_STRIP 0x2
@@ -2676,7 +2675,7 @@ __kernel void kernelOABuffer ()
 
 
 	//Runtime logic
-	#pragma ivdep array(cacheOutputActivations)
+	//#pragma ivdep array(cacheOutputActivations)
 	while (true) {
 		/**
 		 * oa buffer instruction channel <===> dispatcher
@@ -3627,7 +3626,7 @@ void getOABufferDispatcherOutput (
 	}
 } //getOABufferDispatcherOutput
 
-#else //OA_PING_PONG
+#else //((defined(ARRIA10) || defined(STRATIX10)) && defined(OA_PING_PONG))
 #define OA_BUFFER_STATE_DECODE 0x1
 #define OA_BUFFER_STATE_NUM_ACCESS 0x2
 #define OA_BUFFER_UPDATE_STRIP 0x3
@@ -3944,7 +3943,7 @@ __kernel void kernelOABuffer ()
 		currentState = nextState;
 	} //end while
 } //kernelOABuffer
-#endif //OA_PING_PONG
+#endif //((defined(ARRIA10) || defined(STRATIX10)) && defined(OA_PING_PONG))
 
 __attribute__((max_global_work_dim(0)))
 __kernel void kernelOATileController (
