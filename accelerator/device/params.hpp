@@ -2,8 +2,8 @@
 #define PARAMS_DEFINED
 
 //#define HOST_DEBUG
-//#define SPARSE_SYSTEM
-//#define IA_PING_PONG
+#define SPARSE_SYSTEM
+//#define OA_PING_PONG
 /**
  * Global memory settings
  */
@@ -75,7 +75,7 @@
 #define PACKET_SIZE 1
 
 #if defined(FULL_SYSTEM)
-	#define PE_ROWS 2
+	#define PE_ROWS 4
 	#define PE_COLS 2
 #else
 	#define PE_ROWS 2
