@@ -28,7 +28,7 @@
 
 //#define PLAY
 #define REPEAT 1
-#define EMULATE
+//#define EMULATE
 //#define PERF_TEST
 //#NOOP
 //#define PROFILE
@@ -122,7 +122,7 @@ protected:
 }; //testFixture
 
 #ifdef PLAY
-TEST_F (testFixture, back_to_back_identity_conv)
+TEST_F (testFixture, conv_dense_input_dense_output_plain)
 {
     unsigned char inputWidth = 4;
     unsigned char inputHeight = 4;
@@ -138,7 +138,6 @@ TEST_F (testFixture, back_to_back_identity_conv)
     bool flagSparseOutput = false;
     OPERATION op = CONVOLUTION;
     float bias = 0.0f;
-    bool flag2Layer = true;
 
     launch(
                 inputWidth,
@@ -154,11 +153,9 @@ TEST_F (testFixture, back_to_back_identity_conv)
                 flagSparseInput,
                 flagSparseOutput,
                 op,
-                bias,
-                flag2Layer
+                bias
           );
 }
-
 #else
 #if defined(PERF_TEST)
 TEST_F (testFixture, perf_test_conv_sparse_128x128x3x3x32x16COL)

@@ -913,7 +913,7 @@ namespace GraphRuntime {
             status = clCQIAMover.enqueueTask(kernelIAMover, NULL, NULL);
             aocl_utils_cpp::checkError(status, "Failed to launch kernelIAMover!");
 
-            //clCQOAMover.finish();
+            clCQOAMover.finish();
         }
 
         for (int i=1; i<numLayers; i++)
@@ -950,7 +950,7 @@ namespace GraphRuntime {
             status = clCQIAMover.enqueueTask(kernelIAMover, &waitList, NULL);
             aocl_utils_cpp::checkError(status, "Failed to launch kernelIAMover!");
 
-            //clCQOAMover.finish();
+            clCQOAMover.finish();
         }
 
         //clCQOAMover.finish();

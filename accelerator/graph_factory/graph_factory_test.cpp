@@ -5,7 +5,11 @@
 #include <vector>
 #include <map>
 
+//Prirority of the MACRO flags:
+//PLAY > VALIDATE > RESNET56
 //#define PLAY
+//#define VALIDATE
+#define RESNET56
 //#define EMULATE
 #define INFERENCE_REPEAT 1
 
@@ -35,7 +39,8 @@ TEST_F(testFixture, resnet)
     traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_15", "output"));
     launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
 }
-#else //run everything
+#endif
+#if defined(VALIDATE)
 TEST_F(testFixture, miniConv)
 {
     /*
@@ -160,6 +165,21 @@ TEST_F(testFixture, resnet)
     std::map<std::string, std::string> traceName2BlobName;
     traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
     traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_15", "output"));
+    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
+}
+#endif
+#if defined(RESNET56)
+TEST_F(testFixture, resnet56_cifar10)
+{
+    /*
+     *Test trace: https://drive.google.com/drive/folders/1rp9Mnggpa9UpGUBAwuhS-BlgAVVlwqgj?usp=sharing
+    */
+    std::string traceFileName = "resnet56_cifar10_trace.yaml";
+    std::string traceParameterFile = "resnet56_cifar10_parameters.yaml";
+    std::string inoutFile = "resnet56_cifar10_inout.yaml";
+    std::map<std::string, std::string> traceName2BlobName;
+    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
+    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_87", "output"));
     launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
 }
 #endif
