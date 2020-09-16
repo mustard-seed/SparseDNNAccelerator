@@ -76,9 +76,9 @@ TEST_F(testFixture, resnet)
 //    /*
 //     *Test trace: https://drive.google.com/drive/folders/1k9m5-DMOAJaM3-psX6jmItSoer11TBqf?usp=sharing
 //    */
-//    std::string traceFileName = "add_trace.yaml";
-//    std::string traceParameterFile = "add_parameters.yaml";
-//    std::string inoutFile = "add_inout.yaml";
+//    std::string traceFileName = "addbig_trace.yaml";
+//    std::string traceParameterFile = "addbig_parameters.yaml";
+//    std::string inoutFile = "addbig_inout.yaml";
 //    std::map<std::string, std::string> traceName2BlobName;
 //    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input_0"));
 //    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_1", "input_1"));
@@ -147,12 +147,12 @@ TEST_F(testFixture, restest)
     /*
      *Test trace: https://drive.google.com/drive/folders/1k9m5-DMOAJaM3-psX6jmItSoer11TBqf?usp=sharing
     */
-    std::string traceFileName = "restest_0s_trace.yaml";
-    std::string traceParameterFile = "restest_0s_parameters.yaml";
-    std::string inoutFile = "restest_0s_inout.yaml";
+    std::string traceFileName = "restest_resnet32_trace.yaml";
+    std::string traceParameterFile = "restest_resnet32_parameters.yaml";
+    std::string inoutFile = "restest_resnet32_inout.yaml";
     std::map<std::string, std::string> traceName2BlobName;
     traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
-    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_4", "output"));
+    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_51", "output"));
     launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
 }
 
@@ -287,6 +287,9 @@ void testFixture::launch(std::string _traceFileName,
            YAML::Node blob = rawBlobs[layerName];
            std::vector<float> actualResult = accelerator.extractOutputBlob(blobID);
            int iter=0;
+           signed char numFracBitsDifference = blobInfo.numFracBits - 1;
+           float tolerance = (numFracBitsDifference >= 0) ?
+                      1.0 / (1 << numFracBitsDifference) : 1 << (-1 * numFracBitsDifference);
            for (int g=0; g<blobInfo.group; g++)
            {
                for (int h=0; h<blobInfo.height; h++)
@@ -299,7 +302,9 @@ void testFixture::launch(std::string _traceFileName,
                                    + h * blobInfo.width + w;
                            float expected = blob[rawIter].as<float>();
                            float actual = actualResult.at(iter++);
-                           EXPECT_TRUE(std::abs(actual -expected) <= 1.0 / ((float) (1 << blobInfo.numFracBits)))
+                           //The computation is like adding two signed numbers with numFracBits
+                           //hence the difference's number of frac bits is numFracBits - 1
+                           EXPECT_TRUE(std::abs(actual -expected) <= tolerance)
                                    <<"Inference output disagreement at [tensor, group, channel, height, col]: ["
                                    <<blobID<<" "<<g<<" "<<c<<" "<<h<<" "<<w<<"]"<<std::endl
                                    <<"Expected: "<<expected<<std::endl
