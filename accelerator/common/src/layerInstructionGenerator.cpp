@@ -483,24 +483,45 @@ void instruction_generator(
             unsigned int iterNDense = iterNClipped / inputSPWidthUnit;
             unsigned int iterSPNIndex = iterNClipped % inputSPWidthUnit;
 
-            //Transfer the first input blob, and convolution related items (if necessary)
             for (unsigned int iterInputGroup0=0; iterInputGroup0<numIAMoverGroup0; iterInputGroup0++)
             {
-                 unsigned int inputStripStartIndex =
-                        iterInputGroup0 * inputDenseHeight * inputDenseWidth
-                        + iterMDense * inputDenseWidth + iterNDense;
 
-                /*! Send the input IA instruction */
+                //Transfer the first input blob, and convolution related items (if necessary)
+                /*! Send the first input IA instruction,
+                 *  and possibly the 2nd if we are dealing with eltwise addition
+                 *  If we dealing with addition, then we assume that both input tensors are dense
+                 *  and have the same dimensions
+                */
+                typedef struct {
+                    unsigned int memIADramBlockStartIndex;
+                    signed int numIAShiftAmount;
+                    #if defined(SPARSE_SYSTEM)
+                        unsigned int memIATBCountStart;
+                    #endif
+                    bool flagInputShiftLeft;
+                } t_temp_ia_mover_info;
+
+                std::vector<t_temp_ia_mover_info> vecIAInfo;
+                vecIAInfo.push_back({.memIADramBlockStartIndex=memIA0DramBlockStartIndex,
+                                     .numIAShiftAmount=numIA0ShiftAmount,
+                                     .flagInputShiftLeft=flagIA0ShiftLeft
+                                    #if defined(SPARSE_SYSTEM)
+                                     ,.memIATBCountStart=memIATB0CountStart
+                                    #endif
+                                    });
+                if (op == ELT_ADD)
+                {
+                    vecIAInfo.push_back({.memIADramBlockStartIndex=memIA1DramBlockStartIndex,
+                                         .numIAShiftAmount=numIA1ShiftAmount,
+                                         .flagInputShiftLeft=flagIA1ShiftLeft
+                                        #if defined(SPARSE_SYSTEM)
+                                         ,.memIATBCountStart=memIATB1CountStart
+                                        #endif
+                                        });
+                }
+                for (auto & info: vecIAInfo)
                 {
                     t_ia_mover_instruction instructionIA;
-//                    bool isLastInputTile =
-//                            (op == CONVOLUTION || op == MAX_POOL)
-//                            && ( iterInputGroup0 == (numIAMoverGroup0-1))
-//                            && ((iterPTile+1) == numOutputTileY)
-//                            && ((iterQTile+1) == numOutputTileX);
-//                    unsigned char actualFlagInputSync = (flagInputSync == 0x01) ?
-//                                ((isLastInputTile == true) ? 0x1 : 0x0)
-//                                : 0x0;
                     unsigned char actualFlagInputSync = 0x0;
                     //Set the transport target. 0x0 means convolution, 0x1 means MISC
                     unsigned char flagTarget= (op == CONVOLUTION) ?  0x00 : 0x01;
@@ -510,15 +531,15 @@ void instruction_generator(
                              | ((((t_uchar) flagTarget) & 0x01) << 0x05)
                              | ((((t_uchar) flagSparseInput) & 0x01) << 0x06) //Sparse flag for the input tensor
                             );
-                    assert ((((flagIA0ShiftLeft == false) && (numIA0ShiftAmount > 0))
-                            || ((flagIA0ShiftLeft == true) && (numIA0ShiftAmount >= 0)))
+                    assert ((((info.flagInputShiftLeft == false) && (info.numIAShiftAmount > 0))
+                            || ((info.flagInputShiftLeft == true) && (info.numIAShiftAmount >= 0)))
                            && "If input shift direction is RIGHT, then the number of shift must be greater than 0");
-                    t_uchar flagLeftShiftCatShiftAmount = flagIA0ShiftLeft ?
-                                (0x10 | (0x0F & numIA0ShiftAmount))
-                              : (0x00 | (0x0F & numIA0ShiftAmount));
+                    t_uchar flagLeftShiftCatShiftAmount = info.flagInputShiftLeft ?
+                                (0x10 | (0x0F & info.numIAShiftAmount))
+                              : (0x00 | (0x0F & info.numIAShiftAmount));
                     instructionIA.flagLeftShiftCatShiftAmount = flagLeftShiftCatShiftAmount;
                     instructionIA.memBlockStart = (t_int) (
-                                memIA0DramBlockStartIndex
+                                info.memIADramBlockStartIndex
                                 + memIA0DramBlockGroupStride * iterInputGroup0
                                 + memIA0DramBlockRowStride * iterMDense
                                 + memIA0DramBlockColStride * iterNDense);
@@ -527,7 +548,7 @@ void instruction_generator(
 
                     #if defined(SPARSE_SYSTEM)
                         instructionIA.memTBCountStart = (t_int)
-                                (memIATB0CountStart
+                                (info.memIATBCountStart
                                  + inputStripStartIndex * memIATB0CountColStride);
                         instructionIA.memTBCountColStride = (t_ushort) memIATB0CountColStride;
                         instructionIA.memTBCountRowStride = (t_ushort) (memIATB0CountColStride * inputDenseWidth);
@@ -569,7 +590,7 @@ void instruction_generator(
                         instructionIA.tileSPWidthxTileSPHeight = ((t_ushort) maxTN) * ((t_ushort) maxTM);
 
                         vecIAMoverInstruction.push_back(instructionIA);
-                } // generate t_ia_mover_instruction
+                } // generate t_ia_mover_instruction 1 (and 2 if we are dealing with eltwise addition)
 
                 //Instruction that only matters for convolution
                 if (op == CONVOLUTION)
@@ -633,85 +654,88 @@ void instruction_generator(
             } //For. Transfer the first input blob, and convolution related items (if necessary)
 
             //Non-convolution stuff
-            if (op != CONVOLUTION)
+            if ((op != CONVOLUTION))
             {
                 //Transfer the SECOND input blob if necessary
-                for (unsigned int iterInputGroup1=0; iterInputGroup1<numIAMoverGroup1; iterInputGroup1++)
+                if (op != ELT_ADD)
                 {
-                    /*! Send the input IA instruction */
+                    for (unsigned int iterInputGroup1=0; iterInputGroup1<numIAMoverGroup1; iterInputGroup1++)
                     {
-                        t_ia_mover_instruction instructionIA;
+                        /*! Send the input IA instruction */
+                        {
+                            t_ia_mover_instruction instructionIA;
 
-//                        bool isLastInputTile =
-//                                    (op != CONVOLUTION)
-//                                && (op != MAX_POOL)
-//                                && ( iterInputGroup1 == (numIAMoverGroup1-1))
-//                                && ((iterPTile+1) == numOutputTileY)
-//                                && ((iterQTile+1) == numOutputTileX);
+    //                        bool isLastInputTile =
+    //                                    (op != CONVOLUTION)
+    //                                && (op != MAX_POOL)
+    //                                && ( iterInputGroup1 == (numIAMoverGroup1-1))
+    //                                && ((iterPTile+1) == numOutputTileY)
+    //                                && ((iterQTile+1) == numOutputTileX);
 
-//                        unsigned char actualFlagInputSync = (flagInputSync == 0x01) ?
-//                                    ((isLastInputTile == true) ? 0x1 : 0x0)
-//                                    : 0x0;
-                        unsigned char actualFlagInputSync = 0x0;
+    //                        unsigned char actualFlagInputSync = (flagInputSync == 0x01) ?
+    //                                    ((isLastInputTile == true) ? 0x1 : 0x0)
+    //                                    : 0x0;
+                            unsigned char actualFlagInputSync = 0x0;
 
-                        instructionIA.memRegionCatSparseFlagCatDestinationCatSyncCatNumActiveCols = (t_uchar)
-                                ( ( ((t_uchar) numActiveCols)& 0x0F)
-                                 | ((((t_uchar) actualFlagInputSync) & 0x01) << 0x04)
-                                 | ((((t_uchar) 0x01) & 0x01) << 0x05) //Compute engine is MISC
-                                 | ((((t_uchar) 0x0) & 0x01) << 0x06) //Sparse flag for the input tensor. Will be dense
-                                );
-                        assert ((((flagIA1ShiftLeft == false) && (numIA1ShiftAmount > 0))
-                                || ((flagIA1ShiftLeft == true) && (numIA1ShiftAmount >= 0)))
-                               && "If input shift direction is RIGHT, then the number of shift must be greater than 0");
-                        t_uchar flagLeftShiftCatShiftAmount = flagIA1ShiftLeft ?
-                                    (0x10 | (0x0F & numIA1ShiftAmount))
-                                  : (0x00 | (0x0F & numIA1ShiftAmount));
-                        instructionIA.flagLeftShiftCatShiftAmount = flagLeftShiftCatShiftAmount;
-                        instructionIA.memBlockStart = (t_int) (
-                                    memIA1DramBlockStartIndex
-                                    + memIA1DramBlockGroupStride * iterInputGroup1
-                                    + memIA1DramBlockRowStride * iterMDense
-                                    + memIA1DramBlockColStride * iterNDense);
-                        instructionIA.memBlockColStripStride = (t_ushort)(memIA1DramBlockColStride);
-                        instructionIA.memBlockRowStripStride = (t_ushort)(memIA1DramBlockRowStride);
+                            instructionIA.memRegionCatSparseFlagCatDestinationCatSyncCatNumActiveCols = (t_uchar)
+                                    ( ( ((t_uchar) numActiveCols)& 0x0F)
+                                     | ((((t_uchar) actualFlagInputSync) & 0x01) << 0x04)
+                                     | ((((t_uchar) 0x01) & 0x01) << 0x05) //Compute engine is MISC
+                                     | ((((t_uchar) 0x0) & 0x01) << 0x06) //Sparse flag for the input tensor. Will be dense
+                                    );
+                            assert ((((flagIA1ShiftLeft == false) && (numIA1ShiftAmount > 0))
+                                    || ((flagIA1ShiftLeft == true) && (numIA1ShiftAmount >= 0)))
+                                   && "If input shift direction is RIGHT, then the number of shift must be greater than 0");
+                            t_uchar flagLeftShiftCatShiftAmount = flagIA1ShiftLeft ?
+                                        (0x10 | (0x0F & numIA1ShiftAmount))
+                                      : (0x00 | (0x0F & numIA1ShiftAmount));
+                            instructionIA.flagLeftShiftCatShiftAmount = flagLeftShiftCatShiftAmount;
+                            instructionIA.memBlockStart = (t_int) (
+                                        memIA1DramBlockStartIndex
+                                        + memIA1DramBlockGroupStride * iterInputGroup1
+                                        + memIA1DramBlockRowStride * iterMDense
+                                        + memIA1DramBlockColStride * iterNDense);
+                            instructionIA.memBlockColStripStride = (t_ushort)(memIA1DramBlockColStride);
+                            instructionIA.memBlockRowStripStride = (t_ushort)(memIA1DramBlockRowStride);
 
-                        #if defined(SPARSE_SYSTEM)
-                            instructionIA.numCWOrTBInGroup = (t_ushort) (1 + (numIAMoverInputChannelsPerGroup1-1) / TRANSFER_SIZE / CLUSTER_SIZE);
-                        #else
-                            instructionIA.numTBPerStrip = (t_ushort) (1 + (numIAMoverInputChannelsPerGroup1-1) / TRANSFER_SIZE / CLUSTER_SIZE);
-                        #endif
-                            instructionIA.tileSPHeight = (t_uchar) maxTM;
-                            instructionIA.tileSPWidth = (t_uchar) maxTN;
-                            unsigned char inputTileLeftPadding = (iterNGlobal < inputWidthPadding) ?
-                                        inputWidthPadding : 0;
-                            unsigned char inputTileRightPadding = ((iterNGlobal + maxTQ) >= (inputWidthPadding + inputDenseWidth)) ?
-                                        inputWidthPadding : 0;
-                            unsigned char inputTileTopPadding = (iterMGlobal < inputHeightPadding) ?
-                                        inputHeightPadding : 0;
-                            unsigned char inputTileBottomPadding = ((iterMGlobal + maxTP) >= (inputHeightPadding + inputDenseHeight)) ?
-                                        inputHeightPadding : 0;
-                            instructionIA.concatPadding = (t_uchar) (
-                                              (inputTileLeftPadding & 0x03)
-                                            | ((inputTileRightPadding & 0x03) << 2)
-                                            | ((inputTileTopPadding & 0x03) << 4)
-                                            | ((inputTileBottomPadding & 0x03) << 6)
-                                        );
-                            instructionIA.concatInitSPIndices = (t_uchar) (
-                                             ( ((t_uchar) iterSPNIndex) & 0x0F)
-                                            | (( ((t_uchar) iterSPMIndex) & 0x0F) << 0x04)
-                                        );
-                            instructionIA.concatSPSize = (t_uchar) (
-                                            (((t_uchar) inputSPWidthUnit) & 0x0F)
-                                            | ((((t_uchar) inputSPHeightUnit & 0x0F)) << 0x04)
-                                        );
-                            instructionIA.columnWidthStride = (t_uchar) (kernelStride * maxTQPerCol);
-                            instructionIA.columnSPWidth = (t_uchar) maxTNPerCol;
+                            #if defined(SPARSE_SYSTEM)
+                                instructionIA.numCWOrTBInGroup = (t_ushort) (1 + (numIAMoverInputChannelsPerGroup1-1) / TRANSFER_SIZE / CLUSTER_SIZE);
+                            #else
+                                instructionIA.numTBPerStrip = (t_ushort) (1 + (numIAMoverInputChannelsPerGroup1-1) / TRANSFER_SIZE / CLUSTER_SIZE);
+                            #endif
+                                instructionIA.tileSPHeight = (t_uchar) maxTM;
+                                instructionIA.tileSPWidth = (t_uchar) maxTN;
+                                unsigned char inputTileLeftPadding = (iterNGlobal < inputWidthPadding) ?
+                                            inputWidthPadding : 0;
+                                unsigned char inputTileRightPadding = ((iterNGlobal + maxTQ) >= (inputWidthPadding + inputDenseWidth)) ?
+                                            inputWidthPadding : 0;
+                                unsigned char inputTileTopPadding = (iterMGlobal < inputHeightPadding) ?
+                                            inputHeightPadding : 0;
+                                unsigned char inputTileBottomPadding = ((iterMGlobal + maxTP) >= (inputHeightPadding + inputDenseHeight)) ?
+                                            inputHeightPadding : 0;
+                                instructionIA.concatPadding = (t_uchar) (
+                                                  (inputTileLeftPadding & 0x03)
+                                                | ((inputTileRightPadding & 0x03) << 2)
+                                                | ((inputTileTopPadding & 0x03) << 4)
+                                                | ((inputTileBottomPadding & 0x03) << 6)
+                                            );
+                                instructionIA.concatInitSPIndices = (t_uchar) (
+                                                 ( ((t_uchar) iterSPNIndex) & 0x0F)
+                                                | (( ((t_uchar) iterSPMIndex) & 0x0F) << 0x04)
+                                            );
+                                instructionIA.concatSPSize = (t_uchar) (
+                                                (((t_uchar) inputSPWidthUnit) & 0x0F)
+                                                | ((((t_uchar) inputSPHeightUnit & 0x0F)) << 0x04)
+                                            );
+                                instructionIA.columnWidthStride = (t_uchar) (kernelStride * maxTQPerCol);
+                                instructionIA.columnSPWidth = (t_uchar) maxTNPerCol;
 
-                            instructionIA.tileSPWidthxTileSPHeight = ((t_ushort) maxTN) * ((t_ushort) maxTM);
+                                instructionIA.tileSPWidthxTileSPHeight = ((t_ushort) maxTN) * ((t_ushort) maxTM);
 
-                            vecIAMoverInstruction.push_back(instructionIA);
-                    } // generate t_ia_mover_instruction
-                }  //For. Transfer the SECOND input blob, and convolution related items (if necessary)
+                                vecIAMoverInstruction.push_back(instructionIA);
+                        } // generate t_ia_mover_instruction
+                    }  //For. Transfer the SECOND input blob, and convolution related items (if necessary)
+                }
 
                 //Transfer the MISC instruction
                 {
