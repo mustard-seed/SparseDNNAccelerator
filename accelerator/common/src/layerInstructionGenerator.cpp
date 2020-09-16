@@ -308,29 +308,38 @@ void instruction_generator(
     unsigned int numActiveElementsInPartialComputeFold = numOutputChannelsPerGroupCurrentLayer % numActiveElementsInFullComputeFold;
 
     /*
-     * Cache limit check
+     * Cache limit check when performing convolution
     */
-    int maxIATileHeight = sizeInputTileFullHeight > sizeInputTilePartialHeight ?
-                sizeInputTileFullHeight : sizeInputTilePartialHeight;
-    int maxIATileWidth = sizeInputTileFullWidthPerCol > sizeInputTilePartialWidthPerCol ?
-                sizeInputTileFullWidthPerCol : sizeInputTilePartialWidthPerCol;
-    int iaCacheRequirementInDramBlock = ia_cache_boundary_check(
-                //heightTile
-                maxIATileHeight,
-                //widthTile
-                maxIATileWidth,
-                //numDramBlockPerDenseStrip,
-                memIA0DramBlockColStride
-                );
-    assert( iaCacheRequirementInDramBlock < IA_CACHE_DEPTH && "IA tile size is too big to fit inside the cache");
+    if (op == CONVOLUTION)
+    {
+        int maxIATileHeight = sizeInputTileFullHeight > sizeInputTilePartialHeight ?
+                    sizeInputTileFullHeight : sizeInputTilePartialHeight;
+        int maxIATileWidth = sizeInputTileFullWidthPerCol > sizeInputTilePartialWidthPerCol ?
+                    sizeInputTileFullWidthPerCol : sizeInputTilePartialWidthPerCol;
+        int iaCacheRequirementInDramBlock = ia_cache_boundary_check(
+                    //heightTile
+                    maxIATileHeight,
+                    //widthTile
+                    maxIATileWidth,
+                    //numDramBlockPerDenseStrip,
+                    memIA0DramBlockColStride
+                    );
+        assert( iaCacheRequirementInDramBlock < IA_CACHE_DEPTH && "IA tile size is too big to fit inside the cache");
 
-#if defined(SPARSE_SYSTEM)
-    int iaTBCountRequirement = ia_tbcount_cache_boundary_check(
-                maxIATileHeight,
-                maxIATileWidth
-                );
-    assert(iaTBCountRequirement < IA_TBCOUNT_CACHE_SIZE && "Number if IA TB count too big to fit inside the cache");
-#endif
+        #if defined(SPARSE_SYSTEM)
+            int iaTBCountRequirement = ia_tbcount_cache_boundary_check(
+                        maxIATileHeight,
+                        maxIATileWidth
+                        );
+            assert(iaTBCountRequirement < IA_TBCOUNT_CACHE_SIZE && "Number if IA TB count too big to fit inside the cache");
+        #endif
+
+        int filterCacheRequirement = filter_cache_boundary_check(
+                        kernelSize,
+                        numInputChannels0
+                    );
+        assert(filterCacheRequirement < KERNEL_CACHE_DEPTH && "Individual fitler size is too big to fit inside the filter cache");
+    }
 
     int maxOATileHeight = sizeOutputTileFullHeight > sizeOutputTilePartialHeight ?
                     sizeOutputTileFullHeight : sizeOutputTilePartialHeight;
@@ -345,12 +354,6 @@ void instruction_generator(
                 numOutputChannels
                 );
     assert(oaCacheRequirement < (OA_CACHE_DEPTH * CLUSTER_SIZE) && "OA tile size is too big to fit inside the oa cache");
-
-    int filterCacheRequirement = filter_cache_boundary_check(
-                    kernelSize,
-                    numInputChannels0
-                );
-    assert(filterCacheRequirement < KERNEL_CACHE_DEPTH && "Individual fitler size is too big to fit inside the filter cache");
 
 
     //x & y planar coordinates in the input planar dimension
