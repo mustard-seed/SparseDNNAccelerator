@@ -2111,7 +2111,7 @@ __kernel void kernelMisc ()
 		//Decode
 		//OpCode. 00: Add; 01: Max Pooling; 10: Stream
 		uint2_t opcode = (controlPacket.controlBits >> 4) & 0x03;
-		unsigned char numDramBlocksToReduce = controlPacket.numDramBlocksToReduce;
+		unsigned short numDramBlocksToReduce = controlPacket.numDramBlocksToReduce;
 		unsigned char numOutputBlocks = controlPacket.numOutputBlocks;
 		unsigned char numEffectiveValuesInLastStrip = controlPacket.numEffectiveValuesInLastStrip;
 
@@ -2143,7 +2143,7 @@ __kernel void kernelMisc ()
 			}
 
 			//Perform reduction
-			for (unsigned char iBlock=0; iBlock<numDramBlocksToReduce; iBlock++)
+			for (unsigned short iBlock=0; iBlock<numDramBlocksToReduce; iBlock++)
 			{
 				t_dram_block inputDramBlock = read_channel_intel(channel_ia_wide_misc[colID]);
 				#pragma unroll

@@ -345,10 +345,10 @@ typedef struct __attribute__((aligned(16)))
     t_uchar controlBits;
 
     //Number of dram blocks to reduce per output dram block
-    t_uchar numDramBlocksToReduce;
+    unsigned short numDramBlocksToReduce;
 
     //Number of output dram blocks to produce
-    t_uchar numOutputBlocks;
+    unsigned char numOutputBlocks;
 
     //Bit [2:0] Shift amount
     //Bit [3] Flag for left/right shift. 0 for right, 1 for left
@@ -490,10 +490,10 @@ typedef struct __attribute__((packed))
     t_uchar controlBits;
 
     //Number of dram blocks to reduce per output dram block
-    t_uchar numDramBlocksToReduce;
+    unsigned short numDramBlocksToReduce;
 
     //Number of output dram blocks to produce
-    t_uchar numOutputBlocks;
+    unsigned char numOutputBlocks;
 
     //Bit [2:0] Shift amount
     //Bit [3] Flag for left/right shift. 0 for right, 1 for left

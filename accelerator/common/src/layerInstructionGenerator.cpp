@@ -288,7 +288,7 @@ void instruction_generator(
             numOutputChannelsBlob1MK = 0;
             numOutputBlocksBlob0MK = 1+ (numOutputChannelsBlob0MK-1) / BURST_SIZE_BYTE;
             numOutputBlocksBlob1MK = 0;
-            numDramBlocksToReduceMK = kernelSize * kernelSize;
+            numDramBlocksToReduceMK = (unsigned int) kernelSize * (unsigned int) kernelSize;
         }
     break;
         default: {
@@ -731,8 +731,8 @@ void instruction_generator(
                     {
                         t_misc_instruction instructionMisc;
                         instructionMisc.controlBits = (t_uchar) (opCodeField |( numActiveCols & 0x0F));
-                        instructionMisc.numDramBlocksToReduce = (t_uchar) numDramBlocksToReduceMK;
-                        instructionMisc.numOutputBlocks = numOutputBlocksBlob0MK;
+                        instructionMisc.numDramBlocksToReduce = (unsigned short) numDramBlocksToReduceMK;
+                        instructionMisc.numOutputBlocks = (unsigned char) numOutputBlocksBlob0MK;
                         instructionMisc.numEffectiveValuesInLastStrip = (t_uchar) (
                                     numOutputChannelsBlob0MK - (numOutputBlocksBlob0MK-1)*BURST_SIZE_BYTE);
 
@@ -743,8 +743,8 @@ void instruction_generator(
                     {
                         t_misc_instruction instructionMisc;
                         instructionMisc.controlBits = (t_uchar) (opCodeField |( numActiveCols & 0x0F));
-                        instructionMisc.numDramBlocksToReduce = (t_uchar) numDramBlocksToReduceMK;
-                        instructionMisc.numOutputBlocks = numOutputBlocksBlob1MK;
+                        instructionMisc.numDramBlocksToReduce = (unsigned short) numDramBlocksToReduceMK;
+                        instructionMisc.numOutputBlocks = (unsigned char) numOutputBlocksBlob1MK;
                         instructionMisc.numEffectiveValuesInLastStrip = (t_uchar) (
                                     numOutputChannelsBlob1MK - (numOutputBlocksBlob1MK-1)*BURST_SIZE_BYTE);
 
