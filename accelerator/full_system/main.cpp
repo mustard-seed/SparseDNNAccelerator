@@ -26,7 +26,7 @@
 #include "layerInstructionGenerator.hpp"
 #include "accelerator_wrapper.hpp"
 
-#//define PLAY
+//#define PLAY
 #define REPEAT 1
 #ifndef C5SOC
 #define EMULATE

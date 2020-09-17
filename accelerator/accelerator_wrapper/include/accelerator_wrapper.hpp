@@ -22,7 +22,7 @@ namespace GraphRuntime {
         unsigned int group;
         unsigned int height;
         unsigned int width;
-        unsigned int numFracBits;
+        signed int numFracBits;
         bool flagCanBeSparse;
         std::string blobName;
     } t_blob_info;

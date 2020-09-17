@@ -3,7 +3,7 @@
 
 class fixedPointNumber {
     private:
-        char bits;
+        signed char bits;
         signed char fractionWidth;
         signed char integerWidth;
         float resolution;

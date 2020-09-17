@@ -95,10 +95,25 @@ signed char modifyCharOutput (
 
     //Handle the right shift
     unsigned char rndRightShift = shiftAmount - 1;
-    signed char signExtensionMask = (originalIsNonNegative == TRUE) ? 0x00 : ~(0xFF >> rndRightShift);
-    signed char rightShiftOutputWithRndBit = signExtensionMask | ((signed char) (input >> rndRightShift));
-    signed char rightShiftOutputBiased = rightShiftOutputWithRndBit + 0x01;
-    signed char rightShiftFinal = rightShiftOutputBiased >> 0x1;
+    // signed char signExtensionMask = (originalIsNonNegative == TRUE) ? 0x00 : ~(0xFF >> rndRightShift);
+    // signed char rightShiftOutputWithRndBit = signExtensionMask | ((signed char) (input >> rndRightShift));
+    // signed char rightShiftOutputBiased = rightShiftOutputWithRndBit + 0x01;
+    signed short signExtensionMask = (originalIsNonNegative == TRUE) ? 0x0000 : ~(0xFFFF >> rndRightShift);
+    signed short rightShiftOutputWithRndBit = signExtensionMask | (((signed short) input) >> rndRightShift);
+    signed short rightShiftOutputBiased;
+    if(rightShiftOutputWithRndBit >= ((signed short) 256))
+    {
+        rightShiftOutputBiased = 0x0FF; //=255
+    }
+    else if(rightShiftOutputWithRndBit < ((signed short) -256))
+    {
+        rightShiftOutputBiased = 0x0100; //=-256
+    }
+    else
+    {
+        rightShiftOutputBiased = (signed short) ((0x1FF & rightShiftOutputWithRndBit)+ (signed short) 0x01);
+    }
+    signed char rightShiftFinal = 0x0FF & (rightShiftOutputBiased >> 0x1);
 
     //Handle the left shift
     signed char leftShiftTemp = input << shiftAmount;

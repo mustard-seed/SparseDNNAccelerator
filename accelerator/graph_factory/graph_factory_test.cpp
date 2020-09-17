@@ -7,8 +7,8 @@
 
 //Prirority of the MACRO flags:
 //PLAY > VALIDATE > RESNET56
-//#define PLAY
-#define VALIDATE
+#define PLAY
+//#define VALIDATE
 //#define RESNET56
 #ifndef C5SOC
     #define EMULATE
@@ -28,17 +28,18 @@ protected:
                 std::map<std::string, std::string> _traceName2BlobName);
 };
 #if defined(PLAY) //focus on one test
-TEST_F(testFixture, resnet)
+TEST_F(testFixture, miniAdd)
 {
     /*
      *Test trace: https://drive.google.com/drive/folders/1k9m5-DMOAJaM3-psX6jmItSoer11TBqf?usp=sharing
     */
-    std::string traceFileName = "testTrace_trace.yaml";
-    std::string traceParameterFile = "testTrace_parameters.yaml";
-    std::string inoutFile = "testTrace_inout.yaml";
+    std::string traceFileName = "add_trace.yaml";
+    std::string traceParameterFile = "add_parameters.yaml";
+    std::string inoutFile = "add_inout.yaml";
     std::map<std::string, std::string> traceName2BlobName;
-    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
-    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_15", "output"));
+    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input_0"));
+    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_1", "input_1"));
+    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_3", "output"));
     launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
 }
 #endif
