@@ -7,8 +7,8 @@
 
 //Prirority of the MACRO flags:
 //PLAY > VALIDATE > RESNET56
-#define PLAY
-//#define VALIDATE
+//#define PLAY
+#define VALIDATE
 //#define RESNET56
 #ifndef C5SOC
     #define EMULATE
@@ -72,20 +72,20 @@ TEST_F(testFixture, miniAdd)
 //    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
 //}
 
-//TEST_F(testFixture, miniAdd)
-//{
-//    /*
-//     *Test trace: https://drive.google.com/drive/folders/1k9m5-DMOAJaM3-psX6jmItSoer11TBqf?usp=sharing
-//    */
-//    std::string traceFileName = "addbig_trace.yaml";
-//    std::string traceParameterFile = "addbig_parameters.yaml";
-//    std::string inoutFile = "addbig_inout.yaml";
-//    std::map<std::string, std::string> traceName2BlobName;
-//    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input_0"));
-//    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_1", "input_1"));
-//    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_3", "output"));
-//    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
-//}
+TEST_F(testFixture, miniAdd)
+{
+    /*
+     *Test trace: https://drive.google.com/drive/folders/1k9m5-DMOAJaM3-psX6jmItSoer11TBqf?usp=sharing
+    */
+    std::string traceFileName = "addbig_trace.yaml";
+    std::string traceParameterFile = "addbig_parameters.yaml";
+    std::string inoutFile = "addbig_inout.yaml";
+    std::map<std::string, std::string> traceName2BlobName;
+    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input_0"));
+    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_1", "input_1"));
+    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_3", "output"));
+    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
+}
 
 //TEST_F(testFixture, miniAvg)
 //{
@@ -143,19 +143,19 @@ TEST_F(testFixture, miniAdd)
 //    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
 //}
 
-TEST_F(testFixture, restest)
-{
-    /*
-     *Test trace: https://drive.google.com/drive/folders/1k9m5-DMOAJaM3-psX6jmItSoer11TBqf?usp=sharing
-    */
-    std::string traceFileName = "restest_resnet32_trace.yaml";
-    std::string traceParameterFile = "restest_resnet32_parameters.yaml";
-    std::string inoutFile = "restest_resnet32_inout.yaml";
-    std::map<std::string, std::string> traceName2BlobName;
-    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
-    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_51", "output"));
-    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
-}
+//TEST_F(testFixture, restest)
+//{
+//    /*
+//     *Test trace: https://drive.google.com/drive/folders/1k9m5-DMOAJaM3-psX6jmItSoer11TBqf?usp=sharing
+//    */
+//    std::string traceFileName = "restest_1s9b1stride_trace.yaml";
+//    std::string traceParameterFile = "restest_1s9b1stride_parameters.yaml";
+//    std::string inoutFile = "restest_1s9b1stride_inout.yaml";
+//    std::map<std::string, std::string> traceName2BlobName;
+//    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
+//    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_31", "output"));
+//    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
+//}
 
 //TEST_F(testFixture, resnet)
 //{
@@ -289,8 +289,9 @@ void testFixture::launch(std::string _traceFileName,
            std::vector<float> actualResult = accelerator.extractOutputBlob(blobID);
            int iter=0;
            signed char numFracBitsDifference = blobInfo.numFracBits - 1;
-           float tolerance = (numFracBitsDifference >= 0) ?
-                      1.0 / (1 << numFracBitsDifference) : 1 << (-1 * numFracBitsDifference);
+//           float tolerance = (numFracBitsDifference >= 0) ?
+//                      1.0 / (1 << numFracBitsDifference) : 1 << (-1 * numFracBitsDifference);
+           float tolerance = 1e-3;
            for (int g=0; g<blobInfo.group; g++)
            {
                for (int h=0; h<blobInfo.height; h++)
