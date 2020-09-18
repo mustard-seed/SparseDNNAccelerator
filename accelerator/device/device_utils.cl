@@ -29,20 +29,14 @@ t_operand modifyOutput (
     //Handle the right shift case
     //Note the mask below makes sense if the accumulator is 16-bit
     // unsigned char rndRightShift = shiftAmount - 1;
-    #if (ACCUMULATOR_WIDTH == 32)
-    t_accumulator accumulatorMask = 0xFFFFFFFF;
-    #elif (ACCUMULATOR_WIDTH == 16)
-    t_accumulator accumulatorMask = 0xFFFF;
-    #else
-    #error ACCUMULATOR_WIDTH should either be 32 or 16!
-    #endif
+    t_accumulator accumulatorMask = ACCUM_MASK;
 	t_accumulator signExtensionMask = (preShiftIsNonNegative == TRUE) ?
 		0x00 : ~(accumulatorMask >> shiftAmount);
 
     t_accumulator rightShiftBiasMask = 0x01 << shiftAmount;
     t_accumulator rightShiftLeadingBiasBit = (comparedAccumulator & rightShiftBiasMask) >> 1;
     t_accumulator rightShiftRemainingBiasBits = (rightShiftLeadingBiasBit > 0) ? 
-        0x0 : (0xFFFF & ((rightShiftBiasMask - 1) >> 1));
+        0x0 : (accumulatorMask & ((rightShiftBiasMask - 1) >> 1));
     t_accumulator rightShiftBias = rightShiftLeadingBiasBit + rightShiftRemainingBiasBits;
 
 	t_accumulator rightShiftAccumulatorWithRndBit = signExtensionMask | ((t_accumulator) ((comparedAccumulator+rightShiftBias) >> shiftAmount));
@@ -72,14 +66,14 @@ t_operand modifyOutput (
     if (preShiftIsNonNegative == TRUE)
     {   
         leftShiftPreTrunc = (leftShiftTemp < accumulator) ? 0x07F : (
-                                    (leftShiftTemp <= ((t_accumulator) 255)) ? leftShiftTemp : 0x07F
+                                    (leftShiftTemp <= ((t_accumulator) 127)) ? leftShiftTemp : 0x07F
                                 );
 
     }
     else
     {
         leftShiftPreTrunc = (leftShiftTemp > accumulator) ? 0x080 : (
-                                    (leftShiftTemp >= ((t_accumulator) -256)) ? leftShiftTemp : 0x080
+                                    (leftShiftTemp >= ((t_accumulator) -128)) ? leftShiftTemp : 0x080
                                 );
     }
 
@@ -136,15 +130,20 @@ signed char modifyCharOutput (
     signed short rightShiftResult = 0x0FF & rightShiftAccumulatorSaturated;
 
     //Handle the left shift
-    signed char leftShiftTemp = input << shiftAmount;
-    signed char leftShiftFinal;
+    signed short leftShiftTemp = ((signed short) input) << shiftAmount;
+    signed short leftShiftFinal;
     if (originalIsNonNegative == TRUE)
     {
-        leftShiftFinal = (leftShiftTemp < input) ? 0x7F : leftShiftTemp;
+        leftShiftFinal = (leftShiftTemp < input) ? 0x7F : (
+                                    (leftShiftTemp <= ((signed short) 127)) ? leftShiftTemp : 0x07F
+                                );
+
     }
     else
     {
-        leftShiftFinal = (leftShiftTemp > input) ? 0x80 : leftShiftTemp;
+        leftShiftFinal = (leftShiftTemp > input) ? 0x80 : (
+                                    (leftShiftTemp >= ((signed short) -128)) ? leftShiftTemp : 0x080
+                                );
     }
 
     signed char output = (shiftLeft == TRUE) ? leftShiftFinal : rightShiftResult;

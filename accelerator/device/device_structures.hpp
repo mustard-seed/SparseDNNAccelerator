@@ -65,9 +65,11 @@ Types involved in operations
 */
 #ifdef INTELFPGA_CL
 #if (ACCUMULATOR_WIDTH == 32)
-typedef int t_accumulator;
+typedef signed int t_accumulator;
+#elif (ACCUMULATOR_WIDTH == 24)
+typedef int24_t t_accumulator;
 #elif (ACCUMULATOR_WIDTH == 16)
-typedef short t_accumulator;
+typedef signed short t_accumulator;
 #else
 #error ACCUMULATOR_WIDTH should either be 32 or 16!
 #endif
@@ -78,13 +80,13 @@ typedef struct {
 
 typedef short t_bias;
 #else
-#if (ACCUMULATOR_WIDTH == 32)
-typedef signed int t_accumulator;
-#elif (ACCUMULATOR_WIDTH == 16)
-typedef signed short t_accumulator;
-#else
-#error ACCUMULATOR_WIDTH should either be 32 or 16!
-#endif
+// #if (ACCUMULATOR_WIDTH == 32)
+// typedef signed int t_accumulator;
+// #elif (ACCUMULATOR_WIDTH == 16)
+// typedef signed short t_accumulator;
+// #else
+// #error ACCUMULATOR_WIDTH should either be 32 or 16!
+// #endif
 
 typedef struct {
     cl_char cluster_values [CLUSTER_SIZE];
@@ -102,17 +104,6 @@ typedef struct {
 typedef struct {
     t_transfer_block transferBlocks[WIDE_SIZE];
 } t_dram_block;
-
-typedef struct __attribute__((packed)){
-    t_transfer_block values;
-
-    unsigned char isLastConcatMaxTransportID;
-} t_transferblock_tagged;
-
-typedef struct __attribute__((packed)){
-    t_accumulator value;
-    unsigned char isLast;
-} t_conv_drain_tagged;
 
 typedef struct {
         unsigned char bytes[NUM_BITMASK_BYTES];
@@ -380,6 +371,17 @@ typedef struct __attribute__((packed)) {
     unsigned char maxPeCols; //Number of PE COLS that is activated
 
 } t_filter_streamer_control;
+
+typedef struct __attribute__((packed)){
+    t_transfer_block values;
+
+    unsigned char isLastConcatMaxTransportID;
+} t_transferblock_tagged;
+
+typedef struct __attribute__((packed)){
+    t_accumulator value;
+    unsigned char isLast;
+} t_conv_drain_tagged;
 
 /*
 ===================================================================

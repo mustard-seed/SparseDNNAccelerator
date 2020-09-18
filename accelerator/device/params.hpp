@@ -156,13 +156,19 @@
 #define NUM_CLUSTER_IN_DRAM_SIZE BURST_SIZE_BYTE/CLUSTER_SIZE
 
 //Accumulator width
-#define ACCUMULATOR_WIDTH 32
+#define ACCUMULATOR_WIDTH 24
 #if (ACCUMULATOR_WIDTH == 32)
 #define ACCUM_MASK 0x0FFFFFFFF
 #define MULT_MASK 0x0FFFFFFFF
+#define ACCUM_MIN 0x80000000
+#elif (ACCUMULATOR_WIDTH == 24)
+#define ACCUM_MASK 0x00FFFFFF
+#define MULT_MASK 0x00FFFFFF
+#define ACCUM_MIN 0x00800000
 #elif (ACCUMULATOR_WIDTH == 16)
 #define ACCUM_MASK 0x0FFFF
 #define MULT_MASK 0x0FFFF
+#define ACCUM_MIN 0x00008000
 #else
 #error Accumulator width should either be 32 bit or 16 bit
 #endif

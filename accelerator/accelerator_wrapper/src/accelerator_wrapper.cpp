@@ -405,7 +405,7 @@ namespace GraphRuntime {
             kernelWMover.setArg(argIdx++, bufferWMoverInstructions);
             //volatile __global t_dram_block* restrict pW,
             kernelWMover.setArg(argIdx++, bufferWMoverWDramBlocks);
-            //vola<tile __global t_accumulator* restrict pBias,
+            //vola<tile __global t_bias* restrict pBias,
             kernelWMover.setArg(argIdx++, bufferWMoverBias);
             #if defined(SPARSE_SYSTEM)
                 //volatile __global t_streamblock_address* restrict pFilterTBCount,

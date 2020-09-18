@@ -2130,13 +2130,7 @@ __kernel void kernelMisc ()
 				for (int iVal=0; iVal < BURST_SIZE_BYTE; iVal++)
 				{
 					//If max pooling, then intialize the values to the minimum, else zero
-					#if (ACCUMULATOR_WIDTH == 32)
-						t_accumulator min = 0x80000000;
-					#elif (ACCUMULATOR_WIDTH == 16)
-						t_accumulator min = 0x8000;
-					#else
-					#error ACCUMULATOR_WIDTH should either be 32 or 16!
-					#endif
+					t_accumulator min = ACCUM_MIN;
 					reductionBlock[iVal] = (opcode == 0x01) ? 
 						min : 0x0000;
 				}
