@@ -397,8 +397,23 @@ typedef struct __attribute__((packed)){
     //Bit[5:0] Destination col 
     unsigned char route;
 
+    //Only read by the misc engine
+    //Bit[3:0] Left shift amount
+    unsigned char miscLeftShiftAmount;
+
     //bool toInputBuffer; 
 } t_dram_block_ia_tagged;
+
+typedef struct __attribute__((packed)){
+    t_dram_block dramBlock;
+
+    //Only read by the misc engine
+    //Bit[3:0] Left shift amount
+    unsigned char miscLeftShiftAmount;
+
+    //bool toInputBuffer; 
+} t_dram_block_ia_to_misc;
+
 
 
 typedef struct __attribute__((packed))

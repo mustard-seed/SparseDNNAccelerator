@@ -237,10 +237,13 @@ __kernel void kernelIAMover (
 							#pragma unroll
 							for (unsigned char j=0; j<(TRANSFER_SIZE*CLUSTER_SIZE); j++)
 							{
-								iaBlock.dramBlock.transferBlocks[i].values[j]= modifyCharOutput(
-										rawBlock.transferBlocks[i].values[j],
-										flagLeftShiftCatShiftAmount
-									);
+								// iaBlock.dramBlock.transferBlocks[i].values[j]= modifyCharOutput(
+								// 		rawBlock.transferBlocks[i].values[j],
+								// 		flagLeftShiftCatShiftAmount
+								// 	);
+								iaBlock.dramBlock.transferBlocks[i].values[j]= 
+										rawBlock.transferBlocks[i].values[j];
+
 							}
 						}
 						addressIADramBlockDDR++;
@@ -265,6 +268,7 @@ __kernel void kernelIAMover (
 				unsigned char isMiscField = (destinationMisc == 0x1) ?
 					0x40 : 0x00;
 				iaBlock.route = isLastField | isMiscField | ((numActiveCols-1) & 0x3F);
+				iaBlock.miscLeftShiftAmount = 0x0F & flagLeftShiftCatShiftAmount;
 				write_channel_intel(channel_ia_wide[0], iaBlock);
 			}
 
@@ -2053,7 +2057,10 @@ __kernel void kernelIATee ()
 
 			if (write2Misc == true)
 			{
-				write_channel_intel(channel_ia_wide_misc[colID], dramBlock);
+				t_dram_block_ia_to_misc blockToMisc;
+				blockToMisc.dramBlock = taggedBlock.dramBlock;
+				blockToMisc.miscLeftShiftAmount = taggedBlock.miscLeftShiftAmount;
+				write_channel_intel(channel_ia_wide_misc[colID], blockToMisc);
 			}
 		
 		} // if read is successful
@@ -2139,13 +2146,18 @@ __kernel void kernelMisc ()
 			//Perform reduction
 			for (unsigned short iBlock=0; iBlock<numDramBlocksToReduce; iBlock++)
 			{
-				t_dram_block inputDramBlock = read_channel_intel(channel_ia_wide_misc[colID]);
+				t_dram_block_ia_to_misc inputDramBlockTagged = read_channel_intel(channel_ia_wide_misc[colID]);
+				unsigned char numLeftShiftAmount = inputDramBlockTagged.miscLeftShiftAmount;
+				t_dram_block inputDramBlock = inputDramBlockTagged.dramBlock;
 				#pragma unroll
 				for (int iValue=0; iValue < BURST_SIZE_BYTE; iValue++)
 				{
-					t_accumulator inputValue = (t_accumulator) (inputDramBlock
+					t_accumulator rawInputValue = (t_accumulator) (inputDramBlock
 						.transferBlocks[iValue >> (VALUE_TO_CLUSTER_SHIFT + CLUSTER_TO_TRANSFER_SIZE_SHIFT)]
 						.values[iValue & VALUE_DIVIDED_BY_SIMD_SIZE_REMAINDER_MASK]);
+
+					//Left-shift input
+					t_accumulator inputValue = rawInputValue << numLeftShiftAmount;
 
 					t_accumulator currentValue = reductionBlock[iValue];
 

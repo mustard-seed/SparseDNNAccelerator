@@ -22,7 +22,7 @@ channel unsigned char channel_drain_token[PE_ROWS][PE_COLS] __attribute__((depth
 
 #if defined(MISC_ENGINE)
 channel t_accumulator channel_drain_misc[PE_COLS] __attribute__((depth(0)));
-channel t_dram_block channel_ia_wide_misc[PE_COLS] __attribute__((depth(0))); 
+channel t_dram_block_ia_to_misc channel_ia_wide_misc[PE_COLS] __attribute__((depth(0))); 
 channel t_misc_control_packet channel_misc_instruction[PE_COLS]  __attribute__((depth(0)));
 #endif
 
