@@ -2,6 +2,7 @@
 #include <cassert>
 #include <cmath>
 #include <algorithm>
+#include <cfenv> //For rounding modes
 
 fixedPointNumber::fixedPointNumber (float _realNumber
                                     ,signed char _fracWidth
@@ -18,7 +19,9 @@ fixedPointNumber::fixedPointNumber (float _realNumber
     {
         resolution = 1 << ((-1) * (_fracWidth));
     }
-    int fullBits = (int) round(_realNumber / resolution);
+    //int fullBits = (int) round(_realNumber / resolution);
+    std::fesetround(FE_TONEAREST); //round to even
+    int fullBits = (int) std::nearbyint(_realNumber / resolution);
     int totalWidth = _fracWidth + _intWidth;
     int minimum = -1 * (1 << totalWidth);
     int maximum = (1 << totalWidth) - 1;

@@ -28,7 +28,7 @@ t_operand modifyOutput (
 
     //Handle the right shift case
     //Note the mask below makes sense if the accumulator is 16-bit
-    unsigned char rndRightShift = shiftAmount - 1;
+    // unsigned char rndRightShift = shiftAmount - 1;
     #if (ACCUMULATOR_WIDTH == 32)
     t_accumulator accumulatorMask = 0xFFFFFFFF;
     #elif (ACCUMULATOR_WIDTH == 16)
@@ -37,26 +37,34 @@ t_operand modifyOutput (
     #error ACCUMULATOR_WIDTH should either be 32 or 16!
     #endif
 	t_accumulator signExtensionMask = (preShiftIsNonNegative == TRUE) ?
-		0x00 : ~(accumulatorMask >> rndRightShift);
+		0x00 : ~(accumulatorMask >> shiftAmount);
 
-	t_accumulator rightShiftAccumulatorWithRndBit = signExtensionMask | ((t_accumulator) (comparedAccumulator >> rndRightShift));
+    t_accumulator rightShiftBiasMask = 0x01 << shiftAmount;
+    t_accumulator rightShiftLeadingBiasBit = (comparedAccumulator & rightShiftBiasMask) >> 1;
+    t_accumulator rightShiftRemainingBiasBits = (rightShiftLeadingBiasBit > 0) ? 
+        0x0 : (0xFFFF & ((rightShiftBiasMask - 1) >> 1));
+    t_accumulator rightShiftBias = rightShiftLeadingBiasBit + rightShiftRemainingBiasBits;
 
-	t_accumulator rightShiftAccumulatorBiased;
-	if(rightShiftAccumulatorWithRndBit >= ((t_accumulator) 256))
+	t_accumulator rightShiftAccumulatorWithRndBit = signExtensionMask | ((t_accumulator) ((comparedAccumulator+rightShiftBias) >> shiftAmount));
+
+	t_accumulator rightShiftAccumulatorSaturated;
+    //Round toward positive infinity for half-point
+	if(rightShiftAccumulatorWithRndBit >= ((t_accumulator) 128))
 	{
-		rightShiftAccumulatorBiased = 0x0FF; //=255
+		rightShiftAccumulatorSaturated = 0x07F; //=127
 	}
-	else if(rightShiftAccumulatorWithRndBit <((t_accumulator) -256))
+	else if(rightShiftAccumulatorWithRndBit <((t_accumulator) -128))
 	{
-		rightShiftAccumulatorBiased = 0x0100; //=-256
+		rightShiftAccumulatorSaturated = 0x0080; //=-128
 	}
 	else
 	{
-		rightShiftAccumulatorBiased = (t_accumulator) ((0x1FF & rightShiftAccumulatorWithRndBit)+ (t_accumulator) 0x01);
-	}
+		// rightShiftAccumulatorBiased = (t_accumulator) ((0x1FF & rightShiftAccumulatorWithRndBit)+ (t_accumulator) 0x01);
+	    rightShiftAccumulatorSaturated = rightShiftAccumulatorWithRndBit;
+    }
 	// final truncation for the right shift
-	t_operand rightShiftResult = 0xFF & (rightShiftAccumulatorBiased>>0x01);  // remove the last rounding bit
-	
+	//t_operand rightShiftResult = 0xFF & (rightShiftAccumulatorBiased>>0x01);  // remove the last rounding bit
+	t_operand rightShiftResult = 0x0FF & rightShiftAccumulatorSaturated;
 
     //Handle the left shift case
     t_accumulator leftShiftTemp = comparedAccumulator << shiftAmount;
@@ -94,26 +102,38 @@ signed char modifyCharOutput (
     uint1_t originalIsNonNegative = (input >= 0) ? TRUE : FALSE;
 
     //Handle the right shift
-    unsigned char rndRightShift = shiftAmount - 1;
-    // signed char signExtensionMask = (originalIsNonNegative == TRUE) ? 0x00 : ~(0xFF >> rndRightShift);
-    // signed char rightShiftOutputWithRndBit = signExtensionMask | ((signed char) (input >> rndRightShift));
-    // signed char rightShiftOutputBiased = rightShiftOutputWithRndBit + 0x01;
-    signed short signExtensionMask = (originalIsNonNegative == TRUE) ? 0x0000 : ~(0xFFFF >> rndRightShift);
-    signed short rightShiftOutputWithRndBit = signExtensionMask | (((signed short) input) >> rndRightShift);
-    signed short rightShiftOutputBiased;
-    if(rightShiftOutputWithRndBit >= ((signed short) 256))
+    //Use round to even, see
+    //https://zipcpu.com/dsp/2017/07/22/rounding.html
+    //unsigned char rndRightShift = shiftAmount - 1;
+    signed short signExtensionMask = (originalIsNonNegative == TRUE) ?
+        0x00 : ~( ((signed short) 0xFFFF) >> shiftAmount);
+    signed short rightShiftBiasMask = 0x01 << shiftAmount;
+    signed short rightShiftLeadingBiasBit = (((signed short) input) & rightShiftBiasMask) >> 1;
+    signed short rightShiftRemainingBiasBits = (rightShiftLeadingBiasBit > 0) ? 
+        0x0 : (0xFFFF & ((rightShiftBiasMask - 1) >> 1));
+    signed short rightShiftBias = 
+        rightShiftLeadingBiasBit + rightShiftRemainingBiasBits;
+
+    signed short rightShiftAccumulatorWithRndBit = signExtensionMask | ((signed short) ((input+rightShiftBias) >> shiftAmount));
+
+    signed short rightShiftAccumulatorSaturated;
+    //Round toward positive infinity for half-point
+    if(rightShiftAccumulatorWithRndBit >= ((signed short) 128))
     {
-        rightShiftOutputBiased = 0x0FF; //=255
+        rightShiftAccumulatorSaturated = 0x07F; //=127
     }
-    else if(rightShiftOutputWithRndBit < ((signed short) -256))
+    else if(rightShiftAccumulatorWithRndBit <((signed short) -128))
     {
-        rightShiftOutputBiased = 0x0100; //=-256
+        rightShiftAccumulatorSaturated = 0x0080; //=-128
     }
     else
     {
-        rightShiftOutputBiased = (signed short) ((0x1FF & rightShiftOutputWithRndBit)+ (signed short) 0x01);
+        // rightShiftAccumulatorBiased = (t_accumulator) ((0x1FF & rightShiftAccumulatorWithRndBit)+ (t_accumulator) 0x01);
+        rightShiftAccumulatorSaturated = rightShiftAccumulatorWithRndBit;
     }
-    signed char rightShiftFinal = 0x0FF & (rightShiftOutputBiased >> 0x1);
+    // final truncation for the right shift
+    //t_operand rightShiftResult = 0xFF & (rightShiftAccumulatorBiased>>0x01);  // remove the last rounding bit
+    signed short rightShiftResult = 0x0FF & rightShiftAccumulatorSaturated;
 
     //Handle the left shift
     signed char leftShiftTemp = input << shiftAmount;
@@ -127,7 +147,7 @@ signed char modifyCharOutput (
         leftShiftFinal = (leftShiftTemp > input) ? 0x80 : leftShiftTemp;
     }
 
-    signed char output = (shiftLeft == TRUE) ? leftShiftFinal : rightShiftFinal;
+    signed char output = (shiftLeft == TRUE) ? leftShiftFinal : rightShiftResult;
 
     return output;
 }
