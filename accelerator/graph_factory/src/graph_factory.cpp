@@ -2,6 +2,7 @@
 #include "layerInstructionGenerator.hpp"
 #include "params.hpp"
 #include "floatFixedPointConversion.hpp"
+#include <cfenv> //For rounding modes
 
 #include <memory>
 #include <cmath>
@@ -271,11 +272,12 @@ namespace GraphRuntime {
                     bool hasBias = pLayerLocal->getBiasFlag();
                     if (hasBias)
                     {
+                        std::fesetround(FE_TONEAREST); //round to even
                         std::vector<float> biasVector = pLayerLocal->getBiases();
                         for (int i=0; i<biasVector.size(); i++)
                         {
                             float bias = biasVector.at(i);
-                            pBiasVector->at(i) = (t_bias) (round(bias * (float) (1 << pSumFracBits )) );
+                            pBiasVector->at(i) = (t_bias) (std::nearbyint(bias * (float) (1 << pSumFracBits )) );
                         }
                     }
 
@@ -319,11 +321,11 @@ namespace GraphRuntime {
                     int pSumFracBits = 0;
                     if (inputFracBits1 > inputFracBits0)
                     {
-                        input0ShiftBits = 0;
+                        input0ShiftBits = inputFracBits1 - inputFracBits0;
                         input0ShiftLeft = TRUE;
-                        input1ShiftBits = inputFracBits1 - inputFracBits0;
-                        input1ShiftLeft = FALSE;
-                        pSumFracBits = inputFracBits0;
+                        input1ShiftBits = 0;
+                        input1ShiftLeft = TRUE;
+                        pSumFracBits = inputFracBits1;
                     }
                     else if (inputFracBits1 == inputFracBits0)
                     {
@@ -335,11 +337,11 @@ namespace GraphRuntime {
                     }
                     else // inputFracBits1 < inputFracBits0
                     {
-                        input0ShiftBits = inputFracBits0 - inputFracBits1;
-                        input0ShiftLeft = FALSE;
-                        input1ShiftBits = 0;
+                        input0ShiftBits = 0;
+                        input0ShiftLeft = TRUE;
+                        input1ShiftBits = inputFracBits0 - inputFracBits1;
                         input1ShiftLeft = TRUE;
-                        pSumFracBits = inputFracBits1;
+                        pSumFracBits = inputFracBits0;
                     }
 
                     //Figure out output bits
