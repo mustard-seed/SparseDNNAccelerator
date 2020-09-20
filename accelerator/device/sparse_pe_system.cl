@@ -1555,12 +1555,18 @@ void updateIABufferReader (
 					if ((pCurrentRegisters->iTBInCW > 0) 
 						|| (pCurrentRegisters->flagPadBitmask == FALSE))
 					{
+						/**
+						 * Only update the actual TB count if we aren't making things up
+						 * 
+						 */
 						pCurrentRegisters->iterAccess += 1;
 					}
 
 					pCurrentRegisters->iTBInCW += 1;
-					if ( (pCurrentRegisters->iTBInCW) == (COMPRESSION_WINDOW_SIZE / TRANSFER_SIZE) )
+					if ( (pCurrentRegisters->iTBInCW) == (COMPRESSION_WINDOW_SIZE / TRANSFER_SIZE + 0x01) )
 					{
+						//Need to compare iTBinCW with (COMPRESSION_WINDOW_SIZE / TRANSFER_SIZE + 0x01
+						//The extra one is needed when to account for the bitmask.
 						pCurrentRegisters->iTBInCW = 0;
 					}
 				#else
