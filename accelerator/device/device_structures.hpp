@@ -118,24 +118,36 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
 {
     //Concatenation of three signals
     //Bits [3:0] Number of active columns
-    //Bit [4]: Flag for synchornization. 1 if there is a need to wait for the synchornization from OA
-    //Bit [5] Flag for the compute engine. 0 for convolution, 1 for misc.
-    //Bit [6] Flag for sparse input. 0 for dense, 1 for sparse.
-    //Bit [7]: Flag for selecting the memory region to read from
-    t_uchar memRegionCatSparseFlagCatDestinationCatSyncCatNumActiveCols;
+    //Bit [4]: Flag for the compute engine. 0 for convolution, 1 for misc.
+    //Bit [5]: Flag for sparse input. 0 for dense, 1 for sparse.
+    //Bit [7:6]: Input arrangment mode.
+    //  2'b00: One input tensor (e.g convolution, strided convolution)
+    //  2'b01: Two input tensors, and interleave the two tensors per dramblock (e.g. eltwise addition)
+    //  2'b10: Two input tensors, and interleave the two tensors per strip (e.g. concatenation)
+    t_uchar inputArrangementCatSparseFlagCatDestinationCatNumActiveCols;
 
-    //Bit [3:0] Shift amount
-    //Bit [4] Flag for left/right shift. 0 for right, 1 for left
-    t_uchar flagLeftShiftCatShiftAmount;
+    //Bit [3:0] Input 0 left shift amount
+    //Bit [7:4] Input 1 left shift amount
+    t_uchar inputShiftAmounts;
 
-    //Arch parameter: Starting index of the input dram block in the input memory region
-    t_int memBlockStart;
-    //Arch parameter: Column stride of input activation strips in dram block in the input memory region
-    t_ushort memBlockColStripStride;
-    //Arch parameter: Row stride of input activation strips in dram block in the input memory region
-    t_ushort memBlockRowStripStride;
+    //Arch parameter: Starting index of the input dram block in input 0's memory region
+    t_int memBlockStart0;
+    //Arch parameter: Column stride of input activation strips in dram block in input 0's memory region
+    t_ushort memBlockColStripStride0;
+    //Arch parameter: Row stride of input activation strips in dram block in input 0's memory region
+    t_ushort memBlockRowStripStride0;
+
+    //Arch parameter: Starting index of the input dram block in input 1's memory region
+    t_int memBlockStart1;
+    //Arch parameter: Column stride of input activation strips in dram block in input 1's memory region
+    t_ushort memBlockColStripStride1;
+    //Arch parameter: Row stride of input activation strips in dram block in input 1's memory region
+    t_ushort memBlockRowStripStride1;
 
 #if defined(SPARSE_SYSTEM)
+    /*!
+     * If TB memory is needed, then there is only one input
+    */
     //Arch parameter: Starting index of the strip TB count in the memory
     t_int memTBCountStart;
     //Arch parameter: Column stride of input activation strip TB count in the memory
@@ -143,11 +155,13 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
     //Arch parameter: Row stride of input activation strip TB count in the memory
     t_ushort memTBCountRowStride;
     //Problem parameter: 
-    //When sending sparse data, this is the number of compression windows in an input group. Used for sending padding
-    //When sending dense data, this is the number of valid TB in a strip
-    t_ushort numCWOrTBInGroup; 
+    //When sending sparse data, These are the number of compression windows in an input group. Used for sending padding
+    //When sending dense data, These are the number of valid TB in a strip
+    t_ushort numCWOrTBInGroup0; 
+    t_ushort numCWOrTBInGroup1; 
 #else
-    t_ushort numTBPerStrip;
+    t_ushort numTBPerStrip0;
+    t_ushort numTBPerStrip1;
 #endif
 
 
@@ -287,7 +301,7 @@ typedef struct __attribute__((packed)) __attribute__((aligned(16)))
 } t_ia_tile_controller_instruction;
 
 //Instructions for the output tile controller
-typedef struct __attribute__((packed)) __attribute__((aligned(16)))
+typedef struct __attribute__((packed)) __attribute__((aligned(32)))
 {
     //Number of planar indices in the output tile
     t_uchar numLocalTilePerColHxW;
@@ -303,9 +317,9 @@ typedef struct __attribute__((packed)) __attribute__((aligned(16)))
     //Number of full folds required to drian the current tile
     t_uchar numFullFoldsInCurrentLayer;
     //Number of elements per planar index to drain in the full fold
-    t_uchar numActiveElementsInFullFold;
+    t_ushort numActiveElementsInFullFold;
     //Number of elements per planar index to drain in the partial fold
-    t_uchar numActiveElementsInPartialFold;
+    t_ushort numActiveElementsInPartialFold;
 
     //Number of channels per group in the next layer
     t_ushort numLocalChannelsPerCurrentGroup;

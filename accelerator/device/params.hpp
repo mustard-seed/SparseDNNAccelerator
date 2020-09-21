@@ -2,7 +2,7 @@
 #define PARAMS_DEFINED
 
 #define HOST_DEBUG
-//#define SPARSE_SYSTEM
+#define SPARSE_SYSTEM
 //#define OA_PING_PONG
 /**
  * Global memory settings
@@ -75,8 +75,8 @@
 #define PACKET_SIZE 1
 
 #if defined(FULL_SYSTEM)
-	#define PE_ROWS 4
-	#define PE_COLS 2
+	#define PE_ROWS 1
+	#define PE_COLS 1
 #else
 	#define PE_ROWS 2
 	#define PE_COLS 2
@@ -156,7 +156,7 @@
 #define NUM_CLUSTER_IN_DRAM_SIZE BURST_SIZE_BYTE/CLUSTER_SIZE
 
 //Accumulator width
-#define ACCUMULATOR_WIDTH 32
+#define ACCUMULATOR_WIDTH 24
 #if (ACCUMULATOR_WIDTH == 32)
 #define ACCUM_MASK 0x0FFFFFFFF
 #define MULT_MASK 0x0FFFFFFFF
