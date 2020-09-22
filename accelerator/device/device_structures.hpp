@@ -306,7 +306,7 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
     //Number of planar indices in the output tile
     t_uchar numLocalTilePerColHxW;
     //Number of channels in the tile
-    t_uchar numLocalChannels;
+    t_ushort numLocalChannels;
     //Number of compute drain instructions
     t_ushort numDrainInstructions;
     //Number of memory transfer instructions
@@ -350,10 +350,13 @@ typedef struct __attribute__((aligned(16)))
     t_uchar controlBits;
 
     //Number of dram blocks to reduce per output dram block
-    unsigned short numDramBlocksToReduce;
+    t_ushort numDramBlocksToReduce;
 
-    //Number of output dram blocks to produce
-    unsigned char numOutputBlocks;
+    //Number of output dram blocks to produce in a tile
+    t_ushort numOutputBlocks;
+
+    //Number of output dram blocks per strip
+    t_uchar numOutputBlocksPerStrip;
 
     //Bit [2:0] Shift amount
     //Bit [3] Flag for left/right shift. 0 for right, 1 for left
@@ -523,8 +526,11 @@ typedef struct __attribute__((packed))
     //Number of dram blocks to reduce per output dram block
     unsigned short numDramBlocksToReduce;
 
-    //Number of output dram blocks to produce
-    unsigned char numOutputBlocks;
+    //Number of output dram blocks to produce in a tile
+    unsigned short numOutputBlocks;
+
+    //Number of output dram blocks per strip
+    unsigned char numOutputBlocksPerStrip;
 
     //Bit [2:0] Shift amount
     //Bit [3] Flag for left/right shift. 0 for right, 1 for left

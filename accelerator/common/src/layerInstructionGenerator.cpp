@@ -114,10 +114,13 @@ void instruction_generator(
 
         )
 {
-    unsigned int sizeOutputTileFullHeight = (op == CONVOLUTION) ?
-                _sizeOutputTileFullHeight : 1;
-    unsigned int sizeOutputTileFullWidthPerCol = (op == CONVOLUTION) ?
-                _sizeOutputTileFullWidthPerCol : 1;
+//    unsigned int sizeOutputTileFullHeight = ((op == CONVOLUTION) || (op == ELT_ADD) || (op == CONCATENATION)) ?
+//                _sizeOutputTileFullHeight : 1;
+//    unsigned int sizeOutputTileFullWidthPerCol = ((op == CONVOLUTION) || (op == ELT_ADD) || (op == CONCATENATION)) ?
+//                _sizeOutputTileFullWidthPerCol : 1;
+
+    unsigned int sizeOutputTileFullHeight = _sizeOutputTileFullHeight;
+    unsigned int sizeOutputTileFullWidthPerCol = _sizeOutputTileFullWidthPerCol;
 
     unsigned int outputHeight = ( ((unsigned int) inputSPHeight)
             + 2*((unsigned int) inputHeightPadding) - ((unsigned int) kernelSize))
@@ -127,8 +130,13 @@ void instruction_generator(
             + 2* ((unsigned int) inputWidthPadding) - ((unsigned int) kernelSize))
             / ((unsigned int) kernelStride) + 1;
 
-    unsigned char numActiveColsPartialOutputTile = (op == CONVOLUTION) ?
-                _numActiveColsPartialOutputTile : (outputWidth % PE_COLS);
+//    unsigned char numActiveColsPartialOutputTile = ((op == CONVOLUTION) || (op == ELT_ADD) || (op == CONCATENATION)) ?
+//                _numActiveColsPartialOutputTile : (outputWidth % PE_COLS);
+    unsigned char numActiveColsPartialOutputTile = (op != CONCATENATION) ?
+                _numActiveColsPartialOutputTile : 1;
+
+    unsigned char numActiveColsFullOutputTile = (op != CONCATENATION) ?
+                PE_COLS : 1;
 
     //Input height and width before stretch and padding
     assert ((inputSPHeightUnit == 1) || ((inputSPHeight-1) % inputSPHeightUnit == 0));
@@ -147,15 +155,15 @@ void instruction_generator(
 
     unsigned int numFullOutputTileX =
             ((unsigned int) outputWidth) /
-            ( ((unsigned int) PE_COLS) * ((unsigned int) sizeOutputTileFullWidthPerCol) );
+            ( ((unsigned int) numActiveColsFullOutputTile) * ((unsigned int) sizeOutputTileFullWidthPerCol) );
 
     unsigned int numOutputTileX =
             1 + ((unsigned int) (outputWidth-1) ) /
-                ( ((unsigned int) PE_COLS) * ((unsigned int) sizeOutputTileFullWidthPerCol) );
+                ( ((unsigned int) numActiveColsFullOutputTile) * ((unsigned int) sizeOutputTileFullWidthPerCol) );
 
     unsigned int sizeOutputTilePartialWidthPerCol = (numActiveColsPartialOutputTile != 0) ?
                 ( ((unsigned int) outputWidth) %
-                    ( ((unsigned int) PE_COLS) * ((unsigned int) sizeOutputTileFullWidthPerCol) )
+                    ( ((unsigned int) numActiveColsFullOutputTile) * ((unsigned int) sizeOutputTileFullWidthPerCol) )
                 ) / ((unsigned int) numActiveColsPartialOutputTile)
               : sizeOutputTileFullWidthPerCol;
 
@@ -195,9 +203,12 @@ void instruction_generator(
     //Number of output channels caused by each blob that the MISC kernels have to process
     unsigned int numOutputChannelsBlob0MK;
     unsigned int numOutputChannelsBlob1MK;
-    //Number of misc engine output blocks per *current layer* output strip
-    unsigned int numOutputBlocksBlob0MK;
-    unsigned int numOutputBlocksBlob1MK;
+    //Number of misc engine output blocks per *current layer* output tile
+//    unsigned int numOutputBlocksBlob0MK;
+//    unsigned int numOutputBlocksBlob1MK;
+    //Number of misc engine output blocks per "current layer" strip
+    unsigned int numOutputBlocksBlob0PerStripMK;
+    unsigned int numOutputBlocksBlob1PerStripMK;
     //Number of dram block each MK should reduce in order to produce a block of output;
     unsigned int numDramBlocksToReduceMK;
     switch(op) {
@@ -213,8 +224,10 @@ void instruction_generator(
             memIA0DramBlockGroupStride = _memIA0DramBlockGroupStride;
             numOutputChannelsBlob0MK = 0;
             numOutputChannelsBlob1MK = 0;
-            numOutputBlocksBlob0MK = 0;
-            numOutputBlocksBlob1MK = 0;
+//            numOutputBlocksBlob0MK = 0;
+//            numOutputBlocksBlob1MK = 0;
+            numOutputBlocksBlob0PerStripMK = 0;
+            numOutputBlocksBlob1PerStripMK = 0;
             numDramBlocksToReduceMK = 0;
         }
         break;
@@ -226,14 +239,16 @@ void instruction_generator(
             numIAMoverInputChannelsPerGroup1 = numInputChannels1;
             numIAMoverGroup0 = 1;
             numIAMoverGroup1 = 1;
-            numActiveElementsInFullComputeFold = BURST_SIZE_BYTE;
+            numActiveElementsInFullComputeFold = numOutputChannels;
             numOAGroupsCurrentLayer = 1;
             memIA0DramBlockGroupStride = _memIA0DramBlockGroupStride;
             memIA1DramBlockGroupStride = _memIA1DramBlockGroupStride;
             numOutputChannelsBlob0MK = numInputChannels0;
             numOutputChannelsBlob1MK = numInputChannels1;
-            numOutputBlocksBlob0MK = 1+ (numOutputChannelsBlob0MK-1) / BURST_SIZE_BYTE;
-            numOutputBlocksBlob1MK = 1+ (numOutputChannelsBlob1MK-1) / BURST_SIZE_BYTE;
+//            numOutputBlocksBlob0MK = 1+ (numOutputChannelsBlob0MK-1) / BURST_SIZE_BYTE;
+//            numOutputBlocksBlob1MK = 1+ (numOutputChannelsBlob1MK-1) / BURST_SIZE_BYTE;
+            numOutputBlocksBlob0PerStripMK = 1+ (numOutputChannelsBlob0MK-1) / BURST_SIZE_BYTE;;
+            numOutputBlocksBlob1PerStripMK = 1+ (numOutputChannelsBlob1MK-1) / BURST_SIZE_BYTE;
             numDramBlocksToReduceMK = 1;
         }
         break;
@@ -249,8 +264,10 @@ void instruction_generator(
             memIA0DramBlockGroupStride = 1;
             numOutputChannelsBlob0MK = numInputChannels0;
             numOutputChannelsBlob1MK = 0;
-            numOutputBlocksBlob0MK = 1+ (numOutputChannelsBlob0MK-1) / BURST_SIZE_BYTE;
-            numOutputBlocksBlob1MK = 0;
+            numOutputBlocksBlob0PerStripMK = 1+ (numOutputChannelsBlob0MK-1) / BURST_SIZE_BYTE;
+            numOutputBlocksBlob1PerStripMK = 0;
+//            numOutputBlocksBlob0PerStripMK = numOutputBlocksBlob0MK;
+//            numOutputBlocksBlob1PerStripMK = 0;
             numDramBlocksToReduceMK = kernelSize * kernelSize;
         }
         break;
@@ -259,18 +276,18 @@ void instruction_generator(
             assert(numOutputChannels == numInputChannels0);
             assert(flagSparseInput == FALSE);
             assert(kernelSize == 1);
-            numIAMoverInputChannelsPerGroup0 = BURST_SIZE_BYTE;
-            numIAMoverInputChannelsPerGroup1 = BURST_SIZE_BYTE;
-            numIAMoverGroup0 = (1 + (numInputChannels0-1) / BURST_SIZE_BYTE);
-            numIAMoverGroup1 = (1 + (numInputChannels1-1) / BURST_SIZE_BYTE);
-            numActiveElementsInFullComputeFold = BURST_SIZE_BYTE;
+            numIAMoverInputChannelsPerGroup0 = numInputChannels0;
+            numIAMoverInputChannelsPerGroup1 = numInputChannels1;
+            numIAMoverGroup0 = 1;
+            numIAMoverGroup1 = 1;
+            numActiveElementsInFullComputeFold = numInputChannels0;
             numOAGroupsCurrentLayer = 1;
-            memIA0DramBlockGroupStride = 1;
-            memIA1DramBlockGroupStride = 1;
+            memIA0DramBlockGroupStride = _memIA0DramBlockGroupStride;
+            memIA1DramBlockGroupStride = _memIA1DramBlockGroupStride;
             numOutputChannelsBlob0MK = numInputChannels0;
             numOutputChannelsBlob1MK = 0;
-            numOutputBlocksBlob0MK = 1+ (numOutputChannelsBlob0MK-1) / BURST_SIZE_BYTE;
-            numOutputBlocksBlob1MK = 0;
+            numOutputBlocksBlob0PerStripMK = 1+ (numOutputChannelsBlob0MK-1) / BURST_SIZE_BYTE;
+            numOutputBlocksBlob1PerStripMK = 0;
             numDramBlocksToReduceMK = 2;
         }
         break;
@@ -286,8 +303,8 @@ void instruction_generator(
             memIA0DramBlockGroupStride = 1;
             numOutputChannelsBlob0MK = numInputChannels0;
             numOutputChannelsBlob1MK = 0;
-            numOutputBlocksBlob0MK = 1+ (numOutputChannelsBlob0MK-1) / BURST_SIZE_BYTE;
-            numOutputBlocksBlob1MK = 0;
+            numOutputBlocksBlob0PerStripMK = 1+ (numOutputChannelsBlob0MK-1) / BURST_SIZE_BYTE;
+            numOutputBlocksBlob1PerStripMK = 0;
             numDramBlocksToReduceMK = (unsigned int) kernelSize * (unsigned int) kernelSize;
         }
     break;
@@ -371,7 +388,7 @@ void instruction_generator(
         for (unsigned int iterQTile=0; iterQTile < numOutputTileX; iterQTile++)
         {
             unsigned char numActiveCols = (iterQTile >= numFullOutputTileX) ?
-                        numActiveColsPartialOutputTile : PE_COLS;
+                        numActiveColsPartialOutputTile : numActiveColsFullOutputTile;
 
             unsigned int maxTQPerCol = (iterQTile >= numFullOutputTileX) ?
                         sizeOutputTilePartialWidthPerCol : sizeOutputTileFullWidthPerCol;
@@ -389,13 +406,13 @@ void instruction_generator(
                 t_oa_tile_controller_instruction instructionOAControl;
 
                 instructionOAControl.numLocalTilePerColHxW = (t_uchar)(maxTQPerCol*maxTP);
-                instructionOAControl.numLocalChannels = (t_uchar)(numOutputChannels);
+                instructionOAControl.numLocalChannels = (t_ushort)(numOutputChannels);
                 instructionOAControl.numDrainInstructions = (t_ushort) ( numComputeFoldPerGroup * numOAGroupsCurrentLayer);
                 instructionOAControl.numMemInstructions = (t_uchar) numGroupsNextLayer;
                 instructionOAControl.numFoldsInGroupCurrentLayer = (t_uchar) numComputeFoldPerGroup;
                 instructionOAControl.numFullFoldsInCurrentLayer = (t_uchar) numFullComputeFoldPerGroup;
-                instructionOAControl.numActiveElementsInFullFold = (t_uchar) numActiveElementsInFullComputeFold;
-                instructionOAControl.numActiveElementsInPartialFold = (t_uchar) numActiveElementsInPartialComputeFold;
+                instructionOAControl.numActiveElementsInFullFold = (t_ushort) numActiveElementsInFullComputeFold;
+                instructionOAControl.numActiveElementsInPartialFold = (t_ushort) numActiveElementsInPartialComputeFold;
                 instructionOAControl.numLocalChannelsPerCurrentGroup = (t_ushort) numOutputChannelsPerGroupCurrentLayer;
                 instructionOAControl.numLocalChannelsPerNextGroup = (t_ushort) numOutputChannelsPerGroupNextLayer;
                 instructionOAControl.numActiveCols = (t_uchar) numActiveCols;
@@ -483,8 +500,15 @@ void instruction_generator(
             unsigned int iterNDense = iterNClipped / inputSPWidthUnit;
             unsigned int iterSPNIndex = iterNClipped % inputSPWidthUnit;
 
+            /*!
+              Transfer the inputs
+              For the operations that have two input tensors, the number of IA groups are 1
+            */
             for (unsigned int iterInputGroup0=0; iterInputGroup0<numIAMoverGroup0; iterInputGroup0++)
             {
+                unsigned int inputStripStartIndex =
+                                        iterInputGroup0 * inputDenseHeight * inputDenseWidth
+                                        + iterMDense * inputDenseWidth + iterNDense;
 
                 //Transfer the first input blob, and convolution related items (if necessary)
                 /*! Send the first input IA instruction,
@@ -492,73 +516,94 @@ void instruction_generator(
                  *  If we dealing with addition, then we assume that both input tensors are dense
                  *  and have the same dimensions
                 */
-                typedef struct {
-                    unsigned int memIADramBlockStartIndex;
-                    signed int numIAShiftAmount;
-                    #if defined(SPARSE_SYSTEM)
-                        unsigned int memIATBCountStart;
-                    #endif
-                    bool flagInputShiftLeft;
-                } t_temp_ia_mover_info;
+//                typedef struct {
+//                    unsigned int memIADramBlockStartIndex;
+//                    signed int numIAShiftAmount;
+//                    bool flagInputShiftLeft;
+//                    #if defined(SPARSE_SYSTEM)
+//                        unsigned int memIATBCountStart;
+//                    #endif
+//                } t_temp_ia_mover_info;
 
-                std::vector<t_temp_ia_mover_info> vecIAInfo;
-                vecIAInfo.push_back({.memIADramBlockStartIndex=memIA0DramBlockStartIndex,
-                                     .numIAShiftAmount=numIA0ShiftAmount,
-                                     .flagInputShiftLeft=flagIA0ShiftLeft
-                                    #if defined(SPARSE_SYSTEM)
-                                     ,.memIATBCountStart=memIATB0CountStart
-                                    #endif
-                                    });
-                if (op == ELT_ADD)
-                {
-                    vecIAInfo.push_back({.memIADramBlockStartIndex=memIA1DramBlockStartIndex,
-                                         .numIAShiftAmount=numIA1ShiftAmount,
-                                         .flagInputShiftLeft=flagIA1ShiftLeft
-                                        #if defined(SPARSE_SYSTEM)
-                                         ,.memIATBCountStart=memIATB1CountStart
-                                        #endif
-                                        });
-                }
-                for (auto & info: vecIAInfo)
+//                std::vector<t_temp_ia_mover_info> vecIAInfo;
+//                vecIAInfo.push_back({.memIADramBlockStartIndex=memIA0DramBlockStartIndex,
+//                                     .numIAShiftAmount=numIA0ShiftAmount,
+//                                     .flagInputShiftLeft=flagIA0ShiftLeft
+//                                    #if defined(SPARSE_SYSTEM)
+//                                     ,.memIATBCountStart=memIATB0CountStart
+//                                    #endif
+//                                    });
+//                if (op == ELT_ADD)
+//                {
+//                    vecIAInfo.push_back({.memIADramBlockStartIndex=memIA1DramBlockStartIndex,
+//                                         .numIAShiftAmount=numIA1ShiftAmount,
+//                                         .flagInputShiftLeft=flagIA1ShiftLeft
+//                                        #if defined(SPARSE_SYSTEM)
+//                                         ,.memIATBCountStart=memIATB0CountStart
+//                                        #endif
+//                                        });
+//                }
+                //IA mover instruciton
                 {
                     t_ia_mover_instruction instructionIA;
-                    unsigned char actualFlagInputSync = 0x0;
                     //Set the transport target. 0x0 means convolution, 0x1 means MISC
                     unsigned char flagTarget= (op == CONVOLUTION) ?  0x00 : 0x01;
-                    instructionIA.memRegionCatSparseFlagCatDestinationCatSyncCatNumActiveCols = (t_uchar)
+                    unsigned char inputArrangement = 0x0;
+                    if (op == ELT_ADD)
+                    {
+                        inputArrangement = 0x01;
+                    }
+                    else if (op == CONCATENATION)
+                    {
+                        inputArrangement = 0x02;
+                    }
+                    instructionIA.inputArrangementCatSparseFlagCatDestinationCatNumActiveCols = (t_uchar)
                             ( ( ((t_uchar) numActiveCols)& 0x0F)
-                             | ((((t_uchar) actualFlagInputSync) & 0x01) << 0x04)
-                             | ((((t_uchar) flagTarget) & 0x01) << 0x05)
-                             | ((((t_uchar) flagSparseInput) & 0x01) << 0x06) //Sparse flag for the input tensor
+                             | ((((t_uchar) flagTarget) & 0x01) << 0x04)
+                             | ((((t_uchar) flagSparseInput) & 0x01) << 0x05) //Sparse flag for the input tensor
+                             | ((((t_uchar) inputArrangement) & 0x03) << 0x06)
                             );
-                    assert ((((info.flagInputShiftLeft == false) && (info.numIAShiftAmount > 0))
-                            || ((info.flagInputShiftLeft == true) && (info.numIAShiftAmount >= 0)))
-                           && "If input shift direction is RIGHT, then the number of shift must be greater than 0");
-                    t_uchar flagLeftShiftCatShiftAmount = info.flagInputShiftLeft ?
-                                (0x10 | (0x0F & info.numIAShiftAmount))
-                              : (0x00 | (0x0F & info.numIAShiftAmount));
-                    instructionIA.flagLeftShiftCatShiftAmount = flagLeftShiftCatShiftAmount;
-                    instructionIA.memBlockStart = (t_int) (
-                                info.memIADramBlockStartIndex
+                    assert ((((flagIA0ShiftLeft == true) && (numIA0ShiftAmount >= 0))
+                            && ((flagIA1ShiftLeft == true) && (numIA1ShiftAmount >= 0)))
+                           && "Input left shift amount must be greater or equal to 0");
+                    t_uchar inputShiftAmounts = ((numIA1ShiftAmount & 0x0F) << 0x04) | (numIA0ShiftAmount & 0x0F);
+                    instructionIA.inputShiftAmounts = inputShiftAmounts;
+                    instructionIA.memBlockStart0 = (t_int) (
+                                memIA0DramBlockStartIndex
                                 + memIA0DramBlockGroupStride * iterInputGroup0
                                 + memIA0DramBlockRowStride * iterMDense
                                 + memIA0DramBlockColStride * iterNDense);
-                    instructionIA.memBlockColStripStride = (t_ushort)memIA0DramBlockColStride;
-                    instructionIA.memBlockRowStripStride = (t_ushort)memIA0DramBlockRowStride;
+                    instructionIA.memBlockColStripStride0 = (t_ushort)memIA0DramBlockColStride;
+                    instructionIA.memBlockRowStripStride0 = (t_ushort)memIA0DramBlockRowStride;
+
+                    instructionIA.memBlockStart1 = (t_int) (
+                                memIA1DramBlockStartIndex
+                                + memIA1DramBlockGroupStride * iterInputGroup0
+                                + memIA1DramBlockRowStride * iterMDense
+                                + memIA1DramBlockColStride * iterNDense);
+                    instructionIA.memBlockColStripStride1 = (t_ushort)memIA1DramBlockColStride;
+                    instructionIA.memBlockRowStripStride1 = (t_ushort)memIA1DramBlockRowStride;
+
 
                     #if defined(SPARSE_SYSTEM)
                         instructionIA.memTBCountStart = (t_int)
-                                (info.memIATBCountStart
+                                (memIATB0CountStart
                                  + inputStripStartIndex * memIATB0CountColStride);
                         instructionIA.memTBCountColStride = (t_ushort) memIATB0CountColStride;
                         instructionIA.memTBCountRowStride = (t_ushort) (memIATB0CountColStride * inputDenseWidth);
-                        instructionIA.numCWOrTBInGroup = (flagSparseInput == 0x1) ?
+                        instructionIA.numCWOrTBInGroup0 = (flagSparseInput == 0x1) ?
                                             (t_ushort) (
                                                 1 + (numIAMoverInputChannelsPerGroup0-1) / COMPRESSION_WINDOW_SIZE / CLUSTER_SIZE
                                                 )
                                             : (t_ushort) (1 + (numIAMoverInputChannelsPerGroup0-1) / TRANSFER_SIZE / CLUSTER_SIZE);
+                        instructionIA.numCWOrTBInGroup1 = (flagSparseInput == 0x1) ?
+                                            (t_ushort) (
+                                                1 + (numIAMoverInputChannelsPerGroup1-1) / COMPRESSION_WINDOW_SIZE / CLUSTER_SIZE
+                                                )
+                                            : (t_ushort) (1 + (numIAMoverInputChannelsPerGroup1-1) / TRANSFER_SIZE / CLUSTER_SIZE);
                     #else
-                        instructionIA.numTBPerStrip = (t_ushort) (1 + (numIAMoverInputChannelsPerGroup0-1) / TRANSFER_SIZE / CLUSTER_SIZE);
+                        instructionIA.numTBPerStrip0 = (t_ushort) (1 + (numIAMoverInputChannelsPerGroup0-1) / TRANSFER_SIZE / CLUSTER_SIZE);
+                        instructionIA.numTBPerStrip1 = (t_ushort) (1 + (numIAMoverInputChannelsPerGroup1-1) / TRANSFER_SIZE / CLUSTER_SIZE);
                     #endif
                         instructionIA.tileSPHeight = (t_uchar) maxTM;
                         instructionIA.tileSPWidth = (t_uchar) maxTN;
@@ -657,7 +702,7 @@ void instruction_generator(
             if ((op != CONVOLUTION))
             {
                 //Transfer the SECOND input blob if necessary
-                if (op != ELT_ADD)
+                if ((op == AVG_POOL) || (op == MAX_POOL))
                 {
                     for (unsigned int iterInputGroup1=0; iterInputGroup1<numIAMoverGroup1; iterInputGroup1++)
                     {
@@ -665,43 +710,27 @@ void instruction_generator(
                         {
                             t_ia_mover_instruction instructionIA;
 
-    //                        bool isLastInputTile =
-    //                                    (op != CONVOLUTION)
-    //                                && (op != MAX_POOL)
-    //                                && ( iterInputGroup1 == (numIAMoverGroup1-1))
-    //                                && ((iterPTile+1) == numOutputTileY)
-    //                                && ((iterQTile+1) == numOutputTileX);
-
-    //                        unsigned char actualFlagInputSync = (flagInputSync == 0x01) ?
-    //                                    ((isLastInputTile == true) ? 0x1 : 0x0)
-    //                                    : 0x0;
-                            unsigned char actualFlagInputSync = 0x0;
-
-                            instructionIA.memRegionCatSparseFlagCatDestinationCatSyncCatNumActiveCols = (t_uchar)
+                            unsigned char flagTarget = 0x01;
+                            instructionIA.inputArrangementCatSparseFlagCatDestinationCatNumActiveCols = (t_uchar)
                                     ( ( ((t_uchar) numActiveCols)& 0x0F)
-                                     | ((((t_uchar) actualFlagInputSync) & 0x01) << 0x04)
-                                     | ((((t_uchar) 0x01) & 0x01) << 0x05) //Compute engine is MISC
-                                     | ((((t_uchar) 0x0) & 0x01) << 0x06) //Sparse flag for the input tensor. Will be dense
+                                     | ((((t_uchar) flagTarget) & 0x01) << 0x04)
+                                     | ((((t_uchar) flagSparseInput) & 0x01) << 0x05) //Sparse flag for the input tensor
                                     );
-                            assert ((((flagIA1ShiftLeft == false) && (numIA1ShiftAmount > 0))
-                                    || ((flagIA1ShiftLeft == true) && (numIA1ShiftAmount >= 0)))
-                                   && "If input shift direction is RIGHT, then the number of shift must be greater than 0");
-                            t_uchar flagLeftShiftCatShiftAmount = flagIA1ShiftLeft ?
-                                        (0x10 | (0x0F & numIA1ShiftAmount))
-                                      : (0x00 | (0x0F & numIA1ShiftAmount));
-                            instructionIA.flagLeftShiftCatShiftAmount = flagLeftShiftCatShiftAmount;
-                            instructionIA.memBlockStart = (t_int) (
+                            instructionIA.inputShiftAmounts = 0x00;
+                            instructionIA.memBlockStart0 = (t_int) (
                                         memIA1DramBlockStartIndex
                                         + memIA1DramBlockGroupStride * iterInputGroup1
                                         + memIA1DramBlockRowStride * iterMDense
                                         + memIA1DramBlockColStride * iterNDense);
-                            instructionIA.memBlockColStripStride = (t_ushort)(memIA1DramBlockColStride);
-                            instructionIA.memBlockRowStripStride = (t_ushort)(memIA1DramBlockRowStride);
+                            instructionIA.memBlockColStripStride0 = (t_ushort)(memIA1DramBlockColStride);
+                            instructionIA.memBlockRowStripStride0 = (t_ushort)(memIA1DramBlockRowStride);
+
+                            //Don't need to worry about input 1, since it doesn't exist for pooling layers
 
                             #if defined(SPARSE_SYSTEM)
-                                instructionIA.numCWOrTBInGroup = (t_ushort) (1 + (numIAMoverInputChannelsPerGroup1-1) / TRANSFER_SIZE / CLUSTER_SIZE);
+                                instructionIA.numCWOrTBInGroup0 = (t_ushort) (1 + (numIAMoverInputChannelsPerGroup1-1) / TRANSFER_SIZE / CLUSTER_SIZE);
                             #else
-                                instructionIA.numTBPerStrip = (t_ushort) (1 + (numIAMoverInputChannelsPerGroup1-1) / TRANSFER_SIZE / CLUSTER_SIZE);
+                                instructionIA.numTBPerStrip0 = (t_ushort) (1 + (numIAMoverInputChannelsPerGroup1-1) / TRANSFER_SIZE / CLUSTER_SIZE);
                             #endif
                                 instructionIA.tileSPHeight = (t_uchar) maxTM;
                                 instructionIA.tileSPWidth = (t_uchar) maxTN;
@@ -737,7 +766,8 @@ void instruction_generator(
                     }  //For. Transfer the SECOND input blob, and convolution related items (if necessary)
                 }
 
-                //Transfer the MISC instruction
+                //Transfer the MISC instruction for non-concatenation MISC operations
+                if (op != CONCATENATION)
                 {
                     unsigned char opCodeField = 0X0;
                     if ((op == ELT_ADD) || (op == AVG_POOL))
@@ -749,34 +779,18 @@ void instruction_generator(
                     {
                         opCodeField = 0x10;
                     }
-                    else if (op == CONCATENATION)
-                    {
-                        opCodeField = 0x20;
-                    }
 
-                    if (numOutputBlocksBlob0MK > 0)
-                    {
-                        t_misc_instruction instructionMisc;
-                        instructionMisc.controlBits = (t_uchar) (opCodeField |( numActiveCols & 0x0F));
-                        instructionMisc.numDramBlocksToReduce = (unsigned short) numDramBlocksToReduceMK;
-                        instructionMisc.numOutputBlocks = (unsigned char) numOutputBlocksBlob0MK;
-                        instructionMisc.numEffectiveValuesInLastStrip = (t_uchar) (
-                                    numOutputChannelsBlob0MK - (numOutputBlocksBlob0MK-1)*BURST_SIZE_BYTE);
+                    t_misc_instruction instructionMisc;
+                    instructionMisc.controlBits = (t_uchar) (opCodeField |( numActiveCols & 0x0F));
+                    instructionMisc.numDramBlocksToReduce = (cl_ushort) numDramBlocksToReduceMK;
+                    instructionMisc.numOutputBlocksPerStrip = (cl_uchar) numOutputBlocksBlob0PerStripMK;
+                    instructionMisc.numOutputBlocks =
+                            (cl_ushort) (maxTP * maxTQPerCol * numOutputBlocksBlob0PerStripMK) ;
+                    instructionMisc.numEffectiveValuesInLastStrip = (t_uchar) (
+                                numOutputChannelsBlob0MK - (numOutputBlocksBlob0PerStripMK-1)*BURST_SIZE_BYTE);
 
-                        vecMiscInstruction.push_back(instructionMisc);
-                    } //if fold 0 iMiscFold
+                    vecMiscInstruction.push_back(instructionMisc);
 
-                    if (numOutputBlocksBlob1MK > 0)
-                    {
-                        t_misc_instruction instructionMisc;
-                        instructionMisc.controlBits = (t_uchar) (opCodeField |( numActiveCols & 0x0F));
-                        instructionMisc.numDramBlocksToReduce = (unsigned short) numDramBlocksToReduceMK;
-                        instructionMisc.numOutputBlocks = (unsigned char) numOutputBlocksBlob1MK;
-                        instructionMisc.numEffectiveValuesInLastStrip = (t_uchar) (
-                                    numOutputChannelsBlob1MK - (numOutputBlocksBlob1MK-1)*BURST_SIZE_BYTE);
-
-                        vecMiscInstruction.push_back(instructionMisc);
-                    } //if fold 0 iMiscFold
                 } //Transfer the MISC instruction
             } //Non-convolution stuff
             iterQGlobal += maxTQ;
@@ -785,6 +799,47 @@ void instruction_generator(
         iterPGlobal += maxTP;
         iterMGlobal += ((unsigned int)kernelStride)*maxTP;
     } //for iterPTile
+
+    /*!
+      Concatenation is a special case
+    */
+    if (op == CONCATENATION)
+    {
+        unsigned char opCodeField = 0X0;
+        opCodeField = 0x20;
+
+        unsigned char numActiveCols = 1;
+        signed int numStrips = outputHeight*outputWidth;
+
+        for (signed int iStrip=0; iStrip<numStrips; iStrip++)
+        {
+            //Instruciton 0
+            {
+                t_misc_instruction instructionMisc;
+                instructionMisc.controlBits = (t_uchar) (opCodeField |( numActiveCols & 0x0F));
+                instructionMisc.numDramBlocksToReduce = (cl_ushort) numDramBlocksToReduceMK;
+                instructionMisc.numOutputBlocksPerStrip = (cl_uchar) numOutputBlocksBlob0PerStripMK;
+                instructionMisc.numOutputBlocks = (cl_ushort) numOutputBlocksBlob0PerStripMK;
+                instructionMisc.numEffectiveValuesInLastStrip = (t_uchar) (
+                            numOutputChannelsBlob0MK - (numOutputBlocksBlob0PerStripMK-1)*BURST_SIZE_BYTE);
+
+                vecMiscInstruction.push_back(instructionMisc);
+             }
+
+            //Instruction 1
+            {
+                t_misc_instruction instructionMisc;
+                instructionMisc.controlBits = (t_uchar) (opCodeField |( numActiveCols & 0x0F));
+                instructionMisc.numDramBlocksToReduce = (cl_ushort) numDramBlocksToReduceMK;
+                instructionMisc.numOutputBlocksPerStrip = (cl_uchar) numOutputBlocksBlob1PerStripMK;
+                instructionMisc.numOutputBlocks = (cl_ushort) numOutputBlocksBlob1PerStripMK;
+                instructionMisc.numEffectiveValuesInLastStrip = (t_uchar) (
+                            numOutputChannelsBlob1MK - (numOutputBlocksBlob1PerStripMK-1)*BURST_SIZE_BYTE);
+
+                vecMiscInstruction.push_back(instructionMisc);
+            }
+        }
+    } //Transfer the MISC instruction for conatenation if necessary
 }
 
 int ia_cache_boundary_check(

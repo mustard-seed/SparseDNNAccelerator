@@ -204,7 +204,7 @@ __kernel void kernelIAMover (
 				//Compute the number of dram block transfers needed for the strip
 				unsigned short dramBlockCount = (numInputInterleavePerDramblock == 0x01) ?
 					 1 + ( (numTBInStrip-1) >> WIDE_SIZE_OFFSET )
-					: (1 + ( (numTBInStrip-1) >> WIDE_SIZE_OFFSET )) << 2;
+					: (1 + ( (numTBInStrip-1) >> WIDE_SIZE_OFFSET )) << 1;
 				//The actual number of transfer is one more than the number of DRAM block.
 				//The extra block is in the beginning, and it contains routing information
 				//as well as the number of TB count, which is required by the convolution PE array
@@ -295,12 +295,6 @@ __kernel void kernelIAMover (
 							{
 								addressIADramBlockDDR1++;
 							}
-
-							//Toggle between 0 and 1
-							if (numInputInterleavePerDramblock == 0x02)
-							{
-								iterInputDramblockInterleave = (iterInputDramblockInterleave + 0x01) & 0x01;
-							}
 						}
 						else  //Strip is padding
 						{
@@ -333,6 +327,8 @@ __kernel void kernelIAMover (
 						{
 							iaBlock.miscLeftShiftAmount = input1LeftShiftAmount;
 						}
+						//Toggle between 0 and 1
+						iterInputDramblockInterleave = (iterInputDramblockInterleave + 0x01) & 0x01;
 					}
 					else if (inputArrangement == 0x02)
 					{
@@ -2175,6 +2171,7 @@ __kernel void kernelMiscControlMover (
 		packet.controlBits = instruction.controlBits;
 		packet.numDramBlocksToReduce = instruction.numDramBlocksToReduce;
 		packet.numOutputBlocks	=	instruction.numOutputBlocks;
+		packet.numOutputBlocksPerStrip = instruction.numOutputBlocksPerStrip;
 		packet.numEffectiveValuesInLastStrip = instruction.numEffectiveValuesInLastStrip;
 		write_channel_intel(channel_misc_instruction[0], packet);
 		EMULATOR_PRINT(("[kernelMiscControlMover] Sent instruction %d \n",
@@ -2208,16 +2205,27 @@ __kernel void kernelMisc ()
 		//OpCode. 00: Add; 01: Max Pooling; 10: Stream
 		uint2_t opcode = (controlPacket.controlBits >> 4) & 0x03;
 		unsigned short numDramBlocksToReduce = controlPacket.numDramBlocksToReduce;
-		unsigned char numOutputBlocks = controlPacket.numOutputBlocks;
+		unsigned short numOutputBlocks = controlPacket.numOutputBlocks;
+		unsigned char numOutputBlocksPerStrip = controlPacket.numOutputBlocksPerStrip;
 		unsigned char numEffectiveValuesInLastStrip = controlPacket.numEffectiveValuesInLastStrip;
 
 		EMULATOR_PRINT(("[kernelMisc %d] Received command "
-						"opcode=%#04x, numOutputBlocks=%d, numDramBlocksToReduce=%d, numEffectiveValues=%d \n",
-						colID, ((unsigned char)opcode), numOutputBlocks, numDramBlocksToReduce, numEffectiveValuesInLastStrip));
+						"opcode=%#04x, "
+						"numOutputBlocks=%d, "
+						"numDramBlocksToReduce=%d, "
+						"numOutputBlocksPerStrip=%d, "
+						"numEffectiveValuesInLastStrip=%d \n",
+						colID, 
+						((unsigned char)opcode), 
+						numOutputBlocks, 
+						numDramBlocksToReduce, 
+						numOutputBlocksPerStrip,
+						numEffectiveValuesInLastStrip));
 
-		for (unsigned char iOutput=0; iOutput < numOutputBlocks; iOutput++)
+		unsigned char iterDramBlockInOutputStrip = 0;
+		for (unsigned short iOutput=0; iOutput < numOutputBlocks; iOutput++)
 		{
-			unsigned char numEffectiveValues = (iOutput < (numOutputBlocks-1)) ? BURST_SIZE_BYTE : numEffectiveValuesInLastStrip;
+			unsigned char numEffectiveValues = (iterDramBlockInOutputStrip < (numOutputBlocksPerStrip-1)) ? BURST_SIZE_BYTE : numEffectiveValuesInLastStrip;
 			//Initialize the reductionBlock
 			#pragma unroll
 			for (int iCluster=0; iCluster<NUM_CLUSTER_IN_DRAM_SIZE; iCluster++)
@@ -2279,6 +2287,12 @@ __kernel void kernelMisc ()
 			}
 
 			EMULATOR_PRINT(("[kernelMisc %d] Finished processing output block %d / %d of the command.\n", colID, iOutput, numOutputBlocks));
+		
+			iterDramBlockInOutputStrip++;
+			if (iterDramBlockInOutputStrip == numOutputBlocksPerStrip)
+			{
+				iterDramBlockInOutputStrip = 0;
+			}
 		}  //iOutput
 		
 
@@ -3204,10 +3218,10 @@ void updateOABufferWriter (
 					= shortOutput;
 
 				EMULATOR_PRINT(("[kernelOABuffer %d] Read and processed value from PE/Misc. "
-					 "Value: %#04x, %d out of %d values read.\n\n", 
+					 "Value: %#04x, %d out of %d values of the strip are read.\n\n", 
 					 colID, 
 					 shortOutput, 
-					 (*pRegisters).accessInfo.indexOutput, 
+					 (*pRegisters).accessInfo.iLoopPerStip, 
 					 (*pRegisters).accessInfo.numOutputsPerStrip));
 				//Loop variable updates
 				(*pRegisters).accessInfo.indexOutput += 0x1;
@@ -3909,8 +3923,8 @@ __kernel void kernelOABuffer ()
 					//cacheOutputActivations[indexOutput] = shortOutput;
 					cacheOutputActivations[indexOutput >> VALUE_TO_CLUSTER_SHIFT][indexOutput & VALUE_DIVIDED_BY_CLUSTER_SIZE_REMAINDER_MASK] = shortOutput;
 
-					EMULATOR_PRINT(("[kernelOABuffer %d] Read and processed value from PE. Value: %#04x, %d out of %d values read.\n\n", 
-					colID, shortOutput, indexOutput, numOutputsPerStrip));
+					EMULATOR_PRINT(("[kernelOABuffer %d] Read and processed value from PE. Value: %#04x, %d out of %d values from the strip are read.\n\n", 
+					colID, shortOutput, iLoopPerStip, numOutputsPerStrip));
 					//Loop variable updates
 					indexOutput++;
 					iLoopPerStip++;
@@ -6266,7 +6280,7 @@ __kernel void kernelOperandFilter ()
 					);
 			if (success == true)
 			{
-				EMULATOR_PRINT(("[Op Filter DRAIN (%d, %d)] Sent a value: %#06x\n", idy, idx, drainTransportBlock.value));
+				EMULATOR_PRINT(("[Op Filter DRAIN (%d, %d)] Sent a value: %#06x\n", idy, idx, (int) drainTransportBlock.value));
 				sendNextPESuccess = TRUE;
 			}
 		}
