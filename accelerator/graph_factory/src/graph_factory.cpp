@@ -26,7 +26,7 @@ typedef struct {
  * \param _isWidth[bool]
  * \return
  */
-t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer, int _numUnits, bool _isWidth);
+t_tile_pair calculateTileSizePerUnit(Layer& _convLayer, int _numUnits, bool _isWidth);
 
 namespace GraphRuntime {
     GraphFactory::GraphFactory(std::string _traceFileName, std::string _parameterFileName)
@@ -310,9 +310,11 @@ namespace GraphRuntime {
                     numInputChannel1 = pLayerLocal->getInputChannels().at(1);
                     numInputChannelPerGroup1 = numInputChannel1 / numGroupCurrentLayer;
 
-                    sizeOutputTileFullWidthPerCol = 1;
-                    numActiveColsPartialOutputTile = numOutputWidth % PE_COLS;
-                    sizeOutputTileFullHeight = 1;
+                    t_tile_pair widthTileInfo = calculateTileSizePerUnit(*pLayerLocal.get(), PE_COLS, true);
+                    sizeOutputTileFullWidthPerCol = widthTileInfo.tileSizePerUnitFull;
+                    numActiveColsPartialOutputTile = widthTileInfo.numUnitsWhenPartial;
+                    t_tile_pair heightTileInfo = calculateTileSizePerUnit(*pLayerLocal.get(), 1, false);
+                    sizeOutputTileFullHeight = heightTileInfo.tileSizePerUnitFull;
 
                     //Align input bits
                     int inputFracBits0 = pLayerLocal->getInputFracBits().at(0);
@@ -691,15 +693,15 @@ namespace GraphRuntime {
     }
 }
 
-t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer, int _numUnits, bool _isWidth)
+t_tile_pair calculateTileSizePerUnit(Layer& _layer, int _numUnits, bool _isWidth)
 {
     //TODO: To compute the tile size and the number of active roles properly, we need to develop an analytical model.
     int tileSizePerUnitFull;
     int numUnitsWhenPartial;
     if (_isWidth)
     {
-        int width = _convLayer.getOutputWidth();
-        tileSizePerUnitFull = ((width / PE_COLS) > 4) ? 4 : (width / PE_COLS);
+        int width = _layer.getOutputWidth();
+        tileSizePerUnitFull = ((width / _numUnits) > 4) ? 4 : (width / _numUnits);
         tileSizePerUnitFull = (tileSizePerUnitFull == 0) ? 1 : tileSizePerUnitFull;
         numUnitsWhenPartial = 1;
     }

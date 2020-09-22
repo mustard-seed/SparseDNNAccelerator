@@ -114,16 +114,15 @@ typedef struct {
    Data mover and tile controller instructions
    ==================================================
 */
-typedef struct __attribute__((packed)) __attribute__((aligned(32))) 
+typedef struct __attribute__((packed)) __attribute__((aligned(64))) 
 {
     //Concatenation of three signals
     //Bits [3:0] Number of active columns
     //Bit [4]: Flag for the compute engine. 0 for convolution, 1 for misc.
     //Bit [5]: Flag for sparse input. 0 for dense, 1 for sparse.
-    //Bit [7:6]: Input arrangment mode.
-    //  2'b00: One input tensor (e.g convolution, strided convolution)
-    //  2'b01: Two input tensors, and interleave the two tensors per dramblock (e.g. eltwise addition)
-    //  2'b10: Two input tensors, and interleave the two tensors per strip (e.g. concatenation)
+    //Bit [6]: Input arrangment mode.
+    //  1'b0: One input tensor (e.g convolution, strided convolution)
+    //  1'b1: Two input tensors, and interleave the two tensors per dramblock (e.g. eltwise addition)
     t_uchar inputArrangementCatSparseFlagCatDestinationCatNumActiveCols;
 
     //Bit [3:0] Input 0 left shift amount
@@ -132,17 +131,14 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
 
     //Arch parameter: Starting index of the input dram block in input 0's memory region
     t_int memBlockStart0;
-    //Arch parameter: Column stride of input activation strips in dram block in input 0's memory region
-    t_ushort memBlockColStripStride0;
-    //Arch parameter: Row stride of input activation strips in dram block in input 0's memory region
-    t_ushort memBlockRowStripStride0;
-
     //Arch parameter: Starting index of the input dram block in input 1's memory region
     t_int memBlockStart1;
-    //Arch parameter: Column stride of input activation strips in dram block in input 1's memory region
-    t_ushort memBlockColStripStride1;
-    //Arch parameter: Row stride of input activation strips in dram block in input 1's memory region
-    t_ushort memBlockRowStripStride1;
+
+    //Important: we assume the two input tensors (if there are two) have the exact same input dimensions
+    //Arch parameter: Column stride of input activation strips in dram block in both input memory regions
+    t_ushort memBlockColStripStride;
+    //Arch parameter: Row stride of input activation strips in dram block in both input memory regions
+    t_ushort memBlockRowStripStride;
 
 #if defined(SPARSE_SYSTEM)
     /*!
@@ -157,11 +153,13 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
     //Problem parameter: 
     //When sending sparse data, These are the number of compression windows in an input group. Used for sending padding
     //When sending dense data, These are the number of valid TB in a strip
-    t_ushort numCWOrTBInGroup0; 
-    t_ushort numCWOrTBInGroup1; 
+    //Important: we assume the two input tensors (if there are two) have the exact same input dimensions
+    //Arch parameter: Column stride of input activation strips in dram block in both input memory regions
+    t_ushort numCWOrTBInGroup;
 #else
-    t_ushort numTBPerStrip0;
-    t_ushort numTBPerStrip1;
+    //Important: we assume the two input tensors (if there are two) have the exact same input dimensions
+    //Arch parameter: Column stride of input activation strips in dram block in both input memory regions
+    t_ushort numTBPerStrip;
 #endif
 
 

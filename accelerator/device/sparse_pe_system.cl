@@ -124,10 +124,8 @@ __kernel void kernelIAMover (
 		signed char iRowInSPTile = 0;
 
 		//Address offset contributions from row and column movements in the tile
-		signed int offsetIADramBlockRow0 = 0;
-		signed int offsetIADramBlockCol0 = 0;
-		signed int offsetIADramBlockRow1 = 0;
-		signed int offsetIADramBlockCol1 = 0;
+		signed int offsetIADramBlockRow = 0;
+		signed int offsetIADramBlockCol = 0;
 		#if defined(SPARSE_SYSTEM)
 			signed int offsetTBCountRow = 0;
 			signed int offsetTBCountCol = 0;
@@ -148,19 +146,15 @@ __kernel void kernelIAMover (
 			bool realStrip = colIsDense && rowIsDense;
 
 			unsigned char numInputInterleavePerDramblock = (inputArrangement == 0x01) ? 0x02 : 0x01;
-			unsigned char numInputInterleavePerStrip = (inputArrangement == 0x02) ? 0x02 : 0x01;
 
-			for (unsigned char iterInputStripInterleave=0x0; 
-				iterInputStripInterleave < numInputInterleavePerStrip; iterInputStripInterleave++)
 			{
-				int addressIADramBlockDDR0 = (iterInputStripInterleave == 0x0) ? 
-					 ((t_int) inst.memBlockStart0) + offsetIADramBlockCol0 + offsetIADramBlockRow0
-					: ((t_int) inst.memBlockStart1) + offsetIADramBlockCol1 + offsetIADramBlockRow1;
+				int addressIADramBlockDDR0 = 
+					((t_int) inst.memBlockStart0) + offsetIADramBlockCol + offsetIADramBlockRow;
 
 				//The second iter is special, used during elementwise addition only
 				//hence the mixing of indices from 1 and 0
 				int addressIADramBlockDDR1 = 
-					((t_int) inst.memBlockStart1) + offsetIADramBlockCol0 + offsetIADramBlockRow0;
+					((t_int) inst.memBlockStart1) + offsetIADramBlockCol + offsetIADramBlockRow;
 
 				#if defined(SPARSE_SYSTEM)
 					//For the sparse case, we need to consider whether the input is actually sparse,
@@ -183,21 +177,15 @@ __kernel void kernelIAMover (
 						}
 						else
 						{
-							numTBInStrip = (iterInputStripInterleave == 0x0) ?  
-								(t_ushort) inst.numCWOrTBInGroup0:
-								(t_ushort) inst.numCWOrTBInGroup1;
+							numTBInStrip = (t_ushort) inst.numCWOrTBInGroup;
 						}
 					}
 					else
 					{
-						numTBInStrip = (iterInputStripInterleave == 0x0) ?  
-								(t_ushort) inst.numCWOrTBInGroup0:
-								(t_ushort) inst.numCWOrTBInGroup1;
+						numTBInStrip = (t_ushort) inst.numCWOrTBInGroup;
 					}
 				#else
-					unsigned short numTBInStrip = (iterInputStripInterleave == 0x0) ?  
-								(t_ushort) inst.numTBInStrip0:
-								(t_ushort) inst.numTBInStrip1;
+					unsigned short numTBInStrip = (t_ushort) inst.numTBInStrip;
 				#endif
 
 				//dramBlockCount = ceil(numTBInStrip / WIDE_SIZE)
@@ -221,8 +209,6 @@ __kernel void kernelIAMover (
 							"colIsDense=%#03x, "
 							"inputArrangement=%#03x, "
 							"numInputInterleavePerDramblock=%#03x, "
-							"numInputInterleavePerStrip=%03x, "
-							"iterInputStripInterleave=%#03x, "
 							"numTBInStrip=%d, "
 							"numActiveCols=%d, "
 							"addressIADramBlockDDR0=%#010x, "
@@ -239,8 +225,6 @@ __kernel void kernelIAMover (
 							colIsDense,
 							inputArrangement,
 							numInputInterleavePerDramblock,
-							numInputInterleavePerStrip,
-							iterInputStripInterleave,
 							numTBInStrip,
 							numActiveCols,
 							(unsigned int) addressIADramBlockDDR0,
@@ -330,17 +314,6 @@ __kernel void kernelIAMover (
 						//Toggle between 0 and 1
 						iterInputDramblockInterleave = (iterInputDramblockInterleave + 0x01) & 0x01;
 					}
-					else if (inputArrangement == 0x02)
-					{
-						if (iterInputStripInterleave == 0x00)
-						{
-							iaBlock.miscLeftShiftAmount = input0LeftShiftAmount;
-						}
-						else
-						{
-							iaBlock.miscLeftShiftAmount = input1LeftShiftAmount;
-						}
-					}
 
 					write_channel_intel(channel_ia_wide[0], iaBlock);
 				}
@@ -360,8 +333,7 @@ __kernel void kernelIAMover (
 				if (iColSPUnitIndex >= ((unsigned char) colSPSize))
 				{
 					iColSPUnitIndex = 0;
-					offsetIADramBlockCol0 += ((t_int) inst.memBlockColStripStride0);
-					offsetIADramBlockCol1 += ((t_int) inst.memBlockColStripStride1);
+					offsetIADramBlockCol += ((t_int) inst.memBlockColStripStride);
 					#if defined(SPARSE_SYSTEM)
 						offsetTBCountCol +=(t_int) inst.memTBCountColStride;
 					#endif
@@ -372,8 +344,7 @@ __kernel void kernelIAMover (
 			{
 				iColInSPTile = 0;
 				iColSPUnitIndex = hInitSPIndex;
-				offsetIADramBlockCol0 = 0;
-				offsetIADramBlockCol1 = 0;
+				offsetIADramBlockCol = 0;
 				#if defined(SPARSE_SYSTEM)
 					offsetTBCountCol = 0;
 				#endif
@@ -386,8 +357,7 @@ __kernel void kernelIAMover (
 					if (iRowSPUnitIndex >= ((unsigned char) rowSPSize))
 					{
 						iRowSPUnitIndex = 0;
-						offsetIADramBlockRow0 += ((t_int) inst.memBlockRowStripStride0);
-						offsetIADramBlockRow1 += ((t_int) inst.memBlockRowStripStride1);
+						offsetIADramBlockRow += ((t_int) inst.memBlockRowStripStride);
 						#if defined(SPARSE_SYSTEM)
 							offsetTBCountRow += (t_int) inst.memTBCountRowStride;
 						#endif

@@ -501,205 +501,166 @@ void instruction_generator(
             unsigned int iterSPNIndex = iterNClipped % inputSPWidthUnit;
 
             /*!
-              Transfer the inputs
+              Transfer the inputs for non-concatenation ops
               For the operations that have two input tensors, the number of IA groups are 1
             */
-            for (unsigned int iterInputGroup0=0; iterInputGroup0<numIAMoverGroup0; iterInputGroup0++)
+            if (op != CONCATENATION)
             {
-                unsigned int inputStripStartIndex =
-                                        iterInputGroup0 * inputDenseHeight * inputDenseWidth
-                                        + iterMDense * inputDenseWidth + iterNDense;
-
-                //Transfer the first input blob, and convolution related items (if necessary)
-                /*! Send the first input IA instruction,
-                 *  and possibly the 2nd if we are dealing with eltwise addition
-                 *  If we dealing with addition, then we assume that both input tensors are dense
-                 *  and have the same dimensions
-                */
-//                typedef struct {
-//                    unsigned int memIADramBlockStartIndex;
-//                    signed int numIAShiftAmount;
-//                    bool flagInputShiftLeft;
-//                    #if defined(SPARSE_SYSTEM)
-//                        unsigned int memIATBCountStart;
-//                    #endif
-//                } t_temp_ia_mover_info;
-
-//                std::vector<t_temp_ia_mover_info> vecIAInfo;
-//                vecIAInfo.push_back({.memIADramBlockStartIndex=memIA0DramBlockStartIndex,
-//                                     .numIAShiftAmount=numIA0ShiftAmount,
-//                                     .flagInputShiftLeft=flagIA0ShiftLeft
-//                                    #if defined(SPARSE_SYSTEM)
-//                                     ,.memIATBCountStart=memIATB0CountStart
-//                                    #endif
-//                                    });
-//                if (op == ELT_ADD)
-//                {
-//                    vecIAInfo.push_back({.memIADramBlockStartIndex=memIA1DramBlockStartIndex,
-//                                         .numIAShiftAmount=numIA1ShiftAmount,
-//                                         .flagInputShiftLeft=flagIA1ShiftLeft
-//                                        #if defined(SPARSE_SYSTEM)
-//                                         ,.memIATBCountStart=memIATB0CountStart
-//                                        #endif
-//                                        });
-//                }
-                //IA mover instruciton
+                for (unsigned int iterInputGroup0=0; iterInputGroup0<numIAMoverGroup0; iterInputGroup0++)
                 {
-                    t_ia_mover_instruction instructionIA;
-                    //Set the transport target. 0x0 means convolution, 0x1 means MISC
-                    unsigned char flagTarget= (op == CONVOLUTION) ?  0x00 : 0x01;
-                    unsigned char inputArrangement = 0x0;
-                    if (op == ELT_ADD)
+                    unsigned int inputStripStartIndex =
+                                            iterInputGroup0 * inputDenseHeight * inputDenseWidth
+                                            + iterMDense * inputDenseWidth + iterNDense;
+
+                    //Transfer the first input blob, and convolution related items (if necessary)
+                    //IA mover instruciton
                     {
-                        inputArrangement = 0x01;
-                    }
-                    else if (op == CONCATENATION)
-                    {
-                        inputArrangement = 0x02;
-                    }
-                    instructionIA.inputArrangementCatSparseFlagCatDestinationCatNumActiveCols = (t_uchar)
-                            ( ( ((t_uchar) numActiveCols)& 0x0F)
-                             | ((((t_uchar) flagTarget) & 0x01) << 0x04)
-                             | ((((t_uchar) flagSparseInput) & 0x01) << 0x05) //Sparse flag for the input tensor
-                             | ((((t_uchar) inputArrangement) & 0x03) << 0x06)
-                            );
-                    assert ((((flagIA0ShiftLeft == true) && (numIA0ShiftAmount >= 0))
-                            && ((flagIA1ShiftLeft == true) && (numIA1ShiftAmount >= 0)))
-                           && "Input left shift amount must be greater or equal to 0");
-                    t_uchar inputShiftAmounts = ((numIA1ShiftAmount & 0x0F) << 0x04) | (numIA0ShiftAmount & 0x0F);
-                    instructionIA.inputShiftAmounts = inputShiftAmounts;
-                    instructionIA.memBlockStart0 = (t_int) (
-                                memIA0DramBlockStartIndex
-                                + memIA0DramBlockGroupStride * iterInputGroup0
-                                + memIA0DramBlockRowStride * iterMDense
-                                + memIA0DramBlockColStride * iterNDense);
-                    instructionIA.memBlockColStripStride0 = (t_ushort)memIA0DramBlockColStride;
-                    instructionIA.memBlockRowStripStride0 = (t_ushort)memIA0DramBlockRowStride;
-
-                    instructionIA.memBlockStart1 = (t_int) (
-                                memIA1DramBlockStartIndex
-                                + memIA1DramBlockGroupStride * iterInputGroup0
-                                + memIA1DramBlockRowStride * iterMDense
-                                + memIA1DramBlockColStride * iterNDense);
-                    instructionIA.memBlockColStripStride1 = (t_ushort)memIA1DramBlockColStride;
-                    instructionIA.memBlockRowStripStride1 = (t_ushort)memIA1DramBlockRowStride;
-
-
-                    #if defined(SPARSE_SYSTEM)
-                        instructionIA.memTBCountStart = (t_int)
-                                (memIATB0CountStart
-                                 + inputStripStartIndex * memIATB0CountColStride);
-                        instructionIA.memTBCountColStride = (t_ushort) memIATB0CountColStride;
-                        instructionIA.memTBCountRowStride = (t_ushort) (memIATB0CountColStride * inputDenseWidth);
-                        instructionIA.numCWOrTBInGroup0 = (flagSparseInput == 0x1) ?
-                                            (t_ushort) (
-                                                1 + (numIAMoverInputChannelsPerGroup0-1) / COMPRESSION_WINDOW_SIZE / CLUSTER_SIZE
-                                                )
-                                            : (t_ushort) (1 + (numIAMoverInputChannelsPerGroup0-1) / TRANSFER_SIZE / CLUSTER_SIZE);
-                        instructionIA.numCWOrTBInGroup1 = (flagSparseInput == 0x1) ?
-                                            (t_ushort) (
-                                                1 + (numIAMoverInputChannelsPerGroup1-1) / COMPRESSION_WINDOW_SIZE / CLUSTER_SIZE
-                                                )
-                                            : (t_ushort) (1 + (numIAMoverInputChannelsPerGroup1-1) / TRANSFER_SIZE / CLUSTER_SIZE);
-                    #else
-                        instructionIA.numTBPerStrip0 = (t_ushort) (1 + (numIAMoverInputChannelsPerGroup0-1) / TRANSFER_SIZE / CLUSTER_SIZE);
-                        instructionIA.numTBPerStrip1 = (t_ushort) (1 + (numIAMoverInputChannelsPerGroup1-1) / TRANSFER_SIZE / CLUSTER_SIZE);
-                    #endif
-                        instructionIA.tileSPHeight = (t_uchar) maxTM;
-                        instructionIA.tileSPWidth = (t_uchar) maxTN;
-                        unsigned char inputTileLeftPadding = (iterNGlobal < inputWidthPadding) ?
-                                    inputWidthPadding : 0;
-                        unsigned char inputTileRightPadding = ((iterNGlobal + maxTN) > (inputWidthPadding + inputDenseWidth)) ?
-                                    inputWidthPadding : 0;
-                        unsigned char inputTileTopPadding = (iterMGlobal < inputHeightPadding) ?
-                                    inputHeightPadding : 0;
-                        unsigned char inputTileBottomPadding = ((iterMGlobal + maxTM) > (inputHeightPadding + inputDenseHeight)) ?
-                                    inputHeightPadding : 0;
-                        instructionIA.concatPadding = (t_uchar) (
-                                          (inputTileLeftPadding & 0x03)
-                                        | ((inputTileRightPadding & 0x03) << 2)
-                                        | ((inputTileTopPadding & 0x03) << 4)
-                                        | ((inputTileBottomPadding & 0x03) << 6)
-                                    );
-                        instructionIA.concatInitSPIndices = (t_uchar) (
-                                         ( ((t_uchar) iterSPNIndex) & 0x0F)
-                                        | (( ((t_uchar) iterSPMIndex) & 0x0F) << 0x04)
-                                    );
-                        instructionIA.concatSPSize = (t_uchar) (
-                                        (((t_uchar) inputSPWidthUnit) & 0x0F)
-                                        | ((((t_uchar) inputSPHeightUnit & 0x0F)) << 0x04)
-                                    );
-                        instructionIA.columnWidthStride = (t_uchar) (kernelStride * maxTQPerCol);
-                        instructionIA.columnSPWidth = (t_uchar) maxTNPerCol;
-
-                        instructionIA.tileSPWidthxTileSPHeight = ((t_ushort) maxTN) * ((t_ushort) maxTM);
-
-                        vecIAMoverInstruction.push_back(instructionIA);
-                } // generate t_ia_mover_instruction 1 (and 2 if we are dealing with eltwise addition)
-
-                //Instruction that only matters for convolution
-                if (op == CONVOLUTION)
-                {
-                     /*! Send the input IA controller instruction */
-                    {
-                        t_ia_tile_controller_instruction instructionIAControl;
-                        instructionIAControl.localTileWidth = (t_uchar) maxTNPerCol;
-                        instructionIAControl.localTileHeight = (t_uchar) maxTM;
-                        instructionIAControl.kernelStride = (t_uchar) kernelStride;
-                        instructionIAControl.kernelSize = (t_uchar) kernelSize;
-                        instructionIAControl.numOutputInstructions = (t_ushort)
-                                ((t_ushort) maxTP * (t_ushort) maxTQPerCol * numComputeFoldPerGroup);
-                        //Number of TBs in an uncompressed strip
-                        unsigned short cacheIAStripColStrideTBCount = 1 + (numIAMoverInputChannelsPerGroup0-1) / TRANSFER_SIZE / CLUSTER_SIZE;
-                        //Number of TBs needed for encoding the bitmask
-                        unsigned short cacheIAStripColStrideBitmaskCount = 1 + (numIAMoverInputChannelsPerGroup0-1)/COMPRESSION_WINDOW_SIZE / CLUSTER_SIZE;
-                        instructionIAControl.cacheIAStripColStride = (flagSparseInput == 0x00) ?
-                                    (t_ushort) (1 + (cacheIAStripColStrideTBCount-1) / WIDE_SIZE)
-                                  : (t_ushort) (1 + (cacheIAStripColStrideBitmaskCount+cacheIAStripColStrideTBCount-1) / WIDE_SIZE);
-                        instructionIAControl.numOutputChannelsInGroup = (t_ushort) numOutputChannelsPerGroupCurrentLayer;
-                        unsigned char inputNeedsBitmaskPadding = (flagSparseInput == 0x00) ? 0x80 : 0x00;
-                        instructionIAControl.flagPadBitmaskCatNumActiveCols = (t_uchar)
-                                (inputNeedsBitmaskPadding | (0x7F & numActiveCols));
-#if defined(SPARSE_SYSTEM)
-                        assert(COMPRESSION_WINDOW_SIZE % 8 == 0);
-                        unsigned int numClusterinChannelGroup = 1 + (numIAMoverInputChannelsPerGroup0-1) / CLUSTER_SIZE;
-                        unsigned int partialBitmask = (numClusterinChannelGroup % COMPRESSION_WINDOW_SIZE == 0)
-                                ? 0 : ((1 << (numClusterinChannelGroup % COMPRESSION_WINDOW_SIZE)) - 1);
-                        for (int i=0; i < (COMPRESSION_WINDOW_SIZE / 8); i++)
+                        t_ia_mover_instruction instructionIA;
+                        //Set the transport target. 0x0 means convolution, 0x1 means MISC
+                        unsigned char flagTarget= (op == CONVOLUTION) ?  0x00 : 0x01;
+                        unsigned char inputArrangement = 0x0;
+                        if (op == ELT_ADD)
                         {
-                            instructionIAControl.partialBitmask[i] = (partialBitmask >> (i*8)) & 0x0FF;
+                            inputArrangement = 0x01;
                         }
-#endif
 
-                        vecIATileControlInstruction.push_back(instructionIAControl);
-                     } // generate the ia controller instruction
+                        instructionIA.inputArrangementCatSparseFlagCatDestinationCatNumActiveCols = (t_uchar)
+                                ( ( ((t_uchar) numActiveCols)& 0x0F)
+                                 | ((((t_uchar) flagTarget) & 0x01) << 0x04)
+                                 | ((((t_uchar) flagSparseInput) & 0x01) << 0x05) //Sparse flag for the input tensor
+                                 | ((((t_uchar) inputArrangement) & 0x03) << 0x06)
+                                );
+                        assert ((((flagIA0ShiftLeft == true) && (numIA0ShiftAmount >= 0))
+                                && ((flagIA1ShiftLeft == true) && (numIA1ShiftAmount >= 0)))
+                               && "Input left shift amount must be greater or equal to 0");
+                        t_uchar inputShiftAmounts = ((numIA1ShiftAmount & 0x0F) << 0x04) | (numIA0ShiftAmount & 0x0F);
+                        instructionIA.inputShiftAmounts = inputShiftAmounts;
+                        instructionIA.memBlockStart0 = (t_int) (
+                                    memIA0DramBlockStartIndex
+                                    + memIA0DramBlockGroupStride * iterInputGroup0
+                                    + memIA0DramBlockRowStride * iterMDense
+                                    + memIA0DramBlockColStride * iterNDense);
 
-                    /*! Generate the weight mover instruction*/
-                    {
-                        unsigned int filterIndex = iterInputGroup0 * numOutputChannelsPerGroupCurrentLayer;
-                        t_weight_mover_instruction instructionWMover;
-                        instructionWMover.numFiltersInGroup = (t_ushort) numOutputChannelsPerGroupCurrentLayer;
-                        instructionWMover.numFullFilterFold = (t_ushort) numFullComputeFoldPerGroup;
-                        instructionWMover.numFiltersInPartialFold = (t_uchar) numActiveElementsInPartialComputeFold;
-                        instructionWMover.filterReuse = (t_ushort) maxTQPerCol * (t_ushort) maxTP;
-                        instructionWMover.numActivePeCols = (t_uchar) numActiveCols;
-                        instructionWMover.memBiasStart = (t_int)(memBiasStartIndex + filterIndex);
-                        instructionWMover.memWeightStart = (t_int) memWeightDramBlockStartIndex +(t_int) filterIndex * memWeightDramBlockFilterStride;
-                        instructionWMover.memWeightFilterStride = (t_int) memWeightDramBlockFilterStride;
+                        instructionIA.memBlockStart1 = (t_int) (
+                                    memIA1DramBlockStartIndex
+                                    + memIA1DramBlockGroupStride * iterInputGroup0
+                                    + memIA1DramBlockRowStride * iterMDense
+                                    + memIA1DramBlockColStride * iterNDense);
+
+                        instructionIA.memBlockColStripStride = (t_ushort)memIA0DramBlockColStride;
+                        instructionIA.memBlockRowStripStride = (t_ushort)memIA0DramBlockRowStride;
+
                         #if defined(SPARSE_SYSTEM)
-                            instructionWMover.memTBCountStart = (t_int) memWeightTBCountStart + (t_int) filterIndex;
+                            instructionIA.memTBCountStart = (t_int)
+                                    (memIATB0CountStart
+                                     + inputStripStartIndex * memIATB0CountColStride);
+                            instructionIA.memTBCountColStride = (t_ushort) memIATB0CountColStride;
+                            instructionIA.memTBCountRowStride = (t_ushort) (memIATB0CountColStride * inputDenseWidth);
+                            instructionIA.numCWOrTBInGroup = (flagSparseInput == 0x1) ?
+                                                (t_ushort) (
+                                                    1 + (numIAMoverInputChannelsPerGroup0-1) / COMPRESSION_WINDOW_SIZE / CLUSTER_SIZE
+                                                    )
+                                                : (t_ushort) (1 + (numIAMoverInputChannelsPerGroup0-1) / TRANSFER_SIZE / CLUSTER_SIZE);
                         #else
-                            unsigned int numTBPerInputStrip =
-                                    1+(numIAMoverInputChannelsPerGroup0-1)/CLUSTER_SIZE/TRANSFER_SIZE;
-                            instructionWMover.numTBPerFilter = (t_uint) numTBPerInputStrip*kernelSize*kernelSize;
+                            instructionIA.numTBPerStrip = (t_ushort) (1 + (numIAMoverInputChannelsPerGroup0-1) / TRANSFER_SIZE / CLUSTER_SIZE);
                         #endif
-                        vecWeightMoverInstruction.push_back(instructionWMover);
-                    } //Generate the weight mover instruction
-                }   //Instruction that only matters for convolution
-            } //For. Transfer the first input blob, and convolution related items (if necessary)
+                            instructionIA.tileSPHeight = (t_uchar) maxTM;
+                            instructionIA.tileSPWidth = (t_uchar) maxTN;
+                            unsigned char inputTileLeftPadding = (iterNGlobal < inputWidthPadding) ?
+                                        inputWidthPadding : 0;
+                            unsigned char inputTileRightPadding = ((iterNGlobal + maxTN) > (inputWidthPadding + inputDenseWidth)) ?
+                                        inputWidthPadding : 0;
+                            unsigned char inputTileTopPadding = (iterMGlobal < inputHeightPadding) ?
+                                        inputHeightPadding : 0;
+                            unsigned char inputTileBottomPadding = ((iterMGlobal + maxTM) > (inputHeightPadding + inputDenseHeight)) ?
+                                        inputHeightPadding : 0;
+                            instructionIA.concatPadding = (t_uchar) (
+                                              (inputTileLeftPadding & 0x03)
+                                            | ((inputTileRightPadding & 0x03) << 2)
+                                            | ((inputTileTopPadding & 0x03) << 4)
+                                            | ((inputTileBottomPadding & 0x03) << 6)
+                                        );
+                            instructionIA.concatInitSPIndices = (t_uchar) (
+                                             ( ((t_uchar) iterSPNIndex) & 0x0F)
+                                            | (( ((t_uchar) iterSPMIndex) & 0x0F) << 0x04)
+                                        );
+                            instructionIA.concatSPSize = (t_uchar) (
+                                            (((t_uchar) inputSPWidthUnit) & 0x0F)
+                                            | ((((t_uchar) inputSPHeightUnit & 0x0F)) << 0x04)
+                                        );
+                            instructionIA.columnWidthStride = (t_uchar) (kernelStride * maxTQPerCol);
+                            instructionIA.columnSPWidth = (t_uchar) maxTNPerCol;
 
-            //Non-convolution stuff
-            if ((op != CONVOLUTION))
+                            instructionIA.tileSPWidthxTileSPHeight = ((t_ushort) maxTN) * ((t_ushort) maxTM);
+
+                            vecIAMoverInstruction.push_back(instructionIA);
+                    } // generate t_ia_mover_instruction 1
+
+                    //Instruction that only matters for convolution
+                    if (op == CONVOLUTION)
+                    {
+                         /*! Send the input IA controller instruction */
+                        {
+                            t_ia_tile_controller_instruction instructionIAControl;
+                            instructionIAControl.localTileWidth = (t_uchar) maxTNPerCol;
+                            instructionIAControl.localTileHeight = (t_uchar) maxTM;
+                            instructionIAControl.kernelStride = (t_uchar) kernelStride;
+                            instructionIAControl.kernelSize = (t_uchar) kernelSize;
+                            instructionIAControl.numOutputInstructions = (t_ushort)
+                                    ((t_ushort) maxTP * (t_ushort) maxTQPerCol * numComputeFoldPerGroup);
+                            //Number of TBs in an uncompressed strip
+                            unsigned short cacheIAStripColStrideTBCount = 1 + (numIAMoverInputChannelsPerGroup0-1) / TRANSFER_SIZE / CLUSTER_SIZE;
+                            //Number of TBs needed for encoding the bitmask
+                            unsigned short cacheIAStripColStrideBitmaskCount = 1 + (numIAMoverInputChannelsPerGroup0-1)/COMPRESSION_WINDOW_SIZE / CLUSTER_SIZE;
+                            instructionIAControl.cacheIAStripColStride = (flagSparseInput == 0x00) ?
+                                        (t_ushort) (1 + (cacheIAStripColStrideTBCount-1) / WIDE_SIZE)
+                                      : (t_ushort) (1 + (cacheIAStripColStrideBitmaskCount+cacheIAStripColStrideTBCount-1) / WIDE_SIZE);
+                            instructionIAControl.numOutputChannelsInGroup = (t_ushort) numOutputChannelsPerGroupCurrentLayer;
+                            unsigned char inputNeedsBitmaskPadding = (flagSparseInput == 0x00) ? 0x80 : 0x00;
+                            instructionIAControl.flagPadBitmaskCatNumActiveCols = (t_uchar)
+                                    (inputNeedsBitmaskPadding | (0x7F & numActiveCols));
+    #if defined(SPARSE_SYSTEM)
+                            assert(COMPRESSION_WINDOW_SIZE % 8 == 0);
+                            unsigned int numClusterinChannelGroup = 1 + (numIAMoverInputChannelsPerGroup0-1) / CLUSTER_SIZE;
+                            unsigned int partialBitmask = (numClusterinChannelGroup % COMPRESSION_WINDOW_SIZE == 0)
+                                    ? 0 : ((1 << (numClusterinChannelGroup % COMPRESSION_WINDOW_SIZE)) - 1);
+                            for (int i=0; i < (COMPRESSION_WINDOW_SIZE / 8); i++)
+                            {
+                                instructionIAControl.partialBitmask[i] = (partialBitmask >> (i*8)) & 0x0FF;
+                            }
+    #endif
+
+                            vecIATileControlInstruction.push_back(instructionIAControl);
+                         } // generate the ia controller instruction
+
+                        /*! Generate the weight mover instruction*/
+                        {
+                            unsigned int filterIndex = iterInputGroup0 * numOutputChannelsPerGroupCurrentLayer;
+                            t_weight_mover_instruction instructionWMover;
+                            instructionWMover.numFiltersInGroup = (t_ushort) numOutputChannelsPerGroupCurrentLayer;
+                            instructionWMover.numFullFilterFold = (t_ushort) numFullComputeFoldPerGroup;
+                            instructionWMover.numFiltersInPartialFold = (t_uchar) numActiveElementsInPartialComputeFold;
+                            instructionWMover.filterReuse = (t_ushort) maxTQPerCol * (t_ushort) maxTP;
+                            instructionWMover.numActivePeCols = (t_uchar) numActiveCols;
+                            instructionWMover.memBiasStart = (t_int)(memBiasStartIndex + filterIndex);
+                            instructionWMover.memWeightStart = (t_int) memWeightDramBlockStartIndex +(t_int) filterIndex * memWeightDramBlockFilterStride;
+                            instructionWMover.memWeightFilterStride = (t_int) memWeightDramBlockFilterStride;
+                            #if defined(SPARSE_SYSTEM)
+                                instructionWMover.memTBCountStart = (t_int) memWeightTBCountStart + (t_int) filterIndex;
+                            #else
+                                unsigned int numTBPerInputStrip =
+                                        1+(numIAMoverInputChannelsPerGroup0-1)/CLUSTER_SIZE/TRANSFER_SIZE;
+                                instructionWMover.numTBPerFilter = (t_uint) numTBPerInputStrip*kernelSize*kernelSize;
+                            #endif
+                            vecWeightMoverInstruction.push_back(instructionWMover);
+                        } //Generate the weight mover instruction
+                    }   //Instruction that only matters for convolution
+                } //For. Transfer the first input blob, and convolution related items (if necessary)
+            }
+
+            //Generate the MISC instructions for misc operations
+            //EXCEPT CONCATENATION
+            if ((op != CONVOLUTION) && (op != CONCATENATION))
             {
                 //Transfer the SECOND input blob if necessary
                 if ((op == AVG_POOL) || (op == MAX_POOL))
@@ -722,15 +683,15 @@ void instruction_generator(
                                         + memIA1DramBlockGroupStride * iterInputGroup1
                                         + memIA1DramBlockRowStride * iterMDense
                                         + memIA1DramBlockColStride * iterNDense);
-                            instructionIA.memBlockColStripStride0 = (t_ushort)(memIA1DramBlockColStride);
-                            instructionIA.memBlockRowStripStride0 = (t_ushort)(memIA1DramBlockRowStride);
+                            instructionIA.memBlockColStripStride = (t_ushort)(memIA1DramBlockColStride);
+                            instructionIA.memBlockRowStripStride = (t_ushort)(memIA1DramBlockRowStride);
 
                             //Don't need to worry about input 1, since it doesn't exist for pooling layers
 
                             #if defined(SPARSE_SYSTEM)
-                                instructionIA.numCWOrTBInGroup0 = (t_ushort) (1 + (numIAMoverInputChannelsPerGroup1-1) / TRANSFER_SIZE / CLUSTER_SIZE);
+                                instructionIA.numCWOrTBInGroup = (t_ushort) (1 + (numIAMoverInputChannelsPerGroup1-1) / TRANSFER_SIZE / CLUSTER_SIZE);
                             #else
-                                instructionIA.numTBPerStrip0 = (t_ushort) (1 + (numIAMoverInputChannelsPerGroup1-1) / TRANSFER_SIZE / CLUSTER_SIZE);
+                                instructionIA.numTBPerStrip = (t_ushort) (1 + (numIAMoverInputChannelsPerGroup1-1) / TRANSFER_SIZE / CLUSTER_SIZE);
                             #endif
                                 instructionIA.tileSPHeight = (t_uchar) maxTM;
                                 instructionIA.tileSPWidth = (t_uchar) maxTN;
@@ -767,7 +728,6 @@ void instruction_generator(
                 }
 
                 //Transfer the MISC instruction for non-concatenation MISC operations
-                if (op != CONCATENATION)
                 {
                     unsigned char opCodeField = 0X0;
                     if ((op == ELT_ADD) || (op == AVG_POOL))
@@ -793,53 +753,147 @@ void instruction_generator(
 
                 } //Transfer the MISC instruction
             } //Non-convolution stuff
+
+            //Concatenation's IA instruction and misc instructions requires special attention
+            if (op == CONCATENATION)
+            {
+                for (unsigned int iterMLocal=iterMGlobal;
+                     iterMLocal < iterMGlobal+maxTP;
+                     iterMLocal++)
+                {
+                    for (unsigned int iterNLocal=iterNGlobal;
+                         iterNLocal < iterNGlobal+maxTQ;
+                         iterNLocal++)
+                    {
+                        //Generage the IA instructions
+                        {
+                            unsigned int iterMClipped = (iterMLocal < inputHeightPadding ) ?
+                                        0 : ( (iterMLocal >= (inputHeightPadding + inputSPHeight)) ?
+                                                  (inputSPHeight - 1) : (iterMLocal - inputHeightPadding));
+                            unsigned int iterMDense = iterMClipped / inputSPHeightUnit;
+                            unsigned int iterSPMIndex = iterMClipped % inputSPHeightUnit;
+
+                            unsigned int iterNClipped = (iterNLocal < inputWidthPadding ) ?
+                                        0 : ( (iterNLocal >= (inputWidthPadding + inputSPWidth)) ?
+                                                  (inputSPWidth - 1) : (iterNLocal - inputWidthPadding));
+                            unsigned int iterNDense = iterNClipped / inputSPWidthUnit;
+                            unsigned int iterSPNIndex = iterNClipped % inputSPWidthUnit;
+
+                            t_ia_mover_instruction instructionIA;
+                            //Set the transport target. 0x1 means MISC
+                            unsigned char flagTarget=  0x01;
+                            unsigned char inputArrangement = 0x0;
+
+                            assert ((numActiveCols == 1) && "Number of active columns must be 1 for concatenation!");
+                            instructionIA.inputArrangementCatSparseFlagCatDestinationCatNumActiveCols = (t_uchar)
+                                    ( ( ((t_uchar) numActiveCols)& 0x0F)
+                                     | ((((t_uchar) flagTarget) & 0x01) << 0x04)
+                                     | ((((t_uchar) flagSparseInput) & 0x01) << 0x05) //Sparse flag for the input tensor
+                                     | ((((t_uchar) inputArrangement) & 0x03) << 0x06)
+                                    );
+                            assert ((((flagIA0ShiftLeft == true) && (numIA0ShiftAmount >= 0))
+                                    && ((flagIA1ShiftLeft == true) && (numIA1ShiftAmount >= 0)))
+                                   && "Input left shift amount must be greater or equal to 0");
+                            instructionIA.inputShiftAmounts = (cl_uchar) (numIA0ShiftAmount & 0x0F);
+                            instructionIA.memBlockStart0 = (t_int) (
+                                        memIA0DramBlockStartIndex
+                                        + memIA0DramBlockRowStride * iterMDense
+                                        + memIA0DramBlockColStride * iterNDense);
+
+                            //Concatenation can only work with dense input
+                            #if defined(SPARSE_SYSTEM)
+                                instructionIA.numCWOrTBInGroup =
+                                        (t_ushort) (1 + (numIAMoverInputChannelsPerGroup0-1) / TRANSFER_SIZE / CLUSTER_SIZE);
+                            #else
+                                instructionIA.numTBPerStrip = (t_ushort) (1 + (numIAMoverInputChannelsPerGroup0-1) / TRANSFER_SIZE / CLUSTER_SIZE);
+                            #endif
+                                instructionIA.tileSPHeight = (t_uchar) 1;
+                                instructionIA.tileSPWidth = (t_uchar) 1;
+                                unsigned char inputTileLeftPadding = (iterNLocal < inputWidthPadding) ?
+                                            inputWidthPadding : 0;
+                                unsigned char inputTileRightPadding = ((iterNLocal + 1) > (inputWidthPadding + inputDenseWidth)) ?
+                                            inputWidthPadding : 0;
+                                unsigned char inputTileTopPadding = (iterMLocal < inputHeightPadding) ?
+                                            inputHeightPadding : 0;
+                                unsigned char inputTileBottomPadding = ((iterMLocal + 1) > (inputHeightPadding + inputDenseHeight)) ?
+                                            inputHeightPadding : 0;
+                                instructionIA.concatPadding = (t_uchar) (
+                                                  (inputTileLeftPadding & 0x03)
+                                                | ((inputTileRightPadding & 0x03) << 2)
+                                                | ((inputTileTopPadding & 0x03) << 4)
+                                                | ((inputTileBottomPadding & 0x03) << 6)
+                                            );
+                                instructionIA.concatInitSPIndices = (t_uchar) (
+                                                 ( ((t_uchar) iterSPNIndex) & 0x0F)
+                                                | (( ((t_uchar) iterSPMIndex) & 0x0F) << 0x04)
+                                            );
+                                instructionIA.concatSPSize = (t_uchar) (
+                                                (((t_uchar) inputSPWidthUnit) & 0x0F)
+                                                | ((((t_uchar) inputSPHeightUnit & 0x0F)) << 0x04)
+                                            );
+                                instructionIA.columnWidthStride = (t_uchar) 1;
+                                instructionIA.columnSPWidth = (t_uchar) 1;
+
+                                instructionIA.tileSPWidthxTileSPHeight = (t_ushort) 1;
+
+                                vecIAMoverInstruction.push_back(instructionIA);
+
+                                //Generate the IA instruction for the second tensor in the strip
+                                instructionIA.inputShiftAmounts = (cl_uchar) (numIA1ShiftAmount & 0x0F);
+                                //Still use memBlockStart0
+                                instructionIA.memBlockStart0 = (t_int) (
+                                            memIA1DramBlockStartIndex
+                                            + memIA1DramBlockRowStride * iterMDense
+                                            + memIA1DramBlockColStride * iterNDense);
+
+                                //Concatenation can only work with dense input
+                                #if defined(SPARSE_SYSTEM)
+                                    instructionIA.numCWOrTBInGroup =
+                                            (t_ushort) (1 + (numIAMoverInputChannelsPerGroup1-1) / TRANSFER_SIZE / CLUSTER_SIZE);
+                                #else
+                                    instructionIA.numTBPerStrip = (t_ushort) (1 + (numIAMoverInputChannelsPerGroup1-1) / TRANSFER_SIZE / CLUSTER_SIZE);
+                                #endif
+
+                                vecIAMoverInstruction.push_back(instructionIA);
+                            }
+
+                        //Generate the Misc instructions
+                        unsigned char opCodeField = 0X20;
+                        //Instruciton 0
+                        {
+                            t_misc_instruction instructionMisc;
+                            instructionMisc.controlBits = (t_uchar) (opCodeField |( numActiveCols & 0x0F));
+                            instructionMisc.numDramBlocksToReduce = (cl_ushort) numDramBlocksToReduceMK;
+                            instructionMisc.numOutputBlocksPerStrip = (cl_uchar) numOutputBlocksBlob0PerStripMK;
+                            instructionMisc.numOutputBlocks = (cl_ushort) numOutputBlocksBlob0PerStripMK;
+                            instructionMisc.numEffectiveValuesInLastStrip = (t_uchar) (
+                                        numOutputChannelsBlob0MK - (numOutputBlocksBlob0PerStripMK-1)*BURST_SIZE_BYTE);
+
+                            vecMiscInstruction.push_back(instructionMisc);
+                         } //Misc instruction 0
+
+                        //Instruction 1
+                        {
+                            t_misc_instruction instructionMisc;
+                            instructionMisc.controlBits = (t_uchar) (opCodeField |( numActiveCols & 0x0F));
+                            instructionMisc.numDramBlocksToReduce = (cl_ushort) numDramBlocksToReduceMK;
+                            instructionMisc.numOutputBlocksPerStrip = (cl_uchar) numOutputBlocksBlob1PerStripMK;
+                            instructionMisc.numOutputBlocks = (cl_ushort) numOutputBlocksBlob1PerStripMK;
+                            instructionMisc.numEffectiveValuesInLastStrip = (t_uchar) (
+                                        numOutputChannelsBlob1MK - (numOutputBlocksBlob1PerStripMK-1)*BURST_SIZE_BYTE);
+
+                            vecMiscInstruction.push_back(instructionMisc);
+                        }   //Misc instruction 1
+                    } //iterNLocal for concatenation
+                } //iterMLocal for concatenation
+            } //If concatenation
+
             iterQGlobal += maxTQ;
             iterNGlobal += ((unsigned int)kernelStride)*maxTQ;
         } //for iterQTile
         iterPGlobal += maxTP;
         iterMGlobal += ((unsigned int)kernelStride)*maxTP;
     } //for iterPTile
-
-    /*!
-      Concatenation is a special case
-    */
-    if (op == CONCATENATION)
-    {
-        unsigned char opCodeField = 0X0;
-        opCodeField = 0x20;
-
-        unsigned char numActiveCols = 1;
-        signed int numStrips = outputHeight*outputWidth;
-
-        for (signed int iStrip=0; iStrip<numStrips; iStrip++)
-        {
-            //Instruciton 0
-            {
-                t_misc_instruction instructionMisc;
-                instructionMisc.controlBits = (t_uchar) (opCodeField |( numActiveCols & 0x0F));
-                instructionMisc.numDramBlocksToReduce = (cl_ushort) numDramBlocksToReduceMK;
-                instructionMisc.numOutputBlocksPerStrip = (cl_uchar) numOutputBlocksBlob0PerStripMK;
-                instructionMisc.numOutputBlocks = (cl_ushort) numOutputBlocksBlob0PerStripMK;
-                instructionMisc.numEffectiveValuesInLastStrip = (t_uchar) (
-                            numOutputChannelsBlob0MK - (numOutputBlocksBlob0PerStripMK-1)*BURST_SIZE_BYTE);
-
-                vecMiscInstruction.push_back(instructionMisc);
-             }
-
-            //Instruction 1
-            {
-                t_misc_instruction instructionMisc;
-                instructionMisc.controlBits = (t_uchar) (opCodeField |( numActiveCols & 0x0F));
-                instructionMisc.numDramBlocksToReduce = (cl_ushort) numDramBlocksToReduceMK;
-                instructionMisc.numOutputBlocksPerStrip = (cl_uchar) numOutputBlocksBlob1PerStripMK;
-                instructionMisc.numOutputBlocks = (cl_ushort) numOutputBlocksBlob1PerStripMK;
-                instructionMisc.numEffectiveValuesInLastStrip = (t_uchar) (
-                            numOutputChannelsBlob1MK - (numOutputBlocksBlob1PerStripMK-1)*BURST_SIZE_BYTE);
-
-                vecMiscInstruction.push_back(instructionMisc);
-            }
-        }
-    } //Transfer the MISC instruction for conatenation if necessary
 }
 
 int ia_cache_boundary_check(
