@@ -1,5 +1,3 @@
-include (${PROJECT_SOURCE_DIR}/config.cmake)
-
 set (TEST_NAME "sparseMemoryTest")
 
 set (PREPROCESSOR_DEFS

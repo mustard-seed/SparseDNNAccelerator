@@ -1,5 +1,3 @@
-include (${PROJECT_SOURCE_DIR}/config.cmake)
-
 set (LIB_NAME "graph_factory")
 
 ############################################

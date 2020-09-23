@@ -941,21 +941,25 @@ namespace GraphRuntime {
 
             status = clCQOAMover.enqueueTask(kernelOAMover, NULL, &(vecOAFinishes.at(i)));
             //status = clEnqueueTask(clCQOAMover(), kernelOAMover(), 0, NULL, &(vecOAFinishes[i])));
+            #if defined(HOST_DEBUG)
             aocl_utils_cpp::checkError(status, "Failed to launch kernelOAMover!");
+            #endif
 
             //The creation of the following waitList vector seems redundant
             //but it is needed to keep the OpenCL C++ API happy.
             //Worry: Is the event copied into the vector in sync with the original event?
             std::vector<cl::Event> waitList = {vecOAFinishes.at(i-1)};
             status = clCQIAMover.enqueueTask(kernelIAMover, &waitList, NULL);
+            #if defined(HOST_DEBUG)
             aocl_utils_cpp::checkError(status, "Failed to launch kernelIAMover!");
-
-            clCQOAMover.finish();
+                clCQOAMover.finish();
+            #endif
         }
 
-        //clCQOAMover.finish();
         #if defined(HOST_DEBUG)
             std::cout<<"Done all layers."<<std::endl;
+        #else
+            clCQOAMover.finish();
         #endif
 
 
@@ -984,7 +988,9 @@ namespace GraphRuntime {
                                                          NULL, //dependency list
                                                          &event //events generated
                                                             );
-                aocl_utils_cpp::checkError(status, "Failed to read an output activation vector");
+                #if defined(HOST_DEBUG)
+                    aocl_utils_cpp::checkError(status, "Failed to read an output activation vector");
+                #endif
                 cl_ulong startTime = event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
                 cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
                 vecOutputTransferTime.at(index) += (cl_double)((endTime - startTime)*(cl_double)(1e-3));
@@ -1007,13 +1013,16 @@ namespace GraphRuntime {
                                                              (pOutput->getTransferBlockCountVector()).data(), //data pointer
                                                              NULL, //dependency list
                                                              NULL //events generated
-                                                            );
+                                                               );
+                        #if defined(HOST_DEBUG)
                         aocl_utils_cpp::checkError(status, "Failed to read the output activation TB count");
+                        #endif
                     }
                 #endif
                 index++;
             }
         }
+        t.stop();
 
         //Update runtime of eacy layer
         {
@@ -1026,8 +1035,6 @@ namespace GraphRuntime {
             }
         }
         numRunExecuted++;
-
-        t.stop();
 
         //Updat clocks
         double timeElapsed = (double) t.get_time_s();

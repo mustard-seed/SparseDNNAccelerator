@@ -8,7 +8,7 @@
 #if defined(C5SOC)
 #define VOLATILE volatile
 #else
-#define VOLATILE 
+#define VOLATILE volatile
 #endif
 
 /** t_conv_input_index
@@ -185,7 +185,7 @@ __kernel void kernelIAMover (
 						numTBInStrip = (t_ushort) inst.numCWOrTBInGroup;
 					}
 				#else
-					unsigned short numTBInStrip = (t_ushort) inst.numTBInStrip;
+					unsigned short numTBInStrip = (t_ushort) inst.numTBPerStrip;
 				#endif
 
 				//dramBlockCount = ceil(numTBInStrip / WIDE_SIZE)
@@ -2451,6 +2451,7 @@ __kernel void kernelOAMover (
 
 #ifdef OA_MEMORY
 #if ((defined(ARRIA10) || defined(STRATIX10)) && defined(OA_PING_PONG))
+// #if defined(OA_PING_PONG)
 #define OA_BUFFER_ACCESS_STATE_DECODE 0x0
 #define OA_BUFFER_ACCESS_STATE_NUM_ACCESS 0x1
 #define OA_BUFFER_ACCESS_STATE_UPDATE_STRIP 0x2

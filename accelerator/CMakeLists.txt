@@ -4,7 +4,8 @@ set (PROJECT_NAME "sparseDNNAccel")
 
 project (${PROJECT_NAME})
 
-set (CMAKE_BUILD_TYPE "Debug")
+include (${PROJECT_SOURCE_DIR}/config.cmake)
+
 add_subdirectory(googletest)
 
 #============================

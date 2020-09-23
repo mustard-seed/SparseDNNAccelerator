@@ -1,5 +1,3 @@
-include (${PROJECT_SOURCE_DIR}/config.cmake)
-
 set (PREPROCESSOR_DEFS
 #        -DWEIGHT_MEMORY_TEST
 #        -DHW_DEBUG

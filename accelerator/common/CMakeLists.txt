@@ -1,7 +1,4 @@
 #Purpose: Generate build targets for the Intel OpenCL common utilities
-
-include (${PROJECT_SOURCE_DIR}/config.cmake)
-
 set (LIBRARY_NAME "aocl_utils")
 
 ############################################

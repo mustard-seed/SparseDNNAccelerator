@@ -18,7 +18,7 @@ if (NOT GLOBAL_CONFIG_SET)
 # RelWithDebInfo
 ###############################################
 
-    set(CMAKE_BUILD_TYPE Debug)
+    set(CMAKE_BUILD_TYPE Release)
     
     set(CMAKE_EXPORT_COMPILE_COMMANDS TRUE)
     if (CMAKE_BUILD_TYPE MATCHES "Debug")
@@ -38,7 +38,7 @@ if (NOT GLOBAL_CONFIG_SET)
     #set(OPTIMIZATION_FLAGS "-pipe -Og") # -O2 is required for -D_FORTIFY_SOURCE=2, but would obfuscate debugging
     if (CMAKE_BUILD_TYPE MATCHES "Debug")
         set(OPTIMIZATION_DEBUG_FLAGS "-pipe -Og -g")
-    else(CMAKE_BUILD_TYPE MATCHES "Debug")
+    else(CMAKE_BUILD_TYPE MATCHES "Release")
         set(OPTIMIZATION_DEBUG_FLAGS "-pipe -O3")
     endif(CMAKE_BUILD_TYPE MATCHES "Debug")
     

@@ -8,12 +8,12 @@
 //Prirority of the MACRO flags:
 //PLAY > VALIDATE > RESNET56
 //#define PLAY
-//#define VALIDATE
+#define VALIDATE
 #define RESNET56
 #ifndef C5SOC
     #define EMULATE
 #endif
-#define INFERENCE_REPEAT 1
+#define INFERENCE_REPEAT 100
 
 class testFixture : public ::testing::Test {
 protected:
