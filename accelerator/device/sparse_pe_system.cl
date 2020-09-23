@@ -3515,7 +3515,7 @@ void getOABufferReaderOutput (
 							0x0 
 							: cacheOutputActivations
 									[addressBase + (index >> VALUE_TO_CLUSTER_SHIFT)]
-									[index & VALUE_DIVIDED_BY_CLUSTER_SIZE_REMAINDER_MASK];
+									[i & VALUE_DIVIDED_BY_CLUSTER_SIZE_REMAINDER_MASK];
 						cluster.cluster_values[i] = tempValue;
 						keep = keep || (tempValue != 0x0);
 					}
@@ -3559,7 +3559,7 @@ void getOABufferReaderOutput (
 							0x0 
 							: cacheOutputActivations
 								[addressBase + (index >> VALUE_TO_CLUSTER_SHIFT)]
-								[index & VALUE_DIVIDED_BY_CLUSTER_SIZE_REMAINDER_MASK];
+								[i & VALUE_DIVIDED_BY_CLUSTER_SIZE_REMAINDER_MASK];
 					taggedCluster.cluster.cluster_values[i] = tempValue;
 				}
 
@@ -3918,9 +3918,12 @@ __kernel void kernelOABuffer ()
 						{
 							unsigned short index = indexOutput + i;
 							unsigned short tempOC = iOutputChannelFetched + i;
+							//If there are multiple output groups, 
+							//then the number of channels per group must be divisible by the cluster size.
+							//i.e. indexOutput is divisble by CLUSTER size
 							char tempValue = (tempOC >= numOutputsPerStrip) ?
 								0x0 : cacheOutputActivations[index >> VALUE_TO_CLUSTER_SHIFT]
-								[index & VALUE_DIVIDED_BY_CLUSTER_SIZE_REMAINDER_MASK];
+								[i & VALUE_DIVIDED_BY_CLUSTER_SIZE_REMAINDER_MASK];
 							cluster.cluster_values[i] = tempValue;
 							keep = keep || (tempValue != 0x0);
 						}
@@ -3972,7 +3975,7 @@ __kernel void kernelOABuffer ()
 						unsigned short tempOC = iOutputChannelFetched + i;
 						char tempValue = (tempOC >= numOutputsPerStrip) ?
 								0x0 : cacheOutputActivations[index >> VALUE_TO_CLUSTER_SHIFT]
-								[index & VALUE_DIVIDED_BY_CLUSTER_SIZE_REMAINDER_MASK];
+								[i & VALUE_DIVIDED_BY_CLUSTER_SIZE_REMAINDER_MASK];
 						taggedCluster.cluster.cluster_values[i] = tempValue;
 					}
 
@@ -4060,7 +4063,7 @@ __kernel void kernelOATileController (
 	    unsigned char outputModifierBits = inst.flagSparseCatFlagReluCatFlagSourceCatShift;
 	    unsigned char numActivePeCols = inst.numActiveCols;
 
-	    unsigned short numOutputChannels = inst.numLocalChannels;
+	    unsigned short numRoundedOutputChannels = inst.numRoundedLocalChannels;
 		{		
 
 		    /*
@@ -4084,7 +4087,7 @@ __kernel void kernelOATileController (
 		    	bufferPacketTagged.bufferPacket.startOutputIndex = startOutputIndex;
 		    	bufferPacketTagged.bufferPacket.numOutputsPerStrip = numActivePeRows;
 		    	bufferPacketTagged.bufferPacket.numStripsToAccess = numOutputTileHeightxWidth;
-		    	bufferPacketTagged.bufferPacket.iaStridePerCol = numOutputChannels;
+		    	bufferPacketTagged.bufferPacket.iaStridePerCol = numRoundedOutputChannels;
 		    	bufferPacketTagged.bufferPacket.controlBits = 
 		    		( (((unsigned short) writeSideIndex) & 0x01) << 0x9)
 		    		| ((unsigned short) outputModifierBits);
@@ -4117,7 +4120,7 @@ __kernel void kernelOATileController (
 	    	bufferPacketTagged.bufferPacket.startOutputIndex = 0x0;
 			bufferPacketTagged.bufferPacket.numOutputsPerStrip = numChannelsInGroupNextLayer;
 	    	bufferPacketTagged.bufferPacket.numStripsToAccess = numOutputTileHeightxWidth;
-	    	bufferPacketTagged.bufferPacket.iaStridePerCol = numOutputChannels;
+	    	bufferPacketTagged.bufferPacket.iaStridePerCol = numRoundedOutputChannels;
 	    	bufferPacketTagged.bufferPacket.controlBits = 
 	    		( (((unsigned short) (writeSideIndex)) & 0x01) << 0x9)
 	    		| (((unsigned short) 0x1) << 0x8 ) 

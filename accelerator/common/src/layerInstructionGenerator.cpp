@@ -403,10 +403,12 @@ void instruction_generator(
 
             /*! Generate the output tile controller instruction */
             {
+                assert (((numGroupsNextLayer == 1) || ((numOutputChannelsPerGroupNextLayer % CLUSTER_SIZE) == 0))
+                        && "Either the number of groups in the next layer should be 1, or the number of channel per next group should be divisible by CLUSTER_SIZE");
                 t_oa_tile_controller_instruction instructionOAControl;
 
                 instructionOAControl.numLocalTilePerColHxW = (t_uchar)(maxTQPerCol*maxTP);
-                instructionOAControl.numLocalChannels = (t_ushort)(numOutputChannels);
+                instructionOAControl.numRoundedLocalChannels = (t_ushort)((1 + (numOutputChannels-1) / CLUSTER_SIZE) * CLUSTER_SIZE);
                 instructionOAControl.numDrainInstructions = (t_ushort) ( numComputeFoldPerGroup * numOAGroupsCurrentLayer);
                 instructionOAControl.numMemInstructions = (t_uchar) numGroupsNextLayer;
                 instructionOAControl.numFoldsInGroupCurrentLayer = (t_uchar) numComputeFoldPerGroup;

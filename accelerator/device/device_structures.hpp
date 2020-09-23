@@ -303,8 +303,8 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
 {
     //Number of planar indices in the output tile
     t_uchar numLocalTilePerColHxW;
-    //Number of channels in the tile
-    t_ushort numLocalChannels;
+    //Number of channels in the tile, rounded up to a multiple of cluster size
+    t_ushort numRoundedLocalChannels;
     //Number of compute drain instructions
     t_ushort numDrainInstructions;
     //Number of memory transfer instructions
