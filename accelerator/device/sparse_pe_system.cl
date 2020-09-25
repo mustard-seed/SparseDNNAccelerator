@@ -2450,12 +2450,17 @@ __kernel void kernelOAMover (
 #endif //MEMORY_WRITER 
 
 #ifdef OA_MEMORY
-#if ((defined(ARRIA10) || defined(STRATIX10)) && defined(OA_PING_PONG))
-// #if defined(OA_PING_PONG)
-#define OA_BUFFER_ACCESS_STATE_DECODE 0x0
-#define OA_BUFFER_ACCESS_STATE_NUM_ACCESS 0x1
-#define OA_BUFFER_ACCESS_STATE_UPDATE_STRIP 0x2
-#define OA_BUFFER_ACCESS_STATE_ACCESS 0x3
+//#if ((defined(ARRIA10) || defined(STRATIX10)) && defined(OA_PING_PONG))
+#if defined(OA_PING_PONG)
+#define OA_BUFFER_WRITER_STATE_DECODE 0x0
+#define OA_BUFFER_WRITER_STATE_NUM_ACCESS 0x1
+#define OA_BUFFER_WRITER_STATE_UPDATE_STRIP 0x2
+#define OA_BUFFER_WRITER_STATE_ACCESS 0x3
+
+#define OA_BUFFER_READER_STATE_DECODE 0x0
+#define OA_BUFFER_READER_STATE_NUM_ACCESS 0x1
+#define OA_BUFFER_READER_STATE_UPDATE_STRIP 0x2
+#define OA_BUFFER_READER_STATE_ACCESS 0x3
 
 #define OA_BUFFER_DISPATCH_STATE_IDLE 0x0
 #define OA_BUFFER_DISPATCH_STATE_SEND_WRITER 0x1
@@ -2502,11 +2507,6 @@ typedef struct __attribute__((packed)) {
 	//Init to 0
 	unsigned short numClustersToDrain;
 	//Init to 0
-	unsigned short numWindowsToDrain;
-
-	//Init to 0
-	unsigned char countSurvivingClustersInWindow;
-	//Init to 0
 	unsigned char iClustersInWindowFetched;
 	//Init to 0
 	unsigned short iOutputChannelFetched;
@@ -2518,15 +2518,22 @@ typedef struct __attribute__((packed)) {
 	unsigned char numGroupsNextLayer;
 	//Init to 0
 	unsigned short numChannelsInGroupNextLayer;
-	//Init to 
-	//Init to 0
-	t_bitmask mask;
 } t_oa_buffer_reader_info;
 
 /**
- * State type for oa_buffer_writer, and oa_buffer_reader
+ * State type for oa_buffer_writer
  */
-typedef uint2_t t_oa_buffer_access_state;
+typedef uint2_t t_oa_buffer_writer_state;
+
+/*
+ * State type for oa_buffer_reader
+*/
+#if defined(SPARSE_SYSTEM)
+typedef uint2_t t_oa_buffer_reader_state;
+#else
+typedef uint2_t t_oa_buffer_reader_state;
+#endif
+
 /**
  * State type for the instruction generator
  */
@@ -2549,13 +2556,14 @@ void updateOABufferWriter (
 	t_flag _validValueFromMisc,
 
 	//Modified buffers
-	char cacheOutputActivations[2*OA_CACHE_DEPTH][CLUSTER_SIZE],
+	char cacheOutputActivations0[OA_CACHE_DEPTH][CLUSTER_SIZE],
+	char cacheOutputActivations1[OA_CACHE_DEPTH][CLUSTER_SIZE],
 
 	//State variables
 	t_oa_buffer_writer_info *pRegisters,
 
 	//State
-	t_oa_buffer_access_state *pState,
+	t_oa_buffer_writer_state *pState,
 
 	//Auxillary
 	int colID
@@ -2563,7 +2571,7 @@ void updateOABufferWriter (
 
 void getOABufferWriterOutput (
 	//Current state
-	t_oa_buffer_access_state _currentState,
+	t_oa_buffer_writer_state _currentState,
 
 	//Current context
 	t_oa_buffer_writer_info _currentContext,
@@ -2588,10 +2596,6 @@ void updateOABufferReader (
 	t_flag _writeSuccessCompressorData,
 	t_flag _requestWrite2CompressorData,
 
-	//Interface with the compressor info channel
-	t_flag _writeSuccessCompressorInfo,
-	t_flag _requestWrite2CompressorInfo,
-
 	#else
 	//Interface with the channel to OA tee
 	t_flag _writeSuccessOATee,
@@ -2602,7 +2606,7 @@ void updateOABufferReader (
 	t_oa_buffer_reader_info *pRegisters,
 
 	//State,
-	t_oa_buffer_access_state *pState,
+	t_oa_buffer_reader_state *pState,
 
 	//Auxillary
 	int colID
@@ -2610,7 +2614,7 @@ void updateOABufferReader (
 
 void getOABufferReaderOutput (
 	//Current state
-	t_oa_buffer_access_state _currentState,
+	t_oa_buffer_reader_state _currentState,
 	//Current context
 	t_oa_buffer_reader_info _currentContext,
 
@@ -2618,16 +2622,13 @@ void getOABufferReaderOutput (
 	t_flag* pOutAcceptInstruction,
 
 	//Buffer, read only
-	const char cacheOutputActivations[2*OA_CACHE_DEPTH][CLUSTER_SIZE],
+	const char cacheOutputActivations0[OA_CACHE_DEPTH][CLUSTER_SIZE],
+	const char cacheOutputActivations1[OA_CACHE_DEPTH][CLUSTER_SIZE],
 
 	#if defined(SPARSE_SYSTEM)
 	//Interface with the channel to compressor cluster data
 	t_flag* pToCompressorClusterValid,
-	t_cluster* pToCompressorClusterData,
-
-	//Interface with the channel to compressor info
-	t_flag* pToCompressorInfoValid,
-	t_output_cluster_info* pToCompressorInfoData
+	t_cluster_to_compressor* pToCompressorClusterData
 	#else
 	//Interface with the channel to OA Tee
 	t_flag* pToOATeeValid,
@@ -2689,7 +2690,9 @@ __kernel void kernelOABuffer ()
 	 * Activation buffer
 	 * TODO: might need to change the indexing in order to get the BRAM arrangement
 	 */
-	char cacheOutputActivations[2*OA_CACHE_DEPTH][CLUSTER_SIZE] __attribute__((
+	char cacheOutputActivations0 [OA_CACHE_DEPTH][CLUSTER_SIZE] __attribute__((
+                   numbanks(CLUSTER_SIZE), bankwidth(1), singlepump));
+	char cacheOutputActivations1 [OA_CACHE_DEPTH][CLUSTER_SIZE] __attribute__((
                    numbanks(CLUSTER_SIZE), bankwidth(1), singlepump));
 
 	/**
@@ -2711,7 +2714,7 @@ __kernel void kernelOABuffer ()
 		.accumulatorShiftDirCatShiftAmount = 0x0,
 		.enableRelu = FALSE
 	};
-	t_oa_buffer_access_state regWriterState = OA_BUFFER_ACCESS_STATE_DECODE;
+	t_oa_buffer_writer_state regWriterState = OA_BUFFER_WRITER_STATE_DECODE;
 
 	/**
 	 * Reader state and registers 
@@ -2730,8 +2733,6 @@ __kernel void kernelOABuffer ()
 		},
 		.enableSparsification = FALSE,
 		.numClustersToDrain = 0,
-		.numWindowsToDrain = 0,
-		.countSurvivingClustersInWindow = 0,
 		.iClustersInWindowFetched = 0,
 		.iOutputChannelFetched = 0,
 		.iClustersFetched = 0,
@@ -2740,12 +2741,7 @@ __kernel void kernelOABuffer ()
 		.numChannelsInGroupNextLayer = 0
 	};
 
-	#pragma unroll
-	for (int i=0; i<NUM_BITMASK_BYTES; i++)
-	{
-		regReaderContext.mask.bytes[i] = 0x0;
-	}
-	t_oa_buffer_access_state regReaderState = OA_BUFFER_ACCESS_STATE_DECODE;
+	t_oa_buffer_reader_state regReaderState = OA_BUFFER_READER_STATE_DECODE;
 
 	/**
 	 * Dispatcher state and registers
@@ -2755,7 +2751,8 @@ __kernel void kernelOABuffer ()
 
 
 	//Runtime logic
-	//#pragma ivdep array(cacheOutputActivations)
+	// #pragma ivdep array(cacheOutputActivations0)
+	// #pragma ivdep array(cacheOutputActivations1)
 	while (true) {
 		/**
 		 * oa buffer instruction channel <===> dispatcher
@@ -2798,14 +2795,8 @@ __kernel void kernelOABuffer ()
 		 */
 		t_flag readerBlockToCompressorClusterValid = FALSE;
 		t_flag readerBlockToCompressorClusterSent = FALSE;
-		t_cluster readerBlockToCompressorClusterData;
+		t_cluster_to_compressor readerBlockToCompressorClusterData;
 
-		/**
-		 * reader <==> channel to compressor info
-		 */
-		t_flag readerBlockToCompressorInfoValid = FALSE;
-		t_flag readerBlockToCompressorInfoSent = FALSE;
-		t_output_cluster_info readerBlockToCompressorInfoData;
 		#else
 		/**
 		 * reader <===> channel to OA tee
@@ -2819,8 +2810,9 @@ __kernel void kernelOABuffer ()
 		 * Reader-writer synchornization
 		 */
 		bool unblockReader = 
-			(regWriterState == OA_BUFFER_ACCESS_STATE_DECODE)
+			(regWriterState == OA_BUFFER_WRITER_STATE_DECODE)
 			|| (regWriterContext.accessInfo.accessBank != ((regDispatcherInstructionBuffer.controlBits >> 0x9) & 0x01));
+
 
 		/**
 		 * Derive current interface outputs from the modules
@@ -2843,7 +2835,7 @@ __kernel void kernelOABuffer ()
 			);
 
 		getOABufferReaderOutput (
-			//t_oa_buffer_access_state _currentState,
+			//t_oa_buffer_reader_state _currentState,
 			regReaderState,
 			
 			//t_oa_buffer_reader_info _currentContext,
@@ -2853,18 +2845,14 @@ __kernel void kernelOABuffer ()
 			&readerInstructionRequest,
 
 			//const char cacheOutputActivations[2][OA_CACHE_DEPTH][CLUSTER_SIZE],
-			cacheOutputActivations,
+			cacheOutputActivations0,
+			cacheOutputActivations1,
 
 			#if defined(SPARSE_SYSTEM)
 			//t_flag* pToCompressorClusterValid,
 			&readerBlockToCompressorClusterValid,
 			//t_cluster* pToCompressorClusterData,
-			&readerBlockToCompressorClusterData,
-
-			//t_flag* pToCompressorInfoValid,
-			&readerBlockToCompressorInfoValid,
-			//t_output_cluster_info* pToCompressorInfoData,
-			&readerBlockToCompressorInfoData
+			&readerBlockToCompressorClusterData
 			#else
 
 			//t_flag* pToOATeeValid,
@@ -2940,17 +2928,6 @@ __kernel void kernelOABuffer ()
 		}
 
 		#if defined(SPARSE_SYSTEM)
-			//Reader <===> compressor info
-			if (readerBlockToCompressorInfoValid == TRUE)
-			{
-				bool success = 
-					write_channel_nb_intel(channel_output_buffer_to_compressor_info[colID], readerBlockToCompressorInfoData);
-				if (success == true)
-				{
-					readerBlockToCompressorInfoSent = TRUE;
-				}
-			}
-
 			//Reader <===> compressor data
 			if (readerBlockToCompressorClusterValid == TRUE)
 			{
@@ -3000,12 +2977,13 @@ __kernel void kernelOABuffer ()
 			writerBlockFromMiscValid,
 
 			//char cacheOutputActivations[OA_CACHE_DEPTH][CLUSTER_SIZE][2],
-			cacheOutputActivations,
+			cacheOutputActivations0,
+			cacheOutputActivations1,
 
 			//t_oa_buffer_writer_info *pRegisters,
 			&regWriterContext,
 
-			//t_oa_buffer_access_state *pState,
+			//t_oa_buffer_writer_state *pState,
 			&regWriterState,
 
 			//int colID
@@ -3026,11 +3004,6 @@ __kernel void kernelOABuffer ()
 				//t_flag _requestWrite2CompressorData,
 				readerBlockToCompressorClusterValid,
 
-				//t_flag _writeSuccessCompressorInfo,
-				readerBlockToCompressorInfoSent,
-				//t_flag _requestWrite2CompressorInfo,
-				readerBlockToCompressorInfoValid,
-
 			#else
 				//t_flag _writeSuccessOATee,
 				readerBlockToOATeeSent,
@@ -3041,7 +3014,7 @@ __kernel void kernelOABuffer ()
 			//t_oa_buffer_reader_info *pRegisters,
 			&regReaderContext,
 
-			//t_oa_buffer_access_state *pState,
+			//t_oa_buffer_reader_state *pState,
 			&regReaderState,
 
 			//int colID
@@ -3090,20 +3063,21 @@ void updateOABufferWriter (
 	t_flag _validValueFromMisc,
 
 	//Modified buffers
-	char cacheOutputActivations[2*OA_CACHE_DEPTH][CLUSTER_SIZE],
+	char cacheOutputActivations0 [OA_CACHE_DEPTH][CLUSTER_SIZE],
+	char cacheOutputActivations1 [OA_CACHE_DEPTH][CLUSTER_SIZE],
 
 	//State variables
 	t_oa_buffer_writer_info *pRegisters,
 
 	//State
-	t_oa_buffer_access_state *pState,
+	t_oa_buffer_writer_state *pState,
 
 	//Auxillary
 	int colID
 	)
 {
 	switch (*pState) {
-		case (OA_BUFFER_ACCESS_STATE_DECODE) : {
+		case (OA_BUFFER_WRITER_STATE_DECODE) : {
 			//Obtain new instruction and update the context
 			if (_validControl == TRUE)
 			{
@@ -3122,7 +3096,7 @@ void updateOABufferWriter (
 
 
 				//State update
-				*pState = OA_BUFFER_ACCESS_STATE_NUM_ACCESS;
+				*pState = OA_BUFFER_WRITER_STATE_NUM_ACCESS;
 
 				EMULATOR_PRINT(("[kernelOABuffer WRITER %d] START processing instruction. "
 						"stripStartOutputIndex=%d, "
@@ -3145,28 +3119,28 @@ void updateOABufferWriter (
 			} //if, _validControl is TRUE
 		}
 		break;
-		case (OA_BUFFER_ACCESS_STATE_NUM_ACCESS) : {
+		case (OA_BUFFER_WRITER_STATE_NUM_ACCESS) : {
 			(*pRegisters).accessInfo.numLoopsPerStip = (*pRegisters).accessInfo.numOutputsPerStrip;
 			(*pRegisters).accessInfo.iLoopPerStip = 0x0;
 			(*pRegisters).accessInfo.indexOutput = (*pRegisters).accessInfo.stripStartOutputIndex;
-			*pState =  OA_BUFFER_ACCESS_STATE_ACCESS;
+			*pState =  OA_BUFFER_WRITER_STATE_ACCESS;
 
 		}
 		break;
-		case (OA_BUFFER_ACCESS_STATE_UPDATE_STRIP) : {
+		case (OA_BUFFER_WRITER_STATE_UPDATE_STRIP) : {
 			//Default state transition
-			*pState = OA_BUFFER_ACCESS_STATE_NUM_ACCESS;
+			*pState = OA_BUFFER_WRITER_STATE_NUM_ACCESS;
 			(*pRegisters).accessInfo.iStrip += 0x01;
 			(*pRegisters).accessInfo.stripStartOutputIndex += (*pRegisters).accessInfo.oaStridePerCol;
 			if ((*pRegisters).accessInfo.iStrip == (*pRegisters).accessInfo.numStripsToAccess)
 			{
-				*pState = OA_BUFFER_ACCESS_STATE_DECODE;
+				*pState = OA_BUFFER_WRITER_STATE_DECODE;
 				EMULATOR_PRINT(("[kernelOABuffer WRITER %d] Finished processing processing instruction.\n", 
 					colID));
 			}
 		}
 		break;
-		case (OA_BUFFER_ACCESS_STATE_ACCESS) : {
+		case (OA_BUFFER_WRITER_STATE_ACCESS) : {
 			t_accumulator wideOutput = ((*pRegisters).flagSourceIsMisc == TRUE) ?
 				_wideOutputFromMisc : _wideOutputFromPE;
 			t_flag readSuccess = ((*pRegisters).flagSourceIsMisc == TRUE) ?
@@ -3183,10 +3157,20 @@ void updateOABufferWriter (
 					(*pRegisters).enableRelu
 					);
 				//cacheOutputActivations[indexOutput] = shortOutput;
-				cacheOutputActivations
-					[addressBase + ((*pRegisters).accessInfo.indexOutput >> VALUE_TO_CLUSTER_SHIFT)]
-					[(*pRegisters).accessInfo.indexOutput & VALUE_DIVIDED_BY_CLUSTER_SIZE_REMAINDER_MASK]
-					= shortOutput;
+				if (((*pRegisters).accessInfo.accessBank & 0x01) == 0x00) 
+				{
+					cacheOutputActivations0
+						[((*pRegisters).accessInfo.indexOutput >> VALUE_TO_CLUSTER_SHIFT)]
+						[(*pRegisters).accessInfo.indexOutput & VALUE_DIVIDED_BY_CLUSTER_SIZE_REMAINDER_MASK]
+						= shortOutput;
+				}
+				else
+				{
+					cacheOutputActivations1
+						[((*pRegisters).accessInfo.indexOutput >> VALUE_TO_CLUSTER_SHIFT)]
+						[(*pRegisters).accessInfo.indexOutput & VALUE_DIVIDED_BY_CLUSTER_SIZE_REMAINDER_MASK]
+						= shortOutput;
+				}
 
 				EMULATOR_PRINT(("[kernelOABuffer %d] Read and processed value from PE/Misc. "
 					 "Value: %#04x, %d out of %d values of the strip are read.\n\n", 
@@ -3200,7 +3184,7 @@ void updateOABufferWriter (
 
 				if ((*pRegisters).accessInfo.iLoopPerStip == (*pRegisters).accessInfo.numLoopsPerStip)
 	            {
-	                *pState = OA_BUFFER_ACCESS_STATE_UPDATE_STRIP;
+	                *pState = OA_BUFFER_WRITER_STATE_UPDATE_STRIP;
 	            }
 			}	
 		}	
@@ -3212,7 +3196,7 @@ void updateOABufferWriter (
 
 void getOABufferWriterOutput (
 	//Current state
-	t_oa_buffer_access_state _currentState,
+	t_oa_buffer_writer_state _currentState,
 
 	//Current context
 	t_oa_buffer_writer_info _currentContext,
@@ -3233,11 +3217,11 @@ void getOABufferWriterOutput (
 	*pOutAcceptDataFromMisc = FALSE;
 
 	switch (_currentState) {
-		case (OA_BUFFER_ACCESS_STATE_DECODE): {
+		case (OA_BUFFER_WRITER_STATE_DECODE): {
 			*pOutAcceptInstruction = TRUE;
 		}
 		break;
-		case (OA_BUFFER_ACCESS_STATE_ACCESS): {
+		case (OA_BUFFER_WRITER_STATE_ACCESS): {
 			if (_currentContext.flagSourceIsMisc == TRUE) {
 				*pOutAcceptDataFromMisc = TRUE;
 			}
@@ -3261,10 +3245,6 @@ void updateOABufferReader (
 	t_flag _writeSuccessCompressorData,
 	t_flag _requestWrite2CompressorData,
 
-	//Interface with the compressor info channel
-	t_flag _writeSuccessCompressorInfo,
-	t_flag _requestWrite2CompressorInfo,
-
 	#else
 	//Interface with the channel to OA tee
 	t_flag _writeSuccessOATee,
@@ -3275,14 +3255,14 @@ void updateOABufferReader (
 	t_oa_buffer_reader_info *pRegisters,
 
 	//State,
-	t_oa_buffer_access_state *pState,
+	t_oa_buffer_reader_state *pState,
 
 	//Auxillary
 	int colID
 	)
 {
 	switch (*pState) {
-		case (OA_BUFFER_ACCESS_STATE_DECODE): {
+		case (OA_BUFFER_READER_STATE_DECODE): {
 			//Obtain new instruction and update the context
 			if (_validControl == TRUE)
 			{
@@ -3302,10 +3282,10 @@ void updateOABufferReader (
 				(*pRegisters).iGroupsFetched = 0x0;
 
 				//State update
-				*pState = OA_BUFFER_ACCESS_STATE_NUM_ACCESS;
+				*pState = OA_BUFFER_READER_STATE_NUM_ACCESS;
 
 				EMULATOR_PRINT(("[kernelOABuffer READER %d] START processing instruction. "
-						"stripStartOutputIndex=%d, "
+						"stripStartOutputIndex =%d, "
 						"numOutputsPerStrip=%d, "
 						"numStripsToAccess=%d, "
 						"oaStridePerCol=%d, "
@@ -3330,13 +3310,10 @@ void updateOABufferReader (
 			// }
 		} //OA_BUFFER_ACCESS_STATE_DECODE
 		break;
-		case (OA_BUFFER_ACCESS_STATE_NUM_ACCESS): {
+		case (OA_BUFFER_READER_STATE_NUM_ACCESS): {
 			(*pRegisters).numClustersToDrain = 1 
 				+ (((*pRegisters).accessInfo.numOutputsPerStrip - 1) >> VALUE_TO_CLUSTER_SHIFT);
-			(*pRegisters).numWindowsToDrain = 1 
-				+ (((*pRegisters).numClustersToDrain - 1) >> CLUSTER_TO_WINDOW_SHIFT);
 
-			(*pRegisters).countSurvivingClustersInWindow = 0x0;
 			(*pRegisters).iClustersInWindowFetched = 0x0;
 			(*pRegisters).iOutputChannelFetched = 0x0;
 			(*pRegisters).iClustersFetched = 0x0;
@@ -3344,25 +3321,21 @@ void updateOABufferReader (
 			(*pRegisters).accessInfo.iLoopPerStip = 0x0;
 			(*pRegisters).accessInfo.indexOutput = (*pRegisters).accessInfo.stripStartOutputIndex;
 
-			#pragma unroll
-			for (int i=0; i<NUM_BITMASK_BYTES; i++)
-			{
-				(*pRegisters).mask.bytes[i] = 0x0;
-			}
 
-			#if defined(SPARSE_SYSTEM)
-				(*pRegisters).accessInfo.numLoopsPerStip = 
-					((*pRegisters).numClustersToDrain + (*pRegisters).numWindowsToDrain); 
-			#else
-				(*pRegisters).accessInfo.numLoopsPerStip = (*pRegisters).numClustersToDrain;
-			#endif
+			// #if defined(SPARSE_SYSTEM)
+			// 	(*pRegisters).accessInfo.numLoopsPerStip = 
+			// 		((*pRegisters).numClustersToDrain + (*pRegisters).numWindowsToDrain); 
+			// #else
+			// 	(*pRegisters).accessInfo.numLoopsPerStip = (*pRegisters).numClustersToDrain;
+			// #endif
+			(*pRegisters).accessInfo.numLoopsPerStip = (*pRegisters).numClustersToDrain;
 
-			(*pState) = OA_BUFFER_ACCESS_STATE_ACCESS;
+			(*pState) = OA_BUFFER_READER_STATE_ACCESS;
 		} //OA_BUFFER_ACCESS_STATE_NUM_ACCESS
 		break;
-		case (OA_BUFFER_ACCESS_STATE_UPDATE_STRIP): {
+		case (OA_BUFFER_READER_STATE_UPDATE_STRIP): {
 			//Default state transition
-			*pState = OA_BUFFER_ACCESS_STATE_NUM_ACCESS;
+			*pState = OA_BUFFER_READER_STATE_NUM_ACCESS;
 			(*pRegisters).accessInfo.iStrip += 0x01;
 			(*pRegisters).accessInfo.stripStartOutputIndex += (*pRegisters).accessInfo.oaStridePerCol;
 			if ((*pRegisters).accessInfo.iStrip == (*pRegisters).accessInfo.numStripsToAccess)
@@ -3372,59 +3345,29 @@ void updateOABufferReader (
 				(*pRegisters).accessInfo.stripStartOutputIndex = (*pRegisters).numChannelsInGroupNextLayer * (*pRegisters).iGroupsFetched;
 				if ((*pRegisters).iGroupsFetched == (*pRegisters).numGroupsNextLayer)
 				{
-					*pState = OA_BUFFER_ACCESS_STATE_DECODE;
+					*pState = OA_BUFFER_READER_STATE_DECODE;
 					EMULATOR_PRINT(("[kernelOABuffer READER %d] Finished processing processing instruction.\n", 
 						colID));
 				}
 			}
 		} //OA_BUFFER_ACCESS_STATE_UPDATE_STRIP
 		break;
-		case (OA_BUFFER_ACCESS_STATE_ACCESS): {
+		case (OA_BUFFER_READER_STATE_ACCESS): {
 			#if defined(SPARSE_SYSTEM)
-				if (((*pRegisters).iClustersInWindowFetched < COMPRESSION_WINDOW_SIZE) && ((*pRegisters).iClustersFetched < (*pRegisters).numClustersToDrain))
+
+				if (_writeSuccessCompressorData == TRUE)
 				{
-					if ((_requestWrite2CompressorData == TRUE) && (_writeSuccessCompressorData == TRUE))
-					{
-						(*pRegisters).mask.bytes[(*pRegisters).iClustersInWindowFetched >> 0x3] 
-							|= ((unsigned char) 1) << ((*pRegisters).iClustersInWindowFetched & 0x07);
+					(*pRegisters).iClustersFetched += 0x1;
+					(*pRegisters).iClustersInWindowFetched += 0x1;
+					(*pRegisters).iOutputChannelFetched += CLUSTER_SIZE;
 
-						(*pRegisters).countSurvivingClustersInWindow += 0x01;
-					}
-					// else
-					// {
-					// 	EMULATOR_PRINT(("[kernelOABuffer READER %d] WAITING to send data to the compressor data channel.\n\n",
-					// 					colID));
-					// }
-
-					if (((_requestWrite2CompressorData == TRUE) && (_writeSuccessCompressorData == TRUE))
-											|| (_requestWrite2CompressorData == FALSE)
-						)
-					{
-						(*pRegisters).iClustersFetched += 0x1;
-						(*pRegisters).iClustersInWindowFetched += 0x1;
-						(*pRegisters).iOutputChannelFetched += CLUSTER_SIZE;
-
-						(*pRegisters).accessInfo.indexOutput += CLUSTER_SIZE;
-						(*pRegisters).accessInfo.iLoopPerStip += 0x01;
-					}
+					(*pRegisters).accessInfo.indexOutput += CLUSTER_SIZE;
+					(*pRegisters).accessInfo.iLoopPerStip += 0x01;
 				}
-				else //Send mask along with other informatin
+
+				if ((*pRegisters).iClustersInWindowFetched == COMPRESSION_WINDOW_SIZE)
 				{
-					if (_writeSuccessCompressorInfo == TRUE)
-					{
-						for (int i=0; i<NUM_BITMASK_BYTES; i++)
-						{
-							(*pRegisters).mask.bytes[i] = 0x0;
-						}
-						(*pRegisters).countSurvivingClustersInWindow = 0x0;
-						(*pRegisters).iClustersInWindowFetched = 0x0;
-						(*pRegisters).accessInfo.iLoopPerStip += 0x01;
-					}
-					// else
-					// {
-					// 	EMULATOR_PRINT(("[kernelOABuffer READER %d] WAITING to send data to the compressor info channel.\n\n",
-					// 					colID));
-					// }
+					(*pRegisters).iClustersInWindowFetched = 0x0;
 				}
 			#else //SPARSE_SYSTEM
 				if (_writeSuccessOATee == TRUE) {
@@ -3440,12 +3383,11 @@ void updateOABufferReader (
 				// 						colID));
 				// 	}
 			#endif
-
 			if ((*pRegisters).accessInfo.iLoopPerStip == (*pRegisters).accessInfo.numLoopsPerStip)
             {
-                *pState = OA_BUFFER_ACCESS_STATE_UPDATE_STRIP;
+                *pState = OA_BUFFER_READER_STATE_UPDATE_STRIP;
             }
-		} //OA_BUFFER_ACCESS_STATE_ACCESS
+		} //OA_BUFFER_READER_STATE_ACCESS
 		break;
 		default:
 		break;
@@ -3454,7 +3396,7 @@ void updateOABufferReader (
 
 void getOABufferReaderOutput (
 	//Current state
-	t_oa_buffer_access_state _currentState,
+	t_oa_buffer_reader_state _currentState,
 	//Current context
 	t_oa_buffer_reader_info _currentContext,
 
@@ -3462,16 +3404,13 @@ void getOABufferReaderOutput (
 	t_flag* pOutAcceptInstruction,
 
 	//Buffer, read only
-	const char cacheOutputActivations[2*OA_CACHE_DEPTH][CLUSTER_SIZE],
+	const char cacheOutputActivations0 [OA_CACHE_DEPTH][CLUSTER_SIZE],
+	const char cacheOutputActivations1 [OA_CACHE_DEPTH][CLUSTER_SIZE],
 
 	#if defined(SPARSE_SYSTEM)
 	//Interface with the channel to compressor cluster data
 	t_flag* pToCompressorClusterValid,
-	t_cluster* pToCompressorClusterData,
-
-	//Interface with the channel to compressor info
-	t_flag* pToCompressorInfoValid,
-	t_output_cluster_info* pToCompressorInfoData
+	t_cluster_to_compressor* pToCompressorClusterData
 	#else
 	//Interface with the channel to OA Tee
 	t_flag* pToOATeeValid,
@@ -3483,68 +3422,59 @@ void getOABufferReaderOutput (
 	*pOutAcceptInstruction = FALSE;
 	#if defined(SPARSE_SYSTEM)
 		*pToCompressorClusterValid = FALSE;
-		*pToCompressorInfoValid = FALSE;
 	#else
 		*pToOATeeValid = FALSE;
 	#endif
 
 
 	switch (_currentState) {
-		case (OA_BUFFER_ACCESS_STATE_DECODE): {
+		case (OA_BUFFER_READER_STATE_DECODE): {
 			*pOutAcceptInstruction = TRUE;
-		}
+		} //OA_BUFFER_READER_STATE_DECODE
 		break;
-		case (OA_BUFFER_ACCESS_STATE_ACCESS): {
+		case (OA_BUFFER_READER_STATE_ACCESS): {
 			#if defined(SPARSE_SYSTEM)
-				//If we haven't finished streaming a window or haven't drained the current group
-				if ((_currentContext.iClustersInWindowFetched < COMPRESSION_WINDOW_SIZE) && (_currentContext.iClustersFetched < _currentContext.numClustersToDrain))
+				t_cluster_to_compressor clusterToCompressor;
+				//bool writeSuccess = true;
+
+				int addressBase = ((_currentContext.accessInfo.accessBank & 0x01) == 0x00) ?
+					0x0 : OA_CACHE_DEPTH;
+
+				//Fetch all the values in the cluster
+				#pragma unroll
+				for (unsigned char i=0; i<CLUSTER_SIZE; i++)
 				{
-					bool keep = (_currentContext.enableSparsification == FALSE);
-					t_cluster cluster;
-					//bool writeSuccess = true;
-
-					int addressBase = ((_currentContext.accessInfo.accessBank & 0x01) == 0x00) ?
-						0x0 : OA_CACHE_DEPTH;
-
-					//Fetch all the values in the cluster
-					#pragma unroll
-					for (unsigned char i=0; i<CLUSTER_SIZE; i++)
-					{
-						unsigned short index = _currentContext.accessInfo.indexOutput + i;
-						unsigned short tempOC = _currentContext.iOutputChannelFetched + i;
-						char tempValue = (tempOC >= _currentContext.accessInfo.numOutputsPerStrip) ?
-							0x0 
-							: cacheOutputActivations
-									[addressBase + (index >> VALUE_TO_CLUSTER_SHIFT)]
-									[i & VALUE_DIVIDED_BY_CLUSTER_SIZE_REMAINDER_MASK];
-						cluster.cluster_values[i] = tempValue;
-						keep = keep || (tempValue != 0x0);
-					}
-
-					if (keep == true)
-					{
-
-						*pToCompressorClusterValid = TRUE;
-						*pToCompressorClusterData = cluster;
-					}
+					unsigned short index = _currentContext.accessInfo.indexOutput + i;
+					unsigned short tempOC = _currentContext.iOutputChannelFetched + i;
+					char cacheValue = ((_currentContext.accessInfo.accessBank & 0x01) == 0x00) ?
+						cacheOutputActivations0
+								[(_currentContext.accessInfo.indexOutput >> VALUE_TO_CLUSTER_SHIFT)]
+								[i]
+						: cacheOutputActivations1
+								[(_currentContext.accessInfo.indexOutput >> VALUE_TO_CLUSTER_SHIFT)]
+								[i];
+					char tempValue = (tempOC >= _currentContext.accessInfo.numOutputsPerStrip) ?
+						0x0 
+						: cacheValue;
+					clusterToCompressor.cluster.cluster_values[i] = tempValue;
 				}
-				else //Send mask along with other informatin
-				{
-					//bool writeSuccess = false;
-					t_output_cluster_info info;
-					#pragma unroll
-					for (int i=0; i<NUM_BITMASK_BYTES; i++)
-					{
-						info.bitmask.bytes[i] = _currentContext.mask.bytes[i];
-					}
-					unsigned char isLastInStrip = (_currentContext.iClustersFetched == _currentContext.numClustersToDrain) ? 0x1 : 0x0;
-					info.statusBits = (_currentContext.countSurvivingClustersInWindow & 0x3F)
-						| ((isLastInStrip & 0x1) << 0x6)
-						| ( (((unsigned char) _currentContext.enableSparsification) & 0x1) << 0x7);
-					
-					*pToCompressorInfoValid = TRUE;
-					*pToCompressorInfoData = info;
-				}
+
+
+				unsigned char isLastClusterInStrip = 
+					((_currentContext.iClustersFetched + 1) == _currentContext.numClustersToDrain) ?
+					0x01 : 0x00;
+
+				unsigned char isLastClusterInWindow = 
+					((_currentContext.iClustersInWindowFetched + 1) == COMPRESSION_WINDOW_SIZE) ?
+					0x01 : 0x00;
+
+				clusterToCompressor.statusBits = 
+					(((unsigned char) _currentContext.enableSparsification)
+										| (isLastClusterInStrip << 0x01)
+										| (isLastClusterInWindow << 0x01));
+
+				*pToCompressorClusterValid = TRUE;
+				*pToCompressorClusterData = clusterToCompressor;
 			#else //SPARSE_SYSTEM
 				t_output_cluster_tagged taggedCluster;
 
@@ -3556,11 +3486,16 @@ void getOABufferReaderOutput (
 				{
 					unsigned short index = _currentContext.accessInfo.indexOutput + i;
 					unsigned short tempOC = _currentContext.iOutputChannelFetched + i;
-					char tempValue = (tempOC >= _currentContext.accessInfo.numOutputsPerStrip) ?
+					char cacheValue = ((_currentContext.accessInfo.accessBank & 0x01) == 0x00) ?
+							cacheOutputActivations0
+									[(_currentContext.accessInfo.indexOutput >> VALUE_TO_CLUSTER_SHIFT)]
+									[i & VALUE_DIVIDED_BY_CLUSTER_SIZE_REMAINDER_MASK]
+							: cacheOutputActivations1
+									[(_currentContext.accessInfo.indexOutput >> VALUE_TO_CLUSTER_SHIFT)]
+									[i & VALUE_DIVIDED_BY_CLUSTER_SIZE_REMAINDER_MASK];
+						char tempValue = (tempOC >= _currentContext.accessInfo.numOutputsPerStrip) ?
 							0x0 
-							: cacheOutputActivations
-								[addressBase + (index >> VALUE_TO_CLUSTER_SHIFT)]
-								[i & VALUE_DIVIDED_BY_CLUSTER_SIZE_REMAINDER_MASK];
+							: cacheValue;
 					taggedCluster.cluster.cluster_values[i] = tempValue;
 				}
 
@@ -3571,7 +3506,7 @@ void getOABufferReaderOutput (
 				*pToOATeeValid = TRUE;
 				*pToOATeeData = taggedCluster;
 			#endif
-		}
+		} //OA_BUFFER_READER_STATE_ACCESS
 		break;
 		default:
 		break;
@@ -4145,6 +4080,122 @@ __kernel void kernelOATileController (
 
 
 #if defined(SPARSE_SYSTEM)
+typedef struct __attribute__((packed)) {
+	uint6_t numSurvingClustersInWindow[2];
+	t_flag flagsEnableSparsification[2];
+	t_flag flagsIsLastClusterInStrip[2];
+	t_bitmask bitmasks[2];
+} t_compressor_registers;
+
+typedef struct __attribute__((packed)) {
+	//Index that keeps track of the number of clusters in the compression window
+	uint5_t iterCluster;
+} t_compressor_writer_info;
+
+typedef struct __attribute__((packed)) {
+	//Index to access the pruned cluster buffer
+	uint6_t iterCluster;
+	//Counter of the number bitmask bytes that have been sent
+	uint6_t iterBitmaskBytes;
+	//Number of clusters to send to the OA TEE
+	uint6_t numTransfers;
+	//Iterator of the number of clusters that have been sent to the TEE
+	uint6_t iterTransfer;
+
+} t_compressor_reader_info;
+
+
+#define COMPRESSOR_WRITER_STATE_FILTER 0X0
+#define COMPRESSOR_WRITER_STATE_SYNC 0X1
+
+#define COMPRESSOR_READER_STATE_SYNC 0X0
+#define COMPRESSOR_READER_STATE_COMP_NUM_ACCESS 0X1
+#define COMPRESSOR_READER_STATE_SEND_CLUSTER 0x2
+#define COMPRESSOR_READER_STATE_SEND_MASK 0x3
+
+typedef uint1_t t_compressor_writer_state;
+typedef uint2_t t_compressor_reader_state;
+
+void updateCompressorWriter (
+		//Interface with the channel from the OA Buffer
+		t_flag _flagReadFromOABufferSuccess,
+		t_cluster_to_compressor _newCluster,
+
+		//Public register
+		t_compressor_registers* pPublicRegisters,
+		t_cluster bufferClusters [2][COMPRESSION_WINDOW_SIZE],
+
+		//Interface with control
+		t_flag _flagAccessSide,
+
+		//Private registers of the writer
+		t_compressor_writer_state* pState,
+		t_compressor_writer_info* pInfo,
+
+		//sync signal from the reader module
+		t_flag _flagSync,
+
+		//Auxillar for debugging
+		int colID
+	);
+
+void getCompressorWriterOutput (
+		t_compressor_writer_state _currentState,
+
+		//Interface with the channel from the OA Buffer
+		t_flag* pFlagReadFromOABufferRequest,
+
+		//Sync signal
+		t_flag* pSync,
+
+		//Auxillar for debugging
+		int colID
+	);
+
+void updateCompressorReader (
+		//Interface with the channel to the OA Tee
+		t_flag _flagWriteToOATeeSuccess,
+
+		//Public register
+		t_compressor_registers* pPublicRegisters,
+
+		//Interface with control
+		t_flag _flagAccessSide,
+
+		//Private registers of the writer
+		t_compressor_reader_state* pState,
+		t_compressor_reader_info* pInfo,
+
+		//Interface with control
+		//Sync flag from the writer
+		t_flag _flagSync,
+
+		//Auxillar for debugging
+		int colID
+	);
+
+void getCompressorReaderOutput (
+		t_compressor_reader_state _currentState,
+		t_compressor_reader_info _currentContext,
+
+		t_compressor_registers _currentPublicRegisters,
+		t_cluster bufferClusters [2][COMPRESSION_WINDOW_SIZE],
+
+		//Interface with the channel to the OA Tee
+		t_flag* pFlagWriteToOATeeRequest,
+		t_output_cluster_tagged* pClusterToSend,
+
+		//Interface with control
+		t_flag _flagAccessSide,
+
+		//Sync signal
+		t_flag* pSync,
+
+		//Auxillar for debugging
+		int colID
+	);
+
+
 __attribute__((max_global_work_dim(0)))
 __attribute__((autorun))
 __attribute__((num_compute_units(PE_COLS)))
@@ -4152,62 +4203,418 @@ __attribute__((num_compute_units(PE_COLS)))
 __kernel void kernelCompressorOranizer()
 {
 	int colID = get_compute_id(0);
+
+	t_cluster bufferClusters [2][COMPRESSION_WINDOW_SIZE] __attribute__((bankwidth(CLUSTER_SIZE))); 
+
+	t_compressor_registers regPublicInfo;
+	#pragma unroll
+	for (int i=0; i<2; i++)
+	{
+		regPublicInfo.numSurvingClustersInWindow[i] = 0x0;
+		regPublicInfo.flagsEnableSparsification[i] = FALSE;
+		regPublicInfo.flagsIsLastClusterInStrip[i] = FALSE;
+		#pragma unroll
+		for (int j=0; j<NUM_BITMASK_BYTES; j++)
+		{
+			regPublicInfo.bitmasks[i].bytes[j] = 0x0;
+		}
+	}
+	
+	//Writer info and states
+	t_compressor_writer_info regWriterInfo = {.iterCluster = 0x0};
+	t_compressor_writer_state regWriterState = COMPRESSOR_WRITER_STATE_FILTER;
+
+	//Reader info and states
+	t_compressor_reader_info regReaderInfo = {.iterCluster=0x0, .numTransfers=0x0, .iterTransfer=0x0};
+	t_compressor_reader_state regReaderState = COMPRESSOR_READER_STATE_SYNC;
+	
+	//Writer access side
+	t_flag regWriterAccessSide = FALSE;
+
 	while (true)
 	{
-		//Read the information first
-		// EMULATOR_PRINT(("[kernelCompressorOranizer %d] WAITING to READ from the compressor info channel.\n\n",
-		// 								colID));
-		t_output_cluster_info info = read_channel_intel(channel_output_buffer_to_compressor_info[colID]);
-		// EMULATOR_PRINT(("[kernelCompressorOranizer %d] FINISHED READING from the compressor info channel.\n\n",
-		// 								colID));
-		t_bitmask bitmask = info.bitmask;
-		//TODO: What if the compression window size is greater than 32?
-		unsigned char numSurvivingClusters = info.statusBits & 0x3F;
-		bool isLastWindowInStrip = (((info.statusBits >> 0x6) & 0x1) == 0x1);
-		bool enableSparsification = (((info.statusBits >> 0x7) & 0x1) == 0x1);
+		/**
+		 * Local signals
+		 */
+		t_flag flagWriterReadyToSync = FALSE;
+		t_flag flagReaderReadyToSync = FALSE;
 
-		//Depending on whether sparsification is enabled, we may or may not to add an extra transfer block to encode the bitmask/surviving cluster count
-		unsigned char numClustersToSend = enableSparsification ?
-			 numSurvivingClusters + TRANSFER_SIZE : numSurvivingClusters;
+		t_flag flagWriterReadFromOABufferRequest = FALSE;
+		t_flag flagWriterReadFromOABufferSuccess = FALSE;
+		t_cluster_to_compressor clusterFromOABuffer;
 
-		//For every weindow, we want to sent a number of clusters that is a multiple of transfer size
-		//The number of clusters that we actually need to send is the number of surviving clusters, the bitmask/surviving cluster count
-		unsigned char numLoops = 
-			(1 + ((numClustersToSend - 1) >> CLUSTER_TO_TRANSFER_SIZE_SHIFT)) << CLUSTER_TO_TRANSFER_SIZE_SHIFT; //This controls the amount of padding we have to do. Add extra one to send mask
-		unsigned char iClusterSent = 0;
-		unsigned char iBitmaskByte = 0;
-		for (unsigned char iLoop=0; iLoop<numLoops; iLoop++)
+		t_flag flagReaderWriteToOATeeRequest = FALSE;
+		t_flag flagReaderWriteToOATeeSuccess = FALSE;
+		t_output_cluster_tagged clusterToOATee;
+		/**
+		 * Obtain the outputs from the writer and the reader
+		 */
+		getCompressorWriterOutput (
+			//t_compressor_writer_state _currentState,
+			regWriterState,
+
+			//t_flag* pFlagReadFromOABufferRequest,
+			&flagWriterReadFromOABufferRequest,
+
+			//t_flag* pSync,
+			&flagWriterReadyToSync,
+
+			//int colID
+			colID
+		);
+
+		getCompressorReaderOutput (
+			//t_compressor_reader_state _currentState,
+			regReaderState,
+			//t_compressor_reader_info _currentContext,
+			regReaderInfo,
+
+			//t_compressor_registers _currentPublicRegisters,
+			regPublicInfo,
+			//t_cluster bufferClusters [2][COMPRESSION_WINDOW_SIZE],
+			bufferClusters,
+
+			//t_flag* pFlagWriteToOATeeRequest,
+			&flagReaderWriteToOATeeRequest,
+			//t_output_cluster_tagged* pClusterToSend,
+			&clusterToOATee,
+
+			//t_flag _flagAccessSide,
+			(~regWriterAccessSide) & 0x01,
+		
+			//t_flag* pSync,
+			&flagReaderReadyToSync,
+
+			//int colID
+			colID
+		);
+
+		/**
+		 * Channel accesses
+		 */
+		if (flagWriterReadFromOABufferRequest == TRUE)
 		{
-			bool sendCluster = false;
-			t_output_cluster_tagged clusterTagged;
-			if (iClusterSent < numClustersToSend)
+			bool success = false;
+			clusterFromOABuffer = read_channel_nb_intel(
+					channel_output_buffer_to_compressor_data[colID],
+					&success
+				);
+			if (success == true) {
+				flagWriterReadFromOABufferSuccess = TRUE;
+			}
+		}
+
+		if (flagReaderWriteToOATeeRequest == TRUE)
+		{
+			bool success = write_channel_nb_intel(
+					channel_compressor_to_tee[colID],
+					clusterToOATee
+				);
+			if (success == true) {
+				flagReaderWriteToOATeeSuccess = TRUE;
+			}
+		}
+
+		/**
+		 * Update the modules
+		 */
+		updateCompressorWriter (
+			//t_flag _flagReadFromOABufferSuccess,
+			flagWriterReadFromOABufferSuccess,
+			//t_cluster_to_compressor _newCluster,
+			clusterFromOABuffer,
+		
+			//t_compressor_registers* pPublicRegisters,
+			&regPublicInfo,
+			//t_cluster bufferClusters [2][COMPRESSION_WINDOW_SIZE],
+			bufferClusters,
+
+			//t_flag _flagAccessSide,
+			regWriterAccessSide,
+
+			//t_compressor_writer_state* pState,
+			&regWriterState,
+			//t_compressor_writer_info* pInfo,
+			&regWriterInfo,
+
+			//t_flag _flagSync,
+			flagReaderReadyToSync,
+
+			//int colID
+			colID
+		);
+
+		updateCompressorReader (
+			// t_flag _flagWriteToOATeeSuccess,
+			flagReaderWriteToOATeeSuccess,
+			// const t_compressor_registers* pPublicRegisters,
+			&regPublicInfo,
+			// t_flag _flagAccessSide,
+			(~regWriterAccessSide) & 0x01,
+			// t_compressor_reader_state* pState,
+			&regReaderState,
+			// t_compressor_reader_info* pInfo,
+			&regReaderInfo,
+
+			// t_flag _flagSync,
+			flagWriterReadyToSync,
+
+			// int colID
+			colID
+		);
+
+		if ((flagWriterReadyToSync & flagReaderReadyToSync) == TRUE)
+		{
+			regWriterAccessSide = (~regWriterAccessSide) & 0x01;
+		}
+	}
+}
+
+void updateCompressorWriter (
+		//Interface with the channel from the OA Buffer
+		t_flag _flagReadFromOABufferSuccess,
+		t_cluster_to_compressor _newCluster,
+
+		//Public register
+		t_compressor_registers* pPublicRegisters,
+		t_cluster bufferClusters [2][COMPRESSION_WINDOW_SIZE],
+
+		//Interface with control
+		t_flag _flagAccessSide,
+
+		//Private registers of the writer
+		t_compressor_writer_state* pState,
+		t_compressor_writer_info* pInfo,
+
+		//sync signal from the reader module
+		t_flag _flagSync,
+
+		//Auxillar for debugging
+		int colID
+	)
+{
+	switch (*pState) {
+		case (COMPRESSOR_WRITER_STATE_FILTER): {
+			if (_flagReadFromOABufferSuccess == TRUE)
 			{
-				//TODO: Change this if the number of bitmask grows
-				if ((iClusterSent < TRANSFER_SIZE) && enableSparsification)
+				t_flag enableSparsification = _newCluster.statusBits & 0x01;
+				t_flag isLastClusterInStrip = (_newCluster.statusBits >> 1) & 0x01;
+				t_flag isLastClusterInWindow = (_newCluster.statusBits >> 2) & 0x01;
+
+				//update the flags
+				(*pPublicRegisters).flagsEnableSparsification[_flagAccessSide & 0x01] = enableSparsification;
+				(*pPublicRegisters).flagsIsLastClusterInStrip[_flagAccessSide & 0x01] = isLastClusterInStrip;
+
+				//Perform filtering and update the bitmask
+				bool keep = (enableSparsification == FALSE) ? true : false;
+				#pragma unroll
+				for (unsigned char i=0; i<CLUSTER_SIZE; i++)
 				{
-					#pragma unroll
-					for (int i=0; i<CLUSTER_SIZE; i++)
-					{
-						if ((iBitmaskByte+i) < NUM_BITMASK_BYTES)
-						{
-							clusterTagged.cluster.cluster_values[i] = bitmask.bytes[iBitmaskByte+i];
-						}
-						else
-						{
-							clusterTagged.cluster.cluster_values[i] = 0x0;
-						}
-					}
-					iBitmaskByte += CLUSTER_SIZE;
+					keep = keep || (_newCluster.cluster.cluster_values[i] != 0x0);
 				}
-				else
+
+				if (keep == true)
 				{
-					// EMULATOR_PRINT(("[kernelCompressorOranizer %d] WAITING to READ from the compressor data channel.\n\n",
-					// 					colID));
-					clusterTagged.cluster = read_channel_intel(channel_output_buffer_to_compressor_data[colID]);
-					// EMULATOR_PRINT(("[kernelCompressorOranizer %d] FINISHED READING from the compressor data channel.\n\n",
-					// 					colID));
+					(*pPublicRegisters).bitmasks[_flagAccessSide & 0x01].bytes[(*pInfo).iterCluster >> 0x03] 
+						= ((unsigned char) 1) << ((*pInfo).iterCluster & 0x07);
+					
+					unsigned char bufferIndex = (*pPublicRegisters).numSurvingClustersInWindow[_flagAccessSide & 0x01];
+					bufferClusters[_flagAccessSide & 0x01][bufferIndex] = _newCluster.cluster;
+					
+					(*pPublicRegisters).numSurvingClustersInWindow[_flagAccessSide & 0x01] += 0x01;
 				}
-				iClusterSent++;
+
+				(*pInfo).iterCluster += 1;
+
+				if ((isLastClusterInWindow | isLastClusterInStrip) == TRUE)
+				{
+					*pState = COMPRESSOR_WRITER_STATE_SYNC;
+				}
+			}
+		}
+		break;
+		case (COMPRESSOR_WRITER_STATE_SYNC): {
+			(*pInfo).iterCluster = 0x0;
+			if (_flagSync == TRUE)
+			{
+				*pState = COMPRESSOR_WRITER_STATE_FILTER;
+			}
+		}
+		break;
+		default:
+		break;
+	}
+}
+
+void getCompressorWriterOutput (
+		t_compressor_writer_state _currentState,
+
+		//Interface with the channel from the OA Buffer
+		t_flag* pFlagReadFromOABufferRequest,
+
+		//Sync signal
+		t_flag* pSync,
+
+		//Auxillar for debugging
+		int colID
+	)
+{
+	switch (_currentState) {
+		case (COMPRESSOR_WRITER_STATE_FILTER): {
+			*pFlagReadFromOABufferRequest = TRUE;
+			*pSync = FALSE;
+		}
+		break;
+		case (COMPRESSOR_WRITER_STATE_SYNC): {
+			*pFlagReadFromOABufferRequest = FALSE;
+			*pSync = TRUE;
+		}
+		break;
+		default:
+		break;
+	}
+}
+
+void updateCompressorReader (
+		//Interface with the channel to the OA Tee
+		t_flag _flagWriteToOATeeSuccess,
+
+		//Public register
+		t_compressor_registers* pPublicRegisters,
+
+		//Interface with control
+		t_flag _flagAccessSide,
+
+		//Private registers of the writer
+		t_compressor_reader_state* pState,
+		t_compressor_reader_info* pInfo,
+
+		//Sync flag from the writer
+		t_flag _flagSync,
+
+		//Auxillar for debugging
+		int colID
+	)
+{
+	uint6_t numSurvingClustersInWindow = 
+		(*pPublicRegisters).numSurvingClustersInWindow[_flagAccessSide & 0x01];
+	t_flag flagEnableSparsification = 
+		(*pPublicRegisters).flagsEnableSparsification[_flagAccessSide & 0x01];
+	t_flag flagIsLastClusterInStrip =
+		(*pPublicRegisters).flagsIsLastClusterInStrip[_flagAccessSide & 0x01];
+	t_bitmask bitmask =
+		(*pPublicRegisters).bitmasks[_flagAccessSide & 0x01];
+
+	switch (*pState) {
+		case (COMPRESSOR_READER_STATE_COMP_NUM_ACCESS): {
+			(*pInfo).iterCluster = 0x0;
+			(*pInfo).iterBitmaskBytes = 0x0;
+			(*pInfo).iterTransfer = 0x0;
+			//Round the number of clusters to send up a multiple that aligns with TRANSFER_SIZE
+			(*pInfo).numTransfers = (numSurvingClustersInWindow == 0x0)?
+				0x0
+				: (1 + ((numSurvingClustersInWindow - 1) >> CLUSTER_TO_TRANSFER_SIZE_SHIFT)) << CLUSTER_TO_TRANSFER_SIZE_SHIFT;
+
+			*pState = (flagEnableSparsification == TRUE) ? 
+				COMPRESSOR_READER_STATE_SEND_MASK : COMPRESSOR_READER_STATE_SEND_CLUSTER;
+		}
+		break;
+		case (COMPRESSOR_READER_STATE_SEND_CLUSTER): {
+			if (_flagWriteToOATeeSuccess == TRUE)
+			{
+				(*pInfo).iterCluster += 0x1;
+				(*pInfo).iterTransfer += 0x1;
+				if (((*pInfo).iterTransfer) == (*pInfo).numTransfers)
+				{
+					(*pState) = COMPRESSOR_READER_STATE_SYNC;
+				}
+			}
+		}
+		break;
+		case (COMPRESSOR_READER_STATE_SEND_MASK): {
+			if (_flagWriteToOATeeSuccess == TRUE)
+			{
+				(*pInfo).iterBitmaskBytes += CLUSTER_SIZE;
+				if ((*pInfo).iterBitmaskBytes >= CLUSTER_SIZE*TRANSFER_SIZE)
+				{
+					(*pState) = (numSurvingClustersInWindow == 0x0) ? 
+						COMPRESSOR_READER_STATE_SYNC : COMPRESSOR_READER_STATE_SEND_CLUSTER;
+				}
+			}
+		}
+		break;
+		case (COMPRESSOR_READER_STATE_SYNC): {
+			//Reset the public registers
+			(*pPublicRegisters).numSurvingClustersInWindow[_flagAccessSide & 0x01] = 0x0;
+			(*pPublicRegisters).flagsEnableSparsification[_flagAccessSide & 0x01] = FALSE;
+			(*pPublicRegisters).flagsIsLastClusterInStrip[_flagAccessSide & 0x01] = FALSE;
+			#pragma unroll
+			for (int i=0; i<NUM_BITMASK_BYTES; i++)
+			{
+				(*pPublicRegisters).bitmasks[_flagAccessSide & 0x01].bytes[i] = 0x0;
+			}
+
+			if (_flagSync == TRUE)
+			{
+				*pState = COMPRESSOR_READER_STATE_COMP_NUM_ACCESS;
+			}
+		}	
+		break;
+		default:
+		break;
+	}
+}
+
+void getCompressorReaderOutput (
+		t_compressor_reader_state _currentState,
+		t_compressor_reader_info _currentContext,
+
+		t_compressor_registers _currentPublicRegisters,
+		t_cluster bufferClusters [2][COMPRESSION_WINDOW_SIZE],
+
+		//Interface with the channel to the OA Tee
+		t_flag* pFlagWriteToOATeeRequest,
+		t_output_cluster_tagged* pClusterToSend,
+
+		//Interface with control
+		t_flag _flagAccessSide,
+
+		//Sync signal
+		t_flag* pSync,
+
+		//Auxillar for debugging
+		int colID
+	)
+{
+	uint6_t numSurvingClustersInWindow = 
+		_currentPublicRegisters.numSurvingClustersInWindow[_flagAccessSide & 0x01];
+	t_flag flagEnableSparsification = 
+		_currentPublicRegisters.flagsEnableSparsification[_flagAccessSide & 0x01];
+	t_flag flagIsLastClusterInStrip =
+		_currentPublicRegisters.flagsIsLastClusterInStrip[_flagAccessSide & 0x01];
+	t_bitmask bitmask =
+		_currentPublicRegisters.bitmasks[_flagAccessSide & 0x01];
+
+	//Index to access the pruned cluster buffer
+	uint6_t iterCluster = _currentContext.iterCluster;
+	//Counter of the number bitmask bytes that have been sent
+	uint6_t iterBitmaskBytes = _currentContext.iterBitmaskBytes;
+	//Number of clusters to send to the OA TEE
+	uint6_t numTransfers = _currentContext.numTransfers;
+	//Iterator of the number of clusters that have been sent to the TEE
+	uint6_t iterTransfer = _currentContext.iterTransfer;
+
+	*pSync = FALSE;
+
+	switch (_currentState) {
+		case (COMPRESSOR_READER_STATE_SEND_CLUSTER): {
+			t_output_cluster_tagged clusterTagged;
+			*pFlagWriteToOATeeRequest = TRUE;
+
+			if (iterCluster < numSurvingClustersInWindow)
+			{
+				clusterTagged.cluster = 
+					bufferClusters[_flagAccessSide & 0x01][iterCluster];
 			}
 			else
 			{
@@ -4216,18 +4623,50 @@ __kernel void kernelCompressorOranizer()
 				{
 					clusterTagged.cluster.cluster_values[i] = 0x0;
 				}
-			}	
+			}
 
-			clusterTagged.isLastInStrip = (isLastWindowInStrip && (iLoop == (numLoops - 1))) ? true : false;
-
-			// EMULATOR_PRINT(("[kernelCompressorOranizer %d] WAITING to WRITE to the oa tee.\n\n",
-			// 							colID));
-			write_channel_intel(channel_compressor_to_tee[colID], clusterTagged);
-			// EMULATOR_PRINT(("[kernelCompressorOranizer %d] FINISHED WRITING to the oa tee.\n\n",
-			// 							colID));
+			*pClusterToSend = clusterTagged;
 		}
+		break;
+		case (COMPRESSOR_READER_STATE_SEND_MASK): {
+			t_output_cluster_tagged clusterTagged;
+
+			*pFlagWriteToOATeeRequest = TRUE;
+			for (int i=0; i<CLUSTER_SIZE; i++)
+			{
+				if ((iterBitmaskBytes+i) < NUM_BITMASK_BYTES)
+				{
+					clusterTagged.cluster.cluster_values[i] = bitmask.bytes[iterBitmaskBytes+i];
+				}
+				else
+				{
+					clusterTagged.cluster.cluster_values[i] = 0x0;
+				}
+			}
+
+			if ((flagIsLastClusterInStrip == TRUE) 
+							&& ((iterBitmaskBytes+CLUSTER_SIZE) == (CLUSTER_SIZE*TRANSFER_SIZE))
+							&& (numSurvingClustersInWindow == 0))
+			{
+				clusterTagged.isLastInStrip = true;
+			}
+			else
+			{
+				clusterTagged.isLastInStrip = false;
+			}
+
+			*pClusterToSend = clusterTagged;
+		}
+		break;
+		case (COMPRESSOR_READER_STATE_SYNC): {
+			*pSync = TRUE;
+		}	
+		break;
+		default:
+		break;
 	}
 }
+
 #endif //SPARSE_SYSTEM
 
 __attribute__((max_global_work_dim(0)))

@@ -546,16 +546,16 @@ Data structures that travel on the output activation bus system
 */
 typedef struct __attribute__((packed)) {
     //TODO: HANDLE MULTI-BYTE MASK
-    t_bitmask bitmask;
+    t_cluster cluster;
     //unsigned char numSurvivingClusters;  //Number of surviving data cluster (not including the bitmask) in the window
     //bool isLastWindowInStrip; //Whether this is the last window in a strip
 
     //Status bits
-    //Bit 5:0: Number of surviving clusters
-    //Bit 6: isLastWindowInStrip
-    //Bit 7: enableSparsification
+    //Bit 0: Enable sparsification
+    //Bit 1: Is last cluster in the strip
+    //Bit 2: Is last cluster in window
     unsigned char statusBits;
-} t_output_cluster_info;
+} t_cluster_to_compressor;
 //Used to send data to the tee
 typedef struct __attribute__((packed)) {
     t_cluster cluster;
