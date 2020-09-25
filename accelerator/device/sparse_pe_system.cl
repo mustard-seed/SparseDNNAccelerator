@@ -3441,6 +3441,7 @@ void getOABufferReaderOutput (
 					0x0 : OA_CACHE_DEPTH;
 
 				//Fetch all the values in the cluster
+				//Take into account of double-buffering
 				#pragma unroll
 				for (unsigned char i=0; i<CLUSTER_SIZE; i++)
 				{
@@ -3453,6 +3454,7 @@ void getOABufferReaderOutput (
 						: cacheOutputActivations1
 								[(_currentContext.accessInfo.indexOutput >> VALUE_TO_CLUSTER_SHIFT)]
 								[i];
+					//Set apdding values to 0x00
 					char tempValue = (tempOC >= _currentContext.accessInfo.numOutputsPerStrip) ?
 						0x0 
 						: cacheValue;
@@ -3686,20 +3688,12 @@ __kernel void kernelOABuffer ()
 	uint1_t enableRelu = FALSE;
 	uint1_t enableSparsification = FALSE;
 	unsigned short numClustersToDrain = 0;
-	unsigned short numWindowsToDrain = 0;
 
 	//Loop-carried variables 
-	unsigned char countSurvivingClustersInWindow = 0;
 	unsigned char iClustersInWindowFetched = 0;
 	unsigned short iOutputChannelFetched = 0;
 	unsigned short iClustersFetched = 0;
 	unsigned char iGroupsFetched = 0;
-	t_bitmask mask;
-	#pragma unroll
-	for (int i=0; i<NUM_BITMASK_BYTES; i++)
-	{
-		mask.bytes[i] = 0x0;
-	}
 
 	unsigned short iStrip = 0;
 	unsigned short numLoopsPerStip = 0;
@@ -3767,29 +3761,16 @@ __kernel void kernelOABuffer ()
 		else if (currentState == OA_BUFFER_STATE_NUM_ACCESS)
 		{
 			numClustersToDrain = 1 + ((numOutputsPerStrip - 1) >> VALUE_TO_CLUSTER_SHIFT);
-			numWindowsToDrain = 1 + ((numClustersToDrain - 1) >> CLUSTER_TO_WINDOW_SHIFT);
 
 			//Loop-carried variables 
-			countSurvivingClustersInWindow = 0;
 			iClustersInWindowFetched = 0;
 			iOutputChannelFetched = 0;
 			iClustersFetched = 0;
-			#pragma unroll
-			for (int i=0; i<NUM_BITMASK_BYTES; i++)
-			{
-				mask.bytes[i] = 0x0;
-			}
 
 			//Loop control
-			#if defined(SPARSE_SYSTEM)
-				numLoopsPerStip = (isDrainBuffer == TRUE) ?
-					(numClustersToDrain + numWindowsToDrain) 
-					: numOutputsPerStrip;
-			#else
-                numLoopsPerStip = (isDrainBuffer == TRUE) ?
-                    (numClustersToDrain)
-                    : numOutputsPerStrip;
-			#endif
+            numLoopsPerStip = (isDrainBuffer == TRUE) ?
+                (numClustersToDrain)
+                : numOutputsPerStrip;
 
 			iLoopPerStip = 0;
 			indexOutput = stripStartOutputIndex;
@@ -3841,66 +3822,50 @@ __kernel void kernelOABuffer ()
 			else //Case: Stream the buffered output to the cache
 			{
 				#if defined(SPARSE_SYSTEM)
-					//If we haven't finished streaming a window or haven't drained the current group
-					if ((iClustersInWindowFetched < COMPRESSION_WINDOW_SIZE) && (iClustersFetched < numClustersToDrain))
+					t_cluster_to_compressor cluster;
+					//bool writeSuccess = true;
+
+					//Fetch all the values in the cluster
+					#pragma unroll
+					for (unsigned char i=0; i<CLUSTER_SIZE; i++)
 					{
-						bool keep = (enableSparsification == FALSE);
-						t_cluster cluster;
-						//bool writeSuccess = true;
-
-						//Fetch all the values in the cluster
-						#pragma unroll
-						for (unsigned char i=0; i<CLUSTER_SIZE; i++)
-						{
-							unsigned short index = indexOutput + i;
-							unsigned short tempOC = iOutputChannelFetched + i;
-							//If there are multiple output groups, 
-							//then the number of channels per group must be divisible by the cluster size.
-							//i.e. indexOutput is divisble by CLUSTER size
-							char tempValue = (tempOC >= numOutputsPerStrip) ?
-								0x0 : cacheOutputActivations[index >> VALUE_TO_CLUSTER_SHIFT]
-								[i & VALUE_DIVIDED_BY_CLUSTER_SIZE_REMAINDER_MASK];
-							cluster.cluster_values[i] = tempValue;
-							keep = keep || (tempValue != 0x0);
-						}
-
-						if (keep == true)
-						{
-							write_channel_intel(channel_output_buffer_to_compressor_data[colID], cluster);
-							//mask |= ((unsigned char) 1) << iClustersInWindowFetched;
-							mask.bytes[iClustersInWindowFetched >> 0x3] |= ((unsigned char) 1) << (iClustersInWindowFetched & 0x07);
-							countSurvivingClustersInWindow++;
-						}
-
-						iClustersFetched++;
-						iClustersInWindowFetched++;
-
-						//Gotcha
-						iOutputChannelFetched += CLUSTER_SIZE;
-						indexOutput += CLUSTER_SIZE;
-						iLoopPerStip++;
-
+						unsigned short index = indexOutput + i;
+						unsigned short tempOC = iOutputChannelFetched + i;
+						//If there are multiple output groups, 
+						//then the number of channels per group must be divisible by the cluster size.
+						//i.e. indexOutput is divisble by CLUSTER size
+						char tempValue = (tempOC >= numOutputsPerStrip) ?
+							0x0 : cacheOutputActivations[index >> VALUE_TO_CLUSTER_SHIFT]
+							[i & VALUE_DIVIDED_BY_CLUSTER_SIZE_REMAINDER_MASK];
+						cluster.cluster.cluster_values[i] = tempValue;
 					}
-					else //Send mask along with other informatin
+
+					iClustersInWindowFetched++;
+					iClustersFetched++;
+
+					unsigned char flagSparsification = (unsigned char) enableSparsification;
+					unsigned char flagIsLastInWindow = (iClustersInWindowFetched == COMPRESSION_WINDOW_SIZE) ? 
+						0x01 : 0x00;
+					unsigned char flagIsLastInStrip = (iClustersFetched == numClustersToDrain) ?
+						0x01 : 0x00;
+
+					cluster.statusBits = ((flagSparsification << 0)
+												| (flagIsLastInStrip << 0x01)
+												| (flagIsLastInWindow << 0x02));
+
+
+					if (iClustersInWindowFetched == COMPRESSION_WINDOW_SIZE)
 					{
-						//bool writeSuccess = false;
-						t_output_cluster_info info;
-						#pragma unroll
-						for (int i=0; i<NUM_BITMASK_BYTES; i++)
-						{
-							info.bitmask.bytes[i] = mask.bytes[i];
-							mask.bytes[i] = 0x0;
-						}
-						unsigned char isLastInStrip = (iClustersFetched == numClustersToDrain) ? 0x1 : 0x0;
-						info.statusBits = (countSurvivingClustersInWindow & 0x3F)
-							| ((isLastInStrip & 0x1) << 0x6)
-							| ( (((unsigned char) enableSparsification) & 0x1) << 0x7);
-						
-						write_channel_intel(channel_output_buffer_to_compressor_info[colID], info);
-						countSurvivingClustersInWindow = 0;
-						iClustersInWindowFetched = 0;
-						iLoopPerStip++;
+						iClustersInWindowFetched = 0x0;
 					}
+
+					write_channel_intel(channel_output_buffer_to_compressor_data[colID], cluster);
+
+					//Gotcha
+					iOutputChannelFetched += CLUSTER_SIZE;
+					indexOutput += CLUSTER_SIZE;
+					iLoopPerStip++;
+
 				#else //DENSE_SYSTEM
 					t_output_cluster_tagged taggedCluster;
 					//fetch the cluster

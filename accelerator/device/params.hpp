@@ -3,7 +3,7 @@
 
 //#define HOST_DEBUG
 #define SPARSE_SYSTEM
-#define OA_PING_PONG
+//#define OA_PING_PONG
 /**
  * Global memory settings
  */
