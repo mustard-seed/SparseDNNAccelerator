@@ -3473,7 +3473,7 @@ void getOABufferReaderOutput (
 				clusterToCompressor.statusBits = 
 					(((unsigned char) _currentContext.enableSparsification)
 										| (isLastClusterInStrip << 0x01)
-										| (isLastClusterInWindow << 0x01));
+										| (isLastClusterInWindow << 0x02));
 
 				*pToCompressorClusterValid = TRUE;
 				*pToCompressorClusterData = clusterToCompressor;
@@ -4381,7 +4381,7 @@ void updateCompressorWriter (
 				if (keep == true)
 				{
 					(*pPublicRegisters).bitmasks[_flagAccessSide & 0x01].bytes[(*pInfo).iterCluster >> 0x03] 
-						= ((unsigned char) 1) << ((*pInfo).iterCluster & 0x07);
+						|= ((unsigned char) 1) << ((*pInfo).iterCluster & 0x07);
 					
 					unsigned char bufferIndex = (*pPublicRegisters).numSurvingClustersInWindow[_flagAccessSide & 0x01];
 					bufferClusters[_flagAccessSide & 0x01][bufferIndex] = _newCluster.cluster;
@@ -4589,6 +4589,18 @@ void getCompressorReaderOutput (
 					clusterTagged.cluster.cluster_values[i] = 0x0;
 				}
 			}
+
+			if ((flagIsLastClusterInStrip == TRUE) 
+					&& (iterTransfer+1) == numTransfers
+				)
+			{
+				clusterTagged.isLastInStrip = true;
+			}
+			else
+			{
+				clusterTagged.isLastInStrip = false;
+			}
+
 
 			*pClusterToSend = clusterTagged;
 		}
