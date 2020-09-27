@@ -2,7 +2,7 @@
 #define PARAMS_DEFINED
 
 //#define HOST_DEBUG
-#define SPARSE_SYSTEM
+//#define SPARSE_SYSTEM
 #define OA_PING_PONG
 /**
  * Global memory settings
@@ -75,8 +75,8 @@
 #define PACKET_SIZE 1
 
 #if defined(FULL_SYSTEM)
-	#define PE_ROWS 1
-	#define PE_COLS 1
+	#define PE_ROWS 4
+	#define PE_COLS 2
 #else
 	#define PE_ROWS 2
 	#define PE_COLS 2
@@ -165,12 +165,16 @@
 #define ACCUM_MASK 0x00FFFFFF
 #define MULT_MASK 0x00FFFFFF
 #define ACCUM_MIN 0x00800000
+#elif (ACCUMULATOR_WIDTH == 20)
+#define ACCUM_MASK 0x000FFFFF
+#define MULT_MASK 0x000FFFFF
+#define ACCUM_MIN 0x00080000
 #elif (ACCUMULATOR_WIDTH == 16)
 #define ACCUM_MASK 0x0FFFF
 #define MULT_MASK 0x0FFFF
 #define ACCUM_MIN 0x00008000
 #else
-#error Accumulator width should either be 32 bit or 16 bit
+#error Accumulator width should be from 32-bit, 24-bit, 20-bit, and 16-bit
 #endif
 
 #define KERNEL_INDEX_CACHE_DEPTH 512
