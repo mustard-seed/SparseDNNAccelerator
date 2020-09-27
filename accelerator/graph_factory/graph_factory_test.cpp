@@ -191,7 +191,7 @@ void testFixture::SetUp()
 #ifdef C5SOC
     aocxBinaryFile = "device_utils.aocx";
 #else
-    aocxBinaryFile = "sparse_pe_system.aocx";
+    aocxBinaryFile = "device_utils.aocx";
 #if defined(EMULATE)
     aocxBinaryFile = "smallBuffer.aocx";
 #endif

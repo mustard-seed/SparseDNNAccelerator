@@ -31,7 +31,7 @@ if (NOT GLOBAL_CONFIG_SET)
 
     set(DEFENSIVE_FLAGS "-D_GLIBCXX_ASSERTIONS") # -D_FORTIFY_SOURCE=2 would enable runtime overflow checks, but requires O2
     if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 8.0)
-        set(DEFENSIVE_FLAGS "${DEFENSIVE_FLAGS} -fstack-clash-protection -mcet -fcf-protection")
+        set(DEFENSIVE_FLAGS "${DEFENSIVE_FLAGS} -fstack-clash-protection")
     endif()
     set(DEBUGGING_FLAGS "-fasynchronous-unwind-tables -grecord-gcc-switches")
     set(WARNING_FLAGS "-Wall -W -Wno-unused-parameter -Werror=format-security -Werror=implicit-function-declaration -Wl,-z,now -Wl,-z,relro") #  -Wl,-z,defs would prevent underlinking, but doesn't play nice with ROS/Catkin

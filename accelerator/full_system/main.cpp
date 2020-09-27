@@ -26,9 +26,9 @@
 #include "layerInstructionGenerator.hpp"
 #include "accelerator_wrapper.hpp"
 
-//#define PLAY
+#define PLAY
 //#define PERF_TEST
-#define VALIDATE
+//#define VALIDATE
 #define REPEAT 1
 #ifndef C5SOC
 #define EMULATE
@@ -126,56 +126,21 @@ protected:
 }; //testFixture
 
 #ifdef PLAY
-TEST_F (testFixture, max_pool_sparse_output_grouped)
+TEST_F (testFixture, conv_dense_input_dense_output_plain)
 {
-    unsigned char inputWidth = 4;
-    unsigned char inputHeight = 4;
-    unsigned char numInputChannel = 120;
-    unsigned char numInputGroup = 1;
-    unsigned char numOutputGroup = 2;
-    unsigned char inputHeightSPUnitSize = 1;
-    unsigned char inputWidthSPUnitSize = 1;
-    unsigned char sizeOutputTileWidthPerColFull = 2;
-    unsigned char sizeOutputTileHeight = 4;
-    bool flagEnableRelu = false;
-    bool flagSparseInput = false;
-    bool flagSparseOutput = true;
-    OPERATION op = MAX_POOL;
-    float bias = 0.0f;
-
-    launch(
-                inputWidth,
-                inputHeight,
-                numInputChannel,
-                numInputGroup,
-                numOutputGroup,
-                inputHeightSPUnitSize,
-                inputWidthSPUnitSize,
-                sizeOutputTileWidthPerColFull,
-                sizeOutputTileHeight,
-                flagEnableRelu,
-                flagSparseInput,
-                flagSparseOutput,
-                op,
-                bias
-          );
-}
-
-TEST_F (testFixture, elt_add_sparse_output)
-{
-    unsigned char inputWidth = 4;
-    unsigned char inputHeight = 4;
+    unsigned char inputWidth = 1;
+    unsigned char inputHeight = 1;
     unsigned char numInputChannel = 127;
     unsigned char numInputGroup = 1;
     unsigned char numOutputGroup = 1;
     unsigned char inputHeightSPUnitSize = 1;
     unsigned char inputWidthSPUnitSize = 1;
-    unsigned char sizeOutputTileWidthPerColFull = 2;
+    unsigned char sizeOutputTileWidthPerColFull = 8;
     unsigned char sizeOutputTileHeight = 4;
     bool flagEnableRelu = false;
     bool flagSparseInput = false;
-    bool flagSparseOutput = true;
-    OPERATION op = ELT_ADD;
+    bool flagSparseOutput = false;
+    OPERATION op = CONVOLUTION;
     float bias = 0.0f;
 
     launch(
@@ -195,77 +160,6 @@ TEST_F (testFixture, elt_add_sparse_output)
                 bias
           );
 }
-
-TEST_F (testFixture, concat_sparse_output_grouped)
-{
-    unsigned char inputWidth = 2;
-    unsigned char inputHeight = 2;
-    unsigned char numInputChannel = 120;
-    unsigned char numInputGroup = 1;
-    unsigned char numOutputGroup = 2;
-    unsigned char inputHeightSPUnitSize = 1;
-    unsigned char inputWidthSPUnitSize = 1;
-    unsigned char sizeOutputTileWidthPerColFull = 2;
-    unsigned char sizeOutputTileHeight = 4;
-    bool flagEnableRelu = false;
-    bool flagSparseInput = false;
-    bool flagSparseOutput = true;
-    OPERATION op = CONCATENATION;
-    float bias = 0.0f;
-
-    launch(
-                inputWidth,
-                inputHeight,
-                numInputChannel,
-                numInputGroup,
-                numOutputGroup,
-                inputHeightSPUnitSize,
-                inputWidthSPUnitSize,
-                sizeOutputTileWidthPerColFull,
-                sizeOutputTileHeight,
-                flagEnableRelu,
-                flagSparseInput,
-                flagSparseOutput,
-                op,
-                bias
-          );
-}
-
-TEST_F (testFixture, global_avg_pool_sparse_output_grouped)
-{
-    unsigned char inputWidth = 4;
-    unsigned char inputHeight = 4;
-    unsigned char numInputChannel = 120;
-    unsigned char numInputGroup = 1;
-    unsigned char numOutputGroup = 2;
-    unsigned char inputHeightSPUnitSize = 1;
-    unsigned char inputWidthSPUnitSize = 1;
-    unsigned char sizeOutputTileWidthPerColFull = 2;
-    unsigned char sizeOutputTileHeight = 4;
-    bool flagEnableRelu = false;
-    bool flagSparseInput = false;
-    bool flagSparseOutput = true;
-    OPERATION op = AVG_POOL;
-    float bias = 0.0f;
-
-    launch(
-                inputWidth,
-                inputHeight,
-                numInputChannel,
-                numInputGroup,
-                numOutputGroup,
-                inputHeightSPUnitSize,
-                inputWidthSPUnitSize,
-                sizeOutputTileWidthPerColFull,
-                sizeOutputTileHeight,
-                flagEnableRelu,
-                flagSparseInput,
-                flagSparseOutput,
-                op,
-                bias
-          );
-}
-
 
 #endif
 #if defined(PERF_TEST)
@@ -824,7 +718,7 @@ void testFixture::SetUp()
 #ifdef C5SOC
     binaryFile = "device_utils.aocx";
 #else
-    binaryFile = "sparse_pe_system.aocx";
+    binaryFile = "device_utils.aocx";
 #if defined(EMULATE)
     binaryFile = "smallBuffer.aocx";
 #endif

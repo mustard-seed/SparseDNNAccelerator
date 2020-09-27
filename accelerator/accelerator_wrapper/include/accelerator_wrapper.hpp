@@ -6,7 +6,9 @@
 #include <memory>
 
 #include "aocl_utils_cpp.hpp"
+#if !defined(C5SOC)
 #include "CL/cl_ext_intelfpga.h" //For CL_CHANNEL_<X>_INTELFPGA
+#endif
 
 #include "floatFixedPointConversion.hpp"
 #include "tensorCompression.hpp"
