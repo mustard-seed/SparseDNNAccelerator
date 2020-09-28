@@ -71,9 +71,9 @@ void instruction_generator(
 
         unsigned char flagSparseOutput,
         unsigned char flagSparseInput,
-        //Whether the IA mover kernel should wait for the output to commit before moving
-        //on to the next tensor
-        //unsigned char flagInputSync,
+        //Whether the IA mover kernel should wait for the output from the previous tensor to commit before moving
+        //on to the current tensor
+        unsigned char flagTensorSync,
         //unsigned char flagOutputSync,
         unsigned char flagRelu,
         unsigned char outputShiftBits,
@@ -438,14 +438,14 @@ void instruction_generator(
             for (int iOutputGroup=0; iOutputGroup < numGroupsNextLayer; iOutputGroup++)
             {
                 t_oa_mover_instruction instructionOA;
-                bool isLastOutputTile =
-                        ( (iOutputGroup+1) == numGroupsNextLayer)
-                        && ((iterPTile+1) == numOutputTileY)
-                        && ((iterQTile+1) == numOutputTileX);
+                bool isFirstTile =
+                        ( iOutputGroup == 0)
+                        && (iterPTile == 0)
+                        && (iterQTile == 0);
 //                unsigned char actualFlagOutputSync = (flagOutputSync == 0x01) ?
 //                            ((isLastOutputTile == true) ? 0x1 : 0x0)
 //                            : 0x0;
-                unsigned char actualFlagOutputSync = 0x0;
+                unsigned char actualFlagOutputSync = isFirstTile ? isFirstTile : 0x0;
                 instructionOA.memSelectCatSparseFlagCatSyncFlagCatNumActiveCols =
                         ((t_uchar) numActiveCols & 0x0F)
                         | ((((t_uchar) actualFlagOutputSync) & 0x01) << 0x04)
@@ -517,6 +517,11 @@ void instruction_generator(
                     //Transfer the first input blob, and convolution related items (if necessary)
                     //IA mover instruciton
                     {
+                        bool isFirstTile =
+                                ( iterInputGroup0 == 0)
+                                && (iterPTile == 0)
+                                && (iterQTile == 0);
+
                         t_ia_mover_instruction instructionIA;
                         //Set the transport target. 0x0 means convolution, 0x1 means MISC
                         unsigned char flagTarget= (op == CONVOLUTION) ?  0x00 : 0x01;
@@ -526,11 +531,14 @@ void instruction_generator(
                             inputArrangement = 0x01;
                         }
 
-                        instructionIA.inputArrangementCatSparseFlagCatDestinationCatNumActiveCols = (t_uchar)
+                        unsigned char actualSyncFlag = isFirstTile ? 0x01 : 0x00;
+
+                        instructionIA.flagSyncCatInputArrangementCatSparseFlagCatDestinationCatNumActiveCols = (t_uchar)
                                 ( ( ((t_uchar) numActiveCols)& 0x0F)
                                  | ((((t_uchar) flagTarget) & 0x01) << 0x04)
                                  | ((((t_uchar) flagSparseInput) & 0x01) << 0x05) //Sparse flag for the input tensor
-                                 | ((((t_uchar) inputArrangement) & 0x03) << 0x06)
+                                 | ((((t_uchar) inputArrangement) & 0x01) << 0x06)
+                                 | ((((t_uchar) actualSyncFlag) & 0x01) << 0x07)
                                 );
                         assert ((((flagIA0ShiftLeft == true) && (numIA0ShiftAmount >= 0))
                                 && ((flagIA1ShiftLeft == true) && (numIA1ShiftAmount >= 0)))
@@ -674,7 +682,7 @@ void instruction_generator(
                             t_ia_mover_instruction instructionIA;
 
                             unsigned char flagTarget = 0x01;
-                            instructionIA.inputArrangementCatSparseFlagCatDestinationCatNumActiveCols = (t_uchar)
+                            instructionIA.flagSyncCatInputArrangementCatSparseFlagCatDestinationCatNumActiveCols = (t_uchar)
                                     ( ( ((t_uchar) numActiveCols)& 0x0F)
                                      | ((((t_uchar) flagTarget) & 0x01) << 0x04)
                                      | ((((t_uchar) flagSparseInput) & 0x01) << 0x05) //Sparse flag for the input tensor
@@ -769,6 +777,9 @@ void instruction_generator(
                     {
                         //Generage the IA instructions
                         {
+                            bool isFirstTile = (iterMLocal == 0) && (iterNLocal == 0);
+                            t_uchar actualSyncFlag = isFirstTile ? flagTensorSync : 0x0;
+
                             unsigned int iterMClipped = (iterMLocal < inputHeightPadding ) ?
                                         0 : ( (iterMLocal >= (inputHeightPadding + inputSPHeight)) ?
                                                   (inputSPHeight - 1) : (iterMLocal - inputHeightPadding));
@@ -786,13 +797,15 @@ void instruction_generator(
                             unsigned char flagTarget=  0x01;
                             unsigned char inputArrangement = 0x0;
 
+                            t_uchar commonFlag = ( ( ((t_uchar) numActiveCols)& 0x0F)
+                                                   | ((((t_uchar) flagTarget) & 0x01) << 0x04)
+                                                   | ((((t_uchar) flagSparseInput) & 0x01) << 0x05) //Sparse flag for the input tensor
+                                                   | ((((t_uchar) inputArrangement) & 0x03) << 0x06)
+                                                  );
+
                             assert ((numActiveCols == 1) && "Number of active columns must be 1 for concatenation!");
-                            instructionIA.inputArrangementCatSparseFlagCatDestinationCatNumActiveCols = (t_uchar)
-                                    ( ( ((t_uchar) numActiveCols)& 0x0F)
-                                     | ((((t_uchar) flagTarget) & 0x01) << 0x04)
-                                     | ((((t_uchar) flagSparseInput) & 0x01) << 0x05) //Sparse flag for the input tensor
-                                     | ((((t_uchar) inputArrangement) & 0x03) << 0x06)
-                                    );
+                            instructionIA.flagSyncCatInputArrangementCatSparseFlagCatDestinationCatNumActiveCols = (t_uchar)
+                                    commonFlag | (actualSyncFlag << 0x07);
                             assert ((((flagIA0ShiftLeft == true) && (numIA0ShiftAmount >= 0))
                                     && ((flagIA1ShiftLeft == true) && (numIA1ShiftAmount >= 0)))
                                    && "Input left shift amount must be greater or equal to 0");
@@ -841,6 +854,8 @@ void instruction_generator(
                                 vecIAMoverInstruction.push_back(instructionIA);
 
                                 //Generate the IA instruction for the second tensor in the strip
+                                instructionIA.flagSyncCatInputArrangementCatSparseFlagCatDestinationCatNumActiveCols = (t_uchar)
+                                        commonFlag;
                                 instructionIA.inputShiftAmounts = (cl_uchar) (numIA1ShiftAmount & 0x0F);
                                 //Still use memBlockStart0
                                 instructionIA.memBlockStart0 = (t_int) (

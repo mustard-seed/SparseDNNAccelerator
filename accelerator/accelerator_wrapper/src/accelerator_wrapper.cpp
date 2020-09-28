@@ -275,6 +275,7 @@ namespace GraphRuntime {
         launchIATileController = false;
         launchMKController = false;
         launchWMover = false;
+        numIAInstructions = 0;
     }
 
     void AcceleratorWrapper::loadGraph (t_execution_graph& _executionGraph)
@@ -382,6 +383,16 @@ namespace GraphRuntime {
             #endif
             //volatile __global t_ia_mover_instruction* restrict pInstruction,
             kernelIAMover.setArg(argIdx, bufferIAMoverInstructions);
+            argIdx++;
+
+            auto numElements = _executionGraph.vecIAMoverInstruction.size();
+            //unsigned int numInstruction,
+            kernelIAMover.setArg(argIdx, (cl_uint) numElements);
+            argIdx++;
+
+            //unsigned int offsetInstruction
+            kernelIAMover.setArg(argIdx, (cl_uint) 0);
+            argIdx++;
         }
 
         std::cout <<stepCount++<<". Setting kernel arguments for the IA Tile controller."<<std::endl;
@@ -884,23 +895,24 @@ namespace GraphRuntime {
         int numLayers = vecLayerInfo.size();
         vecOAFinishes.resize(numLayers);
 
+        //Launch the IA mover once first
+        {
+            status = clCQIAMover.enqueueTask(kernelIAMover, NULL, NULL);
+            #if defined(HOST_DEBUG)
+            aocl_utils_cpp::checkError(status, "Failed to launch kernelIAMover!");
+            #endif
+        }
+
         //The first layer is a special case
         {
             #if defined(HOST_DEBUG)
                 std::cout<<"Launching layer "<<vecLayerInfo.at(0).layerName<<std::endl;
             #endif
             #if defined(SPARSE_SYSTEM)
-                cl_uint iaArgIdx = 3;
                 cl_uint oaArgIdx = 3;
             #else
-                cl_uint iaArgIdx = 2;
                 cl_uint oaArgIdx = 2;
             #endif
-
-            //unsigned int numInstruction
-            kernelIAMover.setArg(iaArgIdx++, (cl_uint) vecLayerInfo.at(0).numIAMoverInstruction);
-            //offsetInstruction
-            kernelIAMover.setArg(iaArgIdx, (cl_uint) vecLayerInfo.at(0).offsetIAMoverInstruction);
 
             //unsigned int numInstruction,
             kernelOAMover.setArg(oaArgIdx++, (cl_uint) vecLayerInfo.at(0).numOAMoverInstructions);
@@ -908,10 +920,9 @@ namespace GraphRuntime {
             kernelOAMover.setArg(oaArgIdx++, (cl_uint) vecLayerInfo.at(0).offsetOAMoverInstruction);
 
             status = clCQOAMover.enqueueTask(kernelOAMover, NULL, &(vecOAFinishes.at(0)));
+            #if defined(HOST_DEBUG)
             aocl_utils_cpp::checkError(status, "Failed to launch kernelOAMover!");
-
-            status = clCQIAMover.enqueueTask(kernelIAMover, NULL, NULL);
-            aocl_utils_cpp::checkError(status, "Failed to launch kernelIAMover!");
+            #endif
 
             clCQOAMover.finish();
         }
@@ -922,17 +933,10 @@ namespace GraphRuntime {
                 std::cout<<"Launching layer "<<vecLayerInfo.at(i).layerName<<std::endl;
             #endif
             #if defined(SPARSE_SYSTEM)
-                cl_uint iaArgIdx = 3;
                 cl_uint oaArgIdx = 3;
             #else
-                cl_uint iaArgIdx = 2;
                 cl_uint oaArgIdx = 2;
             #endif
-
-            //unsigned int numInstruction
-            kernelIAMover.setArg(iaArgIdx++, (cl_uint) vecLayerInfo.at(i).numIAMoverInstruction);
-            //offsetInstruction
-            kernelIAMover.setArg(iaArgIdx, (cl_uint) vecLayerInfo.at(i).offsetIAMoverInstruction);
 
             //unsigned int numInstruction,
             kernelOAMover.setArg(oaArgIdx++, (cl_uint) vecLayerInfo.at(i).numOAMoverInstructions);
@@ -940,18 +944,11 @@ namespace GraphRuntime {
             kernelOAMover.setArg(oaArgIdx++, (cl_uint) vecLayerInfo.at(i).offsetOAMoverInstruction);
 
             status = clCQOAMover.enqueueTask(kernelOAMover, NULL, &(vecOAFinishes.at(i)));
-            //status = clEnqueueTask(clCQOAMover(), kernelOAMover(), 0, NULL, &(vecOAFinishes[i])));
             #if defined(HOST_DEBUG)
             aocl_utils_cpp::checkError(status, "Failed to launch kernelOAMover!");
             #endif
 
-            //The creation of the following waitList vector seems redundant
-            //but it is needed to keep the OpenCL C++ API happy.
-            //Worry: Is the event copied into the vector in sync with the original event?
-            std::vector<cl::Event> waitList = {vecOAFinishes.at(i-1)};
-            status = clCQIAMover.enqueueTask(kernelIAMover, &waitList, NULL);
             #if defined(HOST_DEBUG)
-            aocl_utils_cpp::checkError(status, "Failed to launch kernelIAMover!");
                 clCQOAMover.finish();
             #endif
         }
@@ -1042,6 +1039,11 @@ namespace GraphRuntime {
         maxInferenceDuration = std::max(timeElapsed, maxInferenceDuration);
         minInferenceDuration = std::min(timeElapsed, minInferenceDuration);
 
+    }
+
+    float AcceleratorWrapper::getInvocationOverhead()
+    {
+       return 0.0;
     }
 
     std::string AcceleratorWrapper::reportRuntime()

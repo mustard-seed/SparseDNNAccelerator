@@ -125,7 +125,9 @@ typedef struct __attribute__((packed)) __attribute__((aligned(64)))
     //Bit [6]: Input arrangment mode.
     //  1'b0: One input tensor (e.g convolution, strided convolution)
     //  1'b1: Two input tensors, and interleave the two tensors per dramblock (e.g. eltwise addition)
-    t_uchar inputArrangementCatSparseFlagCatDestinationCatNumActiveCols;
+    //Bit [7]: Flag indicating that the IA mover should wait for sync. token from the OA mover
+    //in the beginninger
+    t_uchar flagSyncCatInputArrangementCatSparseFlagCatDestinationCatNumActiveCols;
 
     //Bit [3:0] Input 0 left shift amount
     //Bit [7:4] Input 1 left shift amount
@@ -201,7 +203,7 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
 {
     //Arch. parameters.
     //[3:0]: Number of active compute columns
-    //[4]: Sync Flag. 1 if there is a need to send sync. signal to the IA mover.
+    //[4]: Sync Flag. 1 if there is a need to send sync. signal to the IA mover in the beginning
     //[6]: Flag for whether the output is sparse. 1 for YES, 0 for NO
     //[7]: Flag for selecting the memory region to write to
     t_uchar memSelectCatSparseFlagCatSyncFlagCatNumActiveCols;

@@ -150,6 +150,7 @@ namespace GraphRuntime {
             std::vector<t_blob_info> vecOutputBlobsInfo;
 
             std::vector<t_layer_info> vecLayerInfo;
+            unsigned int numIAInstructions;
 
             t_accelerator_info acceleratorInfo;
 
@@ -209,6 +210,12 @@ namespace GraphRuntime {
              * \details Perform inference using the content of the current inference buffers
              */
             void inference();
+
+            /*!
+             * \brief getInvocationOverhead
+             * \return The invocation overhead in us
+             */
+            float getInvocationOverhead();
 
             std::string reportRuntime();
     };

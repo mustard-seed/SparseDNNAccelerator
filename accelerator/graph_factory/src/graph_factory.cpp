@@ -102,6 +102,9 @@ namespace GraphRuntime {
         unsigned short maxClusterIndexInTransferBlock = TRANSFER_SIZE-1;
         unsigned short maxScalarIndexInCluster = CLUSTER_SIZE-1;
 
+        //Counter of the number of compute layers;
+        unsigned int countComputeLayer = 0;
+
                 //Iterate through the layers
         for (const auto& pLayer: vecLayers)
         {
@@ -526,6 +529,11 @@ namespace GraphRuntime {
                     memDramBlockIA1ColStride = 0;
                 }
 
+                //Synchornization flags
+                //The first layer: the IAMover doesn't need to wait
+                //The first layer: the OAMover doesn't need to wait
+                unsigned char flagTensorSync = (countComputeLayer==0) ? 0x00 : 0x01;
+
                 t_aligned_ia_mover_instruction_vector vecIAMoverInstruction;
                 t_aligned_oa_mover_instruction_vector vecOAMoverInstruction;
                 instruction_generator (//Type of the operation
@@ -607,6 +615,9 @@ namespace GraphRuntime {
                         //unsigned char flagSparseInput,
                         instFlagSparseInput,
 
+                        //unsigned char flagTensorSync,
+                        flagTensorSync,
+
                         //unsigned char flagRelu,
                         instEnableRelu,
                         //unsigned char outputShiftBits,
@@ -685,6 +696,8 @@ namespace GraphRuntime {
                     #if defined(SPARSE_SYSTEM)
                         assert(offsetWeightTBCount <= MAX_DRAM_BYTE_INPUT_WEIGHT_SB_COUNT);
                     #endif
+
+                    countComputeLayer++;
             } // if compute layer
 
         } // for layer

@@ -69,7 +69,9 @@ void instruction_generator (//Type of the operation
 
         unsigned char flagSparseOutput,
         unsigned char flagSparseInput,
-//        unsigned char flagInputSync,
+        //Whether the IA mover kernel should wait for the output from the previous tensor to commit before moving
+        //on to the current tensor
+        unsigned char flagTensorSync,
 //        unsigned char flagOutputSync,
         unsigned char flagRelu,
         unsigned char outputShiftBits,
