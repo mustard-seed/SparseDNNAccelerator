@@ -897,37 +897,16 @@ namespace GraphRuntime {
 
         //Launch the IA mover once first
         {
+            #if defined(HOST_DEBUG)
+                std::cout<<"Launching kernelIAMover."<<std::endl;
+            #endif
             status = clCQIAMover.enqueueTask(kernelIAMover, NULL, NULL);
             #if defined(HOST_DEBUG)
             aocl_utils_cpp::checkError(status, "Failed to launch kernelIAMover!");
             #endif
         }
 
-        //The first layer is a special case
-        {
-            #if defined(HOST_DEBUG)
-                std::cout<<"Launching layer "<<vecLayerInfo.at(0).layerName<<std::endl;
-            #endif
-            #if defined(SPARSE_SYSTEM)
-                cl_uint oaArgIdx = 3;
-            #else
-                cl_uint oaArgIdx = 2;
-            #endif
-
-            //unsigned int numInstruction,
-            kernelOAMover.setArg(oaArgIdx++, (cl_uint) vecLayerInfo.at(0).numOAMoverInstructions);
-            //unsigned int offsetInstruction
-            kernelOAMover.setArg(oaArgIdx++, (cl_uint) vecLayerInfo.at(0).offsetOAMoverInstruction);
-
-            status = clCQOAMover.enqueueTask(kernelOAMover, NULL, &(vecOAFinishes.at(0)));
-            #if defined(HOST_DEBUG)
-            aocl_utils_cpp::checkError(status, "Failed to launch kernelOAMover!");
-            #endif
-
-            clCQOAMover.finish();
-        }
-
-        for (int i=1; i<numLayers; i++)
+        for (int i=0; i<numLayers; i++)
         {
             #if defined(HOST_DEBUG)
                 std::cout<<"Launching layer "<<vecLayerInfo.at(i).layerName<<std::endl;
@@ -945,10 +924,7 @@ namespace GraphRuntime {
 
             status = clCQOAMover.enqueueTask(kernelOAMover, NULL, &(vecOAFinishes.at(i)));
             #if defined(HOST_DEBUG)
-            aocl_utils_cpp::checkError(status, "Failed to launch kernelOAMover!");
-            #endif
-
-            #if defined(HOST_DEBUG)
+                aocl_utils_cpp::checkError(status, "Failed to launch kernelOAMover!");
                 clCQOAMover.finish();
             #endif
         }

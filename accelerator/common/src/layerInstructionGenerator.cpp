@@ -800,7 +800,7 @@ void instruction_generator(
                             t_uchar commonFlag = ( ( ((t_uchar) numActiveCols)& 0x0F)
                                                    | ((((t_uchar) flagTarget) & 0x01) << 0x04)
                                                    | ((((t_uchar) flagSparseInput) & 0x01) << 0x05) //Sparse flag for the input tensor
-                                                   | ((((t_uchar) inputArrangement) & 0x03) << 0x06)
+                                                   | ((((t_uchar) inputArrangement) & 0x01) << 0x06)
                                                   );
 
                             assert ((numActiveCols == 1) && "Number of active columns must be 1 for concatenation!");

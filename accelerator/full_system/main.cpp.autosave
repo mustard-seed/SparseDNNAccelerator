@@ -1088,7 +1088,8 @@ void testFixture::launch (
     numOutputHeight = (op==MAX_POOL || op==AVG_POOL) ? inputHeightSPSize / kernelSize : inputHeightSPSize;
     verticalBorderPadding = (op==CONVOLUTION) ? ((stride-1) * inputWidthSPSize + kernelSize - stride)/2 : 0;
     horizontalBorderPadding  = (op==CONVOLUTION) ? ((stride-1) * inputHeightSPSize + kernelSize - stride)/2 : 0;
-    unsigned char numActiveColsPartialOutputTile = 1;
+    unsigned char numActiveColsPartialOutputTile = (op==CONVOLUTION) ?
+                1 : (numOutputWidth % PE_COLS);
     assert(numOutputChannels % _numGroupNext == 0);
     numOutputChannelPerGroup = numOutputChannels / _numGroupNext;
 
