@@ -1043,7 +1043,18 @@ namespace GraphRuntime {
 
     float AcceleratorWrapper::getInvocationOverhead()
     {
-       return 0.0;
+        float usTime = 0;
+        for (int i=0; i<100; i++)
+        {
+            cl::Event event;
+            clCQNoop.enqueueTask(kernelNoop, NULL, &event);
+            cl_ulong startTime = event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+            cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
+            usTime += (float)((endTime - startTime)*(cl_double)(1e-3));
+
+        }
+        usTime = usTime  / 100.0;
+        return usTime;
     }
 
     std::string AcceleratorWrapper::reportRuntime()

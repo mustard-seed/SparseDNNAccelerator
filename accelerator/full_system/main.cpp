@@ -26,9 +26,9 @@
 #include "layerInstructionGenerator.hpp"
 #include "accelerator_wrapper.hpp"
 
-#define PLAY
+//#define PLAY
 //#define PERF_TEST
-//#define VALIDATE
+#define VALIDATE
 #define REPEAT 1
 #ifndef C5SOC
 #define EMULATE
@@ -1369,6 +1369,9 @@ void testFixture::launch (
                     TRUE,
                     instFlagSparseInput,
 
+                    //unsigned char flagTensorSync,
+                    FALSE,
+
                     //instFlagRelu,
                     FALSE,
                     instOutputShiftBits,
@@ -1504,6 +1507,9 @@ void testFixture::launch (
                     //instFlagSparseInput,
                     TRUE,
 
+                    //unsigned char flagTensorSync,
+                    TRUE,
+
                     instFlagRelu,
                     instOutputShiftBits,
                     instOutputShiftLeft,
@@ -1632,6 +1638,9 @@ void testFixture::launch (
 
                     instFlagSparseOutput,
                     instFlagSparseInput,
+
+                    //unsigned char flagTensorSync,
+                    FALSE,
 
                     instFlagRelu,
                     instOutputShiftBits,
@@ -1848,4 +1857,6 @@ void testFixture::launch (
             }
         } //check the input if necessary
     } // output decode
+    float invocationOverhead = accelerator.getInvocationOverhead();
+    std::cout <<"Invocation overhead is "<<invocationOverhead<<" us"<<std::endl;
 } //launch
