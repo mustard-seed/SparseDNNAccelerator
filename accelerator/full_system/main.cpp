@@ -272,9 +272,8 @@ TEST_F (testFixture, perf_test_max_pool_sparse_128x32x32)
     unsigned char numOutputGroup = 1;
     unsigned char inputHeightSPUnitSize = 1;
     unsigned char inputWidthSPUnitSize = 1;
-    unsigned char sizeOutputTileWidthPerColFull = ((inputWidth / PE_COLS) > 8) ?
-                8 : (inputWidth / PE_COLS);
-    unsigned char sizeOutputTileHeight = 8;
+    unsigned char sizeOutputTileWidthPerColFull = 1;
+    unsigned char sizeOutputTileHeight = 1;
     bool flagEnableRelu = false;
     bool flagSparseInput = false;
     bool flagSparseOutput = true;
@@ -360,9 +359,8 @@ TEST_F (testFixture, perf_test_concat_sparse_64x32x32)
     unsigned char numOutputGroup = 1;
     unsigned char inputHeightSPUnitSize = 1;
     unsigned char inputWidthSPUnitSize = 1;
-    unsigned char sizeOutputTileWidthPerColFull = ((inputWidth / PE_COLS) > 8) ?
-                8 : (inputWidth / PE_COLS);
-    unsigned char sizeOutputTileHeight = 8;
+    unsigned char sizeOutputTileWidthPerColFull = 1;
+    unsigned char sizeOutputTileHeight = 1;
     bool flagEnableRelu = false;
     bool flagSparseInput = false;
     bool flagSparseOutput = true;

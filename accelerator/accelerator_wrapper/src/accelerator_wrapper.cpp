@@ -1024,6 +1024,7 @@ namespace GraphRuntime {
         {
             cl::Event event;
             clCQNoop.enqueueTask(kernelNoop, NULL, &event);
+            clCQNoop.finish();
             cl_ulong startTime = event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
             cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
             usTime += (float)((endTime - startTime)*(cl_double)(1e-3));

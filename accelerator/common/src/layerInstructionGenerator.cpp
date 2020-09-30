@@ -114,13 +114,13 @@ void instruction_generator(
 
         )
 {
-//    unsigned int sizeOutputTileFullHeight = ((op == CONVOLUTION) || (op == ELT_ADD) || (op == CONCATENATION)) ?
-//                _sizeOutputTileFullHeight : 1;
-//    unsigned int sizeOutputTileFullWidthPerCol = ((op == CONVOLUTION) || (op == ELT_ADD) || (op == CONCATENATION)) ?
-//                _sizeOutputTileFullWidthPerCol : 1;
+    unsigned int sizeOutputTileFullHeight = ((op == CONVOLUTION) || (op == ELT_ADD) || (op == CONCATENATION)) ?
+                _sizeOutputTileFullHeight : 1;
+    unsigned int sizeOutputTileFullWidthPerCol = ((op == CONVOLUTION) || (op == ELT_ADD) || (op == CONCATENATION)) ?
+                _sizeOutputTileFullWidthPerCol : 1;
 
-    unsigned int sizeOutputTileFullHeight = _sizeOutputTileFullHeight;
-    unsigned int sizeOutputTileFullWidthPerCol = _sizeOutputTileFullWidthPerCol;
+//    unsigned int sizeOutputTileFullHeight = _sizeOutputTileFullHeight;
+//    unsigned int sizeOutputTileFullWidthPerCol = _sizeOutputTileFullWidthPerCol;
 
     unsigned int outputHeight = ( ((unsigned int) inputSPHeight)
             + 2*((unsigned int) inputHeightPadding) - ((unsigned int) kernelSize))
@@ -132,8 +132,9 @@ void instruction_generator(
 
 //    unsigned char numActiveColsPartialOutputTile = ((op == CONVOLUTION) || (op == ELT_ADD) || (op == CONCATENATION)) ?
 //                _numActiveColsPartialOutputTile : (outputWidth % PE_COLS);
-    unsigned char numActiveColsPartialOutputTile = (op != CONCATENATION) ?
-                _numActiveColsPartialOutputTile : 1;
+    unsigned char numActiveColsPartialOutputTile = (op == CONCATENATION) ?
+                1 : (((op == MAX_POOL) || (op == AVG_POOL)) ? (outputWidth % PE_COLS) : _numActiveColsPartialOutputTile
+                    );
 
     unsigned char numActiveColsFullOutputTile = (op != CONCATENATION) ?
                 PE_COLS : 1;
@@ -672,96 +673,27 @@ void instruction_generator(
             //EXCEPT CONCATENATION
             if ((op != CONVOLUTION) && (op != CONCATENATION))
             {
-                //Transfer the SECOND input blob if necessary
-                if ((op == AVG_POOL) || (op == MAX_POOL))
+                unsigned char opCodeField = 0X0;
+                if ((op == ELT_ADD) || (op == AVG_POOL))
                 {
-                    for (unsigned int iterInputGroup1=0; iterInputGroup1<numIAMoverGroup1; iterInputGroup1++)
-                    {
-                        /*! Send the input IA instruction */
-                        {
-                            t_ia_mover_instruction instructionIA;
-
-                            unsigned char flagTarget = 0x01;
-                            instructionIA.flagSyncCatInputArrangementCatSparseFlagCatDestinationCatNumActiveCols = (t_uchar)
-                                    ( ( ((t_uchar) numActiveCols)& 0x0F)
-                                     | ((((t_uchar) flagTarget) & 0x01) << 0x04)
-                                     | ((((t_uchar) flagSparseInput) & 0x01) << 0x05) //Sparse flag for the input tensor
-                                    );
-                            instructionIA.inputShiftAmounts = 0x00;
-                            instructionIA.memBlockStart0 = (t_int) (
-                                        memIA1DramBlockStartIndex
-                                        + memIA1DramBlockGroupStride * iterInputGroup1
-                                        + memIA1DramBlockRowStride * iterMDense
-                                        + memIA1DramBlockColStride * iterNDense);
-                            instructionIA.memBlockColStripStride = (t_ushort)(memIA1DramBlockColStride);
-                            instructionIA.memBlockRowStripStride = (t_ushort)(memIA1DramBlockRowStride);
-
-                            //Don't need to worry about input 1, since it doesn't exist for pooling layers
-
-                            #if defined(SPARSE_SYSTEM)
-                                instructionIA.numCWOrTBInGroup = (t_ushort) (1 + (numIAMoverInputChannelsPerGroup1-1) / TRANSFER_SIZE / CLUSTER_SIZE);
-                            #else
-                                instructionIA.numTBPerStrip = (t_ushort) (1 + (numIAMoverInputChannelsPerGroup1-1) / TRANSFER_SIZE / CLUSTER_SIZE);
-                            #endif
-                                instructionIA.tileSPHeight = (t_uchar) maxTM;
-                                instructionIA.tileSPWidth = (t_uchar) maxTN;
-                                unsigned char inputTileLeftPadding = (iterNGlobal < inputWidthPadding) ?
-                                            inputWidthPadding : 0;
-                                unsigned char inputTileRightPadding = ((iterNGlobal + maxTQ) >= (inputWidthPadding + inputDenseWidth)) ?
-                                            inputWidthPadding : 0;
-                                unsigned char inputTileTopPadding = (iterMGlobal < inputHeightPadding) ?
-                                            inputHeightPadding : 0;
-                                unsigned char inputTileBottomPadding = ((iterMGlobal + maxTP) >= (inputHeightPadding + inputDenseHeight)) ?
-                                            inputHeightPadding : 0;
-                                instructionIA.concatPadding = (t_uchar) (
-                                                  (inputTileLeftPadding & 0x03)
-                                                | ((inputTileRightPadding & 0x03) << 2)
-                                                | ((inputTileTopPadding & 0x03) << 4)
-                                                | ((inputTileBottomPadding & 0x03) << 6)
-                                            );
-                                instructionIA.concatInitSPIndices = (t_uchar) (
-                                                 ( ((t_uchar) iterSPNIndex) & 0x0F)
-                                                | (( ((t_uchar) iterSPMIndex) & 0x0F) << 0x04)
-                                            );
-                                instructionIA.concatSPSize = (t_uchar) (
-                                                (((t_uchar) inputSPWidthUnit) & 0x0F)
-                                                | ((((t_uchar) inputSPHeightUnit & 0x0F)) << 0x04)
-                                            );
-                                instructionIA.columnWidthStride = (t_uchar) (kernelStride * maxTQPerCol);
-                                instructionIA.columnSPWidth = (t_uchar) maxTNPerCol;
-
-                                instructionIA.tileSPWidthxTileSPHeight = ((t_ushort) maxTN) * ((t_ushort) maxTM);
-
-                                vecIAMoverInstruction.push_back(instructionIA);
-                        } // generate t_ia_mover_instruction
-                    }  //For. Transfer the SECOND input blob, and convolution related items (if necessary)
+                    //Like elmentwise addition, average pooling first requires adding the elements together
+                    opCodeField = 0x0;
+                }
+                else if (op == MAX_POOL)
+                {
+                    opCodeField = 0x10;
                 }
 
-                //Transfer the MISC instruction for non-concatenation MISC operations
-                {
-                    unsigned char opCodeField = 0X0;
-                    if ((op == ELT_ADD) || (op == AVG_POOL))
-                    {
-                        //Like elmentwise addition, average pooling first requires adding the elements together
-                        opCodeField = 0x0;
-                    }
-                    else if (op == MAX_POOL)
-                    {
-                        opCodeField = 0x10;
-                    }
+                t_misc_instruction instructionMisc;
+                instructionMisc.controlBits = (t_uchar) (opCodeField |( numActiveCols & 0x0F));
+                instructionMisc.numDramBlocksToReduce = (cl_ushort) numDramBlocksToReduceMK;
+                instructionMisc.numOutputBlocksPerStrip = (cl_uchar) numOutputBlocksBlob0PerStripMK;
+                instructionMisc.numOutputBlocks =
+                        (cl_ushort) (maxTP * maxTQPerCol * numOutputBlocksBlob0PerStripMK) ;
+                instructionMisc.numEffectiveValuesInLastStrip = (t_uchar) (
+                            numOutputChannelsBlob0MK - (numOutputBlocksBlob0PerStripMK-1)*BURST_SIZE_BYTE);
 
-                    t_misc_instruction instructionMisc;
-                    instructionMisc.controlBits = (t_uchar) (opCodeField |( numActiveCols & 0x0F));
-                    instructionMisc.numDramBlocksToReduce = (cl_ushort) numDramBlocksToReduceMK;
-                    instructionMisc.numOutputBlocksPerStrip = (cl_uchar) numOutputBlocksBlob0PerStripMK;
-                    instructionMisc.numOutputBlocks =
-                            (cl_ushort) (maxTP * maxTQPerCol * numOutputBlocksBlob0PerStripMK) ;
-                    instructionMisc.numEffectiveValuesInLastStrip = (t_uchar) (
-                                numOutputChannelsBlob0MK - (numOutputBlocksBlob0PerStripMK-1)*BURST_SIZE_BYTE);
-
-                    vecMiscInstruction.push_back(instructionMisc);
-
-                } //Transfer the MISC instruction
+                vecMiscInstruction.push_back(instructionMisc);
             } //Non-convolution stuff
 
             //Concatenation's IA instruction and misc instructions requires special attention
