@@ -514,8 +514,7 @@ typedef struct __attribute__((packed))
     unsigned char numGroups;
 
     //Bit [3:0] Maximum column ID
-    //Bit [4] Flag for sparse draining sparse input (1 for true)
-    //Bit [5] Flag for draining from the MISC kernel (1), or the conv engine (0)
+    //Bit [5] Flag for sparse draining sparse input (1 for true)
     unsigned char flagSourceCatFlagSparseFlagMaxColID;
 } t_output_tile_tee_packet;
 

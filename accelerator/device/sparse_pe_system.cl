@@ -4596,6 +4596,7 @@ void getCompressorReaderOutput (
 			t_output_cluster_tagged clusterTagged;
 
 			*pFlagWriteToOATeeRequest = TRUE;
+			#pragma unroll
 			for (int i=0; i<CLUSTER_SIZE; i++)
 			{
 				if ((iterBitmaskBytes+i) < NUM_BITMASK_BYTES)

@@ -77,8 +77,8 @@
 #define PACKET_SIZE 1
 
 #if defined(FULL_SYSTEM)
-	#define PE_ROWS 4
-	#define PE_COLS 2
+	#define PE_ROWS 1
+	#define PE_COLS 4
 #else
 	#define PE_ROWS 2
 	#define PE_COLS 2
@@ -141,12 +141,16 @@
 #define KERNEL_CACHE_DEPTH (KERNEL_CACHE_SIZE_BYTE/BURST_SIZE_BYTE)
 #define KERNEL_CACHE_DEPTH_MASK 0x03FF
 
-#define IA_CACHE_SIZE_BYTE 16384
+//TODO: Change this back to the commented line
+//#define IA_CACHE_SIZE_BYTE 16384
+#define IA_CACHE_SIZE_BYTE 8192
 #define IA_CACHE_DEPTH (IA_CACHE_SIZE_BYTE/BURST_SIZE_BYTE)
 
 #define IA_TBCOUNT_CACHE_SIZE 256
 
-#define OA_CACHE_SIZE_BYTE 32768
+//TODO: Change this back to the commented line
+//#define OA_CACHE_SIZE_BYTE 32768
+#define OA_CACHE_SIZE_BYTE 16384
 #define OA_CACHE_DEPTH (OA_CACHE_SIZE_BYTE/CLUSTER_SIZE)
 
 
@@ -158,7 +162,7 @@
 #define NUM_CLUSTER_IN_DRAM_SIZE BURST_SIZE_BYTE/CLUSTER_SIZE
 
 //Accumulator width
-#define ACCUMULATOR_WIDTH 24
+#define ACCUMULATOR_WIDTH 16
 #if (ACCUMULATOR_WIDTH == 32)
 #define ACCUM_MASK 0x0FFFFFFFF
 #define MULT_MASK 0x0FFFFFFFF
