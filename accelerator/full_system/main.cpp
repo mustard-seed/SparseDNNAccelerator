@@ -26,9 +26,9 @@
 #include "layerInstructionGenerator.hpp"
 #include "accelerator_wrapper.hpp"
 
-//#define PLAY
-#define PERF_TEST
-#define VALIDATE
+#define PLAY
+//#define PERF_TEST
+//#define VALIDATE
 //Some how if repeat is 100, bad things will happen on concat
 #define REPEAT 40
 #ifndef C5SOC
@@ -100,14 +100,16 @@ protected:
 
 
     std::vector<fixedPointNumber> generateSparseWeights (unsigned char _kernelSize,
-                unsigned char _numInputChannel,
-                unsigned char _numGroups,
-                float denseProb = 1.0f
-            , int channelPruneScale = CLUSTER_SIZE);
+                    unsigned char _numInputChannel,
+                    unsigned char _numOutputChannel,
+                    unsigned char _numGroups,
+                    float denseProb = 1.0f
+                , int channelPruneScale = CLUSTER_SIZE);
 
     void launch (unsigned char _inputWidth,
             unsigned char _inputHeight,
             unsigned char _numInputChannel,
+            unsigned char _numOutputChannel,
             unsigned char _numInputGroup, //The code will override this to 1 if the operation is not convolution
             unsigned char _numGroupNext, //Number of groups for the next layer
             unsigned char _inputHeightSPUnitSize, //The code will override this to 1 if the operation is not convolution
@@ -127,48 +129,51 @@ protected:
 }; //testFixture
 
 #ifdef PLAY
-TEST_F (testFixture, concat_sparse)
+TEST_F (testFixture, perf_test_128x128x1x1x1x1)
 {
-    unsigned char inputWidth = 32;
-       unsigned char inputHeight = 32;
-       unsigned char numInputChannel = 64;
-       unsigned char numInputGroup = 1;
-       unsigned char numOutputGroup = 1;
-       unsigned char inputHeightSPUnitSize = 1;
-       unsigned char inputWidthSPUnitSize = 1;
-       unsigned char sizeOutputTileWidthPerColFull = ((inputWidth / PE_COLS) > 8) ?
-                   8 : (inputWidth / PE_COLS);
-       unsigned char sizeOutputTileHeight = 8;
-       bool flagEnableRelu = false;
-       bool flagSparseInput = false;
-       bool flagSparseOutput = true;
-       OPERATION op = CONCATENATION;
-       float bias = 0.0f;
-       int channelPruneScale = 1;
-       std::vector<float> vecDenseProb = {0.0, 1.0};
-       for (auto & prob : vecDenseProb)
-       {
-           launch(
-                       inputWidth,
-                       inputHeight,
-                       numInputChannel,
-                       numInputGroup,
-                       numOutputGroup,
-                       inputHeightSPUnitSize,
-                       inputWidthSPUnitSize,
-                       sizeOutputTileWidthPerColFull,
-                       sizeOutputTileHeight,
-                       flagEnableRelu,
-                       flagSparseInput,
-                       flagSparseOutput,
-                       op,
-                       bias,
-                       false, //back to back
-                       true, //perf test
-                       prob, //dense prob
-                       channelPruneScale
-                 );
-       }
+    unsigned char inputWidth = 1;
+    unsigned char inputHeight = 1;
+    std::vector<unsigned char> vecInputChannel = {32, 64, 128};
+    unsigned char numInputGroup = 1;
+    unsigned char numOutputGroup = 1;
+    unsigned char inputHeightSPUnitSize = 1;
+    unsigned char inputWidthSPUnitSize = 1;
+    unsigned char sizeOutputTileWidthPerColFull = 8;
+    unsigned char sizeOutputTileHeight = 8;
+    bool flagEnableRelu = false;
+    bool flagSparseInput = true;
+    bool flagSparseOutput = true;
+    OPERATION op = CONVOLUTION;
+    float bias = 0.0f;
+    std::vector<float> vecDenseProb = {1.0, 0.0};
+    for (auto& numInputChannel: vecInputChannel)
+    {
+        for (auto & prob : vecDenseProb)
+        {
+            unsigned char numOutputChannel = 32*128 / (unsigned int) numInputChannel;
+            launch(
+                        inputWidth,
+                        inputHeight,
+                        numInputChannel,
+                        numOutputChannel,
+                        numInputGroup,
+                        numOutputGroup,
+                        inputHeightSPUnitSize,
+                        inputWidthSPUnitSize,
+                        sizeOutputTileWidthPerColFull,
+                        sizeOutputTileHeight,
+                        flagEnableRelu,
+                        flagSparseInput,
+                        flagSparseOutput,
+                        op,
+                        bias,
+                        false, //back to back
+                        true, //perf test
+                        prob, //dense prob
+                        1 //channel prune scale
+                  );
+        }
+     }
 }
 
 #endif
@@ -195,10 +200,59 @@ TEST_F (testFixture, perf_test_conv_sparse_128x128x3x3x32x16COL)
     {
         for (auto & prob : vecDenseProb)
         {
+            unsigned char numOutputChannel = numInputChannel;
             launch(
                         inputWidth,
                         inputHeight,
                         numInputChannel,
+                        numOutputChannel,
+                        numInputGroup,
+                        numOutputGroup,
+                        inputHeightSPUnitSize,
+                        inputWidthSPUnitSize,
+                        sizeOutputTileWidthPerColFull,
+                        sizeOutputTileHeight,
+                        flagEnableRelu,
+                        flagSparseInput,
+                        flagSparseOutput,
+                        op,
+                        bias,
+                        false, //back to back
+                        true, //perf test
+                        prob, //dense prob
+                        pruneScale //channel prune scale
+                  );
+        }
+     }
+}
+
+TEST_F (testFixture, perf_test_128x128x1x1x1x1)
+{
+    unsigned char inputWidth = 1;
+    unsigned char inputHeight = 1;
+    std::vector<unsigned char> vecInputChannel = {32, 64, 128};
+    unsigned char numInputGroup = 1;
+    unsigned char numOutputGroup = 1;
+    unsigned char inputHeightSPUnitSize = 1;
+    unsigned char inputWidthSPUnitSize = 1;
+    unsigned char sizeOutputTileWidthPerColFull = 8;
+    unsigned char sizeOutputTileHeight = 8;
+    bool flagEnableRelu = false;
+    bool flagSparseInput = true;
+    bool flagSparseOutput = true;
+    OPERATION op = CONVOLUTION;
+    float bias = 0.0f;
+    std::vector<float> vecDenseProb = {1.0, 0.0};
+    for (auto& numInputChannel: vecInputChannel)
+    {
+        for (auto & prob : vecDenseProb)
+        {
+            unsigned char numOutputChannel = 32*128 / (unsigned int) numInputChannel;
+            launch(
+                        inputWidth,
+                        inputHeight,
+                        numInputChannel,
+                        numOutputChannel,
                         numInputGroup,
                         numOutputGroup,
                         inputHeightSPUnitSize,
@@ -239,10 +293,12 @@ TEST_F (testFixture, depth_sensitivity)
     float pruneScale = CLUSTER_SIZE;
 
     for (auto& numInputChannel: vecInputChannel) {
+        unsigned char numOutputChannel = numInputChannel;
         launch(
                     inputWidth,
                     inputHeight,
                     numInputChannel,
+                    numOutputChannel,
                     numInputGroup,
                     numOutputGroup,
                     inputHeightSPUnitSize,
@@ -268,6 +324,7 @@ TEST_F (testFixture, perf_test_max_pool_sparse_128x32x32)
     unsigned char inputWidth = 32;
     unsigned char inputHeight = 32;
     unsigned char numInputChannel = 128;
+    unsigned char numOutputChannel = numInputChannel;
     unsigned char numInputGroup = 1;
     unsigned char numOutputGroup = 1;
     unsigned char inputHeightSPUnitSize = 1;
@@ -287,6 +344,7 @@ TEST_F (testFixture, perf_test_max_pool_sparse_128x32x32)
                     inputWidth,
                     inputHeight,
                     numInputChannel,
+                    numOutputChannel,
                     numInputGroup,
                     numOutputGroup,
                     inputHeightSPUnitSize,
@@ -311,6 +369,7 @@ TEST_F (testFixture, perf_test_elt_add_sparse_128x32x32)
     unsigned char inputWidth = 32;
     unsigned char inputHeight = 32;
     unsigned char numInputChannel = 128;
+    unsigned char numOutputChannel = numInputChannel;
     unsigned char numInputGroup = 1;
     unsigned char numOutputGroup = 1;
     unsigned char inputHeightSPUnitSize = 1;
@@ -331,6 +390,7 @@ TEST_F (testFixture, perf_test_elt_add_sparse_128x32x32)
                     inputWidth,
                     inputHeight,
                     numInputChannel,
+                    numOutputChannel,
                     numInputGroup,
                     numOutputGroup,
                     inputHeightSPUnitSize,
@@ -355,6 +415,7 @@ TEST_F (testFixture, perf_test_concat_sparse_64x32x32)
     unsigned char inputWidth = 32;
     unsigned char inputHeight = 32;
     unsigned char numInputChannel = 64;
+    unsigned char numOutputChannel = numInputChannel + numInputChannel;
     unsigned char numInputGroup = 1;
     unsigned char numOutputGroup = 1;
     unsigned char inputHeightSPUnitSize = 1;
@@ -374,6 +435,7 @@ TEST_F (testFixture, perf_test_concat_sparse_64x32x32)
                     inputWidth,
                     inputHeight,
                     numInputChannel,
+                    numOutputChannel,
                     numInputGroup,
                     numOutputGroup,
                     inputHeightSPUnitSize,
@@ -399,6 +461,7 @@ TEST_F (testFixture, conv_dense_input_dense_output_plain)
     unsigned char inputWidth = 4;
     unsigned char inputHeight = 4;
     unsigned char numInputChannel = 33;
+    unsigned char numOutputChannel = numInputChannel;
     unsigned char numInputGroup = 1;
     unsigned char numOutputGroup = 1;
     unsigned char inputHeightSPUnitSize = 1;
@@ -415,6 +478,7 @@ TEST_F (testFixture, conv_dense_input_dense_output_plain)
                 inputWidth,
                 inputHeight,
                 numInputChannel,
+                numOutputChannel,
                 numInputGroup,
                 numOutputGroup,
                 inputHeightSPUnitSize,
@@ -434,6 +498,7 @@ TEST_F (testFixture, max_pool_sparse_output_grouped)
     unsigned char inputWidth = 4;
     unsigned char inputHeight = 4;
     unsigned char numInputChannel = 120;
+    unsigned char numOutputChannel = numInputChannel;
     unsigned char numInputGroup = 1;
     unsigned char numOutputGroup = 2;
     unsigned char inputHeightSPUnitSize = 1;
@@ -450,6 +515,7 @@ TEST_F (testFixture, max_pool_sparse_output_grouped)
                 inputWidth,
                 inputHeight,
                 numInputChannel,
+                numOutputChannel,
                 numInputGroup,
                 numOutputGroup,
                 inputHeightSPUnitSize,
@@ -469,6 +535,7 @@ TEST_F (testFixture, elt_add_sparse_output)
     unsigned char inputWidth = 4;
     unsigned char inputHeight = 4;
     unsigned char numInputChannel = 127;
+    unsigned char numOutputChannel = numInputChannel;
     unsigned char numInputGroup = 1;
     unsigned char numOutputGroup = 1;
     unsigned char inputHeightSPUnitSize = 1;
@@ -485,6 +552,7 @@ TEST_F (testFixture, elt_add_sparse_output)
                 inputWidth,
                 inputHeight,
                 numInputChannel,
+                numOutputChannel,
                 numInputGroup,
                 numOutputGroup,
                 inputHeightSPUnitSize,
@@ -504,6 +572,7 @@ TEST_F (testFixture, concat_sparse_output_grouped)
     unsigned char inputWidth = 2;
     unsigned char inputHeight = 2;
     unsigned char numInputChannel = 120;
+    unsigned char numOutputChannel = 2*numInputChannel;
     unsigned char numInputGroup = 1;
     unsigned char numOutputGroup = 2;
     unsigned char inputHeightSPUnitSize = 1;
@@ -520,6 +589,7 @@ TEST_F (testFixture, concat_sparse_output_grouped)
                 inputWidth,
                 inputHeight,
                 numInputChannel,
+                numOutputChannel,
                 numInputGroup,
                 numOutputGroup,
                 inputHeightSPUnitSize,
@@ -539,6 +609,7 @@ TEST_F (testFixture, global_avg_pool_sparse_output_grouped)
     unsigned char inputWidth = 4;
     unsigned char inputHeight = 4;
     unsigned char numInputChannel = 120;
+    unsigned char numOutputChannel = numInputChannel;
     unsigned char numInputGroup = 1;
     unsigned char numOutputGroup = 2;
     unsigned char inputHeightSPUnitSize = 1;
@@ -555,6 +626,7 @@ TEST_F (testFixture, global_avg_pool_sparse_output_grouped)
                 inputWidth,
                 inputHeight,
                 numInputChannel,
+                numOutputChannel,
                 numInputGroup,
                 numOutputGroup,
                 inputHeightSPUnitSize,
@@ -575,6 +647,7 @@ TEST_F (testFixture, conv_dense_input_dense_output_grouped)
     unsigned char inputWidth = 4;
     unsigned char inputHeight = 4;
     unsigned char numInputChannel = 16;
+    unsigned char numOutputChannel = numInputChannel;
     unsigned char numInputGroup = 2;
     unsigned char numOutputGroup = 2;
     unsigned char inputHeightSPUnitSize = 1;
@@ -591,6 +664,7 @@ TEST_F (testFixture, conv_dense_input_dense_output_grouped)
                 inputWidth,
                 inputHeight,
                 numInputChannel,
+                numOutputChannel,
                 numInputGroup,
                 numOutputGroup,
                 inputHeightSPUnitSize,
@@ -610,6 +684,7 @@ TEST_F (testFixture, conv_dense_input_dense_output_strided)
     unsigned char inputWidth = 4;
     unsigned char inputHeight = 4;
     unsigned char numInputChannel = 16;
+    unsigned char numOutputChannel = numInputChannel;
     unsigned char numInputGroup = 1;
     unsigned char numOutputGroup = 1;
     unsigned char inputHeightSPUnitSize = 2;
@@ -626,6 +701,7 @@ TEST_F (testFixture, conv_dense_input_dense_output_strided)
                 inputWidth,
                 inputHeight,
                 numInputChannel,
+                numOutputChannel,
                 numInputGroup,
                 numOutputGroup,
                 inputHeightSPUnitSize,
@@ -645,6 +721,7 @@ TEST_F (testFixture, conv_sparse_input_sparse_output)
     unsigned char inputWidth = 4;
     unsigned char inputHeight = 4;
     unsigned char numInputChannel = 16;
+    unsigned char numOutputChannel = numInputChannel;
     unsigned char numInputGroup = 1;
     unsigned char numOutputGroup = 1;
     unsigned char inputHeightSPUnitSize = 1;
@@ -661,6 +738,7 @@ TEST_F (testFixture, conv_sparse_input_sparse_output)
                 inputWidth,
                 inputHeight,
                 numInputChannel,
+                numOutputChannel,
                 numInputGroup,
                 numOutputGroup,
                 inputHeightSPUnitSize,
@@ -682,6 +760,7 @@ TEST_F (testFixture, back_to_back_identity_conv)
     unsigned char inputWidth = 4;
     unsigned char inputHeight = 4;
     unsigned char numInputChannel =16;
+    unsigned char numOutputChannel = numInputChannel;
     unsigned char numInputGroup = 1;
     unsigned char numOutputGroup = 1;
     unsigned char inputHeightSPUnitSize = 1;
@@ -699,6 +778,7 @@ TEST_F (testFixture, back_to_back_identity_conv)
                 inputWidth,
                 inputHeight,
                 numInputChannel,
+                numOutputChannel,
                 numInputGroup,
                 numOutputGroup,
                 inputHeightSPUnitSize,
@@ -868,6 +948,7 @@ std::vector<fixedPointNumber> testFixture::generateWeights (
 std::vector<fixedPointNumber> testFixture::generateSparseWeights (
         unsigned char _kernelSize,
         unsigned char _numInputChannel,
+        unsigned char _numOutputChannel,
         unsigned char _numGroups,
         float denseProb,
         int channelPruneScale
@@ -876,6 +957,8 @@ std::vector<fixedPointNumber> testFixture::generateSparseWeights (
     assert(_kernelSize % 2 == 1);
     assert(_numInputChannel % _numGroups == 0);
     std::vector<fixedPointNumber> fpWeightTensor;
+    assert ((((unsigned int) _numOutputChannel) % _numGroups) && "Number of output channels is not divisble by the number of groups.");
+    unsigned char numOCPerGroup = _numOutputChannel / _numGroups;
     unsigned char numICPerGroup = _numInputChannel / _numGroups;
 
     std::mt19937 generator(WEIGHT_SEED);
@@ -884,7 +967,7 @@ std::vector<fixedPointNumber> testFixture::generateSparseWeights (
     for (unsigned char g=0; g<_numGroups; g++)
     {
         //Number of OC per group equals to the number of IC per group
-        for (unsigned char iFilter=0; iFilter<numICPerGroup; iFilter++)
+        for (unsigned char iFilter=0; iFilter<numOCPerGroup; iFilter++)
         {
             for (unsigned char iH=0; iH<_kernelSize; iH++)
             {
@@ -921,6 +1004,7 @@ void testFixture::launch (
         unsigned char _inputWidth,
         unsigned char _inputHeight,
         unsigned char _numInputChannel,
+        unsigned char _numOutputChannel,
         unsigned char _numInputGroup, //The code will override this to 1 if the operation is not convolution
         unsigned char _numGroupNext, //Number of groups for the next layer
         unsigned char _inputHeightSPUnitSize, //The code will override this to 1 if the operation is not convolution
@@ -940,9 +1024,6 @@ void testFixture::launch (
 {
     //Checking the parameters' consistency AND
     //Derive parameters
-    assert(_inputHeight % 2 == 0);
-    assert(_inputWidth % 2 == 0);
-    //assert(_numInputChannel <= 127);
 
     cl_uchar kernelSize;
     cl_uchar stride;
@@ -973,7 +1054,6 @@ void testFixture::launch (
             assert((flagMultiLayerConv==false) || (_numInputGroup == 1));
             numInputChannel0 = _numInputChannel;
             numInputChannel1 = 0;
-            numOutputChannels = _numInputChannel;
             inputHeightSPUnitSize = _inputHeightSPUnitSize;
             inputWidthSPUnitSize = _inputWidthSPUnitSize;
             numGroupCurrentLayer = _numInputGroup;
@@ -982,7 +1062,8 @@ void testFixture::launch (
             kernelSize = 3;
             stride = 1;
 
-            numOutputChannels = numInputChannel0;
+            numOutputChannels = _flagPerformanceTest ? _numOutputChannel : _numInputChannel;
+            assert(numOutputChannels % _numInputGroup == 0);
 
 #if defined(SPARSE_SYSTEM)
             flagSparseInput = _flagSparseInput;
@@ -1011,6 +1092,8 @@ void testFixture::launch (
 #else
             flagSparseOutput = false;
 #endif
+            assert(_inputHeight % 2 == 0);
+            assert(_inputWidth % 2 == 0);
         }
         break;
         case ELT_ADD: {
@@ -1052,6 +1135,7 @@ void testFixture::launch (
 #else
             flagSparseOutput = false;
 #endif
+            assert(_numInputChannel <= 127);
         }
         break;
         case AVG_POOL: {
@@ -1129,7 +1213,7 @@ void testFixture::launch (
     {
         if (_flagPerformanceTest == true)
         {
-            inputWeightDense = generateSparseWeights((unsigned char) kernelSize, _numInputChannel, numGroupCurrentLayer, denseProb, pruneScale);
+            inputWeightDense = generateSparseWeights((unsigned char) kernelSize, _numInputChannel, numOutputChannels, numGroupCurrentLayer, denseProb, pruneScale);
         }
         else
         {
@@ -1138,7 +1222,7 @@ void testFixture::launch (
     }
     //Generate biases
     t_bias fixedBias = (t_bias) (std::nearbyint(_bias * (float) (1 << (FRAC_WIDTH + FRAC_WIDTH)) ));
-    auto pBiasVector = std::make_shared<t_aligned_short_vector>(_numInputChannel, fixedBias);
+    auto pBiasVector = std::make_shared<t_aligned_short_vector>(numOutputChannels, fixedBias);
 
     /* 2. Allocate the aligned weight tensors and compress them if necessary
      * */
@@ -1157,7 +1241,7 @@ void testFixture::launch (
 #if defined(SPARSE_SYSTEM)
         pWeight.reset(new FlexibleDirectCompressedTensor (
                     inputWeightDense,
-                    _numInputChannel, //_num3DTensors
+                    numOutputChannels, //_num3DTensors
                     maxScalarIndexInChannelGroup+1, //channel
                     (unsigned char) kernelSize, //width
                     (unsigned char) kernelSize, //height
@@ -1170,7 +1254,7 @@ void testFixture::launch (
 #else
         pWeight.reset( new AlignedTensor (
                     inputWeightDense,
-                    _numInputChannel, //_num3DTensors
+                    numOutputChannels, //_num3DTensors
                     maxScalarIndexInChannelGroup+1, //channel
                     (unsigned char) kernelSize, //width
                     (unsigned char) kernelSize, //height
