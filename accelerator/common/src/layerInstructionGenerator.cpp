@@ -349,7 +349,7 @@ void instruction_generator(
                         maxIATileHeight,
                         maxIATileWidth
                         );
-            assert(iaTBCountRequirement < IA_TBCOUNT_CACHE_SIZE && "Number if IA TB count too big to fit inside the cache");
+            assert(iaTBCountRequirement < IA_BUFFER_TBCOUNT_CACHE_SIZE && "Number if IA TB count too big to fit inside the cache");
         #endif
 
         int filterCacheRequirement = filter_cache_boundary_check(

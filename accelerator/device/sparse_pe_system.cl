@@ -8,7 +8,7 @@
 #if defined(C5SOC)
 #define VOLATILE volatile
 #else
-#define VOLATILE volatile
+#define VOLATILE
 #endif
 
 /** t_conv_input_index
@@ -65,7 +65,7 @@ __kernel void kernelNoop ()
 __attribute__((max_global_work_dim(0)))
 __kernel void kernelIAMover (
 		// Memory port for input activations
-		volatile __global const t_dram_block* restrict pIA,
+		VOLATILE __global const t_dram_block* restrict pIA,
 
 		#if defined(SPARSE_SYSTEM)
 			// Memory port for TB count per strip
@@ -388,14 +388,19 @@ __kernel void kernelWMover (
 		//Memory port for instructions
 		VOLATILE __global const t_weight_mover_instruction* restrict pInst,
 		VOLATILE __global const t_dram_block* restrict pW,
-		VOLATILE __global const t_bias* restrict pBias,
+		volatile __global const t_bias* restrict pBias,
 		#if defined(SPARSE_SYSTEM)
 		 //Pointer to filter transfer block count
-		 VOLATILE __global const t_streamblock_address* restrict pFilterTBCount,
+		 volatile __global const t_streamblock_address* restrict pFilterTBCount,
 		#endif //SPARSE_SYSTEM
 		unsigned int numInstruction
 	)
 {
+	#if defined(SPARSE_SYSTEM)
+		t_streamblock_address cacheTBCount[WEIGHT_MOVER_TBCOUNT_CACHE_SIZE];
+	#endif
+		t_bias cacheBias[WEIGHT_MOVER_BIAS_CACHE_SIZE];
+
 	for (unsigned int iInst=0; iInst<numInstruction; iInst++)
 	{
 		t_weight_mover_instruction inst = pInst[iInst];
@@ -406,10 +411,27 @@ __kernel void kernelWMover (
 		unsigned char iFilterInFold = 0;
 
 		signed int addrWeightFilterBase = inst.memWeightStart;
-		signed int addrBias = inst.memBiasStart;
-		#if defined(SPARSE_SYSTEM)
-			signed int addrWeightTB = inst.memTBCountStart;
-		#endif
+
+		/*
+		 * Preload the bias and the TB count
+		*/
+		{
+			#if defined(SPARSE_SYSTEM)
+				signed int addrWeightTB = inst.memTBCountStart;
+			#endif
+			signed int addrBias = inst.memBiasStart;
+			for (unsigned short iFilterInGroup=0; iFilterInGroup<inst.numFiltersInGroup; iFilterInGroup++)
+			{
+				#if defined(SPARSE_SYSTEM)
+					cacheTBCount[iFilterInGroup] = pFilterTBCount[addrWeightTB];
+					addrWeightTB++;
+				#endif
+
+				cacheBias[iFilterInGroup] = pBias[addrBias];
+				addrBias++;
+			}
+		}
+
 		for (unsigned short iFilterInGroup=0; iFilterInGroup<inst.numFiltersInGroup; iFilterInGroup++)
 		{
 
@@ -417,12 +439,12 @@ __kernel void kernelWMover (
 				PE_ROWS : inst.numFiltersInPartialFold;
 
 			#if defined(SPARSE_SYSTEM)
-				unsigned short numTransferBlockInFilter = pFilterTBCount[addrWeightTB];
+				unsigned short numTransferBlockInFilter = cacheTBCount[iFilterInGroup];
 			#else
 				unsigned short numTransferBlockInFilter = inst.numTBPerFilter;
 			#endif
 			
-			t_bias bias = pBias[addrBias];
+			t_bias bias = cacheBias[iFilterInGroup];
 
 			unsigned short numDramBlockInFilter = ((numTransferBlockInFilter-1) >> WIDE_SIZE_OFFSET) + 1;
 			
@@ -491,10 +513,6 @@ __kernel void kernelWMover (
 			{
 				iFilterInFold++;
 			}
-			addrBias++;
-			#if defined (SPARSE_SYSTEM)
-				addrWeightTB++;
-			#endif
 		} //for loop over the filters in one group
 	}  //for loop over instructions
 }
@@ -631,8 +649,8 @@ void updateIABufferWriter (
 
 		//Modified buffer and buffers
 		#if defined(SPARSE_SYSTEM)
-			t_streamblock_address cacheIAStreamBlockAddress0 [IA_TBCOUNT_CACHE_SIZE],
-			t_streamblock_address cacheIAStreamBlockAddress1 [IA_TBCOUNT_CACHE_SIZE],
+			t_streamblock_address cacheIAStreamBlockAddress0 [IA_BUFFER_TBCOUNT_CACHE_SIZE],
+			t_streamblock_address cacheIAStreamBlockAddress1 [IA_BUFFER_TBCOUNT_CACHE_SIZE],
 		#else
 			unsigned short numTBPerStrip[2],
 		#endif
@@ -701,8 +719,8 @@ void getIABufferReaderOutput (
 
 		//Buffers to read from
 		#if defined(SPARSE_SYSTEM)
-			t_streamblock_address cacheIAStreamBlockAddress0 [IA_TBCOUNT_CACHE_SIZE],
-			t_streamblock_address cacheIAStreamBlockAddress1 [IA_TBCOUNT_CACHE_SIZE],
+			t_streamblock_address cacheIAStreamBlockAddress0 [IA_BUFFER_TBCOUNT_CACHE_SIZE],
+			t_streamblock_address cacheIAStreamBlockAddress1 [IA_BUFFER_TBCOUNT_CACHE_SIZE],
 		#else
 			unsigned short numTBPerStrip[],
 		#endif
@@ -739,8 +757,8 @@ void updateIABufferReader (
 
 		//Buffers to read from
 		#if defined(SPARSE_SYSTEM)
-			t_streamblock_address cacheIAStreamBlockAddress0 [IA_TBCOUNT_CACHE_SIZE],
-			t_streamblock_address cacheIAStreamBlockAddress1 [IA_TBCOUNT_CACHE_SIZE],
+			t_streamblock_address cacheIAStreamBlockAddress0 [IA_BUFFER_TBCOUNT_CACHE_SIZE],
+			t_streamblock_address cacheIAStreamBlockAddress1 [IA_BUFFER_TBCOUNT_CACHE_SIZE],
 		#else
 			unsigned short numTBPerStrip[],
 		#endif
@@ -806,8 +824,8 @@ __kernel void kernelIABuffer ()
 
 	//TODO: Determine whether the attribute for the TB count cache is correct
 	#if defined(SPARSE_SYSTEM)
-		t_streamblock_address cacheIAStreamBlockAddress0 [IA_TBCOUNT_CACHE_SIZE] __attribute__((bankwidth(2)));
-		t_streamblock_address cacheIAStreamBlockAddress1 [IA_TBCOUNT_CACHE_SIZE] __attribute__((bankwidth(2)));
+		t_streamblock_address cacheIAStreamBlockAddress0 [IA_BUFFER_TBCOUNT_CACHE_SIZE] __attribute__((bankwidth(2)));
+		t_streamblock_address cacheIAStreamBlockAddress1 [IA_BUFFER_TBCOUNT_CACHE_SIZE] __attribute__((bankwidth(2)));
 	#else
 		t_streamblock_address numTBPerStrip [2];
 	#endif
@@ -1122,8 +1140,8 @@ void updateIABufferWriter (
 
 		//Modified buffer and buffers
 		#if defined(SPARSE_SYSTEM)
-			t_streamblock_address cacheIAStreamBlockAddress0 [IA_TBCOUNT_CACHE_SIZE],
-			t_streamblock_address cacheIAStreamBlockAddress1 [IA_TBCOUNT_CACHE_SIZE],
+			t_streamblock_address cacheIAStreamBlockAddress0 [IA_BUFFER_TBCOUNT_CACHE_SIZE],
+			t_streamblock_address cacheIAStreamBlockAddress1 [IA_BUFFER_TBCOUNT_CACHE_SIZE],
 		#else
 			unsigned short numTBPerStrip[],
 		#endif
@@ -1331,8 +1349,8 @@ void getIABufferReaderOutput (
 
 		//Buffers to read from
 		#if defined(SPARSE_SYSTEM)
-			t_streamblock_address cacheIAStreamBlockAddress0 [IA_TBCOUNT_CACHE_SIZE],
-			t_streamblock_address cacheIAStreamBlockAddress1 [IA_TBCOUNT_CACHE_SIZE],
+			t_streamblock_address cacheIAStreamBlockAddress0 [IA_BUFFER_TBCOUNT_CACHE_SIZE],
+			t_streamblock_address cacheIAStreamBlockAddress1 [IA_BUFFER_TBCOUNT_CACHE_SIZE],
 		#else
 			unsigned short numTBPerStrip[],
 		#endif
@@ -1409,8 +1427,8 @@ void updateIABufferReader (
 
 		//Buffers to read from
 		#if defined(SPARSE_SYSTEM)
-			t_streamblock_address cacheIAStreamBlockAddress0 [IA_TBCOUNT_CACHE_SIZE],
-			t_streamblock_address cacheIAStreamBlockAddress1 [IA_TBCOUNT_CACHE_SIZE],
+			t_streamblock_address cacheIAStreamBlockAddress0 [IA_BUFFER_TBCOUNT_CACHE_SIZE],
+			t_streamblock_address cacheIAStreamBlockAddress1 [IA_BUFFER_TBCOUNT_CACHE_SIZE],
 		#else
 			unsigned short numTBPerStrip[],
 		#endif
@@ -2264,7 +2282,7 @@ __kernel void kernelMisc ()
 #ifdef MEMORY_WRITER
 __attribute__((max_global_work_dim(0)))
 __kernel void kernelOAMover (
-		volatile __global t_output_dram_block* restrict pOA,
+		VOLATILE __global t_output_dram_block* restrict pOA,
 
 		#if defined(SPARSE_SYSTEM)
 			volatile __global t_streamblock_address* restrict pTBCount,
@@ -2276,6 +2294,10 @@ __kernel void kernelOAMover (
 		unsigned int offsetInstruction
 	)
 {
+	#if defined(SPARSE_SYSTEM)
+		t_streamblock_address cacheTBCount [OA_MOVER_TBCOUNT_CACHE_SIZE];
+	#endif
+
 	//Use while loop instead of for-loop
 	unsigned int iInst = 0;
 	while (iInst < numInstruction)
@@ -2305,9 +2327,12 @@ __kernel void kernelOAMover (
 		signed int addrOARowContribution = 0;
 		//signed int addrOAGroupContribution = 0;
 		#if defined(SPARSE_SYSTEM)
-			signed int addrTBPeColContribution = 0;
-			signed int addrTBColContribution = 0;
-			signed int addrTBRowContribution = 0;
+			//Total output width covered by all the PE column tiles
+			unsigned short totalTileWidth = ((unsigned short) numActivePeCols) 
+				* ((unsigned short) inst.columnTileWidth);
+
+			//Iterator over all columns in a tile
+			unsigned short iTotalCol = 0;
 			//signed int addrTBGroupContribution = 0;
 		#endif
 
@@ -2345,7 +2370,9 @@ __kernel void kernelOAMover (
 							numActivePeCols));
 				#if defined(SPARSE_SYSTEM)
 					//int addrTB = inst.memTBStart + addrTBGroupContribution + addrTBRowContribution + addrTBColContribution + addrTBPeColContribution;
-					int addrTB = inst.memTBStart + addrTBRowContribution + addrTBColContribution + addrTBPeColContribution;
+					unsigned short addrCacheTB = iTotalCol 
+						+ (unsigned short) iOutputHeightInColTile * (unsigned short) totalTileWidth;
+
 					bool proceed = true;
 					unsigned short clusterCount = 0;
 					while (proceed)
@@ -2374,7 +2401,7 @@ __kernel void kernelOAMover (
 					if (enableSparsification == TRUE)
 					{
 						//Store the cluster count
-						pTBCount[addrTB++] = tbBlockCount;
+						cacheTBCount[addrCacheTB] = tbBlockCount;
 					}
 				#else
 					for (unsigned int i=0; i<inst.numDramBlockPerStrip;)
@@ -2396,38 +2423,61 @@ __kernel void kernelOAMover (
 				iCol++;
 				addrOAPeColContribution += (signed int) inst.memOAPEColStride;
 				#if defined(SPARSE_SYSTEM)
-					addrTBPeColContribution += (signed int) inst.memTBPEColStride;
+					iTotalCol += numActivePeCols;
 				#endif
 				if (iCol==numActivePeCols)
 				{
 					iCol = 0;
 					addrOAPeColContribution = 0;
-					#if defined(SPARSE_SYSTEM)
-						addrTBPeColContribution = 0;
-					#endif
 
 					iOutputWidthInColTile++;
 					addrOAColContribution += (signed int) inst.memOAColStride;
 					#if defined(SPARSE_SYSTEM)
-						addrTBColContribution += (signed int) inst.memTBColStride;
+						iTotalCol = iOutputWidthInColTile;
 					#endif
 					if (iOutputWidthInColTile==inst.columnTileWidth)
 					{
 						iOutputWidthInColTile = 0;
 						addrOAColContribution = 0;
 						#if defined(SPARSE_SYSTEM)
-							addrTBColContribution = 0;
+							iTotalCol = 0;
 						#endif
 
 						iOutputHeightInColTile++;
 						addrOARowContribution += (signed int) inst.memOARowStride;
-						#if defined(SPARSE_SYSTEM)
-							addrTBRowContribution += (signed int) inst.memTBRowStride;
-						#endif
 					}
 				}
 				EMULATOR_PRINT(("[kernelOAMover] FINISHED a strip transfer.\n"));
 			} //for. strip inside the OA tile
+
+			//Write the TB count from the cache to the off-chip memory
+			#if defined(SPARSE_SYSTEM)
+				signed int addrTBColContribution = 0;
+				signed int addrTBRowContribution = 0;
+				unsigned short iColTB = 0;
+				unsigned char iRowTB = 0;
+
+				unsigned short numTBCountToTransfer = (enableSparsification == TRUE) ?
+					inst.numColumnTileWidthxTileHeightxNumActiveCols : 0x0;
+
+				for (unsigned short iter=0; iter<numTBCountToTransfer; iter++)
+				{	
+					int addrTB = inst.memTBStart + addrTBRowContribution + addrTBColContribution;
+
+					pTBCount[addrTB] = cacheTBCount[iter];
+
+					iColTB++;
+					addrTBColContribution += (signed int) inst.memTBColStride;
+					if (iColTB == totalTileWidth)
+					{
+						iColTB = 0;
+						addrTBColContribution = 0x0;
+
+						iRowTB++;
+						addrTBRowContribution += (signed int) inst.memTBRowStride;
+					}
+				}
+			#endif //SPARSE_SYSTEM
 
 			//Increment the instruction count.
 			iInst++;
