@@ -1098,7 +1098,7 @@ std::vector<fixedPointNumber> testFixture::generateSparseWeights (
     assert(_kernelSize % 2 == 1);
     assert(_numInputChannel % _numGroups == 0);
     std::vector<fixedPointNumber> fpWeightTensor;
-    assert ((((unsigned int) _numOutputChannel) % _numGroups) && "Number of output channels is not divisble by the number of groups.");
+    assert ((((unsigned int) _numOutputChannel) % _numGroups == 0) && "Number of output channels is not divisble by the number of groups.");
     unsigned char numOCPerGroup = _numOutputChannel / _numGroups;
     unsigned char numICPerGroup = _numInputChannel / _numGroups;
 
