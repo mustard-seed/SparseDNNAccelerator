@@ -386,12 +386,12 @@ __kernel void kernelIAMover (
 __attribute__((max_global_work_dim(0)))
 __kernel void kernelWMover (
 		//Memory port for instructions
-		VOLATILE __global const t_weight_mover_instruction* restrict pInst,
-		VOLATILE __global const t_dram_block* restrict pW,
-		volatile __global const t_bias* restrict pBias,
+		__global const t_weight_mover_instruction* restrict pInst,
+		__global const t_dram_block* restrict pW,
+		__global const t_bias* restrict pBias,
 		#if defined(SPARSE_SYSTEM)
 		 //Pointer to filter transfer block count
-		 volatile __global const t_streamblock_address* restrict pFilterTBCount,
+		 __global const t_streamblock_address* restrict pFilterTBCount,
 		#endif //SPARSE_SYSTEM
 		unsigned int numInstruction
 	)
@@ -2285,7 +2285,7 @@ __kernel void kernelOAMover (
 		VOLATILE __global t_output_dram_block* restrict pOA,
 
 		#if defined(SPARSE_SYSTEM)
-			volatile __global t_streamblock_address* restrict pTBCount,
+			__global t_streamblock_address* restrict pTBCount,
 		#endif
 
 		VOLATILE __global const t_oa_mover_instruction* restrict pInstruction,

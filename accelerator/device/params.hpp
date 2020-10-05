@@ -2,7 +2,7 @@
 #define PARAMS_DEFINED
 
 //#define HOST_DEBUG
-#define SPARSE_SYSTEM
+//#define SPARSE_SYSTEM
 #define OA_PING_PONG
 
 #define NOOP

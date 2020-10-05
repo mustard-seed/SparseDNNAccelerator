@@ -3,6 +3,10 @@
 #include "floatFixedPointConversion.hpp"
 #include "timer.hpp"
 
+#if !defined(C5SOC)
+#include "CL/cl_ext_intelfpga.h" //For CL_CHANNEL_<X>_INTELFPGA
+#endif
+
 #include <iomanip>
 #include <limits>
 
@@ -800,7 +804,7 @@ namespace GraphRuntime {
         return vecOutputBlobsInfo;
     }
 
-    void AcceleratorWrapper::inference()
+    void AcceleratorWrapper::inference(bool flagEnableProfile)
     {
         Timer t;
         t.start();
@@ -895,6 +899,31 @@ namespace GraphRuntime {
         int numLayers = vecLayerInfo.size();
         vecOAFinishes.resize(numLayers);
 
+        if (flagEnableProfile == true)
+        {
+            clGetProfileDataDeviceIntelFPGA (
+                        //cl_device_id
+                        clDevice(),
+                        //cl_program
+                        program(),
+                        //bool read_enqueue_kernels, no effect
+                        false,
+                        //cl_bool read_auto_enqueued,
+                        true,
+//                        cl_bool clear_counters_after_readback,
+//                        size_t param_value_size,
+//                        void *param_value,
+//                        size_t *param_value_size_ret,
+//                        cl_int *errcode_ret
+                        false,
+                        0,
+                        NULL,
+                        0,
+                        NULL
+                        );
+
+        }
+
         //Launch the IA mover once first
         {
             #if defined(HOST_DEBUG)
@@ -935,6 +964,30 @@ namespace GraphRuntime {
             clCQOAMover.finish();
         #endif
 
+            if (flagEnableProfile == true)
+            {
+                clGetProfileDataDeviceIntelFPGA (
+                            //cl_device_id
+                            clDevice(),
+                            //cl_program
+                            program(),
+                            //bool read_enqueue_kernels, no effect
+                            false,
+                            //cl_bool read_auto_enqueued,
+                            true,
+    //                        cl_bool clear_counters_after_readback,
+    //                        size_t param_value_size,
+    //                        void *param_value,
+    //                        size_t *param_value_size_ret,
+    //                        cl_int *errcode_ret
+                            false,
+                            0,
+                            NULL,
+                            0,
+                            NULL
+                            );
+
+            }
 
         /*
          *4. Transfer output blobs from the FPGA to the host

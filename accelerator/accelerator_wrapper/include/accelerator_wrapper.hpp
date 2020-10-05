@@ -6,9 +6,6 @@
 #include <memory>
 
 #include "aocl_utils_cpp.hpp"
-#if !defined(C5SOC)
-#include "CL/cl_ext_intelfpga.h" //For CL_CHANNEL_<X>_INTELFPGA
-#endif
 
 #include "floatFixedPointConversion.hpp"
 #include "tensorCompression.hpp"
@@ -209,7 +206,7 @@ namespace GraphRuntime {
              * \brief inference
              * \details Perform inference using the content of the current inference buffers
              */
-            void inference();
+            void inference(bool flagEnableProfile=false);
 
             /*!
              * \brief getInvocationOverhead
