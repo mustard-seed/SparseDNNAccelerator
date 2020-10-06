@@ -30,6 +30,12 @@ Only available on certain Arria 10 and Stratix 10 boards
 //__asm__(".symver _ZNSt6chrono3_V212system_clock3nowEv,_ZNSt6chrono12system_clock3nowEv@GLIBCXX_3.4.11");
 //#endif
 
+//See https://www.intel.com/content/www/us/en/programmable/documentation/mwh1391807965224.html#yng1552497976376
+typedef cl_int (*clGetProfileDataDevice_fn) (cl_device_id, cl_program,
+                                                       cl_bool, cl_bool, cl_bool,
+                                                       size_t, void *,
+                                                       size_t *, cl_int *);
+
 namespace GraphRuntime {
     std::vector<float> convert2Float(std::vector<fixedPointNumber> fpVector)
     {
@@ -473,7 +479,11 @@ namespace GraphRuntime {
             auto transferBytes = sizeElement * numElements;
 
             std::cout <<"Transfering "<<transferBytes<<" bytes into bufferIAMoverInstructions"<<std::endl;
-            assert(transferBytes <= MAX_DRAM_BYTE_INPUT_MOVER_INSTRUCTION && "Too many IA mover instructions to fit inside the global memory" );
+            if (transferBytes > MAX_DRAM_BYTE_INPUT_MOVER_INSTRUCTION)
+            {
+                std::cout << "Too many IA mover instructions to fit inside the global memory."<<std::endl;
+                throw;
+            }
 
             status = clCQIAMover.enqueueWriteBuffer(bufferIAMoverInstructions, //buffer
                                                  CL_TRUE, //blocking_write
@@ -501,7 +511,11 @@ namespace GraphRuntime {
             if (transferBytes > 0)
             {
                 std::cout <<"Transfering "<<transferBytes<<" bytes into bufferIATileControllerInstructions"<<std::endl;
-                assert(transferBytes <= MAX_DRAM_BYTE_INPUT_TILE_CONTROLLER_INSTRUCTION && "Too many IA Tile instructions to fit inside the global memory" );
+                if (transferBytes > MAX_DRAM_BYTE_INPUT_TILE_CONTROLLER_INSTRUCTION)
+                {
+                    std::cout << "Too many IA Tile instructions to fit inside the global memory."<<std::endl;
+                    throw;
+                }
 
                 status = clCQIATileController.enqueueWriteBuffer(bufferIATileControllerInstructions, //buffer
                                                                  CL_TRUE, //blocking_write
@@ -528,7 +542,11 @@ namespace GraphRuntime {
             auto transferBytes = sizeElement * numElements;
 
             std::cout <<"Transfering "<<transferBytes<<" bytes into bufferOAMoverInstructions"<<std::endl;
-            assert(transferBytes <= MAX_DRAM_BYTE_OUTPUT_MOVER_INSTRUCTION && "Too many OA mover instructions to fit inside the global memory" );
+            if (transferBytes > MAX_DRAM_BYTE_OUTPUT_MOVER_INSTRUCTION)
+            {
+                std::cout << "Too many OA mover instructions to fit inside the global memory."<<std::endl;
+                throw;
+            }
 
             status = clCQOAMover.enqueueWriteBuffer(bufferOAMoverInstructions, //buffer
                                                  CL_TRUE, //blocking_write
@@ -554,7 +572,11 @@ namespace GraphRuntime {
             auto transferBytes = sizeElement * numElements;
 
             std::cout <<"Transfering "<<transferBytes<<" bytes into bufferOAMoverInstructions"<<std::endl;
-            assert(transferBytes <= MAX_DRAM_BYTE_OUTPUT_TILE_CONTROLLER_INSTRUCTION && "Too many OA TILE instructions to fit inside the global memory" );
+            if (transferBytes > MAX_DRAM_BYTE_OUTPUT_TILE_CONTROLLER_INSTRUCTION)
+            {
+                std::cout << "Too many OA TILE instructions to fit inside the global memory."<<std::endl;
+                throw;
+            }
 
             status = clCQOATileController.enqueueWriteBuffer(bufferOATileControllerInstructions, //buffer
                                                  CL_TRUE, //blocking_write
@@ -582,7 +604,11 @@ namespace GraphRuntime {
             if (transferBytes > 0)
             {
                 std::cout <<"Transfering "<<transferBytes<<" bytes into bufferWMoverInstructions"<<std::endl;
-                assert(transferBytes <= MAX_DRAM_BYTE_WEIGHT_MOVER_INSTRUCTION && "Too many Weight Mover instructions to fit inside the global memory" );
+                if (transferBytes > MAX_DRAM_BYTE_WEIGHT_MOVER_INSTRUCTION)
+                {
+                    std::cout << "Too many Weight Mover instructions to fit inside the global memory."<<std::endl;
+                    throw;
+                }
 
 
                 status = clCQWMover.enqueueWriteBuffer(bufferWMoverInstructions, //buffer
@@ -616,7 +642,11 @@ namespace GraphRuntime {
                 transferBytes += sizeElement * numElements;
 
                 int offsetIndex = _executionGraph.vecBiasStart.at(idxTensor++) * sizeElement;
-                assert(transferBytes <= MAX_DRAM_BYTE_INPUT_BIAS && "Too many biases to fit inside the global memory" );
+                if (transferBytes > MAX_DRAM_BYTE_INPUT_BIAS)
+                {
+                    std::cout << "Too many biases to fit inside the global memory."<<std::endl;
+                    throw;
+                }
 
                 status = clCQWMover.enqueueWriteBuffer(bufferWMoverBias, //buffer
                                                      CL_TRUE, //blocking_write
@@ -652,7 +682,11 @@ namespace GraphRuntime {
                         * (BURST_SIZE_BYTE);
 
                 weightTransferBytes += numElements*sizeElement;
-                assert(weightTransferBytes <= MAX_DRAM_BYTE_INPUT_WEIGHT && "Too many weights to fit inside the global memory" );
+                if (weightTransferBytes > MAX_DRAM_BYTE_INPUT_WEIGHT)
+                {
+                    std::cout << "Too many weights to fit inside the global memory."<<std::endl;
+                    throw;
+                }
                 status = clCQWMover.enqueueWriteBuffer(bufferWMoverWDramBlocks, //buffer
                                                      CL_TRUE, //blocking_write
                                                      byteOffset, //offset
@@ -686,9 +720,11 @@ namespace GraphRuntime {
                 transferBytes += sizeElement * numElements;
 
                 int byteOffset = _executionGraph.vecWeightTBCountStart.at(idxTensor++) * 2;
-
-                assert(transferBytes <= MAX_DRAM_BYTE_INPUT_WEIGHT_SB_COUNT && "Too many weight TB counts to fit inside the global memory" );
-
+                if (transferBytes > MAX_DRAM_BYTE_INPUT_WEIGHT_SB_COUNT)
+                {
+                    std::cout << "Too many weight TB counts to fit inside the global memory."<<std::endl;
+                    throw;
+                }
                 status = clCQWMover.enqueueWriteBuffer(bufferWMoverWTBCounts, //buffer
                                                      CL_TRUE, //blocking_write
                                                      byteOffset, //offset
@@ -716,8 +752,11 @@ namespace GraphRuntime {
             if (transferBytes > 0)
             {
                 std::cout <<"Transfering "<<transferBytes<<" bytes into bufferMKInstructions"<<std::endl;
-                assert(transferBytes <= MAX_DRAM_BYTE_MISC_CONTROLLER_INSTRUCTION && "Too many MK instructions to fit inside the global memory" );
-
+                if (transferBytes > MAX_DRAM_BYTE_MISC_CONTROLLER_INSTRUCTION)
+                {
+                    std::cout << "Too many MK instructions to fit inside the global memory."<<std::endl;
+                    throw;
+                }
                 status = clCQMKController.enqueueWriteBuffer(bufferMKInstructions, //buffer
                                                              CL_TRUE, //blocking_write
                                                              0, //offset
@@ -741,10 +780,13 @@ namespace GraphRuntime {
         //Sanity checks:
         //1. inputBlobID should be in range
         //2. Number of elements inside floatBlob should be consistent with the inputBlobID info.
-        assert(inputBlobID < vecInputBlobsInfo.size() && "inputBlobID is out of range");
         auto blobInfo = vecInputBlobsInfo.at(inputBlobID);
-        assert(blobInfo.group*blobInfo.channelPerGroup*blobInfo.height*blobInfo.width
-               == floatBlob.size() && "Number of elements in the provided vector of float mismatch that of the requested input tensor size.");
+        if(blobInfo.group*blobInfo.channelPerGroup*blobInfo.height*blobInfo.width
+               != floatBlob.size())
+        {
+            std::cout << "Number of elements in the provided vector of float mismatch that"
+                      <<" of the requested input tensor size."<<std::endl;
+        }
 
         //Quantize the input
         std::vector<fixedPointNumber> inputBlobQuantized = quantize(floatBlob, blobInfo.numFracBits);
@@ -785,7 +827,6 @@ namespace GraphRuntime {
 
     std::vector<float> AcceleratorWrapper::extractOutputBlob (int outputBlobID)
     {
-        assert(outputBlobID < vecOutputBlobsInfo.size() && "outputBlobID is out of range.");
         t_blob_info blobInfo = vecOutputBlobsInfo.at(outputBlobID);
         std::vector<fixedPointNumber> quantizedResult;
         signed char fracWidth = blobInfo.numFracBits;
@@ -849,8 +890,11 @@ namespace GraphRuntime {
                 auto valueVectorSizeBytes = sizeTransferBlockElement * numTransferBlocks;
 
                 int activationOffsetByte = blobInfo.memoryRegionID * MEM_ACTIVATION_REGION_SIZE_PER_SLICE * BURST_SIZE_BYTE;
-                assert(valueVectorSizeBytes <= MEM_ACTIVATION_REGION_SIZE_PER_SLICE && "Too many input activation bytes to fit inside the global memory" );
-
+                if (valueVectorSizeBytes > MEM_ACTIVATION_REGION_SIZE_PER_SLICE)
+                {
+                    std::cout << "Too many input activation bytes to fit inside the global memory."<<std::endl;
+                    throw;
+                }
                 status = clCQIAMover.enqueueWriteBuffer(bufferActivationDramBlocks, //buffer
                                                          CL_TRUE, //blocking_write
                                                          activationOffsetByte, //offset
@@ -874,8 +918,11 @@ namespace GraphRuntime {
                         int tbCountOffsetByte = blobInfo.memoryRegionID * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE * sizeof(t_streamblock_address);
 
                         //std::cout <<"Transfering "<<transferBytes<<" bytes into bufferActivationTBCounts"<<std::endl;
-                        assert(transferBytes <= MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE && "Too many input activation TB count bytes to fit inside the global memory" );
-
+                        if (transferBytes > MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE)
+                        {
+                            std::cout << "Too many input activation TB count bytes to fit inside the global memory."<<std::endl;
+                            throw;
+                        }
                         status = clCQIAMover.enqueueWriteBuffer(bufferActivationTBCounts, //buffer
                                                              CL_TRUE, //blocking_write
                                                              tbCountOffsetByte, //offset
@@ -901,7 +948,8 @@ namespace GraphRuntime {
 
         if (flagEnableProfile == true)
         {
-            clGetProfileDataDeviceIntelFPGA (
+            clGetProfileDataDevice_fn get_profile_data_ptr = (clGetProfileDataDevice_fn) clGetExtensionFunctionAddressForPlatform (clPlatform(), "clGetProfileDataDeviceIntelFPGA");
+            (get_profile_data_ptr) (
                         //cl_device_id
                         clDevice(),
                         //cl_program
@@ -921,6 +969,25 @@ namespace GraphRuntime {
                         0,
                         NULL
                         );
+            (get_profile_data_ptr) (
+                        //cl_device_id
+                        clDevice(),
+                        //cl_program
+                        program(),
+                        //bool read_enqueue_kernels, no effect
+                        false,
+                        //cl_bool read_auto_enqueued,
+                        true,
+//                        cl_bool clear_counters_after_readback,
+//                        size_t param_value_size,
+//                        void *param_value,
+//                        size_t *param_value_size_ret,
+//                        cl_int *errcode_ret
+                        false,
+                        0,
+                        NULL,
+                        0,
+                        NULL);
 
         }
 
@@ -966,7 +1033,8 @@ namespace GraphRuntime {
 
             if (flagEnableProfile == true)
             {
-                clGetProfileDataDeviceIntelFPGA (
+                clGetProfileDataDevice_fn get_profile_data_ptr = (clGetProfileDataDevice_fn) clGetExtensionFunctionAddressForPlatform (clPlatform(), "clGetProfileDataDeviceIntelFPGA");
+                (get_profile_data_ptr) (
                             //cl_device_id
                             clDevice(),
                             //cl_program
@@ -984,8 +1052,7 @@ namespace GraphRuntime {
                             0,
                             NULL,
                             0,
-                            NULL
-                            );
+                            NULL);
 
             }
 
@@ -1004,8 +1071,11 @@ namespace GraphRuntime {
                 auto valueVectorSizeBytes = sizeTransferBlockElement * numTransferBlocks;
 
                 int activationOffsetByte = blobInfo.memoryRegionID * MEM_ACTIVATION_REGION_SIZE_PER_SLICE * BURST_SIZE_BYTE;
-                assert(valueVectorSizeBytes <= MEM_ACTIVATION_REGION_SIZE_PER_SLICE && "Too many output activation bytes to read from global memory" );
-
+                if (valueVectorSizeBytes > MEM_ACTIVATION_REGION_SIZE_PER_SLICE)
+                {
+                    std::cout << "Too many output activation bytes to read from global memory."<<std::endl;
+                    throw;
+                }
                 status = clCQOAMover.enqueueReadBuffer(bufferActivationDramBlocks, //buffer
                                                          CL_TRUE, //blocking_write
                                                          activationOffsetByte, //offset
@@ -1030,8 +1100,11 @@ namespace GraphRuntime {
 
                         int tbCountOffsetByte = blobInfo.memoryRegionID * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE * sizeof(t_streamblock_address);
 
-                        assert(transferBytes <= MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE && "Too many output activation TB count bytes to be read from global memory" );
-
+                        if (transferBytes > MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE)
+                        {
+                            std::cout << "Too many output activation TB count bytes to be read from global memory."<<std::endl;
+                            throw;
+                        }
                         status = clCQOAMover.enqueueReadBuffer(bufferActivationTBCounts, //buffer
                                                              CL_TRUE, //blocking_write
                                                              tbCountOffsetByte, //offset

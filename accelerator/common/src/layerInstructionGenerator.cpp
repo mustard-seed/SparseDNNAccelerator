@@ -140,8 +140,16 @@ void instruction_generator(
                 PE_COLS : 1;
 
     //Input height and width before stretch and padding
-    assert ((inputSPHeightUnit == 1) || ((inputSPHeight-1) % inputSPHeightUnit == 0));
-    assert ((inputSPWidthUnit == 1) || ((inputSPWidth-1) % inputSPWidthUnit == 0));
+    if ((inputSPHeightUnit != 1) && ((inputSPHeight-1) % inputSPHeightUnit != 0))
+    {
+        std::cout <<"[layer instruction generation] The stretch and padded height is not compatiable with the height strech-padding unit"<<std::endl;
+        throw;
+    }
+    if ((inputSPWidthUnit != 1) && ((inputSPWidth-1) % inputSPWidthUnit != 0))
+    {
+        std::cout <<"[layer instruction generation] The stretch and padded width is not compatiable with the width strech-padding unit"<<std::endl;
+        throw;
+    }
     unsigned int inputDenseHeight = 1 + (inputSPHeight-1) / inputSPHeightUnit;
     unsigned int inputDenseWidth = 1 + (inputSPWidth-1) / inputSPWidthUnit;
 
@@ -215,8 +223,12 @@ void instruction_generator(
     switch(op) {
         case CONVOLUTION : {
             numOAGroupsCurrentLayer = _numGroupsCurrentLayer;
-            assert(numOutputChannels % _numGroupsCurrentLayer == 0);
-            assert(numInputChannels0 % _numGroupsCurrentLayer == 0);
+            if ((numOutputChannels % _numGroupsCurrentLayer != 0)
+                    || (numInputChannels0 % _numGroupsCurrentLayer != 0))
+            {
+                std::cout <<"[layer instruction generator] Number of input or output channels is not divisble by the number of groups in the current layer."<<std::endl;
+                throw;
+            }
             numIAMoverInputChannelsPerGroup0 = numInputChannels0 / _numGroupsCurrentLayer;
             numIAMoverInputChannelsPerGroup1  = 0;
             numIAMoverGroup0 = _numGroupsCurrentLayer;
@@ -233,9 +245,24 @@ void instruction_generator(
         }
         break;
         case CONCATENATION : {
-            assert(numOutputChannels == (numInputChannels0 + numInputChannels1));
-            assert(flagSparseInput == FALSE);
-            assert(kernelSize == 1);
+            if (numOutputChannels != (numInputChannels0 + numInputChannels1))
+            {
+                std::cout <<"[layer instruction generator] Operation is concatenation, "
+                            "but the two input tensor's input channels do not add up to the number of output channels."<<std::endl;
+                throw;
+            }
+            if (flagSparseInput != FALSE)
+            {
+                std::cout <<"[layer instruction generator] Operation is concatenation, "
+                            "but the input sparse flag is TRUE"<<std::endl;
+                throw;
+            }
+            if (kernelSize != 1)
+            {
+                std::cout <<"[layer instruction generator] Operation is concatenation, "
+                            "but the kernel size is not 1"<<std::endl;
+                throw;
+            }
             numIAMoverInputChannelsPerGroup0 = numInputChannels0;
             numIAMoverInputChannelsPerGroup1 = numInputChannels1;
             numIAMoverGroup0 = 1;
@@ -254,8 +281,18 @@ void instruction_generator(
         }
         break;
         case MAX_POOL : {
-            assert(numOutputChannels == numInputChannels0);
-            assert(flagSparseInput == FALSE);
+            if (numOutputChannels != numInputChannels0)
+            {
+                std::cout <<"[layer instruction generator] Operation is max pool, "
+                            "but the number of input channels does not match the number of output channels."<<std::endl;
+                throw;
+            }
+            if (flagSparseInput != FALSE)
+            {
+                std::cout <<"[layer instruction generator] Operation is max pool, "
+                            "but the input sparse flag is TRUE"<<std::endl;
+                throw;
+            }
             numIAMoverInputChannelsPerGroup0 = BURST_SIZE_BYTE;
             numIAMoverInputChannelsPerGroup1 = 0;
             numIAMoverGroup0 = (1 + (numInputChannels0-1) / BURST_SIZE_BYTE);
@@ -273,10 +310,24 @@ void instruction_generator(
         }
         break;
         case ELT_ADD : {
-            assert(numInputChannels0==numInputChannels1);
-            assert(numOutputChannels == numInputChannels0);
-            assert(flagSparseInput == FALSE);
-            assert(kernelSize == 1);
+            if ( (numOutputChannels != numInputChannels0) || (numInputChannels0!=numInputChannels1))
+            {
+                std::cout <<"[layer instruction generator] Operation is elt-add, "
+                            "but the number of input channels and the number of output channels do not match."<<std::endl;
+                throw;
+            }
+            if (flagSparseInput != FALSE)
+            {
+                std::cout <<"[layer instruction generator] Operation is elt-add, "
+                            "but the input sparse flag is TRUE."<<std::endl;
+                throw;
+            }
+            if (kernelSize != 1)
+            {
+                std::cout <<"[layer instruction generator] Operation is elt-add, "
+                            "but the kernel size is not 1."<<std::endl;
+                throw;
+            }
             numIAMoverInputChannelsPerGroup0 = numInputChannels0;
             numIAMoverInputChannelsPerGroup1 = numInputChannels1;
             numIAMoverGroup0 = 1;
@@ -293,8 +344,18 @@ void instruction_generator(
         }
         break;
         case AVG_POOL : {
-            assert(numOutputChannels == numInputChannels0);
-            assert(flagSparseInput == FALSE);
+            if ( (numOutputChannels != numInputChannels0))
+            {
+                std::cout <<"[layer instruction generator] Operation is avg-pool, "
+                            "but the number of output channels does not match the number of input channels."<<std::endl;
+                throw;
+            }
+            if (flagSparseInput != FALSE)
+            {
+                std::cout <<"[layer instruction generator] Operation is avg-pool, "
+                            "but the input sparse flag is TRUE."<<std::endl;
+                throw;
+            }
             numIAMoverInputChannelsPerGroup0 = BURST_SIZE_BYTE;
             numIAMoverInputChannelsPerGroup1 = 0;
             numIAMoverGroup0 = (1 + (numInputChannels0-1) / BURST_SIZE_BYTE);
@@ -311,67 +372,40 @@ void instruction_generator(
     break;
         default: {
             std::cout <<"Instruction generator: unsupported operation type: "<<op<<std::endl;
-            assert(false);
+            throw;
         }
         break;
     }
     unsigned int numOutputChannelsPerGroupCurrentLayer =
             numOutputChannels / numOAGroupsCurrentLayer;
 
-    assert(numOutputChannels % numGroupsNextLayer == 0);
+    if (numOutputChannels % numGroupsNextLayer != 0)
+    {
+        std::cout <<"[layer instruction generator] The number of output channels is not divisble by the number of groups "
+                    "in the next layer."<<std::endl;
+        throw;
+    }
     unsigned int numOutputChannelsPerGroupNextLayer = numOutputChannels / numGroupsNextLayer;
 
     unsigned int numComputeFoldPerGroup = (numOutputChannelsPerGroupCurrentLayer-1) / numActiveElementsInFullComputeFold + 1;
     unsigned int numFullComputeFoldPerGroup = numOutputChannelsPerGroupCurrentLayer / numActiveElementsInFullComputeFold;
     unsigned int numActiveElementsInPartialComputeFold = numOutputChannelsPerGroupCurrentLayer % numActiveElementsInFullComputeFold;
 
-    /*
-     * Cache limit check when performing convolution
-    */
-    if (op == CONVOLUTION)
+    int filterCacheRequirement = filter_cache_boundary_check(
+                    kernelSize,
+                    numInputChannels0
+                );
+    if (filterCacheRequirement > KERNEL_CACHE_DEPTH)
     {
-        int maxIATileHeight = sizeInputTileFullHeight > sizeInputTilePartialHeight ?
-                    sizeInputTileFullHeight : sizeInputTilePartialHeight;
-        int maxIATileWidth = sizeInputTileFullWidthPerCol > sizeInputTilePartialWidthPerCol ?
-                    sizeInputTileFullWidthPerCol : sizeInputTilePartialWidthPerCol;
-        int iaCacheRequirementInDramBlock = ia_cache_boundary_check(
-                    //heightTile
-                    maxIATileHeight,
-                    //widthTile
-                    maxIATileWidth,
-                    //numDramBlockPerDenseStrip,
-                    memIA0DramBlockColStride
-                    );
-        assert( iaCacheRequirementInDramBlock < IA_CACHE_DEPTH && "IA tile size is too big to fit inside the cache");
-
-        #if defined(SPARSE_SYSTEM)
-            int iaTBCountRequirement = ia_tbcount_cache_boundary_check(
-                        maxIATileHeight,
-                        maxIATileWidth
-                        );
-            assert(iaTBCountRequirement < IA_BUFFER_TBCOUNT_CACHE_SIZE && "Number if IA TB count too big to fit inside the cache");
-        #endif
-
-        int filterCacheRequirement = filter_cache_boundary_check(
-                        kernelSize,
-                        numInputChannels0
-                    );
-        assert(filterCacheRequirement < KERNEL_CACHE_DEPTH && "Individual fitler size is too big to fit inside the filter cache");
+        std::cout <<"Individual fitler size is too big to fit inside the filter cache."<<std::endl;
+        throw;
     }
 
     int maxOATileHeight = sizeOutputTileFullHeight > sizeOutputTilePartialHeight ?
                     sizeOutputTileFullHeight : sizeOutputTilePartialHeight;
     int maxOATileWidth = sizeOutputTileFullWidthPerCol > sizeOutputTilePartialWidthPerCol ?
                 sizeOutputTileFullWidthPerCol : sizeOutputTilePartialWidthPerCol;
-    int oaCacheRequirement = oa_cache_boundary_check(
-                //heightTile
-                maxOATileHeight,
-                //widthTile
-                maxOATileWidth,
-                //numChannels,
-                numOutputChannels
-                );
-    assert(oaCacheRequirement < (OA_CACHE_DEPTH * CLUSTER_SIZE) && "OA tile size is too big to fit inside the oa cache");
+
 
 
     //x & y planar coordinates in the input planar dimension
@@ -402,10 +436,67 @@ void instruction_generator(
             unsigned int maxTN = maxTNPerCol * numActiveCols
                     - (((signed int) kernelSize) - ((signed int) kernelStride) ) * (numActiveCols-1);
 
+            /*
+             * Cache limit check when performing convolution
+            */
+            if (op == CONVOLUTION)
+            {
+                int oaCacheRequirement = oa_cache_boundary_check(
+                            //heightTile
+                            maxTP,
+                            //widthTile
+                            maxTQPerCol,
+                            //numChannels,
+                            numOutputChannels
+                            );
+                if (oaCacheRequirement > (OA_CACHE_DEPTH * CLUSTER_SIZE))
+                {
+                    std::cout << "OA tile size is too big to fit inside the oa cache. "
+                              << "output height per tile, output width per col: "
+                              << maxTP <<" "<<maxTQPerCol<<std::endl;
+                    throw;
+                }
+
+                int iaCacheRequirementInDramBlock = ia_cache_boundary_check(
+                            //heightTile
+                            maxTM,
+                            //widthTile
+                            maxTNPerCol,
+                            //numDramBlockPerDenseStrip,
+                            memIA0DramBlockColStride
+                            );
+                if (iaCacheRequirementInDramBlock > IA_CACHE_DEPTH)
+                {
+                    std::cout <<"IA tile size is too big to fit inside the IA buffer cache"<<std::endl;
+                    std::cout <<"input tile height, input tile width per col, numDramBlockPerStrip: "
+                             <<" "<<maxTM<<" "<<maxTNPerCol<<" "<<memIA0DramBlockColStride<<std::endl;
+                    throw;
+                }
+
+                #if defined(SPARSE_SYSTEM)
+                    int iaTBCountRequirement = ia_tbcount_cache_boundary_check(
+                                maxTM,
+                                maxTNPerCol
+                                );
+                    if (iaTBCountRequirement > IA_BUFFER_TBCOUNT_CACHE_SIZE)
+                    {
+                        std::cout <<"IA TB count size is too big to fit inside the IA buffer cache"<<std::endl;
+                        std::cout <<"input tile height, input tile width per col: "
+                                 <<" "<<maxTM<<" "<<maxTNPerCol<<std::endl;
+                        throw;
+                    }
+                #endif
+            }
+
             /*! Generate the output tile controller instruction */
             {
-                assert (((numGroupsNextLayer == 1) || ((numOutputChannelsPerGroupNextLayer % CLUSTER_SIZE) == 0))
-                        && "Either the number of groups in the next layer should be 1, or the number of channel per next group should be divisible by CLUSTER_SIZE");
+                if (((numGroupsNextLayer != 1) && ((numOutputChannelsPerGroupNextLayer % CLUSTER_SIZE) != 0)))
+                {
+                    std::cout <<"Either the number of groups in the next layer should be 1, "
+                                "or the number of channel per next group should be divisible by CLUSTER_SIZE"
+                               <<std::endl;
+                    throw;
+                }
                 t_oa_tile_controller_instruction instructionOAControl;
 
                 instructionOAControl.numLocalTilePerColHxW = (t_uchar)(maxTQPerCol*maxTP);
@@ -421,9 +512,17 @@ void instruction_generator(
                 instructionOAControl.numActiveCols = (t_uchar) numActiveCols;
                 unsigned char leftShift = flagOutputShiftLeft;
                 unsigned char scaleShift = outputShiftBits;
-                assert ((((flagOutputShiftLeft == 0x00) && (outputShiftBits > 0))
-                        || ((flagOutputShiftLeft == 0x01) && (outputShiftBits >= 0)))
-                       && "If output shift direction is RIGHT, then the number of shift must be greater than 0");
+
+                if (!(((flagOutputShiftLeft == 0x00) && (outputShiftBits > 0))
+                     || ((flagOutputShiftLeft == 0x01) && (outputShiftBits >= 0))))
+                {
+                    std::cout << "If output shift direction is RIGHT, then the number of shift must be greater than 0."
+                              << std::endl
+                              << "shift left flag, shift amount: "
+                              <<(unsigned int) flagOutputShiftLeft<<" "
+                              <<(unsigned int) outputShiftBits<<std::endl;
+                    throw;
+                }
                 unsigned char sourceIsMisc = (op != CONVOLUTION) ? 0x01 : 0x00;
                 instructionOAControl.flagSparseCatFlagReluCatFlagSourceCatShift = (t_uchar)
                         (   ((t_uchar) (scaleShift & 0x0F))
@@ -541,9 +640,12 @@ void instruction_generator(
                                  | ((((t_uchar) inputArrangement) & 0x01) << 0x06)
                                  | ((((t_uchar) actualSyncFlag) & 0x01) << 0x07)
                                 );
-                        assert ((((flagIA0ShiftLeft == true) && (numIA0ShiftAmount >= 0))
-                                && ((flagIA1ShiftLeft == true) && (numIA1ShiftAmount >= 0)))
-                               && "Input left shift amount must be greater or equal to 0");
+                        if (!(((flagIA0ShiftLeft == true) && (numIA0ShiftAmount >= 0))
+                              && ((flagIA1ShiftLeft == true) && (numIA1ShiftAmount >= 0))))
+                        {
+                            std::cout <<"Input left shift amount must be greater or equal to 0."<<std::endl;
+                            throw;
+                        }
                         t_uchar inputShiftAmounts = ((numIA1ShiftAmount & 0x0F) << 0x04) | (numIA0ShiftAmount & 0x0F);
                         instructionIA.inputShiftAmounts = inputShiftAmounts;
                         instructionIA.memBlockStart0 = (t_int) (
@@ -631,7 +733,11 @@ void instruction_generator(
                             instructionIAControl.flagPadBitmaskCatNumActiveCols = (t_uchar)
                                     (inputNeedsBitmaskPadding | (0x7F & numActiveCols));
     #if defined(SPARSE_SYSTEM)
-                            assert(COMPRESSION_WINDOW_SIZE % 8 == 0);
+                            if (COMPRESSION_WINDOW_SIZE % 8 != 0)
+                            {
+                                std::cout <<"The compression window size is not divisible by 8."<<std::endl;
+                                throw;
+                            }
                             unsigned int numClusterinChannelGroup = 1 + (numIAMoverInputChannelsPerGroup0-1) / CLUSTER_SIZE;
                             unsigned int partialBitmask = (numClusterinChannelGroup % COMPRESSION_WINDOW_SIZE == 0)
                                     ? 0 : ((1 << (numClusterinChannelGroup % COMPRESSION_WINDOW_SIZE)) - 1);
@@ -735,12 +841,23 @@ void instruction_generator(
                                                    | ((((t_uchar) inputArrangement) & 0x01) << 0x06)
                                                   );
 
-                            assert ((numActiveCols == 1) && "Number of active columns must be 1 for concatenation!");
                             instructionIA.flagSyncCatInputArrangementCatSparseFlagCatDestinationCatNumActiveCols = (t_uchar)
                                     commonFlag | (actualSyncFlag << 0x07);
-                            assert ((((flagIA0ShiftLeft == true) && (numIA0ShiftAmount >= 0))
-                                    && ((flagIA1ShiftLeft == true) && (numIA1ShiftAmount >= 0)))
-                                   && "Input left shift amount must be greater or equal to 0");
+
+                            if (numActiveCols != 1)
+                            {
+                                std::cout <<"The operation is conatenation, but the number of active column is not 1."
+                                          <<std::endl;
+                                throw;
+                            }
+
+                            if (!(((flagIA0ShiftLeft == true) && (numIA0ShiftAmount >= 0))
+                                 && ((flagIA1ShiftLeft == true) && (numIA1ShiftAmount >= 0))))
+                            {
+                                std::cout <<"Input left shift amount must be greater or equal to 0"
+                                          <<std::endl;
+                                throw;
+                            }
                             instructionIA.inputShiftAmounts = (cl_uchar) (numIA0ShiftAmount & 0x0F);
                             instructionIA.memBlockStart0 = (t_int) (
                                         memIA0DramBlockStartIndex

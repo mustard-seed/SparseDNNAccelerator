@@ -26,11 +26,11 @@
 #include "layerInstructionGenerator.hpp"
 #include "accelerator_wrapper.hpp"
 
-//#define PLAY
-#define PERF_TEST
+#define PLAY
+//#define PERF_TEST
 //#define VALIDATE
 //Some how if repeat is 100, bad things will happen on concat
-#define REPEAT 50
+#define REPEAT 1
 #ifndef C5SOC
 #define EMULATE
 #endif
@@ -129,146 +129,49 @@ protected:
 }; //testFixture
 
 #ifdef PLAY
-//TEST_F (testFixture, overhead)
-//{
-//    unsigned char inputWidth = 1;
-//    unsigned char inputHeight = 1;
-//    //std::vector<unsigned char> vecInputChannel = {128};
-//    std::vector<unsigned char> vecInputChannel = {1};
-//    unsigned char numInputGroup = 1;
-//    unsigned char numOutputGroup = 1;
-//    unsigned char inputHeightSPUnitSize = 1;
-//    unsigned char inputWidthSPUnitSize = 1;
-//    unsigned char sizeOutputTileWidthPerColFull = 8;
-//    unsigned char sizeOutputTileHeight = 8;
-//    bool flagEnableRelu = false;
-//    bool flagSparseInput = true;
-//    bool flagSparseOutput = true;
-//    OPERATION op = CONVOLUTION;
-//    float bias = 0.0f;
-//    std::vector<float> vecDenseProb = {0.0};
-//    for (auto& numInputChannel: vecInputChannel)
-//    {
-//        for (auto & prob : vecDenseProb)
-//        {
-////            unsigned char numOutputChannel = 127*128 / (unsigned int) numInputChannel;
-//            unsigned char numOutputChannel = 1 / (unsigned int) numInputChannel;
-//            launch(
-//                        inputWidth,
-//                        inputHeight,
-//                        numInputChannel,
-//                        numOutputChannel,
-//                        numInputGroup,
-//                        numOutputGroup,
-//                        inputHeightSPUnitSize,
-//                        inputWidthSPUnitSize,
-//                        sizeOutputTileWidthPerColFull,
-//                        sizeOutputTileHeight,
-//                        flagEnableRelu,
-//                        flagSparseInput,
-//                        flagSparseOutput,
-//                        op,
-//                        bias,
-//                        false, //back to back
-//                        true, //perf test
-//                        prob, //dense prob
-//                        1 //channel prune scale
-//                  );
-//        }
-//     }
-//}
-
-TEST_F (testFixture, perf_test_fully_connected)
+TEST_F (testFixture, perf_test_concat_sparse_64x32x32)
 {
     unsigned char inputWidth = 1;
     unsigned char inputHeight = 1;
-    typedef struct {
-          unsigned char inputChannel;
-          unsigned char outputChannel;
-    } t_fc_pairs;
-    std::vector<t_fc_pairs> vecTestsPairs = {
-            {.inputChannel=32, .outputChannel=1},
-            {.inputChannel=32, .outputChannel=32},
-            {.inputChannel=32, .outputChannel=64},
-            {.inputChannel=32, .outputChannel=96},
-            {.inputChannel=32, .outputChannel=128},
-            {.inputChannel=32, .outputChannel=160},
-            {.inputChannel=32, .outputChannel=192},
-            {.inputChannel=32, .outputChannel=224},
-            {.inputChannel=32, .outputChannel=254},
-
-            {.inputChannel=64, .outputChannel=1},
-            {.inputChannel=64, .outputChannel=32},
-            {.inputChannel=64, .outputChannel=64},
-            {.inputChannel=64, .outputChannel=96},
-            {.inputChannel=64, .outputChannel=128},
-            {.inputChannel=64, .outputChannel=160},
-            {.inputChannel=64, .outputChannel=192},
-            {.inputChannel=64, .outputChannel=224},
-            {.inputChannel=64, .outputChannel=254},
-
-            {.inputChannel=128, .outputChannel=1},
-            {.inputChannel=128, .outputChannel=32},
-            {.inputChannel=128, .outputChannel=64},
-            {.inputChannel=128, .outputChannel=96},
-            {.inputChannel=128, .outputChannel=128},
-            {.inputChannel=128, .outputChannel=160},
-            {.inputChannel=128, .outputChannel=192},
-            {.inputChannel=128, .outputChannel=224},
-            {.inputChannel=128, .outputChannel=254},
-
-            {.inputChannel=254, .outputChannel=1},
-            {.inputChannel=254, .outputChannel=32},
-            {.inputChannel=254, .outputChannel=64},
-            {.inputChannel=254, .outputChannel=96},
-            {.inputChannel=254, .outputChannel=128},
-            {.inputChannel=254, .outputChannel=160},
-            {.inputChannel=254, .outputChannel=192},
-            {.inputChannel=254, .outputChannel=224},
-            {.inputChannel=254, .outputChannel=254},
-            };
-    //std::vector<unsigned char> vecInputChannel = {1};
+    unsigned char numInputChannel = 1;
+    unsigned char numOutputChannel = numInputChannel + numInputChannel;
     unsigned char numInputGroup = 1;
     unsigned char numOutputGroup = 1;
     unsigned char inputHeightSPUnitSize = 1;
     unsigned char inputWidthSPUnitSize = 1;
-    unsigned char sizeOutputTileWidthPerColFull = 8;
-    unsigned char sizeOutputTileHeight = 8;
+    unsigned char sizeOutputTileWidthPerColFull = 1;
+    unsigned char sizeOutputTileHeight = 1;
     bool flagEnableRelu = false;
-    bool flagSparseInput = true;
+    bool flagSparseInput = false;
     bool flagSparseOutput = true;
-    OPERATION op = CONVOLUTION;
+    OPERATION op = CONCATENATION;
     float bias = 0.0f;
-    std::vector<float> vecDenseProb = {1.0};
-    for (auto& testPairs: vecTestsPairs)
+    int channelPruneScale = 1;
+    std::vector<float> vecDenseProb = {1.0, 0.0};
+    for (auto & prob : vecDenseProb)
     {
-        for (auto & prob : vecDenseProb)
-        {
-            unsigned char numInputChannel = testPairs.inputChannel;
-            unsigned char numOutputChannel = testPairs.outputChannel;
-            launch(
-                        inputWidth,
-                        inputHeight,
-                        numInputChannel,
-                        numOutputChannel,
-                        numInputGroup,
-                        numOutputGroup,
-                        inputHeightSPUnitSize,
-                        inputWidthSPUnitSize,
-                        sizeOutputTileWidthPerColFull,
-                        sizeOutputTileHeight,
-                        flagEnableRelu,
-                        flagSparseInput,
-                        flagSparseOutput,
-                        op,
-                        bias,
-                        false, //back to back
-                        true, //perf test
-                        prob, //dense prob
-                        1 //channel prune scale
-                  );
-        }
-     }
+        launch(
+                    inputWidth,
+                    inputHeight,
+                    numInputChannel,
+                    numOutputChannel,
+                    numInputGroup,
+                    numOutputGroup,
+                    inputHeightSPUnitSize,
+                    inputWidthSPUnitSize,
+                    sizeOutputTileWidthPerColFull,
+                    sizeOutputTileHeight,
+                    flagEnableRelu,
+                    flagSparseInput,
+                    flagSparseOutput,
+                    op,
+                    bias,
+                    false, //back to back
+                    true, //perf test
+                    prob, //dense prob
+                    channelPruneScale
+              );
+    }
 }
 
 #endif
