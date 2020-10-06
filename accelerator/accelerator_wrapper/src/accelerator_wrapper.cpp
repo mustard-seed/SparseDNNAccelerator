@@ -948,6 +948,7 @@ namespace GraphRuntime {
 
         if (flagEnableProfile == true)
         {
+#if !defined(C5SOC)
             clGetProfileDataDevice_fn get_profile_data_ptr = (clGetProfileDataDevice_fn) clGetExtensionFunctionAddressForPlatform (clPlatform(), "clGetProfileDataDeviceIntelFPGA");
             (get_profile_data_ptr) (
                         //cl_device_id
@@ -988,6 +989,28 @@ namespace GraphRuntime {
                         NULL,
                         0,
                         NULL);
+#else
+            clGetProfileDataDeviceIntelFPGA(
+                        //cl_device_id
+                        clDevice(),
+                        //cl_program
+                        program(),
+                        //bool read_enqueue_kernels, no effect
+                        false,
+                        //cl_bool read_auto_enqueued,
+                        true,
+//                        cl_bool clear_counters_after_readback,
+//                        size_t param_value_size,
+//                        void *param_value,
+//                        size_t *param_value_size_ret,
+//                        cl_int *errcode_ret
+                        false,
+                        0,
+                        NULL,
+                        0,
+                        NULL
+                  );
+#endif
 
         }
 
@@ -1033,6 +1056,7 @@ namespace GraphRuntime {
 
             if (flagEnableProfile == true)
             {
+#if !defined(C5SOC)
                 clGetProfileDataDevice_fn get_profile_data_ptr = (clGetProfileDataDevice_fn) clGetExtensionFunctionAddressForPlatform (clPlatform(), "clGetProfileDataDeviceIntelFPGA");
                 (get_profile_data_ptr) (
                             //cl_device_id
@@ -1053,6 +1077,28 @@ namespace GraphRuntime {
                             NULL,
                             0,
                             NULL);
+#else
+            clGetProfileDataDeviceIntelFPGA(
+                        //cl_device_id
+                        clDevice(),
+                        //cl_program
+                        program(),
+                        //bool read_enqueue_kernels, no effect
+                        false,
+                        //cl_bool read_auto_enqueued,
+                        true,
+//                        cl_bool clear_counters_after_readback,
+//                        size_t param_value_size,
+//                        void *param_value,
+//                        size_t *param_value_size_ret,
+//                        cl_int *errcode_ret
+                        false,
+                        0,
+                        NULL,
+                        0,
+                        NULL
+                  );
+#endif
 
             }
 

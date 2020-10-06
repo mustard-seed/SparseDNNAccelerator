@@ -545,7 +545,7 @@ void instruction_generator(
 //                unsigned char actualFlagOutputSync = (flagOutputSync == 0x01) ?
 //                            ((isLastOutputTile == true) ? 0x1 : 0x0)
 //                            : 0x0;
-                unsigned char actualFlagOutputSync = isFirstTile ? isFirstTile : 0x0;
+                unsigned char actualFlagOutputSync = isFirstTile ? flagTensorSync : 0x0;
                 instructionOA.memSelectCatSparseFlagCatSyncFlagCatNumActiveCols =
                         ((t_uchar) numActiveCols & 0x0F)
                         | ((((t_uchar) actualFlagOutputSync) & 0x01) << 0x04)
@@ -631,7 +631,7 @@ void instruction_generator(
                             inputArrangement = 0x01;
                         }
 
-                        unsigned char actualSyncFlag = isFirstTile ? 0x01 : 0x00;
+                        unsigned char actualSyncFlag = isFirstTile ? flagTensorSync : 0x00;
 
                         instructionIA.flagSyncCatInputArrangementCatSparseFlagCatDestinationCatNumActiveCols = (t_uchar)
                                 ( ( ((t_uchar) numActiveCols)& 0x0F)

@@ -131,9 +131,9 @@ protected:
 #ifdef PLAY
 TEST_F (testFixture, perf_test_concat_sparse_64x32x32)
 {
-    unsigned char inputWidth = 1;
-    unsigned char inputHeight = 1;
-    unsigned char numInputChannel = 1;
+    unsigned char inputWidth = 32;
+    unsigned char inputHeight = 32;
+    unsigned char numInputChannel = 64;
     unsigned char numOutputChannel = numInputChannel + numInputChannel;
     unsigned char numInputGroup = 1;
     unsigned char numOutputGroup = 1;
