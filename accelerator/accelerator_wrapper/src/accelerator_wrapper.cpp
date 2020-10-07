@@ -1014,16 +1014,6 @@ namespace GraphRuntime {
 
         }
 
-        //Launch the IA mover once first
-        {
-            #if defined(HOST_DEBUG)
-                std::cout<<"Launching kernelIAMover."<<std::endl;
-            #endif
-            status = clCQIAMover.enqueueTask(kernelIAMover, NULL, NULL);
-            #if defined(HOST_DEBUG)
-            aocl_utils_cpp::checkError(status, "Failed to launch kernelIAMover!");
-            #endif
-        }
 
         for (int i=0; i<numLayers; i++)
         {
@@ -1043,7 +1033,19 @@ namespace GraphRuntime {
 
             status = clCQOAMover.enqueueTask(kernelOAMover, NULL, &(vecOAFinishes.at(i)));
             #if defined(HOST_DEBUG)
-                aocl_utils_cpp::checkError(status, "Failed to launch kernelOAMover!");
+            aocl_utils_cpp::checkError(status, "Failed to launch kernelOAMover!");
+            #endif
+            if (i==0)
+            {
+                #if defined(HOST_DEBUG)
+                    std::cout<<"Launching kernelIAMover."<<std::endl;
+                #endif
+                status = clCQIAMover.enqueueTask(kernelIAMover, NULL, NULL);
+                #if defined(HOST_DEBUG)
+                aocl_utils_cpp::checkError(status, "Failed to launch kernelIAMover!");
+                #endif
+            }
+            #if defined(HOST_DEBUG)
                 clCQOAMover.finish();
             #endif
         }
