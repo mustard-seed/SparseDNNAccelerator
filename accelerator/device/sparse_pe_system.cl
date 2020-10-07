@@ -2423,7 +2423,7 @@ __kernel void kernelOAMover (
 				iCol++;
 				addrOAPeColContribution += (signed int) inst.memOAPEColStride;
 				#if defined(SPARSE_SYSTEM)
-					iTotalCol += numActivePeCols;
+					iTotalCol += inst.columnTileWidth;
 				#endif
 				if (iCol==numActivePeCols)
 				{
