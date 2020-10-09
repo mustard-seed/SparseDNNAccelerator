@@ -314,10 +314,11 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
     //Number of memory transfer instructions
     t_uchar numMemInstructions;
 
+    //TODO: Change data type to t_ushort
     //Number of folds required per group to drain the current tile
-    t_uchar numFoldsInGroupCurrentLayer;
+    t_ushort numFoldsInGroupCurrentLayer;
     //Number of full folds required to drian the current tile
-    t_uchar numFullFoldsInCurrentLayer;
+    t_ushort numFullFoldsInCurrentLayer;
     //Number of elements per planar index to drain in the full fold
     t_ushort numActiveElementsInFullFold;
     //Number of elements per planar index to drain in the partial fold
@@ -358,7 +359,7 @@ typedef struct __attribute__((aligned(16)))
     t_ushort numOutputBlocks;
 
     //Number of output dram blocks per strip
-    t_uchar numOutputBlocksPerStrip;
+    t_ushort numOutputBlocksPerStrip;
 
     //Bit [2:0] Shift amount
     //Bit [3] Flag for left/right shift. 0 for right, 1 for left
@@ -531,7 +532,7 @@ typedef struct __attribute__((packed))
     unsigned short numOutputBlocks;
 
     //Number of output dram blocks per strip
-    unsigned char numOutputBlocksPerStrip;
+    unsigned short numOutputBlocksPerStrip;
 
     //Bit [2:0] Shift amount
     //Bit [3] Flag for left/right shift. 0 for right, 1 for left

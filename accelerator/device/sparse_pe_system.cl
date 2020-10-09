@@ -2184,7 +2184,7 @@ __kernel void kernelMisc ()
 		uint2_t opcode = (controlPacket.controlBits >> 4) & 0x03;
 		unsigned short numDramBlocksToReduce = controlPacket.numDramBlocksToReduce;
 		unsigned short numOutputBlocks = controlPacket.numOutputBlocks;
-		unsigned char numOutputBlocksPerStrip = controlPacket.numOutputBlocksPerStrip;
+		unsigned short numOutputBlocksPerStrip = controlPacket.numOutputBlocksPerStrip;
 		unsigned char numEffectiveValuesInLastStrip = controlPacket.numEffectiveValuesInLastStrip;
 
 		EMULATOR_PRINT(("[kernelMisc %d] Received command "
@@ -2200,7 +2200,7 @@ __kernel void kernelMisc ()
 						numOutputBlocksPerStrip,
 						numEffectiveValuesInLastStrip));
 
-		unsigned char iterDramBlockInOutputStrip = 0;
+		unsigned short iterDramBlockInOutputStrip = 0;
 		for (unsigned short iOutput=0; iOutput < numOutputBlocks; iOutput++)
 		{
 			unsigned char numEffectiveValues = (iterDramBlockInOutputStrip < (numOutputBlocksPerStrip-1)) ? BURST_SIZE_BYTE : numEffectiveValuesInLastStrip;
@@ -3991,8 +3991,8 @@ __kernel void kernelOATileController (
 		 */
 		t_oa_tile_controller_instruction inst = pInst[iInstruction];
 		unsigned char numOutputTileHeightxWidth = inst.numLocalTilePerColHxW;
-		unsigned char numFoldsInGroupCurrentLayer = inst.numFoldsInGroupCurrentLayer;
-	    unsigned char numFullFoldsInGroupCurrentLayer = inst.numFullFoldsInCurrentLayer;
+		unsigned short numFoldsInGroupCurrentLayer = inst.numFoldsInGroupCurrentLayer;
+	    unsigned short numFullFoldsInGroupCurrentLayer = inst.numFullFoldsInCurrentLayer;
 	    unsigned short numActiveElementsInFullFold = inst.numActiveElementsInFullFold;
 	    unsigned short numActiveRowsInPartialFolds = inst.numActiveElementsInPartialFold;
 

@@ -242,6 +242,17 @@ void instruction_generator(
             numOutputBlocksBlob0PerStripMK = 0;
             numOutputBlocksBlob1PerStripMK = 0;
             numDramBlocksToReduceMK = 0;
+
+            int filterCacheRequirement = filter_cache_boundary_check(
+                            kernelSize,
+                            numInputChannels0
+                        );
+            if (filterCacheRequirement > KERNEL_CACHE_DEPTH)
+            {
+                std::cout <<"Individual fitler size is too big to fit inside the filter cache."<<std::endl;
+                std::cout <<"[kernelSize, number of input channels]: "<<(int) kernelSize<<" "<<(int) numInputChannels0<<std::endl;
+                throw;
+            }
         }
         break;
         case CONCATENATION : {
@@ -391,16 +402,6 @@ void instruction_generator(
     unsigned int numFullComputeFoldPerGroup = numOutputChannelsPerGroupCurrentLayer / numActiveElementsInFullComputeFold;
     unsigned int numActiveElementsInPartialComputeFold = numOutputChannelsPerGroupCurrentLayer % numActiveElementsInFullComputeFold;
 
-    int filterCacheRequirement = filter_cache_boundary_check(
-                    kernelSize,
-                    numInputChannels0
-                );
-    if (filterCacheRequirement > KERNEL_CACHE_DEPTH)
-    {
-        std::cout <<"Individual fitler size is too big to fit inside the filter cache."<<std::endl;
-        throw;
-    }
-
     int maxOATileHeight = sizeOutputTileFullHeight > sizeOutputTilePartialHeight ?
                     sizeOutputTileFullHeight : sizeOutputTilePartialHeight;
     int maxOATileWidth = sizeOutputTileFullWidthPerCol > sizeOutputTilePartialWidthPerCol ?
@@ -503,8 +504,8 @@ void instruction_generator(
                 instructionOAControl.numRoundedLocalChannels = (t_ushort)((1 + (numOutputChannels-1) / CLUSTER_SIZE) * CLUSTER_SIZE);
                 instructionOAControl.numDrainInstructions = (t_ushort) ( numComputeFoldPerGroup * numOAGroupsCurrentLayer);
                 instructionOAControl.numMemInstructions = (t_uchar) numGroupsNextLayer;
-                instructionOAControl.numFoldsInGroupCurrentLayer = (t_uchar) numComputeFoldPerGroup;
-                instructionOAControl.numFullFoldsInCurrentLayer = (t_uchar) numFullComputeFoldPerGroup;
+                instructionOAControl.numFoldsInGroupCurrentLayer = (t_ushort) numComputeFoldPerGroup;
+                instructionOAControl.numFullFoldsInCurrentLayer = (t_ushort) numFullComputeFoldPerGroup;
                 instructionOAControl.numActiveElementsInFullFold = (t_ushort) numActiveElementsInFullComputeFold;
                 instructionOAControl.numActiveElementsInPartialFold = (t_ushort) numActiveElementsInPartialComputeFold;
                 instructionOAControl.numLocalChannelsPerCurrentGroup = (t_ushort) numOutputChannelsPerGroupCurrentLayer;
@@ -793,7 +794,7 @@ void instruction_generator(
                 t_misc_instruction instructionMisc;
                 instructionMisc.controlBits = (t_uchar) (opCodeField |( numActiveCols & 0x0F));
                 instructionMisc.numDramBlocksToReduce = (cl_ushort) numDramBlocksToReduceMK;
-                instructionMisc.numOutputBlocksPerStrip = (cl_uchar) numOutputBlocksBlob0PerStripMK;
+                instructionMisc.numOutputBlocksPerStrip = (cl_ushort) numOutputBlocksBlob0PerStripMK;
                 instructionMisc.numOutputBlocks =
                         (cl_ushort) (maxTP * maxTQPerCol * numOutputBlocksBlob0PerStripMK) ;
                 instructionMisc.numEffectiveValuesInLastStrip = (t_uchar) (
@@ -930,7 +931,7 @@ void instruction_generator(
                             t_misc_instruction instructionMisc;
                             instructionMisc.controlBits = (t_uchar) (opCodeField |( numActiveCols & 0x0F));
                             instructionMisc.numDramBlocksToReduce = (cl_ushort) numDramBlocksToReduceMK;
-                            instructionMisc.numOutputBlocksPerStrip = (cl_uchar) numOutputBlocksBlob0PerStripMK;
+                            instructionMisc.numOutputBlocksPerStrip = (cl_ushort) numOutputBlocksBlob0PerStripMK;
                             instructionMisc.numOutputBlocks = (cl_ushort) numOutputBlocksBlob0PerStripMK;
                             instructionMisc.numEffectiveValuesInLastStrip = (t_uchar) (
                                         numOutputChannelsBlob0MK - (numOutputBlocksBlob0PerStripMK-1)*BURST_SIZE_BYTE);
@@ -943,7 +944,7 @@ void instruction_generator(
                             t_misc_instruction instructionMisc;
                             instructionMisc.controlBits = (t_uchar) (opCodeField |( numActiveCols & 0x0F));
                             instructionMisc.numDramBlocksToReduce = (cl_ushort) numDramBlocksToReduceMK;
-                            instructionMisc.numOutputBlocksPerStrip = (cl_uchar) numOutputBlocksBlob1PerStripMK;
+                            instructionMisc.numOutputBlocksPerStrip = (cl_ushort) numOutputBlocksBlob1PerStripMK;
                             instructionMisc.numOutputBlocks = (cl_ushort) numOutputBlocksBlob1PerStripMK;
                             instructionMisc.numEffectiveValuesInLastStrip = (t_uchar) (
                                         numOutputChannelsBlob1MK - (numOutputBlocksBlob1PerStripMK-1)*BURST_SIZE_BYTE);
