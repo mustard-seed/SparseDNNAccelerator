@@ -107,7 +107,7 @@ namespace GraphRuntime {
         return node["outputNextNumGroups"].as<int>();
     }
 
-    ConvLayer::ConvLayer(const YAML::Node& _node, const YAML::Node& _weightNode, const YAML::Node& _biasNode)
+    ConvLayer::ConvLayer(const YAML::Node& _node, const cnpy::NpyArray& _weightNode, const cnpy::NpyArray& _biasNode)
         : Layer(_node)
     {
         //Reorder the weight from NCHW to NHWC
@@ -117,13 +117,15 @@ namespace GraphRuntime {
         this->loadBiases(_biasNode);
     }
 
-    void ConvLayer::loadWeights(const YAML::Node& _weightNode)
+    void ConvLayer::loadWeights(const cnpy::NpyArray& _weightNode)
     {
         int outputChannel = Layer::getOutputChannel();
         int inputChannel = Layer::getInputChannels().at(0);
         int kernelSize = getKernelSize();
 
         vecWeights.resize(outputChannel*inputChannel*kernelSize*kernelSize);
+        const float* pWeights = _weightNode.data<float>();
+        //std::cout <<"Weight word size is "<<_weightNode.word_size<<std::endl;
 
         //Store weights
         int weightTraceIndex = 0;
@@ -137,7 +139,8 @@ namespace GraphRuntime {
                 for (int k=0; k<kernelSize*kernelSize; k++)
                 {
                     int weightLocalIndex = weightLocalIndexOCContrib+weightLocalIndexICContrib+weightLocalIndexPlanarContrib;
-                    vecWeights.at(weightLocalIndex) = _weightNode[weightTraceIndex].as<float>();
+                    vecWeights.at(weightLocalIndex) = pWeights[weightTraceIndex];
+                    //std::cout <<"[oc, ic, k, weight]"<<oc<<" "<<ic<<" "<<k<<" "<<pWeights[weightTraceIndex]<<std::endl;
 
                     weightLocalIndexPlanarContrib += inputChannel;
                     weightTraceIndex++;
@@ -148,15 +151,16 @@ namespace GraphRuntime {
         }
     }
 
-    void ConvLayer::loadBiases(const YAML::Node &_biasNode)
+    void ConvLayer::loadBiases(const cnpy::NpyArray &_biasNode)
     {
         int outputChannel = Layer::getOutputChannel();
         vecBiases.resize(outputChannel);
 
+        const float* pBiases = _biasNode.data<float>();
         //Store biases
         for (int iB=0; iB<outputChannel; iB++)
         {
-            vecBiases.at(iB) = _biasNode[iB].as<float>();
+            vecBiases.at(iB) = pBiases[iB];
         }
     }
 

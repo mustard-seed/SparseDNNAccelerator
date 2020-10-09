@@ -6,6 +6,7 @@
 #include <cassert>
 
 #include "yaml-cpp/yaml.h"
+#include "cnpy.hpp"
 
 namespace GraphRuntime {
     enum LayerType {CONVOLUTION, ELTADD, MAXPOOL, AVGPOOL, QUANT, DEQUANT};
@@ -66,7 +67,7 @@ namespace GraphRuntime {
         FloatVec    vecBiases;
       public:
         ConvLayer() = default;
-        ConvLayer(const YAML::Node& _node, const YAML::Node& _weightNode, const YAML::Node& _biasNode);
+        ConvLayer(const YAML::Node& _node, const cnpy::NpyArray& _weightNode, const cnpy::NpyArray& _biasNode);
 
         LayerType getLayerType() override;
 
@@ -83,8 +84,8 @@ namespace GraphRuntime {
         /*
          * Parameter Related Flag
         */
-        void    loadWeights(const YAML::Node& _weightNode);
-        void    loadBiases(const YAML::Node&  _biasNode);
+        void    loadWeights(const cnpy::NpyArray& _weightNode);
+        void    loadBiases(const cnpy::NpyArray&  _biasNode);
         FloatVec getWeights();
         FloatVec getBiases();
     };

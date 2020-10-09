@@ -7,3 +7,6 @@
 [submodule "accelerator/yaml-cpp"]
 	path = accelerator/yaml-cpp
 	url = https://github.com/jbeder/yaml-cpp.git
+[submodule "accelerator/cnpy"]
+	path = accelerator/cnpy
+	url = https://github.com/rogersce/cnpy.git

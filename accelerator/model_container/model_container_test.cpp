@@ -11,10 +11,10 @@ TEST(MODEL_CONTAINER_TEST, LoadTrace)
 {
     //TODO: Change the file names
     std::string traceFileName = "testTrace_trace.yaml";
-    std::string parameterFileName = "testTrace_parameters.yaml";
+    std::string parameterFileName = "testTrace_parameters.npz";
 
     YAML::Node traceNodes = YAML::LoadFile(traceFileName);
-    YAML::Node parameterNodes = YAML::LoadFile(parameterFileName);
+    cnpy::npz_t parameterNodes = cnpy::npz_load(parameterFileName);
     vector<shared_ptr<Layer>> vecLayers;
 
     std::cout <<"Loading the trace file and instantiating the layers."<<endl;
@@ -79,19 +79,19 @@ TEST(MODEL_CONTAINER_TEST, LoadTrace)
     EXPECT_EQ(vecLayers.at(8)->getLayerType(), ELTADD);
     EXPECT_EQ((dynamic_pointer_cast<EltAddLayer>(vecLayers.at(8)))->getInputMemoryLocations().at(0), 0);
     EXPECT_EQ((dynamic_pointer_cast<EltAddLayer>(vecLayers.at(8)))->getInputMemoryLocations().at(1), 1);
-    EXPECT_EQ((dynamic_pointer_cast<EltAddLayer>(vecLayers.at(8)))->getInputFracBits().at(0), 0);
-    EXPECT_EQ((dynamic_pointer_cast<EltAddLayer>(vecLayers.at(8)))->getInputFracBits().at(1), 5);
-    EXPECT_EQ((dynamic_pointer_cast<EltAddLayer>(vecLayers.at(8)))->getOutputFracBits(), 3);
+    EXPECT_EQ((dynamic_pointer_cast<EltAddLayer>(vecLayers.at(8)))->getInputFracBits().at(0), -6);
+    EXPECT_EQ((dynamic_pointer_cast<EltAddLayer>(vecLayers.at(8)))->getInputFracBits().at(1), -3);
+    EXPECT_EQ((dynamic_pointer_cast<EltAddLayer>(vecLayers.at(8)))->getOutputFracBits(), -6);
 
     //Spot check quant loading stats
     EXPECT_EQ(vecLayers.at(0)->getLayerType(), QUANT);
     EXPECT_EQ((dynamic_pointer_cast<Layer>(vecLayers.at(0)))->getOutputHeight(), 32);
-    EXPECT_EQ((dynamic_pointer_cast<Layer>(vecLayers.at(0)))->getOutputFracBits(), 5);
+    EXPECT_EQ((dynamic_pointer_cast<Layer>(vecLayers.at(0)))->getOutputFracBits(), 4);
 
     //Spot check dequant loading stats
     EXPECT_EQ(vecLayers.at(15)->getLayerType(), DEQUANT);
     EXPECT_EQ((dynamic_pointer_cast<Layer>(vecLayers.at(15)))->getOutputChannel(), 10);
-    EXPECT_EQ((dynamic_pointer_cast<Layer>(vecLayers.at(15)))->getInputFracBits().at(0), 9);
+    EXPECT_EQ((dynamic_pointer_cast<Layer>(vecLayers.at(15)))->getInputFracBits().at(0), -10);
 
     //Spot check avgpool2d loading stats
     EXPECT_EQ(vecLayers.at(13)->getLayerType(), AVGPOOL);

@@ -9,12 +9,16 @@ include (${PROJECT_SOURCE_DIR}/config.cmake)
 add_subdirectory(googletest)
 
 #============================
-# YAML-CPP
+# YAML-CPP Git submodule
 #============================
 set(YAML_CPP_BUILD_TESTS OFF CACHE BOOL "disable yaml tests")
 set(YAML_CPP_BUILD_TOOLS OFF CACHE BOOL "disable yaml tools")
 set(YAML_CPP_BUILD_CONTRIB OFF CACHE BOOL "disable yaml contrib")
 add_subdirectory(yaml-cpp)
+#===========================
+# CNPY Git submodule
+#==========================
+add_subdirectory (cnpy)
 add_subdirectory(common)
 add_subdirectory(model_container)
 add_subdirectory(accelerator_wrapper)

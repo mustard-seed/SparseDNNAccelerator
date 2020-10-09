@@ -7,6 +7,8 @@
 #include <memory>
 #include <cmath>
 
+#include "cnpy.hpp" //Third party library used to load numpy array weights
+
 using namespace std;
 using namespace GraphRuntime;
 
@@ -33,7 +35,16 @@ namespace GraphRuntime {
     {
        typedef YAML::Node YN;
        YN traceNodes = YAML::LoadFile(_traceFileName);
-       YN parameterNodes = YAML::LoadFile(_parameterFileName);
+       std::cout <<"Loaded YAML trace file "<<_traceFileName<<"."<<std::endl;
+       //YN parameterNodes = YAML::LoadFile(_parameterFileName);
+       cnpy::npz_t parameterNodes;
+       try {
+        parameterNodes = cnpy::npz_load(_parameterFileName);
+       }
+       catch (std::runtime_error)
+       {
+           std::cout <<"Failed to load npz_load, but the test might be ok."<<std::endl;
+       }
        for (int i=0; i<traceNodes.size(); i++) {
            YAML::Node traceLayer = traceNodes[i];
            //Hash the string to a enum type, so we can use switch-case statement
@@ -41,7 +52,7 @@ namespace GraphRuntime {
            LayerType opType = hashLayerTypeString(
                        traceLayer["operationType"].as<string>());
 
-           //cout <<"Detected layer type: "<<traceLayer["operationType"].as<string>()<<endl;
+           //cout <<"[Graph factory] Detected layer type: "<<traceLayer["operationType"].as<string>()<<endl;
 #if defined(HOST_DEBUG)
            cout <<"LayerType-ID: "<<traceLayer["operationType"].as<string>()<<"-"<<i<<endl;
 #endif
@@ -714,13 +725,13 @@ t_tile_pair calculateTileSizePerUnit(Layer& _layer, int _numUnits, bool _isWidth
     if (_isWidth)
     {
         int width = _layer.getOutputWidth();
-        tileSizePerUnitFull = ((width / _numUnits) > 4) ? 4 : (width / _numUnits);
+        tileSizePerUnitFull = ((width / _numUnits) > 1) ? 1 : (width / _numUnits);
         tileSizePerUnitFull = (tileSizePerUnitFull == 0) ? 1 : tileSizePerUnitFull;
         numUnitsWhenPartial = 1;
     }
     else
     {
-        tileSizePerUnitFull = 4;
+        tileSizePerUnitFull = 1;
         numUnitsWhenPartial = 1;
     }
 

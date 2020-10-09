@@ -64,7 +64,7 @@ target_include_directories(${LIB_NAME}
     ${Boost_INCLUDE_DIRS})
 target_link_libraries(${LIB_NAME}
     PUBLIC
-    aocl_utils accelerator_wrapper model_container
+    aocl_utils accelerator_wrapper model_container cnpy
     )
 #target_compile_definitions(${LIB_NAME}
 #    PUBLIC

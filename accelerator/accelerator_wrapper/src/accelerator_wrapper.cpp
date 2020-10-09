@@ -651,7 +651,7 @@ namespace GraphRuntime {
                 status = clCQWMover.enqueueWriteBuffer(bufferWMoverBias, //buffer
                                                      CL_TRUE, //blocking_write
                                                      offsetIndex, //offset
-                                                     transferBytes, //size
+                                                     sizeElement * numElements, //size
                                                      pBiases->data(), //data pointer
                                                      NULL, //dependency list
                                                      &event //events generated
@@ -690,7 +690,7 @@ namespace GraphRuntime {
                 status = clCQWMover.enqueueWriteBuffer(bufferWMoverWDramBlocks, //buffer
                                                      CL_TRUE, //blocking_write
                                                      byteOffset, //offset
-                                                     weightTransferBytes, //size
+                                                     numElements*sizeElement, //size
                                                      (pWeights->getTransferBlockVector()).data(), //data pointer
                                                      NULL, //dependency list
                                                      &event //events generated
@@ -728,7 +728,7 @@ namespace GraphRuntime {
                 status = clCQWMover.enqueueWriteBuffer(bufferWMoverWTBCounts, //buffer
                                                      CL_TRUE, //blocking_write
                                                      byteOffset, //offset
-                                                     transferBytes, //size
+                                                     numElements*sizeElement, //size
                                                      (pWeights->getTransferBlockCountVector()).data(), //data pointer
                                                      NULL, //dependency list
                                                      &event //events generated
@@ -890,7 +890,7 @@ namespace GraphRuntime {
                 auto valueVectorSizeBytes = sizeTransferBlockElement * numTransferBlocks;
 
                 int activationOffsetByte = blobInfo.memoryRegionID * MEM_ACTIVATION_REGION_SIZE_PER_SLICE * BURST_SIZE_BYTE;
-                if (valueVectorSizeBytes > MEM_ACTIVATION_REGION_SIZE_PER_SLICE)
+                if (valueVectorSizeBytes > (BURST_SIZE_BYTE * MEM_ACTIVATION_REGION_SIZE_PER_SLICE))
                 {
                     std::cout << "Too many input activation bytes to fit inside the global memory."<<std::endl;
                     throw;
@@ -918,7 +918,7 @@ namespace GraphRuntime {
                         int tbCountOffsetByte = blobInfo.memoryRegionID * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE * sizeof(t_streamblock_address);
 
                         //std::cout <<"Transfering "<<transferBytes<<" bytes into bufferActivationTBCounts"<<std::endl;
-                        if (transferBytes > MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE)
+                        if (transferBytes > (2 * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE))
                         {
                             std::cout << "Too many input activation TB count bytes to fit inside the global memory."<<std::endl;
                             throw;
@@ -1119,7 +1119,7 @@ namespace GraphRuntime {
                 auto valueVectorSizeBytes = sizeTransferBlockElement * numTransferBlocks;
 
                 int activationOffsetByte = blobInfo.memoryRegionID * MEM_ACTIVATION_REGION_SIZE_PER_SLICE * BURST_SIZE_BYTE;
-                if (valueVectorSizeBytes > MEM_ACTIVATION_REGION_SIZE_PER_SLICE)
+                if (valueVectorSizeBytes > (BURST_SIZE_BYTE * MEM_ACTIVATION_REGION_SIZE_PER_SLICE))
                 {
                     std::cout << "Too many output activation bytes to read from global memory."<<std::endl;
                     throw;
@@ -1148,7 +1148,7 @@ namespace GraphRuntime {
 
                         int tbCountOffsetByte = blobInfo.memoryRegionID * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE * sizeof(t_streamblock_address);
 
-                        if (transferBytes > MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE)
+                        if (transferBytes > (2 * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE))
                         {
                             std::cout << "Too many output activation TB count bytes to be read from global memory."<<std::endl;
                             throw;
