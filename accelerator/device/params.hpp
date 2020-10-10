@@ -4,6 +4,8 @@
 //#define HOST_DEBUG
 #define SPARSE_SYSTEM
 #define OA_PING_PONG
+//#define WMOVER_STREAM_CACHE
+//#define OAMOVER_TB_STREAM_CACHE
 
 #define NOOP
 /**
