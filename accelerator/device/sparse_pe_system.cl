@@ -556,14 +556,21 @@ __kernel void kernelWMover (
 #define IA_BUFFER_INSTRUCTION_STATE_DECODE 0x0
 #define IA_BUFFER_INSTRUCTION_STATE_SEND_TO_READER 0x1
 #define IA_BUFFER_INSTRUCTION_STATE_SEND_TO_WRITER 0x2
+#define IA_BUFFER_INSTRUCTION_STATE_WRITER_STALL 0x3
 
 #define IA_BUFFER_READ_STRIP_UPDATE_HORIZONTAL 0x0
 #define IA_BUFFER_READ_STRIP_UPDATE_VERTICAL 0x1
 #define IA_BUFFER_READ_STRIP_UPDATE_DONE 0x2
 
+#if !defined(EMUPRINT)
 typedef uint3_t t_ia_buffer_w_state;
 typedef uint3_t t_ia_buffer_r_state;
 typedef uint2_t t_ia_buffer_d_state;
+#else
+typedef unsigned char t_ia_buffer_w_state;
+typedef unsigned char t_ia_buffer_r_state;
+typedef unsigned char t_ia_buffer_d_state;
+#endif
 
 /**
  * Helper data bundle for accessing the dram_block cache in IA buffers
@@ -800,6 +807,7 @@ void getIABufferDispatcherOutput (
 		t_ia_buffer_d_state currentState,
 		//sync,
 		bool unblockReader,
+		bool unblockWriter,
 
 		//Instruction buffer
 		t_input_buffer_tile_buffer_packet controlBuffer,
@@ -832,6 +840,7 @@ void updateIABufferDispatcher (
 
 		//sync,
 		bool unblockReader,
+		bool unblockWriter,
 
 		//Auxillary
 		int colID
@@ -842,6 +851,10 @@ __attribute__((autorun))
 __attribute__((num_compute_units(PE_COLS)))
 __kernel void kernelIABuffer ()
 {
+	#if defined(EMUPRINT)
+		int iReceived = 0;
+		int iSent = 0;
+	#endif
 	int colID = get_compute_id(0);
 
 	t_dram_block cacheIABlocks [2][IA_CACHE_DEPTH] __attribute__((bankwidth(BURST_SIZE_BYTE)));
@@ -972,6 +985,9 @@ __kernel void kernelIABuffer ()
 				(regWriterState == IA_BUFFER_WRITE_STATE_DECODE) 
 				|| (regWriterContext.accessBank != (regDispatcherInstructionBuffer.controlBits & 0x01));
 
+		bool unblockWriter = 
+				(regReaderState == IA_BUFFER_READ_STATE_DECODE) 
+				|| (regReaderContext.accessBank != (regDispatcherInstructionBuffer.controlBits & 0x01));
 		/**
 		 * Derive current interface outputs from the modules
 		 */
@@ -1007,6 +1023,7 @@ __kernel void kernelIABuffer ()
 		getIABufferDispatcherOutput (
 			regDispatcherState,
 			unblockReader,
+			unblockWriter,
 
 			regDispatcherInstructionBuffer,
 
@@ -1040,6 +1057,17 @@ __kernel void kernelIABuffer ()
 			if (success == true)
 			{
 				writerBlockValid = TRUE;
+				#if defined(EMUPRINT)
+					EMULATOR_PRINT(("[kernelIABuffer %d] RECEIVED dram block %d. TB[0-3]: %#04x %#04x %#04x %#04x \n\n",
+					colID,
+					iReceived
+					,(unsigned int) writerNewBlock.transferBlocks[0].values[0]
+					,(unsigned int) writerNewBlock.transferBlocks[0].values[1]
+					,(unsigned int) writerNewBlock.transferBlocks[0].values[2]
+					,(unsigned int) writerNewBlock.transferBlocks[0].values[3]
+					));
+					iReceived++;
+				#endif
 			}
 		}
 
@@ -1051,13 +1079,47 @@ __kernel void kernelIABuffer ()
 			{
 				readerBlockSent = TRUE;
 
-				EMULATOR_PRINT(("[kernelIABuffer %d] Sent TB %d / %d. TB[0-3]: %#04x %#04x %#04x %#04x \n\n",
-					colID, regReaderContext.iterAccess, regReaderContext.numTBPerStrip
-					,readerTB.values.values[0]
-					,readerTB.values.values[1]
-					,readerTB.values.values[2]
-					,readerTB.values.values[3]
+				EMULATOR_PRINT(("[kernelIABuffer %d] Sent TB %d / %d, "
+							"bank=%d, "
+							"addrBase=%d, "
+							"colContribution=%d, "
+							"rowContribution=%d, "
+							"TB index=%d\n"
+							"data[0]=%#04x, "
+							"data[1]=%#04x, "
+							"data[2]=%#04x, "
+							"data[3]=%#04x\n",
+							colID, regReaderContext.iterAccess, regReaderContext.numTBPerStrip,
+							(unsigned int)(regReaderContext.accessBank),
+							(unsigned int)(regReaderContext.iaBlockInfo.addressBase),
+							(unsigned int)(regReaderContext.iaBlockInfo.colContribution),
+							(unsigned int)(regReaderContext.iaBlockInfo.rowContribution),
+							(unsigned int)((regReaderContext.iterAccess) & WIDE_SIZE_REMAINDER_MASK)
+							,readerTB.values.values[0]
+							,readerTB.values.values[1]
+							,readerTB.values.values[2]
+							,readerTB.values.values[3]
+							));
+
+				#if defined(EMUPRINT)
+					EMULATOR_PRINT(("[kernelIABuffer %d] Sent iSent=%d\n",
+					colID, iSent
 					));
+					if ((regReaderContext.numTBPerStrip == 1) && (readerTB.values.values[0] != 0))
+					{
+						EMULATOR_PRINT(("[kernelIABuffer %d] ERROR. iSent=%d " 
+							"Number of TB in strip is 1, but bitmask is not 1.\n",
+							colID, iSent));
+					}
+					//TODO: the following condition only for shallow tensor input.
+					else if ((regReaderContext.numTBPerStrip > 1) && (regReaderContext.iterAccess == 0) && (readerTB.values.values[0] == 0))
+					{
+						EMULATOR_PRINT(("[kernelIABuffer %d] ERROR. iSent=%d " 
+							"Number of TB in strip is greater than 1, but bitmask is 0.\n",
+							colID, iSent));
+					}
+					iSent++;
+				#endif
 			}
 		}
 
@@ -1115,6 +1177,7 @@ __kernel void kernelIABuffer ()
 			&regDispatcherInstructionBuffer,
 
 			unblockReader,
+			unblockWriter,
 
 			colID
 			);
@@ -1285,6 +1348,18 @@ void updateIABufferWriter (
 					// 		+ pCurrentRegisters->tbCountInfo.colContribution 
 					// 		+ pCurrentRegisters->tbCountInfo.rowContribution] 
 					// 	= numIATransferBlocks;
+					// 	
+					EMULATOR_PRINT(("[kernelIABuffer Writer %d] Writing TB count to bank %d, "
+							"addrBase=%d, "
+							"colContribution=%d, "
+							"rowContribution=%d\n"
+							"TB=%d\n",
+							colID, (unsigned char) (pCurrentRegisters->accessBank),
+							(unsigned int)(pCurrentRegisters->tbCountInfo.addressBase),
+							(unsigned int)(pCurrentRegisters->tbCountInfo.colContribution),
+							(unsigned int)(pCurrentRegisters->tbCountInfo.rowContribution),
+							(unsigned int) numIATransferBlocks
+							));
 				#else
 					numTBPerStrip[(pCurrentRegisters->accessBank) & 0x01] = numIATransferBlocks;
 				#endif
@@ -1311,6 +1386,26 @@ void updateIABufferWriter (
 						+ (pCurrentRegisters->iaBlockInfo.colContribution)
 						+ (pCurrentRegisters->iaBlockInfo.rowContribution)]
 					= dramBlock;
+
+				EMULATOR_PRINT(("[kernelIABuffer Writer %d] Writing new dram block to bank %d, "
+							"iterAccess=%d, "
+							"addrBase=%d, "
+							"colContribution=%d, "
+							"rowContribution=%d\n"
+							"data[0]=%#04x, "
+							"data[1]=%#04x, "
+							"data[2]=%#04x, "
+							"data[3]=%#04x\n",
+							colID, (unsigned char) (pCurrentRegisters->accessBank),
+							(unsigned int)(pCurrentRegisters->iterAccess),
+							(unsigned int)(pCurrentRegisters->iaBlockInfo.addressBase),
+							(unsigned int)(pCurrentRegisters->iaBlockInfo.colContribution),
+							(unsigned int)(pCurrentRegisters->iaBlockInfo.rowContribution),
+							(unsigned int)dramBlock.transferBlocks[0].values[0],
+							(unsigned int)dramBlock.transferBlocks[0].values[1],
+							(unsigned int)dramBlock.transferBlocks[0].values[2],
+							(unsigned int)dramBlock.transferBlocks[0].values[3]
+							));
 
 				pCurrentRegisters->iterAccess += 0x1;
 
@@ -1586,6 +1681,17 @@ void updateIABufferReader (
 				// 			+ pCurrentRegisters->tbCountInfo.colContribution 
 				// 			+ pCurrentRegisters->tbCountInfo.rowContribution];
 				pCurrentRegisters->iTBInCW = 0;
+				EMULATOR_PRINT(("[kernelIABuffer Reader %d] Fetching TB count from bank %d, "
+							"addrBase=%d, "
+							"colContribution=%d, "
+							"rowContribution=%d\n"
+							"TB=%d\n",
+							colID, (unsigned char) (pCurrentRegisters->accessBank),
+							(unsigned int)(pCurrentRegisters->tbCountInfo.addressBase),
+							(unsigned int)(pCurrentRegisters->tbCountInfo.colContribution),
+							(unsigned int)(pCurrentRegisters->tbCountInfo.rowContribution),
+							(unsigned int) (pCurrentRegisters->numTBPerStrip)
+							));
 			#else
 				pCurrentRegisters->numTBPerStrip = numTBPerStrip [(pCurrentRegisters->accessBank) & 0x01]; 
 			#endif
@@ -1696,6 +1802,7 @@ void getIABufferDispatcherOutput (
 		//Current state
 		t_ia_buffer_d_state currentState,
 		bool unblockReader,
+		bool unblockWriter,
 
 		//Instruction buffer
 		t_input_buffer_tile_buffer_packet controlBuffer,
@@ -1733,8 +1840,11 @@ void getIABufferDispatcherOutput (
 	 */
 	if (currentState == IA_BUFFER_INSTRUCTION_STATE_SEND_TO_WRITER)
 	{
-		*pOutValidWriterInstruction = TRUE;
-		*pOutWriterControl = controlBuffer;
+		if (unblockWriter == true)
+		{
+			*pOutValidWriterInstruction = TRUE;
+			*pOutWriterControl = controlBuffer;
+		}
 	}
 
 	/**
@@ -1767,6 +1877,7 @@ void updateIABufferDispatcher (
 
 		//sync
 		bool unblockReader,
+		bool unblockWriter,
 
 		//Auxillary
 		int colID
@@ -1791,7 +1902,7 @@ void updateIABufferDispatcher (
 		break; //IA_BUFFER_INSTRUCTION_STATE_DECODE
 
 		case IA_BUFFER_INSTRUCTION_STATE_SEND_TO_WRITER: {
-			if (inWriterReady == TRUE)
+			if ((inWriterReady == TRUE) && (unblockWriter == true))
 			{
 				*pState = IA_BUFFER_INSTRUCTION_STATE_DECODE;
 
@@ -6276,6 +6387,10 @@ __kernel void kernelOperandFilter ()
 		int idy = 0;
 	#endif	
 
+	#if defined (EMUPRINT)
+		unsigned short countPrint = 0x0;
+	#endif
+
 	//Psum and drain parameters
 	t_accumulator pSum[2];
 	//unsigned char regMaxTransportID[2];
@@ -6805,6 +6920,7 @@ __kernel void kernelOperandFilter ()
 			);
 
 
+
 		nextWeightFilterInstruction = sparseOperandFilterStateUpdate (
 				weightFilterInstruction, //current instruction
 				weightTBAvailable, //thisTBAvailable,
@@ -6834,6 +6950,35 @@ __kernel void kernelOperandFilter ()
 				validWeightMac,
 				swap
 			);
+
+		#if defined(EMUPRINT)
+			if (countPrint == 0xFFFF)
+			{
+				EMULATOR_PRINT(("[Op Filter WEIGHT (%d, %d)] Current state %#04x.\n", 
+					idy, idx, (unsigned int) weightFilterInstruction));
+				EMULATOR_PRINT(("[Op Filter ACTIVATION (%d, %d)] Current state %#04x.\n", 
+					idy, idx, (unsigned int) activationFilterInstruction));
+				countPrint = 0x0;
+			}
+			else
+			{
+				countPrint++;
+			}
+
+			if (nextActivationFilterInstruction != activationFilterInstruction)
+			{
+				EMULATOR_PRINT(("[Op Filter ACTIVATION State change(%d, %d)] "
+					"Current state %#04x, Next state %#04x.\n", 
+					idy, idx, (unsigned int) activationFilterInstruction, (unsigned int)nextActivationFilterInstruction));
+			}
+
+			if (nextWeightFilterInstruction != weightFilterInstruction)
+			{
+				EMULATOR_PRINT(("[Op Filter WEIGHT State change(%d, %d)] "
+					"Current state %#04x, Next state %#04x.\n", 
+					idy, idx, (unsigned int) weightFilterInstruction, (unsigned int)nextWeightFilterInstruction));
+			}
+		#endif
 		//========================================
 		
 

@@ -129,12 +129,12 @@ protected:
 }; //testFixture
 
 #ifdef PLAY
-TEST_F (testFixture, perf_test_concat_sparse_64x32x32)
+TEST_F (testFixture, conv_sparse_input_sparse_output)
 {
-    unsigned char inputWidth = 32;
-    unsigned char inputHeight = 32;
-    unsigned char numInputChannel = 64;
-    unsigned char numOutputChannel = numInputChannel + numInputChannel;
+    unsigned char inputWidth = 4;
+    unsigned char inputHeight = 4;
+    unsigned char numInputChannel = 4;
+    unsigned char numOutputChannel = numInputChannel;
     unsigned char numInputGroup = 1;
     unsigned char numOutputGroup = 1;
     unsigned char inputHeightSPUnitSize = 1;
@@ -142,38 +142,29 @@ TEST_F (testFixture, perf_test_concat_sparse_64x32x32)
     unsigned char sizeOutputTileWidthPerColFull = 1;
     unsigned char sizeOutputTileHeight = 1;
     bool flagEnableRelu = false;
-    bool flagSparseInput = false;
+    bool flagSparseInput = true;
     bool flagSparseOutput = true;
-    OPERATION op = CONCATENATION;
+    OPERATION op = CONVOLUTION;
     float bias = 0.0f;
-    int channelPruneScale = 1;
-    std::vector<float> vecDenseProb = {1.0, 0.0};
-    for (auto & prob : vecDenseProb)
-    {
-        launch(
-                    inputWidth,
-                    inputHeight,
-                    numInputChannel,
-                    numOutputChannel,
-                    numInputGroup,
-                    numOutputGroup,
-                    inputHeightSPUnitSize,
-                    inputWidthSPUnitSize,
-                    sizeOutputTileWidthPerColFull,
-                    sizeOutputTileHeight,
-                    flagEnableRelu,
-                    flagSparseInput,
-                    flagSparseOutput,
-                    op,
-                    bias,
-                    false, //back to back
-                    true, //perf test
-                    prob, //dense prob
-                    channelPruneScale
-              );
-    }
-}
 
+    launch(
+                inputWidth,
+                inputHeight,
+                numInputChannel,
+                numOutputChannel,
+                numInputGroup,
+                numOutputGroup,
+                inputHeightSPUnitSize,
+                inputWidthSPUnitSize,
+                sizeOutputTileWidthPerColFull,
+                sizeOutputTileHeight,
+                flagEnableRelu,
+                flagSparseInput,
+                flagSparseOutput,
+                op,
+                bias
+          );
+}
 #endif
 #if defined(PERF_TEST)
 TEST_F (testFixture, perf_test_conv_sparse_128x128x3x3x32x16COL)
