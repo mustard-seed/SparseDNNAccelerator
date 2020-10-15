@@ -9,12 +9,12 @@
 //PLAY > VALIDATE > RESNET56
 //#define PLAY
 //#define VALIDATE
-//#define RESNET56
+#define RESNET56
 #define RESNET50
 #ifndef C5SOC
     #define EMULATE
 #endif
-#define INFERENCE_REPEAT 30
+#define INFERENCE_REPEAT 20
 
 class testFixture : public ::testing::Test {
 protected:

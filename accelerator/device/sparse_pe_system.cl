@@ -6951,34 +6951,34 @@ __kernel void kernelOperandFilter ()
 				swap
 			);
 
-		#if defined(EMUPRINT)
-			if (countPrint == 0xFFFF)
-			{
-				EMULATOR_PRINT(("[Op Filter WEIGHT (%d, %d)] Current state %#04x.\n", 
-					idy, idx, (unsigned int) weightFilterInstruction));
-				EMULATOR_PRINT(("[Op Filter ACTIVATION (%d, %d)] Current state %#04x.\n", 
-					idy, idx, (unsigned int) activationFilterInstruction));
-				countPrint = 0x0;
-			}
-			else
-			{
-				countPrint++;
-			}
+		// #if defined(EMUPRINT)
+		// 	if (countPrint == 0xFFFF)
+		// 	{
+		// 		EMULATOR_PRINT(("[Op Filter WEIGHT (%d, %d)] Current state %#04x.\n", 
+		// 			idy, idx, (unsigned int) weightFilterInstruction));
+		// 		EMULATOR_PRINT(("[Op Filter ACTIVATION (%d, %d)] Current state %#04x.\n", 
+		// 			idy, idx, (unsigned int) activationFilterInstruction));
+		// 		countPrint = 0x0;
+		// 	}
+		// 	else
+		// 	{
+		// 		countPrint++;
+		// 	}
 
-			if (nextActivationFilterInstruction != activationFilterInstruction)
-			{
-				EMULATOR_PRINT(("[Op Filter ACTIVATION State change(%d, %d)] "
-					"Current state %#04x, Next state %#04x.\n", 
-					idy, idx, (unsigned int) activationFilterInstruction, (unsigned int)nextActivationFilterInstruction));
-			}
+		// 	if (nextActivationFilterInstruction != activationFilterInstruction)
+		// 	{
+		// 		EMULATOR_PRINT(("[Op Filter ACTIVATION State change(%d, %d)] "
+		// 			"Current state %#04x, Next state %#04x.\n", 
+		// 			idy, idx, (unsigned int) activationFilterInstruction, (unsigned int)nextActivationFilterInstruction));
+		// 	}
 
-			if (nextWeightFilterInstruction != weightFilterInstruction)
-			{
-				EMULATOR_PRINT(("[Op Filter WEIGHT State change(%d, %d)] "
-					"Current state %#04x, Next state %#04x.\n", 
-					idy, idx, (unsigned int) weightFilterInstruction, (unsigned int)nextWeightFilterInstruction));
-			}
-		#endif
+		// 	if (nextWeightFilterInstruction != weightFilterInstruction)
+		// 	{
+		// 		EMULATOR_PRINT(("[Op Filter WEIGHT State change(%d, %d)] "
+		// 			"Current state %#04x, Next state %#04x.\n", 
+		// 			idy, idx, (unsigned int) weightFilterInstruction, (unsigned int)nextWeightFilterInstruction));
+		// 	}
+		// #endif
 		//========================================
 		
 

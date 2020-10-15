@@ -1013,4 +1013,199 @@ int filter_cache_boundary_check(
     return requirement;
 }
 
+t_graph_output_tile_info deriveConvOutputTileShape(
+        unsigned int outputHeight,
+        unsigned int outputWidth,
+        unsigned int sizeOutputFullTileHeight,
+        unsigned int sizeOutputFullTileWidthPerCol
+        )
+{
+    t_graph_output_tile_info tileInfo;
+    tileInfo.sizeOutputTileFullHeight = sizeOutputFullTileHeight;
+    tileInfo.sizeOutputTileFullWidthPerCol = sizeOutputFullTileWidthPerCol;
+    tileInfo.numOutputTileAlongHeight =
+            1 + (outputHeight-1) / sizeOutputFullTileHeight;
+    tileInfo.numFullOutputTileAlongHeight =
+            outputHeight / sizeOutputFullTileHeight;
+
+    unsigned int sizeOutputTileFullWidth =
+            sizeOutputFullTileWidthPerCol * PE_COLS;
+    tileInfo.numOutputTileAlongWidth =
+            1 + (outputWidth-1) / sizeOutputTileFullWidth;
+    tileInfo.numFullOutputTileAlongWidth =
+            outputWidth / sizeOutputTileFullWidth;
+
+    tileInfo.sizeOutputTilePartialHeight =
+            outputHeight % sizeOutputFullTileHeight;
+
+    unsigned int sizeOutputTilePartialWidth =
+            outputWidth % sizeOutputTileFullWidth;
+
+    if (sizeOutputTilePartialWidth == 0)
+    {
+        tileInfo.numActiveColsForPartialWidthTile = 0;
+        tileInfo.sizeOutputTilePartialWidthPerCol =
+                sizeOutputFullTileWidthPerCol;
+    }
+    else
+    {
+        unsigned int numColsForPartialWidthTile = PE_COLS;
+        while (sizeOutputTilePartialWidth % numColsForPartialWidthTile != 0)
+        {
+            numColsForPartialWidthTile--;
+        }
+        tileInfo.sizeOutputTilePartialWidthPerCol =
+                sizeOutputTilePartialWidth / numColsForPartialWidthTile;
+        tileInfo.numActiveColsForPartialWidthTile =
+                numColsForPartialWidthTile;
+    }
+
+    return tileInfo;
+}
+
+
+unsigned int deriveConvInputDimension1D(
+        unsigned int outputDimension1D,
+        unsigned int kernelSize,
+        unsigned int kernelStride
+        )
+{
+    unsigned int inputSPWithBorderPaddingDimension1D =
+            (outputDimension1D - 1) * kernelStride + kernelSize;
+    return inputSPWithBorderPaddingDimension1D;
+}
+
+unsigned int deriveConvComputationLatency(
+        t_graph_output_tile_info _outputTileInfo,
+        unsigned int _numOutputChannelsPerGroup,
+        unsigned int _numInputChannelsPerGroup,
+        unsigned int _numGroups,
+        unsigned int _sizeKernel
+        )
+{
+    unsigned int numPERowFoldPerGroup =
+            1 + (_numOutputChannelsPerGroup-1) / PE_ROWS;
+    unsigned int numTranferBlockPerInputGroup =
+            1 + (_numInputChannelsPerGroup-1) / (TRANSFER_SIZE * CLUSTER_SIZE);
+    unsigned int latency =
+            _numGroups * numPERowFoldPerGroup * numTranferBlockPerInputGroup * _sizeKernel * _sizeKernel
+            * (
+                _outputTileInfo.numFullOutputTileAlongHeight
+                    * ( _outputTileInfo.numFullOutputTileAlongWidth
+                        * _outputTileInfo.sizeOutputTileFullWidthPerCol
+                        * _outputTileInfo.sizeOutputTileFullHeight
+                        + (_outputTileInfo.numOutputTileAlongWidth - _outputTileInfo.numFullOutputTileAlongWidth)
+                          * _outputTileInfo.sizeOutputTileFullHeight * _outputTileInfo.sizeOutputTilePartialWidthPerCol
+                      )
+                +
+                  (_outputTileInfo.numOutputTileAlongHeight -  _outputTileInfo.numFullOutputTileAlongHeight)
+                    * ( _outputTileInfo.numFullOutputTileAlongWidth
+                        * _outputTileInfo.sizeOutputTileFullWidthPerCol
+                        * _outputTileInfo.sizeOutputTilePartialHeight
+                        + (_outputTileInfo.numOutputTileAlongWidth - _outputTileInfo.numFullOutputTileAlongWidth)
+                          * _outputTileInfo.sizeOutputTilePartialHeight * _outputTileInfo.sizeOutputTilePartialWidthPerCol
+                      )
+              );
+    return latency;
+}
+
+unsigned int deriveConvInputTransferLatency(
+        t_graph_output_tile_info _outputTileInfo,
+        unsigned int _numInputChannelsPerGroup,
+        unsigned int _numGroups,
+        unsigned int _sizeKernel,
+        unsigned _sizeStride
+        )
+{
+    unsigned int numFullOutputTileAlongHeight =
+            _outputTileInfo.numFullOutputTileAlongHeight;
+    unsigned int numPartialTileAlongHeight =
+            _outputTileInfo.numOutputTileAlongHeight - numFullOutputTileAlongHeight;
+    unsigned int numFullOutputTileAlongWidth =
+            _outputTileInfo.numFullOutputTileAlongWidth;
+    unsigned int numPartialTileAlongWidth =
+            _outputTileInfo.numOutputTileAlongWidth - numFullOutputTileAlongWidth;
+    unsigned int sizeFullTileInputHeight =
+            deriveConvInputDimension1D(
+                    //unsigned int outputDimension1D,
+                    _outputTileInfo.sizeOutputTileFullHeight,
+                    //unsigned int kernelSize,
+                    _sizeKernel,
+                    //unsigned int kernelStride
+                    _sizeStride
+                );
+    unsigned int sizePartialTileInputHeight =
+            deriveConvInputDimension1D(
+                    //unsigned int outputDimension1D,
+                    _outputTileInfo.sizeOutputTilePartialHeight,
+                    //unsigned int kernelSize,
+                    _sizeKernel,
+                    //unsigned int kernelStride
+                    _sizeStride
+                );
+    unsigned int sizeFullTileInputWidth =
+            deriveConvInputDimension1D(
+                    //unsigned int outputDimension1D,
+                    _outputTileInfo.sizeOutputTileFullWidthPerCol * PE_COLS,
+                    //unsigned int kernelSize,
+                    _sizeKernel,
+                    //unsigned int kernelStride
+                    _sizeStride
+                );
+    unsigned int sizePartialTileInputWidth =
+            deriveConvInputDimension1D(
+                    //unsigned int outputDimension1D,
+                    _outputTileInfo.sizeOutputTilePartialWidthPerCol * _outputTileInfo.numActiveColsForPartialWidthTile,
+                    //unsigned int kernelSize,
+                    _sizeKernel,
+                    //unsigned int kernelStride
+                    _sizeStride
+                );
+
+    unsigned int numTransferBlockPerChannelGroup = 1 + ( _numInputChannelsPerGroup -1) / (CLUSTER_SIZE*TRANSFER_SIZE);
+    unsigned int numDramBlockPerStrip = 1 + (numTransferBlockPerChannelGroup-1) / WIDE_SIZE;
+
+    unsigned int latency =
+            _numGroups * numDramBlockPerStrip
+            * (
+                numFullOutputTileAlongHeight*numFullOutputTileAlongWidth*sizeFullTileInputHeight*sizeFullTileInputWidth
+                + numFullOutputTileAlongHeight*numPartialTileAlongWidth*sizeFullTileInputHeight*sizePartialTileInputWidth
+                + numPartialTileAlongHeight*numFullOutputTileAlongWidth*sizePartialTileInputHeight*sizeFullTileInputWidth
+                + numPartialTileAlongHeight*numPartialTileAlongWidth*sizePartialTileInputHeight*sizePartialTileInputWidth
+              );
+    return latency;
+ }
+
+unsigned int deriveConvOutputTransferLatency(
+        unsigned int _outputHeight,
+        unsigned int _outputWidth,
+        unsigned int _numOutputChannelsPerNextGroup,
+        unsigned int _numNextGroups
+        )
+{
+    unsigned int numTransferBlockPerChannelGroup = 1 + ( _numOutputChannelsPerNextGroup -1) / (CLUSTER_SIZE*TRANSFER_SIZE);
+    unsigned int numDramBlockPerStrip = 1 + (numTransferBlockPerChannelGroup-1) / WIDE_SIZE;
+
+    unsigned int latency = _outputHeight * _outputWidth * numDramBlockPerStrip * _numNextGroups;
+    return latency;
+}
+
+unsigned int deriveConvWeightTransferLatency(
+        t_graph_output_tile_info _outputTileInfo,
+        unsigned int _numInputChannelsPerGroup,
+        unsigned int _numOutputChannelsPerGroup,
+        unsigned int _numGroups,
+        unsigned int _sizeKernel
+        )
+{
+    unsigned int numTileAlongHeight = _outputTileInfo.numOutputTileAlongHeight;
+    unsigned int numTileAlongWidth = _outputTileInfo.numOutputTileAlongWidth;
+    unsigned int numTBPerStrip = 1 + (_numInputChannelsPerGroup - 1) / (CLUSTER_SIZE * TRANSFER_SIZE);
+    unsigned int numDramBlocksInFilter =
+            1 + (_sizeKernel*_sizeKernel*numTBPerStrip - 1) / WIDE_SIZE;
+    unsigned int latency =
+            _numGroups * _numOutputChannelsPerGroup * numTileAlongHeight * numTileAlongWidth * numDramBlocksInFilter;
+
+    return latency;
+}
 

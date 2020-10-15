@@ -45,7 +45,6 @@ endif()
 #########################
 file(GLOB LIB_SRC
         ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp
-        ${PROJECT_SOURCE_DIR}/common/src/*
 )
 
 ####################################################################
@@ -60,11 +59,10 @@ add_library(${LIB_NAME}
 target_include_directories(${LIB_NAME}
     PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${PROJECT_SOURCE_DIR}/common/inc
     ${Boost_INCLUDE_DIRS})
 target_link_libraries(${LIB_NAME}
     PUBLIC
-    aocl_utils accelerator_wrapper model_container cnpy
+    aocl_utils data_instruction_gen accelerator_wrapper model_container cnpy
     )
 #target_compile_definitions(${LIB_NAME}
 #    PUBLIC

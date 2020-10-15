@@ -80,7 +80,6 @@ endif()
 #########################
 file(GLOB HOST_SRC
         ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp
-        ${PROJECT_SOURCE_DIR}/common/src/*.cpp
 )
 
 
@@ -110,10 +109,9 @@ INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIRS})
 #####################################
 add_definitions(-DFPGA_DEVICE)
 add_executable (${TEST_NAME}_host ${HOST_SRC})
-target_link_libraries(${TEST_NAME}_host ${Boost_LIBRARIES} gtest_main aocl_utils accelerator_wrapper)
+target_link_libraries(${TEST_NAME}_host ${Boost_LIBRARIES} gtest_main aocl_utils data_instruction_gen accelerator_wrapper)
 target_include_directories(${TEST_NAME}_host
     PUBLIC
-    ${PROJECT_SOURCE_DIR}/common/inc
     ${PROJECT_SOURCE_DIR}/device
     ${CMAKE_CURRENT_SOURCE_DIR}
     )

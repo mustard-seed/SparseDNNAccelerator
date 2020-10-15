@@ -168,5 +168,60 @@ int filter_cache_boundary_check(
       int inputChannelSize
         );
 
+typedef struct {
+    unsigned int sizeOutputTileFullHeight;
+    unsigned int sizeOutputTilePartialHeight;
+    unsigned int sizeOutputTileFullWidthPerCol;
+    unsigned int sizeOutputTilePartialWidthPerCol;
+    unsigned int numActiveColsForPartialWidthTile;
+    unsigned int numFullOutputTileAlongWidth;
+    unsigned int numOutputTileAlongWidth;
+    unsigned int numFullOutputTileAlongHeight;
+    unsigned int numOutputTileAlongHeight;
+} t_graph_output_tile_info;
+
+t_graph_output_tile_info deriveConvOutputTileShape(
+        unsigned int outputHeight,
+        unsigned int outputWidth,
+        unsigned int sizeOutputFullTileHeight,
+        unsigned int sizeOutputFullTileWidthPerCol
+        );
+
+unsigned int deriveConvInputDimension1D(
+        unsigned int outputDimension1D,
+        unsigned int kernelSize,
+        unsigned int kernelStride
+        );
+
+unsigned int deriveConvComputationLatency(
+        t_graph_output_tile_info _outputTileInfo,
+        unsigned int _numOutputChannelsPerGroup,
+        unsigned int _numInputChannelsPerGroup,
+        unsigned int _numGroups,
+        unsigned int _sizeKernel
+        );
+
+unsigned int deriveConvInputTransferLatency(
+        t_graph_output_tile_info _outputTileInfo,
+        unsigned int _numInputChannelsPerGroup,
+        unsigned int _numGroups,
+        unsigned int _sizeKernel,
+        unsigned _sizeStride
+        );
+
+unsigned int deriveConvWeightTransferLatency(
+        t_graph_output_tile_info _outputTileInfo,
+        unsigned int _numInputChannelsPerGroup,
+        unsigned int _numOutputChannelsPerGroup,
+        unsigned int _numGroups,
+        unsigned int _sizeKernel
+        );
+
+unsigned int deriveConvOutputTransferLatency(
+        unsigned int _outputHeight,
+        unsigned int _outputWidth,
+        unsigned int _numOutputChannelsPerNextGroup,
+        unsigned int _numNextGroups
+        );
 
 #endif
