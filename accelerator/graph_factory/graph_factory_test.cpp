@@ -276,6 +276,10 @@ void testFixture::launch(std::string _traceFileName,
     std::cout <<"Step "<<stepCount++<<": Performance counts"<<std::endl;
     std::cout <<accelerator.reportRuntime();
 
+    std::size_t dotPos = _traceFileName.find(".");
+    std::string csvFileName = _traceFileName.substr(0, dotPos) + ".csv";
+    accelerator.dumpRuntimeToCSV(csvFileName);
+
     std::cout <<"Step "<<stepCount++<<": Extract output and perform checks"<<std::endl;
     {
        YAML::Node rawBlobs = YAML::LoadFile(_inoutFileName);

@@ -215,6 +215,11 @@ namespace GraphRuntime {
             float getInvocationOverhead();
 
             std::string reportRuntime();
+
+            /*!
+             * \brief dumpRuntimeToCSV
+             */
+            void dumpRuntimeToCSV(std::string csvFilePath);
     };
 }
 #endif

@@ -9,6 +9,7 @@
 
 #include <iomanip>
 #include <limits>
+#include <fstream> //For file I/O
 
 /**
 CL INTEL FPGA MEM BANKS
@@ -1281,5 +1282,65 @@ namespace GraphRuntime {
             }
         }
         return buffer.str();
+    }
+
+    void AcceleratorWrapper::dumpRuntimeToCSV(std::string csvFilePath)
+    {
+        std::ofstream dumpFile;
+        dumpFile.open(csvFilePath);
+        std::string sep = ",";
+
+        const int maxName = 29;
+        if (numRunExecuted > 0)
+        {
+            //Print average input blob transfer time
+            for (unsigned int i=0; i<vecInputBlobsInfo.size(); i++)
+            {
+                auto blobInfo = vecInputBlobsInfo.at(i);
+                auto blobTime = vecInputTransferTime.at(i);
+                std::string name = blobInfo.blobName;
+                if (name.length() > maxName)
+                {
+                    name = name.substr(0, maxName-4);
+                    name += "...";
+                }
+                double averageTimeUs = blobTime / ((double) numRunExecuted);
+                dumpFile <<name<<sep<<std::to_string(averageTimeUs)<<std::endl;
+            }
+            //Print average layer transfer time
+            for (unsigned int i=0; i<vecLayerExecutionTime.size(); i++)
+            {
+                auto layerInfo = vecLayerInfo.at(i);
+                auto layerTime = vecLayerExecutionTime.at(i);
+                std::string name = layerInfo.layerName;
+                if (name.length() > maxName)
+                {
+                    name = name.substr(0, maxName-4);
+                    name += "...";
+                }
+                double averageTimeUs = layerTime / ((double) numRunExecuted);
+                dumpFile <<name<<sep<<std::to_string(averageTimeUs)<<std::endl;
+            }
+            //Print average outout blob transfer time
+            for (unsigned int i=0; i<vecOutputBlobsInfo.size(); i++)
+            {
+                auto blobInfo = vecOutputBlobsInfo.at(i);
+                auto blobTime = vecOutputTransferTime.at(i);
+                std::string name = blobInfo.blobName;
+                if (name.length() > maxName)
+                {
+                    name = name.substr(0, maxName-4);
+                    name += "...";
+                }
+                double averageTimeUs = blobTime / ((double) numRunExecuted);
+                dumpFile <<name<<sep<<std::to_string(averageTimeUs)<<std::endl;
+            }
+        }
+
+        dumpFile <<"Number of inferences"<<sep<<std::to_string(numRunExecuted)<<std::endl;
+        dumpFile <<"Average Inference Latency (us)"<<sep<<std::to_string(averageInferenceDuration * 1000000.0)<<std::endl;
+        dumpFile <<"Maximum Inference Latency (us)"<<sep<<std::to_string(maxInferenceDuration * 1000000.0)<<std::endl;
+        dumpFile <<"Minimum Inference Latency (us)"<<sep<<std::to_string(minInferenceDuration * 1000000.0)<<std::endl;
+        dumpFile.close();
     }
 }
