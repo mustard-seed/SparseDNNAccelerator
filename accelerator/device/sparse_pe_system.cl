@@ -403,6 +403,8 @@ __kernel void kernelWMover (
 			t_bias cacheBias[WEIGHT_MOVER_BIAS_CACHE_SIZE];
 	#endif //WMOVER_STREAM_CACHE
 
+	t_dram_block cacheFilter[KERNEL_CACHE_DEPTH];
+
 	for (unsigned int iInst=0; iInst<numInstruction; iInst++)
 	{
 		t_weight_mover_instruction inst = pInst[iInst];
@@ -493,7 +495,21 @@ __kernel void kernelWMover (
 						bias,
 						numTransferBlockInFilter));
 
+			/**
+			 * Input dram block coalesceion
+			 */
+			for (unsigned int iDramAccessCount=0; iDramAccessCount<numDramBlockInFilter; iDramAccessCount += WMOVER_FILTER_DRAM_BLOCK_ACCESS_UNROLL_FACTOR)
+			{
+				#pragma unroll
+				for (unsigned int i=0; i<WMOVER_FILTER_DRAM_BLOCK_ACCESS_UNROLL_FACTOR; i++)
+				{
+					cacheFilter[iDramAccessCount+i] = pW[iDramBlock + i];
+				}
+				iDramBlock += WMOVER_FILTER_DRAM_BLOCK_ACCESS_UNROLL_FACTOR;
+			}
+
 			//one extra for filter stream control
+			unsigned short iFilterCacheCount = 0;
 			for (unsigned short iTransmitCount=0; iTransmitCount<=numDramBlockInFilter; iTransmitCount++)
 			{
 				t_dram_block block;
@@ -503,8 +519,10 @@ __kernel void kernelWMover (
 				}
 				else
 				{
-					block = pW[iDramBlock];
-					iDramBlock++;
+					// block = pW[iDramBlock];
+					// iDramBlock++;
+					block = cacheFilter[iFilterCacheCount];
+					iFilterCacheCount++;
 				}
 
 				t_dram_block_w_tagged taggedBlock;
