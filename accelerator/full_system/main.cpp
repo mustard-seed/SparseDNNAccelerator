@@ -144,7 +144,7 @@ TEST_F (testFixture, perf_test_fully_connected)
 //            {.inputChannel=254, .outputChannel=254}
 //            };
     std::vector<t_fc_pairs> vecTestsPairs = {
-            {.inputChannel=1024, .outputChannel=1024}
+            {.inputChannel=254, .outputChannel=254}
             };
     //std::vector<unsigned char> vecInputChannel = {1};
     unsigned char numInputGroup = 1;

@@ -403,7 +403,9 @@ __kernel void kernelWMover (
 			t_bias cacheBias[WEIGHT_MOVER_BIAS_CACHE_SIZE];
 	#endif //WMOVER_STREAM_CACHE
 
+	#if defined(WMOVER_WEIGHT_COALESCE_CACHE)
 	t_dram_block cacheFilter[KERNEL_CACHE_DEPTH];
+	#endif
 
 	for (unsigned int iInst=0; iInst<numInstruction; iInst++)
 	{
@@ -495,21 +497,24 @@ __kernel void kernelWMover (
 						bias,
 						numTransferBlockInFilter));
 
-			/**
-			 * Input dram block coalesceion
-			 */
-			for (unsigned int iDramAccessCount=0; iDramAccessCount<numDramBlockInFilter; iDramAccessCount += WMOVER_FILTER_DRAM_BLOCK_ACCESS_UNROLL_FACTOR)
-			{
-				#pragma unroll
-				for (unsigned int i=0; i<WMOVER_FILTER_DRAM_BLOCK_ACCESS_UNROLL_FACTOR; i++)
+			#if defined(WMOVER_WEIGHT_COALESCE_CACHE)
+				/**
+				 * Input dram block coalescing
+				 */
+				for (unsigned int iDramAccessCount=0; iDramAccessCount<numDramBlockInFilter; iDramAccessCount += WMOVER_FILTER_DRAM_BLOCK_ACCESS_UNROLL_FACTOR)
 				{
-					cacheFilter[iDramAccessCount+i] = pW[iDramBlock + i];
+					#pragma unroll
+					for (unsigned int i=0; i<WMOVER_FILTER_DRAM_BLOCK_ACCESS_UNROLL_FACTOR; i++)
+					{
+						cacheFilter[iDramAccessCount+i] = pW[iDramBlock + i];
+					}
+					iDramBlock += WMOVER_FILTER_DRAM_BLOCK_ACCESS_UNROLL_FACTOR;
 				}
-				iDramBlock += WMOVER_FILTER_DRAM_BLOCK_ACCESS_UNROLL_FACTOR;
-			}
+
+				unsigned short iFilterCacheCount = 0;
+			#endif //WMOVER_WEIGHT_COALESCE_CACHE
 
 			//one extra for filter stream control
-			unsigned short iFilterCacheCount = 0;
 			for (unsigned short iTransmitCount=0; iTransmitCount<=numDramBlockInFilter; iTransmitCount++)
 			{
 				t_dram_block block;
@@ -519,10 +524,13 @@ __kernel void kernelWMover (
 				}
 				else
 				{
-					// block = pW[iDramBlock];
-					// iDramBlock++;
-					block = cacheFilter[iFilterCacheCount];
-					iFilterCacheCount++;
+					#if !defined(WMOVER_WEIGHT_COALESCE_CACHE)
+						block = pW[iDramBlock];
+						iDramBlock++;
+					#else
+						block = cacheFilter[iFilterCacheCount];
+						iFilterCacheCount++;
+					#endif
 				}
 
 				t_dram_block_w_tagged taggedBlock;
