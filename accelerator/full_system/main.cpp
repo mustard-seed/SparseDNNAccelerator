@@ -36,7 +36,7 @@
 #endif
 //#define PERF_TEST
 //#NOOP
-//#define PROFILE
+#define PROFILE
 
 #define FRAC_WIDTH 4
 #define INT_WIDTH 3
@@ -70,14 +70,14 @@ protected:
     std::vector<float> generateInputTensor (
                 unsigned char _inputWidth,
                 unsigned char _inputHeight,
-                unsigned char _numInputChannel,
+                unsigned int _numInputChannel,
                 unsigned char _numGroupCurrentLayer,
                 bool _alternateSign = true
             );
 
     std::vector<float> generateSparseInput (unsigned char _inputWidth,
                 unsigned char _inputHeight,
-                unsigned char _numInputChannel,
+                unsigned int _numInputChannel,
                 unsigned char _numGroupCurrentLayer,
                 float denseProb = 1.0f
                 , int channelPruneScale = CLUSTER_SIZE);
@@ -94,22 +94,22 @@ protected:
      */
     std::vector<fixedPointNumber> generateWeights (
                 unsigned char _kernelSize,
-                unsigned char _numInputChannel,
+                unsigned int _numInputChannel,
                 unsigned char _numGroups
             );
 
 
     std::vector<fixedPointNumber> generateSparseWeights (unsigned char _kernelSize,
-                    unsigned char _numInputChannel,
-                    unsigned char _numOutputChannel,
+                    unsigned int _numInputChannel,
+                    unsigned int _numOutputChannel,
                     unsigned char _numGroups,
                     float denseProb = 1.0f
                 , int channelPruneScale = CLUSTER_SIZE);
 
     void launch (unsigned char _inputWidth,
             unsigned char _inputHeight,
-            unsigned char _numInputChannel,
-            unsigned char _numOutputChannel,
+            unsigned int _numInputChannel,
+            unsigned int _numOutputChannel,
             unsigned char _numInputGroup, //The code will override this to 1 if the operation is not convolution
             unsigned char _numGroupNext, //Number of groups for the next layer
             unsigned char _inputHeightSPUnitSize, //The code will override this to 1 if the operation is not convolution
@@ -129,41 +129,65 @@ protected:
 }; //testFixture
 
 #ifdef PLAY
-TEST_F (testFixture, conv_sparse_input_sparse_output_small_tile)
+TEST_F (testFixture, perf_test_fully_connected)
 {
-    unsigned char inputWidth = 4;
-    unsigned char inputHeight = 4;
-    unsigned char numInputChannel = 16;
-    unsigned char numOutputChannel = numInputChannel;
+    unsigned char inputWidth = 1;
+    unsigned char inputHeight = 1;
+    typedef struct {
+          unsigned int inputChannel;
+          unsigned int outputChannel;
+    } t_fc_pairs;
+//    std::vector<t_fc_pairs> vecTestsPairs = {
+//            {.inputChannel=1, .outputChannel=32},
+//            {.inputChannel=254, .outputChannel=32},
+//            {.inputChannel=1, .outputChannel=254},
+//            {.inputChannel=254, .outputChannel=254}
+//            };
+    std::vector<t_fc_pairs> vecTestsPairs = {
+            {.inputChannel=1024, .outputChannel=1024}
+            };
+    //std::vector<unsigned char> vecInputChannel = {1};
     unsigned char numInputGroup = 1;
     unsigned char numOutputGroup = 1;
     unsigned char inputHeightSPUnitSize = 1;
     unsigned char inputWidthSPUnitSize = 1;
-    unsigned char sizeOutputTileWidthPerColFull = 1;
-    unsigned char sizeOutputTileHeight = 1;
+    unsigned char sizeOutputTileWidthPerColFull = 8;
+    unsigned char sizeOutputTileHeight = 8;
     bool flagEnableRelu = false;
     bool flagSparseInput = true;
     bool flagSparseOutput = true;
     OPERATION op = CONVOLUTION;
     float bias = 0.0f;
-
-    launch(
-                inputWidth,
-                inputHeight,
-                numInputChannel,
-                numOutputChannel,
-                numInputGroup,
-                numOutputGroup,
-                inputHeightSPUnitSize,
-                inputWidthSPUnitSize,
-                sizeOutputTileWidthPerColFull,
-                sizeOutputTileHeight,
-                flagEnableRelu,
-                flagSparseInput,
-                flagSparseOutput,
-                op,
-                bias
-          );
+    std::vector<float> vecDenseProb = {1.0};
+    for (auto& testPairs: vecTestsPairs)
+    {
+        for (auto & prob : vecDenseProb)
+        {
+            unsigned int numInputChannel = testPairs.inputChannel;
+            unsigned int numOutputChannel = testPairs.outputChannel;
+            launch(
+                        inputWidth,
+                        inputHeight,
+                        numInputChannel,
+                        numOutputChannel,
+                        numInputGroup,
+                        numOutputGroup,
+                        inputHeightSPUnitSize,
+                        inputWidthSPUnitSize,
+                        sizeOutputTileWidthPerColFull,
+                        sizeOutputTileHeight,
+                        flagEnableRelu,
+                        flagSparseInput,
+                        flagSparseOutput,
+                        op,
+                        bias,
+                        false, //back to back
+                        true, //perf test
+                        prob, //dense prob
+                        1 //channel prune scale
+                  );
+        }
+     }
 }
 #endif
 #if defined(PERF_TEST)
@@ -903,7 +927,7 @@ void testFixture::SetUp()
 std::vector<float> testFixture::generateInputTensor(
             unsigned char _inputWidth,
             unsigned char _inputHeight,
-            unsigned char _numInputChannel,
+            unsigned int _numInputChannel,
             unsigned char _numGroupCurrentLayer,
             bool _alternateSign
         )
@@ -918,7 +942,7 @@ std::vector<float> testFixture::generateInputTensor(
         {
             for (unsigned char w=0; w<_inputWidth; w++)
             {
-                for (unsigned char c=0; c<numICPerGroup; c++)
+                for (unsigned int c=0; c<numICPerGroup; c++)
                 {
                     unsigned char globalChannel = g*numICPerGroup+c;
                     signed char fpBits = ((w % 2 == 1) && _alternateSign)
@@ -936,7 +960,7 @@ std::vector<float> testFixture::generateInputTensor(
 std::vector<float> testFixture::generateSparseInput(
             unsigned char _inputWidth,
             unsigned char _inputHeight,
-            unsigned char _numInputChannel,
+            unsigned int _numInputChannel,
             unsigned char _numGroupCurrentLayer,
             float denseProb,
             int channelPruneScale
@@ -955,7 +979,7 @@ std::vector<float> testFixture::generateSparseInput(
              for (unsigned char w=0; w<_inputWidth; w++)
              {
                  bool flagNonZero = false;
-                 for (unsigned char c=0; c<numICPerGroup; c++)
+                 for (unsigned int c=0; c<numICPerGroup; c++)
                  {
                      if (((int) c) % channelPruneScale == 0)
                      {
@@ -982,19 +1006,19 @@ std::vector<float> testFixture::generateSparseInput(
 
 std::vector<fixedPointNumber> testFixture::generateWeights (
         unsigned char _kernelSize,
-        unsigned char _numInputChannel,
+        unsigned int _numInputChannel,
         unsigned char _numGroups
         )
 {
     assert(_kernelSize % 2 == 1);
     assert(_numInputChannel % _numGroups == 0);
     std::vector<fixedPointNumber> fpWeightTensor;
-    unsigned char numICPerGroup = _numInputChannel / _numGroups;
+    unsigned int numICPerGroup = _numInputChannel / _numGroups;
 
     for (unsigned char g=0; g<_numGroups; g++)
     {
         //Number of OC per group equals to the number of IC per group
-        for (unsigned char iFilter=0; iFilter<numICPerGroup; iFilter++)
+        for (unsigned int iFilter=0; iFilter<numICPerGroup; iFilter++)
         {
             for (unsigned char iH=0; iH<_kernelSize; iH++)
             {
@@ -1002,7 +1026,7 @@ std::vector<fixedPointNumber> testFixture::generateWeights (
                 for (unsigned char iW=0; iW<_kernelSize; iW++)
                 {
                     bool vCentre = (iW == (_kernelSize / 2));
-                    for (unsigned char iC=0; iC<numICPerGroup; iC++)
+                    for (unsigned int iC=0; iC<numICPerGroup; iC++)
                     {
                         bool isOne = (hCentre == true) && (vCentre == true) && (iFilter == iC);
                         float floatWeight = isOne ? 1.0f : 0.0f;
@@ -1019,8 +1043,8 @@ std::vector<fixedPointNumber> testFixture::generateWeights (
 
 std::vector<fixedPointNumber> testFixture::generateSparseWeights (
         unsigned char _kernelSize,
-        unsigned char _numInputChannel,
-        unsigned char _numOutputChannel,
+        unsigned int _numInputChannel,
+        unsigned int _numOutputChannel,
         unsigned char _numGroups,
         float denseProb,
         int channelPruneScale
@@ -1030,8 +1054,8 @@ std::vector<fixedPointNumber> testFixture::generateSparseWeights (
     assert(_numInputChannel % _numGroups == 0);
     std::vector<fixedPointNumber> fpWeightTensor;
     assert ((((unsigned int) _numOutputChannel) % _numGroups == 0) && "Number of output channels is not divisble by the number of groups.");
-    unsigned char numOCPerGroup = _numOutputChannel / _numGroups;
-    unsigned char numICPerGroup = _numInputChannel / _numGroups;
+    unsigned int numOCPerGroup = _numOutputChannel / _numGroups;
+    unsigned int numICPerGroup = _numInputChannel / _numGroups;
 
     std::mt19937 generator(WEIGHT_SEED);
     std::bernoulli_distribution bernDistribution(denseProb);
@@ -1039,14 +1063,14 @@ std::vector<fixedPointNumber> testFixture::generateSparseWeights (
     for (unsigned char g=0; g<_numGroups; g++)
     {
         //Number of OC per group equals to the number of IC per group
-        for (unsigned char iFilter=0; iFilter<numOCPerGroup; iFilter++)
+        for (unsigned int iFilter=0; iFilter<numOCPerGroup; iFilter++)
         {
             for (unsigned char iH=0; iH<_kernelSize; iH++)
             {
                 for (unsigned char iW=0; iW<_kernelSize; iW++)
                 {
                     bool flagNonZero = false;
-                    for (unsigned char iC=0; iC<numICPerGroup; iC++)
+                    for (unsigned int iC=0; iC<numICPerGroup; iC++)
                     {
                         if (((int) iC) % channelPruneScale == 0)
                         {
@@ -1075,8 +1099,8 @@ std::vector<fixedPointNumber> testFixture::generateSparseWeights (
 void testFixture::launch (
         unsigned char _inputWidth,
         unsigned char _inputHeight,
-        unsigned char _numInputChannel,
-        unsigned char _numOutputChannel,
+        unsigned int _numInputChannel,
+        unsigned int  _numOutputChannel,
         unsigned char _numInputGroup, //The code will override this to 1 if the operation is not convolution
         unsigned char _numGroupNext, //Number of groups for the next layer
         unsigned char _inputHeightSPUnitSize, //The code will override this to 1 if the operation is not convolution
@@ -1099,10 +1123,10 @@ void testFixture::launch (
 
     cl_uchar kernelSize;
     cl_uchar stride;
-    unsigned char numInputChannel0;
-    unsigned char numInputChannel1;
-    unsigned short numOutputChannels;
-    unsigned short numOutputChannelPerGroup;
+    unsigned int numInputChannel0;
+    unsigned int numInputChannel1;
+    unsigned int numOutputChannels;
+    unsigned int numOutputChannelPerGroup;
     unsigned char numOutputWidth;
     unsigned char numOutputHeight;
     unsigned char numGroupCurrentLayer;
