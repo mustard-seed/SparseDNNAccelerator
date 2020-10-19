@@ -2054,7 +2054,7 @@ __kernel void kernelIATileController (
 		    unsigned char kernelSize = instruction.kernelSize;
 	        unsigned int numOutputInstructions = instruction.numOutputInstructions;
 		    unsigned char numActivePeCols = instruction.flagPadBitmaskCatNumActiveCols & 0x7F;
-		    unsigned short numOutputChannelsInGroup = instruction.numOutputChannelsInGroup;
+		    //unsigned short numOutputChannelsInGroup = instruction.numOutputChannelsInGroup;
 		    unsigned short iaCacheColStride = instruction.cacheIAStripColStride;
 		    unsigned short iaCacheRowStride = iaCacheColStride * ((unsigned short)(inputTileWidth));
 
@@ -2102,6 +2102,7 @@ __kernel void kernelIATileController (
 			unsigned short iFilterInGroup = 0;
 			unsigned char iInputTileWidth = 0;
 			unsigned char iInputTileHeight = 0;
+			unsigned short iFoldInStrip = 0;
 
 			unsigned char inputTileWidth = drainInstruction.localTileWidth;
 		    unsigned char inputTileHeight = drainInstruction.localTileHeight;
@@ -2109,7 +2110,9 @@ __kernel void kernelIATileController (
 		    unsigned char kernelSize = drainInstruction.kernelSize;
 	        unsigned int numOutputInstructions = drainInstruction.numOutputInstructions;
 		    unsigned char numActivePeCols = drainInstruction.flagPadBitmaskCatNumActiveCols & 0x7F;
-		    unsigned short numOutputChannelsInGroup = drainInstruction.numOutputChannelsInGroup;
+		    //unsigned short numOutputChannelsInGroup = drainInstruction.numOutputChannelsInGroup;
+			unsigned short numFullFoldsPerStripInGroup = drainInstruction.numFullFoldsPerStripInGroup;
+			unsigned char numActiveRowsInPartialFold = drainInstruction.numActiveRowsInPartialFold;
 			unsigned short iaCacheColStride = drainInstruction.cacheIAStripColStride;
 		    unsigned short iaCacheRowStride = iaCacheColStride * ((unsigned short)(inputTileWidth));
 
@@ -2119,8 +2122,10 @@ __kernel void kernelIATileController (
 
 	        for (unsigned int i=0; i<numOutputInstructions; i++)
 			{
-				unsigned char numActivePeRows = ((numOutputChannelsInGroup - iFilterInGroup) < (unsigned short) (PE_ROWS)) ?
-					(unsigned char) (numOutputChannelsInGroup - iFilterInGroup) : PE_ROWS;
+				// unsigned char numActivePeRows = ((numOutputChannelsInGroup - iFilterInGroup) < (unsigned short) (PE_ROWS)) ?
+				// 	(unsigned char) (numOutputChannelsInGroup - iFilterInGroup) : PE_ROWS;
+				unsigned char numActivePeRows = (iFoldInStrip < numFullFoldsPerStripInGroup) ? 
+					PE_ROWS : numActiveRowsInPartialFold ;
 
 				unsigned char iStripInTile = iInputTileHeight * inputTileWidth + iInputTileWidth;
 
@@ -2177,7 +2182,7 @@ __kernel void kernelIATileController (
 					if ((iInputTileHeight + kernelSize) >= inputTileHeight)
 					{
 						iInputTileHeight = 0;
-						iFilterInGroup += numActivePeRows;
+						iFoldInStrip++;
 					}
 					else
 					{

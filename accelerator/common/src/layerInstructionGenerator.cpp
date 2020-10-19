@@ -729,7 +729,9 @@ void instruction_generator(
                             instructionIAControl.cacheIAStripColStride = (flagSparseInput == 0x00) ?
                                         (t_ushort) (1 + (cacheIAStripColStrideTBCount-1) / WIDE_SIZE)
                                       : (t_ushort) (1 + (cacheIAStripColStrideBitmaskCount+cacheIAStripColStrideTBCount-1) / WIDE_SIZE);
-                            instructionIAControl.numOutputChannelsInGroup = (t_ushort) numOutputChannelsPerGroupCurrentLayer;
+//                            instructionIAControl.numOutputChannelsInGroup = (t_ushort) numOutputChannelsPerGroupCurrentLayer;
+                            instructionIAControl.numFullFoldsPerStripInGroup = (t_ushort) numFullComputeFoldPerGroup;
+                            instructionIAControl.numActiveRowsInPartialFold = (t_uchar) numActiveElementsInPartialComputeFold;
                             unsigned char inputNeedsBitmaskPadding = (flagSparseInput == 0x00) ? 0x80 : 0x00;
                             instructionIAControl.flagPadBitmaskCatNumActiveCols = (t_uchar)
                                     (inputNeedsBitmaskPadding | (0x7F & numActiveCols));
