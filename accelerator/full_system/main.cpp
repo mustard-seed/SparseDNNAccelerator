@@ -36,7 +36,7 @@
 #endif
 //#define PERF_TEST
 //#NOOP
-#define PROFILE
+//#define PROFILE
 
 #define FRAC_WIDTH 4
 #define INT_WIDTH 3
@@ -129,10 +129,46 @@ protected:
 }; //testFixture
 
 #ifdef PLAY
-TEST_F (testFixture, conv_sparse_input_sparse_output)
+//TEST_F (testFixture, conv_sparse_input_sparse_output)
+//{
+//    unsigned char inputWidth = 4;
+//    unsigned char inputHeight = 4;
+//    unsigned char numInputChannel = 16;
+//    unsigned char numOutputChannel = numInputChannel;
+//    unsigned char numInputGroup = 1;
+//    unsigned char numOutputGroup = 1;
+//    unsigned char inputHeightSPUnitSize = 1;
+//    unsigned char inputWidthSPUnitSize = 1;
+//    unsigned char sizeOutputTileWidthPerColFull = 2;
+//    unsigned char sizeOutputTileHeight = 2;
+//    bool flagEnableRelu = false;
+//    bool flagSparseInput = true;
+//    bool flagSparseOutput = true;
+//    OPERATION op = CONVOLUTION;
+//    float bias = 0.0f;
+
+//    launch(
+//                inputWidth,
+//                inputHeight,
+//                numInputChannel,
+//                numOutputChannel,
+//                numInputGroup,
+//                numOutputGroup,
+//                inputHeightSPUnitSize,
+//                inputWidthSPUnitSize,
+//                sizeOutputTileWidthPerColFull,
+//                sizeOutputTileHeight,
+//                flagEnableRelu,
+//                flagSparseInput,
+//                flagSparseOutput,
+//                op,
+//                bias
+//          );
+//}
+TEST_F (testFixture, conv_dense_input_dense_output_partial)
 {
-    unsigned char inputWidth = 4;
-    unsigned char inputHeight = 4;
+    unsigned char inputWidth = 5;
+    unsigned char inputHeight = 5;
     unsigned char numInputChannel = 16;
     unsigned char numOutputChannel = numInputChannel;
     unsigned char numInputGroup = 1;
@@ -140,10 +176,10 @@ TEST_F (testFixture, conv_sparse_input_sparse_output)
     unsigned char inputHeightSPUnitSize = 1;
     unsigned char inputWidthSPUnitSize = 1;
     unsigned char sizeOutputTileWidthPerColFull = 2;
-    unsigned char sizeOutputTileHeight = 2;
+    unsigned char sizeOutputTileHeight = 4;
     bool flagEnableRelu = false;
-    bool flagSparseInput = true;
-    bool flagSparseOutput = true;
+    bool flagSparseInput = false;
+    bool flagSparseOutput = false;
     OPERATION op = CONVOLUTION;
     float bias = 0.0f;
 
