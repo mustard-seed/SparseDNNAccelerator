@@ -11,10 +11,12 @@
 //#define VALIDATE
 #define RESNET56
 #define RESNET50
+#define RESNET50_PRUNED
 #ifndef C5SOC
     #define EMULATE
 #endif
-#define INFERENCE_REPEAT 20
+//#define CHECKOUTPUT
+#define INFERENCE_REPEAT 50
 
 class testFixture : public ::testing::Test {
 protected:
@@ -185,6 +187,19 @@ TEST_F(testFixture, resnet50_imagenet1k)
     launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
 }
 #endif
+#if defined(RESNET50_PRUNED)
+TEST_F(testFixture, resnet50_pc1q_imagenet1k)
+{
+
+    std::string traceFileName = "resnet50_imagenet_pc1q_trace.yaml";
+    std::string traceParameterFile = "resnet50_imagenet_pc1q_parameters.npz";
+    std::string inoutFile = "resnet50_imagenet_pc1q_inout.yaml";
+    std::map<std::string, std::string> traceName2BlobName;
+    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
+    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_73", "output"));
+    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
+}
+#endif
 
 void testFixture::SetUp()
 {
@@ -280,6 +295,7 @@ void testFixture::launch(std::string _traceFileName,
     std::string csvFileName = _traceFileName.substr(0, dotPos) + ".csv";
     accelerator.dumpRuntimeToCSV(csvFileName);
 
+#if defined(CHECKOUTPUT)
     std::cout <<"Step "<<stepCount++<<": Extract output and perform checks"<<std::endl;
     {
        YAML::Node rawBlobs = YAML::LoadFile(_inoutFileName);
@@ -321,4 +337,5 @@ void testFixture::launch(std::string _traceFileName,
            blobID++;
        }
     }
+#endif
 }

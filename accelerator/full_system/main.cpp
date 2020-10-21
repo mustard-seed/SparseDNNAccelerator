@@ -26,11 +26,11 @@
 #include "layerInstructionGenerator.hpp"
 #include "accelerator_wrapper.hpp"
 
-#define PLAY
-//#define PERF_TEST
-//#define VALIDATE
+//#define PLAY
+#define PERF_TEST
+#define VALIDATE
 //Some how if repeat is 100, bad things will happen on concat
-#define REPEAT 1
+#define REPEAT 40
 #ifndef C5SOC
 #define EMULATE
 #endif
