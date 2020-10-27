@@ -45,13 +45,7 @@ function (add_aoc_target)
     if ("${add_aoc_target_HEADER_DIR}" STREQUAL "")
     else()
         list (APPEND occflags -I ${add_aoc_target_HEADER_DIR} )
-    endif()   
-
-    if ("${add_aoc_target_BOARD_NAME}" MATCHES "DE10Standard")
-        set (FMAX -fmax=160)
-    else ()
-        set (FMAX -fmax=300)
-    endif() 
+    endif()    
     
     #Check whether a valid build type is selected
     if ("${add_aoc_target_TARGET_TYPE}" STREQUAL "EMULATION")
@@ -75,13 +69,11 @@ function (add_aoc_target)
             list (APPEND occflags
                     -c
                     -o ${target_name_local}
-                    ${FMAX}
                  )
          else()
              list (APPEND occflags
                      -rtl
      #                -o ${target_name_local}
-                     ${FMAX}
                   )
          endif()
     elseif("${add_aoc_target_TARGET_TYPE}" STREQUAL "PROFILE_HW")
@@ -91,8 +83,6 @@ function (add_aoc_target)
                 -profile
                 -high-effort
 #                -o ${target_name_local}
-                ${FMAX}
-                -seed=7
              )
      elseif("${add_aoc_target_TARGET_TYPE}" STREQUAL "FAST_COMPILE_HW")
          message (STATUS "Generating the FAST_COMPILE_HW AOC target")
@@ -100,16 +90,12 @@ function (add_aoc_target)
          list (APPEND occflags
                  -fast-compile
 #                 -o ${target_name_local}
-                ${FMAX}
-                -seed=7
               )
     elseif("${add_aoc_target_TARGET_TYPE}" STREQUAL "NORMAL_HW")
         message (STATUS "Generating the NORMAL_HW AOC target")
         set (target_name_local "${add_aoc_target_TARGET_NAME}_aoc_normal_hw")
         list (APPEND occflags
 #                -o ${target_name_local}
-                ${FMAX}
-                -seed=7
              )
     elseif("${add_aoc_target_TARGET_TYPE}" STREQUAL "RELEASE_HW")
         message (STATUS "Generating the RELEASE_HW AOC target")
@@ -117,8 +103,6 @@ function (add_aoc_target)
         list (APPEND occflags 
                 -high-effort
  #               -o ${target_name_local}
-                ${FMAX}
-                -seed=7
              )
     else()
         message (FATAL_ERROR "Illegal TARGET_TYPE passed to the function add_aoc_target. Valid options are EMULATION, RTL_ONLY, PROFILE_HW, 
