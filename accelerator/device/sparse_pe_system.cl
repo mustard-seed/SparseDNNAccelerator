@@ -967,6 +967,7 @@ __kernel void kernelIABuffer ()
 	t_input_buffer_tile_buffer_packet regDispatcherInstructionBuffer;
 	t_ia_buffer_d_state regDispatcherState = IA_BUFFER_INSTRUCTION_STATE_DECODE;
 
+	#pragma ii 1
 	while (true)
 	{
 		/**
@@ -2374,12 +2375,13 @@ __kernel void kernelMisc ()
 				{
 					//If max pooling, then intialize the values to the minimum, else zero
 					t_accumulator min = ACCUM_MIN;
-					reductionBlock[iVal] = (opcode == 0x01) ? 
+					reductionBlock[iVal] = (opcode == ((uint2_t) 0x01)) ? 
 						min : 0x0000;
 				}
 			}
 
 			//Perform reduction
+			#pragma ii 1
 			for (unsigned short iBlock=0; iBlock<numDramBlocksToReduce; iBlock++)
 			{
 				t_dram_block_ia_to_misc inputDramBlockTagged = read_channel_intel(channel_ia_wide_misc[colID]);
@@ -2398,11 +2400,11 @@ __kernel void kernelMisc ()
 					t_accumulator currentValue = reductionBlock[iValue];
 
 					t_accumulator newValue;
-					if (opcode == 0x00)
+					if (opcode == ((uint2_t) 0x00))
 					{
 						newValue = inputValue + currentValue;
 					}
-					else if (opcode == 0x01)
+					else if (opcode == ((uint2_t) 0x01))
 					{
 						newValue = (inputValue >= currentValue) ? inputValue : currentValue;
 					}
@@ -2545,6 +2547,7 @@ __kernel void kernelOAMover (
 					#endif
 					bool proceed = true;
 					unsigned short clusterCount = 0;
+					#pragma ii 1
 					while (proceed)
 					{
 						bool readSuccess = false;
@@ -2976,8 +2979,9 @@ __kernel void kernelOABuffer ()
 
 
 	//Runtime logic
-	// #pragma ivdep array(cacheOutputActivations0)
-	// #pragma ivdep array(cacheOutputActivations1)
+	//#pragma ivdep array(cacheOutputActivations0)
+	//#pragma ivdep array(cacheOutputActivations1)
+	#pragma ii 1
 	while (true) {
 		/**
 		 * oa buffer instruction channel <===> dispatcher
@@ -4271,7 +4275,7 @@ __kernel void kernelOATileController (
 
 #if defined(SPARSE_SYSTEM)
 typedef struct __attribute__((packed)) {
-	uint6_t numSurvingClustersInWindow[2];
+	uint5_t numSurvingClustersInWindow[2];
 	t_flag flagsEnableSparsification[2];
 	t_flag flagsIsLastClusterInStrip[2];
 	t_bitmask bitmasks[2];
@@ -4284,13 +4288,13 @@ typedef struct __attribute__((packed)) {
 
 typedef struct __attribute__((packed)) {
 	//Index to access the pruned cluster buffer
-	uint6_t iterCluster;
+	uint5_t iterCluster;
 	//Counter of the number bitmask bytes that have been sent
-	uint6_t iterBitmaskBytes;
+	uint5_t iterBitmaskBytes;
 	//Number of clusters to send to the OA TEE
-	uint6_t numTransfers;
+	uint5_t numTransfers;
 	//Iterator of the number of clusters that have been sent to the TEE
-	uint6_t iterTransfer;
+	uint5_t iterTransfer;
 
 } t_compressor_reader_info;
 
@@ -4421,6 +4425,7 @@ __kernel void kernelCompressorOranizer()
 	//Writer access side
 	t_flag regWriterAccessSide = FALSE;
 
+	#pragma ii 1
 	while (true)
 	{
 		/**
@@ -4958,6 +4963,7 @@ __kernel void kernelOATee ()
 	uint1_t regFlagLastDramBlockInStrip = FALSE;
 
 
+	#pragma ii 1
 	while (true)
 	{
 		bool sendDramBlockEnable = false;
@@ -5290,6 +5296,7 @@ __kernel void kernelFilterBuffer ()
 
 	//#pragma ivdep array(cacheNzBlocks)
 	#pragma ivdep
+	#pragma ii 1
 	while (true)
 	{
 		//===============Write side====================
@@ -6486,6 +6493,7 @@ __kernel void kernelOperandFilter ()
 	}
 
 	//State logic
+	#pragma ii 1
 	while (1) {
 		//========Signal declaration and state actions=============
 		t_instruction nextWeightFilterInstruction = weightFilterInstruction;
