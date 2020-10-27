@@ -2150,7 +2150,6 @@ __kernel void kernelIATileController (
 				 	tileBufferControlPacket.numStripsRow = inputTileHeight;
 
 				regInstruction = instruction;
-				iInstruction++;
 			} // if write external memory to cache command
 			//CACHE TO PE COMMAND
 			else
