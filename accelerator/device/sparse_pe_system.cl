@@ -590,16 +590,15 @@ __kernel void kernelWMover (
 #define IA_BUFFER_READ_STRIP_UPDATE_VERTICAL 0x1
 #define IA_BUFFER_READ_STRIP_UPDATE_DONE 0x2
 
-#if defined(EMULATOR) && defined(EMUPRINT)
-typedef unsigned char t_ia_buffer_w_state;
-typedef unsigned char t_ia_buffer_r_state;
-typedef unsigned char t_ia_buffer_d_state;
-#else
+#if !defined(EMUPRINT)
 typedef uint3_t t_ia_buffer_w_state;
 typedef uint3_t t_ia_buffer_r_state;
 typedef uint2_t t_ia_buffer_d_state;
+#else
+typedef unsigned char t_ia_buffer_w_state;
+typedef unsigned char t_ia_buffer_r_state;
+typedef unsigned char t_ia_buffer_d_state;
 #endif
-
 
 /**
  * Helper data bundle for accessing the dram_block cache in IA buffers
@@ -881,7 +880,7 @@ __attribute__((autorun))
 __attribute__((num_compute_units(PE_COLS)))
 __kernel void kernelIABuffer ()
 {
-	#if defined(EMUPRINT) && defined(EMULATOR)
+	#if defined(EMUPRINT)
 		int iReceived = 0;
 		int iSent = 0;
 	#endif
@@ -1103,7 +1102,7 @@ __kernel void kernelIABuffer ()
 			if (success == true)
 			{
 				writerBlockValid = TRUE;
-				#if defined(EMUPRINT) && defined(EMULATOR)
+				#if defined(EMUPRINT)
 					EMULATOR_PRINT(("[kernelIABuffer %d] RECEIVED dram block %d. TB[0-3]: %#04x %#04x %#04x %#04x \n\n",
 					colID,
 					iReceived
@@ -1147,7 +1146,7 @@ __kernel void kernelIABuffer ()
 							,readerTB.values.values[3]
 							));
 
-				#if defined(EMUPRINT) && defined(EMULATOR)
+				#if defined(EMUPRINT)
 					EMULATOR_PRINT(("[kernelIABuffer %d] Sent iSent=%d\n",
 					colID, iSent
 					));
@@ -6514,7 +6513,7 @@ __kernel void kernelOperandFilter ()
 		int idy = 0;
 	#endif	
 
-	#if defined(EMUPRINT) && defined(EMULATOR)
+	#if defined (EMUPRINT)
 		unsigned short countPrint = 0x0;
 	#endif
 
