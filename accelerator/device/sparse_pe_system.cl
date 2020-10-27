@@ -570,21 +570,21 @@ __kernel void kernelWMover (
 #endif //MEMORY_READER
 
 #ifdef IA_MEMORY
-#define IA_BUFFER_WRITE_STATE_DECODE 0x1
-#define IA_BUFFER_WRITE_STATE_COMP_NUM_ACCESS 0x2
-#define IA_BUFFER_WRITE_STATE_ACCESS 0x4
-#define IA_BUFFER_WRITE_STATE_UPDATE_STRIP 0x8
-#define IA_BUFFER_WRITE_STATE_COMP_NUM_ACCESS2 0x010
+#define IA_BUFFER_WRITE_STATE_DECODE 0x0
+#define IA_BUFFER_WRITE_STATE_COMP_NUM_ACCESS 0x1
+#define IA_BUFFER_WRITE_STATE_ACCESS 0x2
+#define IA_BUFFER_WRITE_STATE_UPDATE_STRIP 0x3
+#define IA_BUFFER_WRITE_STATE_COMP_NUM_ACCESS2 0x4
 
-#define IA_BUFFER_READ_STATE_DECODE 0x1
-#define IA_BUFFER_READ_STATE_ACCESS 0x2
-#define IA_BUFFER_READ_STATE_UPDATE_STRIP 0x4
-#define IA_BUFFER_READ_STATE_COMP_NUM_ACCESS 0x8
+#define IA_BUFFER_READ_STATE_DECODE 0x0
+#define IA_BUFFER_READ_STATE_ACCESS 0x1
+#define IA_BUFFER_READ_STATE_UPDATE_STRIP 0x2
+#define IA_BUFFER_READ_STATE_COMP_NUM_ACCESS 0x3
 
-#define IA_BUFFER_INSTRUCTION_STATE_DECODE 0x1
-#define IA_BUFFER_INSTRUCTION_STATE_SEND_TO_READER 0x2
-#define IA_BUFFER_INSTRUCTION_STATE_SEND_TO_WRITER 0x4
-#define IA_BUFFER_INSTRUCTION_STATE_WRITER_STALL 0x8
+#define IA_BUFFER_INSTRUCTION_STATE_DECODE 0x0
+#define IA_BUFFER_INSTRUCTION_STATE_SEND_TO_READER 0x1
+#define IA_BUFFER_INSTRUCTION_STATE_SEND_TO_WRITER 0x2
+#define IA_BUFFER_INSTRUCTION_STATE_WRITER_STALL 0x3
 
 #define IA_BUFFER_READ_STRIP_UPDATE_HORIZONTAL 0x0
 #define IA_BUFFER_READ_STRIP_UPDATE_VERTICAL 0x1
@@ -595,9 +595,9 @@ typedef unsigned char t_ia_buffer_w_state;
 typedef unsigned char t_ia_buffer_r_state;
 typedef unsigned char t_ia_buffer_d_state;
 #else
-typedef uint5_t t_ia_buffer_w_state;
-typedef uint4_t t_ia_buffer_r_state;
-typedef uint4_t t_ia_buffer_d_state;
+typedef uint3_t t_ia_buffer_w_state;
+typedef uint3_t t_ia_buffer_r_state;
+typedef uint2_t t_ia_buffer_d_state;
 #endif
 
 
@@ -1254,13 +1254,9 @@ void getIABufferWriterOutput (
 	}
 
 	//Driver for the dram block interface's READY signal
-	// if 	(
-	// 		(currentState == IA_BUFFER_WRITE_STATE_ACCESS) 
-	// 		|| (currentState == IA_BUFFER_WRITE_STATE_COMP_NUM_ACCESS)
-	// 	)
 	if 	(
-			(currentState & (IA_BUFFER_WRITE_STATE_ACCESS | IA_BUFFER_WRITE_STATE_COMP_NUM_ACCESS))
-			> 0
+			(currentState == IA_BUFFER_WRITE_STATE_ACCESS) 
+			|| (currentState == IA_BUFFER_WRITE_STATE_COMP_NUM_ACCESS)
 		)
 	{
 		*pOutAcceptData = TRUE;
@@ -1379,8 +1375,8 @@ void updateIABufferWriter (
 					// unsigned char depth = pCurrentRegisters->tbCountInfo.addressBase 
 					// 		+ pCurrentRegisters->tbCountInfo.colContribution 
 					// 		+ pCurrentRegisters->tbCountInfo.rowContribution;
-					//Omit the TB count cache's address base, because the WRITER always start writing from 0x0
-					unsigned char depth = pCurrentRegisters->tbCountInfo.offset;
+					unsigned char depth = 
+						pCurrentRegisters->tbCountInfo.addressBase + pCurrentRegisters->tbCountInfo.offset;
 					// unsigned char depth = pCurrentRegisters->tbCountInfo.offset;
 					if (((pCurrentRegisters->accessBank) & 0x01) == 0x00)
 					{
@@ -1418,7 +1414,8 @@ void updateIABufferWriter (
 		#if defined(SPARSE_SYSTEM)
 			case IA_BUFFER_WRITE_STATE_COMP_NUM_ACCESS2: {
 				pCurrentRegisters->tbCountInfo.offset = 
-					pCurrentRegisters->tbCountInfo.colContribution
+					pCurrentRegisters->tbCountInfo.addressBase
+					+ pCurrentRegisters->tbCountInfo.colContribution
 					+ pCurrentRegisters->tbCountInfo.rowContribution;
 				*pCurrentState = IA_BUFFER_WRITE_STATE_COMP_NUM_ACCESS;
 			}
@@ -2094,10 +2091,8 @@ __kernel void kernelIATileController (
 
 		unsigned char inputTileWidthDrain = drainInstruction.localTileWidth;
 	    unsigned char inputTileHeightDrain = drainInstruction.localTileHeight;
-	    // unsigned char strideDrain = drainInstruction.kernelStride;
-	    // unsigned char kernelSizeDrain = drainInstruction.kernelSize;
-	    uint5_t kernelSizeDrain = drainInstruction.kernelStrideCatKernelSize & 0x01F;
-	    uint3_t strideDrain = (drainInstruction.kernelStrideCatKernelSize >> 0x05) & 0x07;
+	    unsigned char strideDrain = drainInstruction.kernelStride;
+	    unsigned char kernelSizeDrain = drainInstruction.kernelSize;
 	    unsigned int numOutputInstructionsDrain = drainInstruction.numOutputInstructions;
 	    unsigned char numActivePeColsDrain = drainInstruction.flagPadBitmaskCatNumActiveCols & 0x7F;
 		unsigned short numFullFoldsPerStripInGroupDrain = drainInstruction.numFullFoldsPerStripInGroup;
@@ -2120,9 +2115,9 @@ __kernel void kernelIATileController (
 
 				unsigned char inputTileWidth = instruction.localTileWidth;
 			    unsigned char inputTileHeight = instruction.localTileHeight;
-			    // unsigned char stride = instruction.kernelStride;
-			    // unsigned char kernelSize = instruction.kernelSize;
-		     //    unsigned int numOutputInstructions = instruction.numOutputInstructions;
+			    unsigned char stride = instruction.kernelStride;
+			    unsigned char kernelSize = instruction.kernelSize;
+		        unsigned int numOutputInstructions = instruction.numOutputInstructions;
 			    unsigned char numActivePeCols = instruction.flagPadBitmaskCatNumActiveCols & 0x7F;
 			    //unsigned short numOutputChannelsInGroup = instruction.numOutputChannelsInGroup;
 			    unsigned short iaCacheColStride = instruction.cacheIAStripColStride;

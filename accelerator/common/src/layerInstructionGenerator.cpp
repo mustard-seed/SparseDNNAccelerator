@@ -718,10 +718,8 @@ void instruction_generator(
                             t_ia_tile_controller_instruction instructionIAControl;
                             instructionIAControl.localTileWidth = (t_uchar) maxTNPerCol;
                             instructionIAControl.localTileHeight = (t_uchar) maxTM;
-//                            instructionIAControl.kernelStride = (t_uchar) kernelStride;
-//                            instructionIAControl.kernelSize = (t_uchar) kernelSize;
-                            instructionIAControl.kernelStrideCatKernelSize =
-                                    (t_uchar)(((kernelStride & 0x07) << 0x05) | (kernelSize & 0x01F));
+                            instructionIAControl.kernelStride = (t_uchar) kernelStride;
+                            instructionIAControl.kernelSize = (t_uchar) kernelSize;
                             instructionIAControl.numOutputInstructions = (t_ushort)
                                     ((t_ushort) maxTP * (t_ushort) maxTQPerCol * numComputeFoldPerGroup);
                             //Number of TBs in an uncompressed strip

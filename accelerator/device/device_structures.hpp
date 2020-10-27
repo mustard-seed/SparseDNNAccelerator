@@ -282,13 +282,9 @@ typedef struct __attribute__((packed)) __attribute__((aligned(16)))
     //Input tile height per compute column
     t_uchar localTileHeight;
     //Filter planar stride
-    //t_uchar kernelStride;
+    t_uchar kernelStride;
     //Filter planar kernel size
-    //t_uchar kernelSize;
-    
-    //[7:5] Stride
-    //[4:0] Kernel size
-    t_uchar kernelStrideCatKernelSize;
+    t_uchar kernelSize;
     //Number of streaming instruction for this tile
     t_ushort numOutputInstructions;
     //Column stride of IA strip in IA cache in terms of dram block
