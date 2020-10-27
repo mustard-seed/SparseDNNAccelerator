@@ -244,7 +244,6 @@ __kernel void kernelIAMover (
 								(unsigned int) destinationMisc));
 
 					unsigned char iterInputDramblockInterleave = 0x0;
-					#pragma ii 1
 					for (unsigned short iterTransfer=0; iterTransfer<numTransferActions; iterTransfer++)
 					{
 						t_dram_block_ia_tagged iaBlock;
@@ -988,7 +987,6 @@ __kernel void kernelIABuffer ()
 	t_input_buffer_tile_buffer_packet regDispatcherInstructionBuffer;
 	t_ia_buffer_d_state regDispatcherState = IA_BUFFER_INSTRUCTION_STATE_DECODE;
 
-	#pragma ii 1
 	while (true)
 	{
 		/**
@@ -2111,7 +2109,6 @@ __kernel void kernelIATileController (
 		    uint1_t flagPadBitmaskDrain = ((drainInstruction.flagPadBitmaskCatNumActiveCols & 0x80) >> 7);
 		#endif
 
-		//Ok to leave the ii unoptimized
 		for (unsigned int i=0; i<numChannelWrites; i++)
 		{
 			t_input_buffer_tile_buffer_packet tileBufferControlPacket;
@@ -2490,7 +2487,6 @@ __kernel void kernelMisc ()
 			}
 
 			//Perform reduction
-			//Leave out ii optimization for this, should be ok
 			for (unsigned short iBlock=0; iBlock<numDramBlocksToReduce; iBlock++)
 			{
 				t_dram_block_ia_to_misc inputDramBlockTagged = read_channel_intel(channel_ia_wide_misc[colID]);
@@ -2656,7 +2652,6 @@ __kernel void kernelOAMover (
 					#endif
 					bool proceed = true;
 					unsigned short clusterCount = 0;
-					#pragma ii 1
 					while (proceed)
 					{
 						bool readSuccess = false;
@@ -3090,7 +3085,6 @@ __kernel void kernelOABuffer ()
 	//Runtime logic
 	// #pragma ivdep array(cacheOutputActivations0)
 	// #pragma ivdep array(cacheOutputActivations1)
-	#pragma ii 1
 	while (true) {
 		/**
 		 * oa buffer instruction channel <===> dispatcher
@@ -4316,7 +4310,6 @@ __kernel void kernelOATileController (
 		   	EMULATOR_PRINT(("[kernelOATileController] START sending the drain-from-array instruction for instruction %d\n\n", 
 					iInstruction));
 
-		   	//Ok the leave the ii unoptimized
 		    for  (unsigned short i=0; i < inst.numDrainInstructions; i++)
 		    {
 		    	unsigned short numActivePeRows = (iFoldInGroup < numFullFoldsInGroupCurrentLayer) ?
@@ -4535,7 +4528,6 @@ __kernel void kernelCompressorOranizer()
 	//Writer access side
 	t_flag regWriterAccessSide = FALSE;
 
-	#pragma ii 1
 	while (true)
 	{
 		/**
@@ -5073,7 +5065,6 @@ __kernel void kernelOATee ()
 	uint1_t regFlagLastDramBlockInStrip = FALSE;
 
 
-	#pragma ii 1
 	while (true)
 	{
 		bool sendDramBlockEnable = false;
@@ -5405,7 +5396,6 @@ __kernel void kernelFilterBuffer ()
 
 
 	//#pragma ivdep array(cacheNzBlocks)
-	#pragma ii 1
 	#pragma ivdep
 	while (true)
 	{
@@ -6603,7 +6593,6 @@ __kernel void kernelOperandFilter ()
 	}
 
 	//State logic
-	#pragma ii 1
 	while (1) {
 		//========Signal declaration and state actions=============
 		t_instruction nextWeightFilterInstruction = weightFilterInstruction;
@@ -7295,7 +7284,6 @@ __kernel void kernelDensePE ()
 	t_transfer_block regActivationTB;
 	t_dense_pe_flag regActivationIsLast = FALSE;
 
-	#pragma ii 1
 	while (1) {
 		//Declare temp variables
 		t_dense_pe_instruction nextWeightInstruction = regWeightInstruction;
