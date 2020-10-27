@@ -290,9 +290,7 @@ typedef struct __attribute__((packed)) __attribute__((aligned(16)))
     //Column stride of IA strip in IA cache in terms of dram block
     t_ushort cacheIAStripColStride;
     //Number of output channels in the output group
-    //t_ushort numOutputChannelsInGroup;
-    t_ushort numFullFoldsPerStripInGroup;
-    t_uchar  numActiveRowsInPartialFold;
+    t_ushort numOutputChannelsInGroup;
     //Bit[6:0] Number of active PE columns
     //Bit[7] For sparse engine use only. Whether the input activation tensor is dense and hence need bitmask padding.
     t_uchar flagPadBitmaskCatNumActiveCols;
