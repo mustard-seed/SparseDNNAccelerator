@@ -574,12 +574,10 @@ __kernel void kernelWMover (
 #define IA_BUFFER_WRITE_STATE_COMP_NUM_ACCESS 0x1
 #define IA_BUFFER_WRITE_STATE_ACCESS 0x2
 #define IA_BUFFER_WRITE_STATE_UPDATE_STRIP 0x3
-#define IA_BUFFER_WRITE_STATE_COMP_NUM_ACCESS2 0x4
 
 #define IA_BUFFER_READ_STATE_DECODE 0x0
 #define IA_BUFFER_READ_STATE_ACCESS 0x1
 #define IA_BUFFER_READ_STATE_UPDATE_STRIP 0x2
-#define IA_BUFFER_READ_STATE_COMP_NUM_ACCESS 0x3
 
 #define IA_BUFFER_INSTRUCTION_STATE_DECODE 0x0
 #define IA_BUFFER_INSTRUCTION_STATE_SEND_TO_READER 0x1
@@ -626,8 +624,8 @@ typedef struct __attribute__((packed))
 	//Don't uncomment. unsigned char colStride = 1;
 	unsigned char rowStride;
 	unsigned char offset;
-	unsigned char colContribution;
-	unsigned char rowContribution;
+	// unsigned char colContribution;
+	// unsigned char rowContribution;
 } t_ia_tb_buffer_access_info;
 
 #endif
@@ -925,9 +923,7 @@ __kernel void kernelIABuffer ()
 			.tbCountInfo={
 				.addressBase = 0,
 				.rowStride = 0,
-				.offset = 0,
-				.colContribution = 0,
-				.rowContribution = 0
+				.offset = 0
 			},
 			#endif
 			.numIAAccess=0,
@@ -963,9 +959,7 @@ __kernel void kernelIABuffer ()
 			.tbCountInfo={
 				.addressBase = 0,
 				.rowStride = 0,
-				.offset = 0,
-				.colContribution = 0,
-				.rowContribution = 0
+				.offset = 0
 			},
 			.flagPadBitmask = 0x0,
 			.iTBInCW = 0x0,
@@ -1309,9 +1303,9 @@ void updateIABufferWriter (
 				#if defined(SPARSE_SYSTEM)
 					pCurrentRegisters->tbCountInfo.addressBase = control.tbAddressBase;
 					pCurrentRegisters->tbCountInfo.rowStride = control.tbAddressRowStride;
-					pCurrentRegisters->tbCountInfo.offset = 0x0;
-					pCurrentRegisters->tbCountInfo.colContribution = 0;
-					pCurrentRegisters->tbCountInfo.rowContribution = 0;
+					pCurrentRegisters->tbCountInfo.offset = control.tbAddressBase;
+					// pCurrentRegisters->tbCountInfo.colContribution = 0;
+					// pCurrentRegisters->tbCountInfo.rowContribution = 0;
 				#endif
 
 				/**
@@ -1374,9 +1368,9 @@ void updateIABufferWriter (
 					// unsigned char depth = pCurrentRegisters->tbCountInfo.addressBase 
 					// 		+ pCurrentRegisters->tbCountInfo.colContribution 
 					// 		+ pCurrentRegisters->tbCountInfo.rowContribution;
-					unsigned char depth = 
-						pCurrentRegisters->tbCountInfo.addressBase + pCurrentRegisters->tbCountInfo.offset;
-					// unsigned char depth = pCurrentRegisters->tbCountInfo.offset;
+					// unsigned char depth = pCurrentRegisters->tbCountInfo.addressBase 
+					// 		+ pCurrentRegisters->tbCountInfo.offset;
+					unsigned char depth = pCurrentRegisters->tbCountInfo.offset;
 					if (((pCurrentRegisters->accessBank) & 0x01) == 0x00)
 					{
 						cacheIAStreamBlockAddress0[depth] = numIATransferBlocks;
@@ -1385,16 +1379,39 @@ void updateIABufferWriter (
 					{
 						cacheIAStreamBlockAddress1[depth] = numIATransferBlocks;
 					}
-					
+					// cacheIAStreamBlockAddress
+					// 	[(pCurrentRegisters->accessBank) & 0x01]
+					// 	[pCurrentRegisters->tbCountInfo.addressBase 
+					// 		+ pCurrentRegisters->tbCountInfo.colContribution 
+					// 		+ pCurrentRegisters->tbCountInfo.rowContribution] 
+					// 	= numIATransferBlocks;
+					// cacheIAStreamBlockAddress
+					// 	[0]
+					// 	[pCurrentRegisters->tbCountInfo.addressBase 
+					// 		+ pCurrentRegisters->tbCountInfo.colContribution 
+					// 		+ pCurrentRegisters->tbCountInfo.rowContribution] 
+					// 	= numIATransferBlocks;
+					// 	
+					// EMULATOR_PRINT(("[kernelIABuffer Writer %d] Writing TB count to bank %d, "
+					// 		"addrBase=%d, "
+					// 		"colContribution=%d, "
+					// 		"rowContribution=%d\n"
+					// 		"TB=%d\n",
+					// 		colID, (unsigned char) (pCurrentRegisters->accessBank),
+					// 		(unsigned int)(pCurrentRegisters->tbCountInfo.addressBase),
+					// 		(unsigned int)(pCurrentRegisters->tbCountInfo.colContribution),
+					// 		(unsigned int)(pCurrentRegisters->tbCountInfo.rowContribution),
+					// 		(unsigned int) numIATransferBlocks
+					// 		));
 					EMULATOR_PRINT(("[kernelIABuffer Writer %d] Writing TB count to bank %d, "
 							"addrBase=%d, "
-							// "colContribution=%d, "
-							// "rowContribution=%d\n"
+							"colContribution=%d, "
+							"rowContribution=%d\n"
 							"TB=%d\n",
 							colID, (unsigned char) (pCurrentRegisters->accessBank),
 							(unsigned int)(pCurrentRegisters->tbCountInfo.addressBase),
-							// (unsigned int)(pCurrentRegisters->tbCountInfo.colContribution),
-							// (unsigned int)(pCurrentRegisters->tbCountInfo.rowContribution),
+							(unsigned int)(pCurrentRegisters->tileInfo.iCol),
+							(unsigned int)(pCurrentRegisters->tbCountInfo.rowStride * pCurrentRegisters->tileInfo.iRow),
 							(unsigned int) numIATransferBlocks
 							));
 				#else
@@ -1410,16 +1427,6 @@ void updateIABufferWriter (
 			}
 		}
 		break;
-		#if defined(SPARSE_SYSTEM)
-			case IA_BUFFER_WRITE_STATE_COMP_NUM_ACCESS2: {
-				pCurrentRegisters->tbCountInfo.offset = 
-					pCurrentRegisters->tbCountInfo.addressBase
-					+ pCurrentRegisters->tbCountInfo.colContribution
-					+ pCurrentRegisters->tbCountInfo.rowContribution;
-				*pCurrentState = IA_BUFFER_WRITE_STATE_COMP_NUM_ACCESS;
-			}
-			break;
-		#endif
 
 		case IA_BUFFER_WRITE_STATE_ACCESS: {
 			/**
@@ -1475,16 +1482,11 @@ void updateIABufferWriter (
 			pCurrentRegisters->iterAccess = 0;
 			pCurrentRegisters->tileInfo.iCol += 0x1;
 			pCurrentRegisters->iaBlockInfo.colContribution += pCurrentRegisters->iaBlockInfo.colStride;
-			#if defined(SPARSE_SYSTEM)
-				pCurrentRegisters->tbCountInfo.colContribution += 0x1;
-			#endif
+			// #if defined(SPARSE_SYSTEM)
+			// 	pCurrentRegisters->tbCountInfo.colContribution += 0x1;
+			// #endif
 
-			#if defined(SPARSE_SYSTEM)
-				*pCurrentState = IA_BUFFER_WRITE_STATE_COMP_NUM_ACCESS2;
-			#else
-				*pCurrentState = IA_BUFFER_WRITE_STATE_COMP_NUM_ACCESS;
-			#endif
-			//*pCurrentState = IA_BUFFER_WRITE_STATE_COMP_NUM_ACCESS;
+			*pCurrentState = IA_BUFFER_WRITE_STATE_COMP_NUM_ACCESS;
 			EMULATOR_PRINT(("[kernelIABuffer WRITER %d] Strip update.\n", colID));
 
 			if (pCurrentRegisters->tileInfo.iCol == pCurrentRegisters->tileInfo.numStripsCol)
@@ -1493,10 +1495,10 @@ void updateIABufferWriter (
 				pCurrentRegisters->tileInfo.iRow += 0x1;
 				pCurrentRegisters->iaBlockInfo.colContribution = 0;
 				pCurrentRegisters->iaBlockInfo.rowContribution += pCurrentRegisters->iaBlockInfo.rowStride;
-				#if defined(SPARSE_SYSTEM)
-					pCurrentRegisters->tbCountInfo.colContribution = 0x0;
-					pCurrentRegisters->tbCountInfo.rowContribution += pCurrentRegisters->tbCountInfo.rowStride;
-				#endif
+				// #if defined(SPARSE_SYSTEM)
+				// 	pCurrentRegisters->tbCountInfo.colContribution = 0x0;
+				// 	pCurrentRegisters->tbCountInfo.rowContribution += pCurrentRegisters->tbCountInfo.rowStride;
+				// #endif
 
 				if (pCurrentRegisters->tileInfo.iRow == pCurrentRegisters->tileInfo.numStripsRow)
 				{
@@ -1504,16 +1506,18 @@ void updateIABufferWriter (
 					EMULATOR_PRINT(("[kernelIABuffer WRITER %d] FINISHED processing instruction.\n\n", colID));
 				}
 			}
+
 			// #if defined(SPARSE_SYSTEM)
 			// 	pCurrentRegisters->tbCountInfo.offset = 
-			// 			+ pCurrentRegisters->tbCountInfo.colContribution
-			// 			+ pCurrentRegisters->tbCountInfo.rowContribution;
+			// 		pCurrentRegisters->tileInfo.iCol 
+			// 		+ pCurrentRegisters->tileInfo.iRow * pCurrentRegisters->tbCountInfo.rowStride;
 			// #endif
-			// #if defined(SPARSE_SYSTEM)
-			// 	pCurrentRegisters->tbCountInfo.offset = 
-			// 			pCurrentRegisters->tileInfo.iCol 
-			// 			+ pCurrentRegisters->tileInfo.iRow * pCurrentRegisters->tbCountInfo.rowStride;
-			// #endif
+			#if defined(SPARSE_SYSTEM)
+				pCurrentRegisters->tbCountInfo.offset = 
+					pCurrentRegisters->tbCountInfo.addressBase +
+					pCurrentRegisters->tileInfo.iCol 
+					+ pCurrentRegisters->tileInfo.iRow * pCurrentRegisters->tbCountInfo.rowStride;
+			#endif
 		}
 		break;
 
@@ -1651,9 +1655,9 @@ void updateIABufferReader (
 					//tbCountInfo
 					pCurrentRegisters->tbCountInfo.addressBase = control.tbAddressBase;
 					pCurrentRegisters->tbCountInfo.rowStride = control.tbAddressRowStride;
-					pCurrentRegisters->tbCountInfo.offset = 0x0;
-					pCurrentRegisters->tbCountInfo.colContribution = 0;
-					pCurrentRegisters->tbCountInfo.rowContribution = 0;
+					// pCurrentRegisters->tbCountInfo.colContribution = 0;
+					// pCurrentRegisters->tbCountInfo.rowContribution = 0;
+					pCurrentRegisters->tbCountInfo.offset = control.tbAddressBase;
 
 					pCurrentRegisters->flagPadBitmask = (control.controlBits >> 2) & 0x01;
 					pCurrentRegisters->iTBInCW = 0;
@@ -1668,8 +1672,8 @@ void updateIABufferReader (
 				 * Update state
 				 */
 				{
-					#if defined(SPARSE_SYSTEM)
 					*pCurrentState = IA_BUFFER_READ_STATE_UPDATE_STRIP;
+					#if defined(SPARSE_SYSTEM)
 					EMULATOR_PRINT(("[kernelIABuffer Reader %d] START processing instruction. "
 						"iaDramBlockAddressBase=%#010x, "
 						"iaDramBlockColStride=%#010x, "
@@ -1689,7 +1693,6 @@ void updateIABufferReader (
 						(unsigned int) control.numStripsCol,
 						(unsigned int) pCurrentRegisters->accessBank));
 					#else
-						*pCurrentState = IA_BUFFER_READ_STATE_UPDATE_STRIP;
 						EMULATOR_PRINT(("[kernelIABuffer Reader %d] START processing instruction. "
 							"iaDramBlockAddressBase=%#010x, "
 							"iaDramBlockColStride=%#010x, "
@@ -1711,19 +1714,6 @@ void updateIABufferReader (
 		}
 		break; //IA_BUFFER_READ_STATE_DECODE
 
-		// #if defined(SPARSE_SYSTEM)
-		// case IA_BUFFER_READ_STATE_COMP_NUM_ACCESS: {
-		// 	pCurrentRegisters->tbCountInfo.offset = 
-		// 		pCurrentRegisters->tbCountInfo.addressBase
-		// 		+ pCurrentRegisters->tbCountInfo.colContribution
-		// 		+ pCurrentRegisters->tbCountInfo.rowContribution;
-
-		// 	*pCurrentState = IA_BUFFER_READ_STATE_UPDATE_STRIP;
-
-		// } //IA_BUFFER_READ_STATE_COMP_NUM_ACCESS
-		// break;
-		// #endif
-
 		case IA_BUFFER_READ_STATE_UPDATE_STRIP: {
 			
 			*pCurrentState = IA_BUFFER_READ_STATE_ACCESS;
@@ -1737,8 +1727,7 @@ void updateIABufferReader (
 				// 			+ pCurrentRegisters->tbCountInfo.rowContribution;
 				// unsigned char depth = pCurrentRegisters->tbCountInfo.addressBase 
 				// 			+ pCurrentRegisters->tbCountInfo.offset;
-				unsigned char depth = 
-					pCurrentRegisters->tbCountInfo.addressBase + pCurrentRegisters->tbCountInfo.offset;
+				unsigned char depth = pCurrentRegisters->tbCountInfo.offset;
 				if (((pCurrentRegisters->accessBank) & 0x01) == 0x00)
 				{
 					pCurrentRegisters->numTBPerStrip = 
@@ -1797,9 +1786,9 @@ void updateIABufferReader (
 			 */
 			pCurrentRegisters->tileInfo.iCol += 0x1;
 			pCurrentRegisters->stripUpdateMode = IA_BUFFER_READ_STRIP_UPDATE_HORIZONTAL;
-			#if defined(SPARSE_SYSTEM)
-				pCurrentRegisters->tbCountInfo.colContribution += 0x1;
-			#endif
+			// #if defined(SPARSE_SYSTEM)
+			// 	pCurrentRegisters->tbCountInfo.colContribution += 0x1;
+			// #endif
 
 			if (pCurrentRegisters->tileInfo.iCol == pCurrentRegisters->tileInfo.numStripsCol)
 			{
@@ -1808,10 +1797,10 @@ void updateIABufferReader (
 
 				pCurrentRegisters->stripUpdateMode = IA_BUFFER_READ_STRIP_UPDATE_VERTICAL;
 
-				#if defined(SPARSE_SYSTEM)
-					pCurrentRegisters->tbCountInfo.colContribution = 0x0;
-					pCurrentRegisters->tbCountInfo.rowContribution += pCurrentRegisters->tbCountInfo.rowStride;
-				#endif
+				// #if defined(SPARSE_SYSTEM)
+				// 	pCurrentRegisters->tbCountInfo.colContribution = 0x0;
+				// 	pCurrentRegisters->tbCountInfo.rowContribution += pCurrentRegisters->tbCountInfo.rowStride;
+				// #endif
 
 				if (pCurrentRegisters->tileInfo.iRow == pCurrentRegisters->tileInfo.numStripsRow)
 				{
@@ -1821,12 +1810,12 @@ void updateIABufferReader (
 
 			#if defined(SPARSE_SYSTEM)
 				pCurrentRegisters->tbCountInfo.offset = 
-						+ pCurrentRegisters->tbCountInfo.colContribution
-						+ pCurrentRegisters->tbCountInfo.rowContribution;
+					pCurrentRegisters->tbCountInfo.addressBase +
+					pCurrentRegisters->tileInfo.iCol 
+					+ pCurrentRegisters->tileInfo.iRow * pCurrentRegisters->tbCountInfo.rowStride;
 			#endif
-
 		}
-		break; //IA_BUFFER_READ_STATE_UPDATE_STRIP
+		break;
 
 		case IA_BUFFER_READ_STATE_ACCESS: {
 			/**
@@ -1862,18 +1851,12 @@ void updateIABufferReader (
 				 */
 				if (pCurrentRegisters->iterAccess == pCurrentRegisters->numTBPerStrip)
 				{
-					// #if defined(SPARSE_SYSTEM)
-					// 	*pCurrentState = IA_BUFFER_READ_STATE_COMP_NUM_ACCESS;
-					// #else
-					// 	*pCurrentState = IA_BUFFER_READ_STATE_UPDATE_STRIP;
-					// #endif
-					*pCurrentState = IA_BUFFER_READ_STATE_UPDATE_STRIP;
 					if (pCurrentRegisters->stripUpdateMode == IA_BUFFER_READ_STRIP_UPDATE_HORIZONTAL)
 					{
 						pCurrentRegisters->iaBlockInfo.colContribution +=
 							pCurrentRegisters->iaBlockInfo.colStride;
 
-						//*pCurrentState = IA_BUFFER_READ_STATE_UPDATE_STRIP;
+						*pCurrentState = IA_BUFFER_READ_STATE_UPDATE_STRIP;
 					}
 					else if (pCurrentRegisters->stripUpdateMode == IA_BUFFER_READ_STRIP_UPDATE_VERTICAL)
 					{
@@ -1882,7 +1865,7 @@ void updateIABufferReader (
 						pCurrentRegisters->iaBlockInfo.rowContribution +=
 							pCurrentRegisters->iaBlockInfo.rowStride;
 
-						//*pCurrentState = IA_BUFFER_READ_STATE_UPDATE_STRIP;
+						*pCurrentState = IA_BUFFER_READ_STATE_UPDATE_STRIP;
 					}
 					else if (pCurrentRegisters->stripUpdateMode == IA_BUFFER_READ_STRIP_UPDATE_DONE)
 					{
@@ -1893,7 +1876,7 @@ void updateIABufferReader (
 			}
 			
 		}
-		break; //IA_BUFFER_READ_STATE_ACCESS
+		break;
 
 		default: {
 			// Keep the status-quo
