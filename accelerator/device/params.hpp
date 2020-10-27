@@ -2,7 +2,7 @@
 #define PARAMS_DEFINED
 
 //#define HOST_DEBUG
-#define SPARSE_SYSTEM
+//#define SPARSE_SYSTEM
 #define OA_PING_PONG
 #define WMOVER_STREAM_CACHE
 #define OAMOVER_TB_STREAM_CACHE
@@ -81,7 +81,7 @@
 
 #if defined(FULL_SYSTEM)
 	#define PE_ROWS 2
-	#define PE_COLS 2
+	#define PE_COLS 1
 #else
 	#define PE_ROWS 2
 	#define PE_COLS 2

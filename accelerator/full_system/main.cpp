@@ -129,41 +129,65 @@ protected:
 }; //testFixture
 
 #ifdef PLAY
-TEST_F (testFixture, conv_sparse_input_sparse_output)
+TEST_F (testFixture, perf_test_fully_connected)
 {
-    unsigned char inputWidth = 4;
-    unsigned char inputHeight = 4;
-    unsigned char numInputChannel = 16;
-    unsigned char numOutputChannel = numInputChannel;
+    unsigned char inputWidth = 1;
+    unsigned char inputHeight = 1;
+    typedef struct {
+          unsigned int inputChannel;
+          unsigned int outputChannel;
+    } t_fc_pairs;
+//    std::vector<t_fc_pairs> vecTestsPairs = {
+//            {.inputChannel=1, .outputChannel=32},
+//            {.inputChannel=254, .outputChannel=32},
+//            {.inputChannel=1, .outputChannel=254},
+//            {.inputChannel=254, .outputChannel=254}
+//            };
+    std::vector<t_fc_pairs> vecTestsPairs = {
+            {.inputChannel=254, .outputChannel=254}
+            };
+    //std::vector<unsigned char> vecInputChannel = {1};
     unsigned char numInputGroup = 1;
     unsigned char numOutputGroup = 1;
     unsigned char inputHeightSPUnitSize = 1;
     unsigned char inputWidthSPUnitSize = 1;
-    unsigned char sizeOutputTileWidthPerColFull = 2;
-    unsigned char sizeOutputTileHeight = 4;
+    unsigned char sizeOutputTileWidthPerColFull = 8;
+    unsigned char sizeOutputTileHeight = 8;
     bool flagEnableRelu = false;
     bool flagSparseInput = true;
     bool flagSparseOutput = true;
     OPERATION op = CONVOLUTION;
     float bias = 0.0f;
-
-    launch(
-                inputWidth,
-                inputHeight,
-                numInputChannel,
-                numOutputChannel,
-                numInputGroup,
-                numOutputGroup,
-                inputHeightSPUnitSize,
-                inputWidthSPUnitSize,
-                sizeOutputTileWidthPerColFull,
-                sizeOutputTileHeight,
-                flagEnableRelu,
-                flagSparseInput,
-                flagSparseOutput,
-                op,
-                bias
-          );
+    std::vector<float> vecDenseProb = {1.0};
+    for (auto& testPairs: vecTestsPairs)
+    {
+        for (auto & prob : vecDenseProb)
+        {
+            unsigned int numInputChannel = testPairs.inputChannel;
+            unsigned int numOutputChannel = testPairs.outputChannel;
+            launch(
+                        inputWidth,
+                        inputHeight,
+                        numInputChannel,
+                        numOutputChannel,
+                        numInputGroup,
+                        numOutputGroup,
+                        inputHeightSPUnitSize,
+                        inputWidthSPUnitSize,
+                        sizeOutputTileWidthPerColFull,
+                        sizeOutputTileHeight,
+                        flagEnableRelu,
+                        flagSparseInput,
+                        flagSparseOutput,
+                        op,
+                        bias,
+                        false, //back to back
+                        true, //perf test
+                        prob, //dense prob
+                        1 //channel prune scale
+                  );
+        }
+     }
 }
 #endif
 #if defined(PERF_TEST)
