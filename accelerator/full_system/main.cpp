@@ -26,17 +26,18 @@
 #include "layerInstructionGenerator.hpp"
 #include "accelerator_wrapper.hpp"
 
-#define PLAY
+//#define PLAY
 //#define PERF_TEST
-//#define VALIDATE
+#define THROUGHPUT_DIAGNOSTIC
+#define VALIDATE
 //Some how if repeat is 100, bad things will happen on concat
-#define REPEAT 1
+#define REPEAT 40
 #ifndef C5SOC
-#define EMULATE
+//#define EMULATE
 #endif
 //#define PERF_TEST
 //#NOOP
-#define PROFILE
+//#define PROFILE
 
 #define FRAC_WIDTH 4
 #define INT_WIDTH 3
@@ -116,6 +117,7 @@ protected:
             unsigned char _inputWidthSPUnitSize, //The code will overide this to 1 if the operation is not convolution
             unsigned char _sizeOutputTileWidthPerColFull, //The code will override this to 1 if the operation is not convolution
             unsigned char _sizeOutputTileHeight, //The code will overrid this to 1 if the operation is not convolution
+            unsigned char _kernelSize, //convolution kernel size
             bool _flagEnableRelu,
             bool _flagSparseInput, //The code will override this to FALSE if the operation is not convolution
             bool _flagSparseOutput,
@@ -153,6 +155,7 @@ TEST_F (testFixture, perf_test_fully_connected)
     unsigned char inputWidthSPUnitSize = 1;
     unsigned char sizeOutputTileWidthPerColFull = 8;
     unsigned char sizeOutputTileHeight = 8;
+    unsigned char kernelSize = 3;
     bool flagEnableRelu = false;
     bool flagSparseInput = true;
     bool flagSparseOutput = true;
@@ -176,6 +179,7 @@ TEST_F (testFixture, perf_test_fully_connected)
                         inputWidthSPUnitSize,
                         sizeOutputTileWidthPerColFull,
                         sizeOutputTileHeight,
+                        kernelSize,
                         flagEnableRelu,
                         flagSparseInput,
                         flagSparseOutput,
@@ -190,56 +194,8 @@ TEST_F (testFixture, perf_test_fully_connected)
      }
 }
 #endif
-#if defined(PERF_TEST)
-TEST_F (testFixture, perf_test_conv_sparse_128x128x3x3x32x16COL)
-{
-    unsigned char inputWidth = 8*2*PE_COLS;
-    unsigned char inputHeight = 32;
-    unsigned char numInputChannel = 128;
-    unsigned char numInputGroup = 1;
-    unsigned char numOutputGroup = 1;
-    unsigned char inputHeightSPUnitSize = 1;
-    unsigned char inputWidthSPUnitSize = 1;
-    unsigned char sizeOutputTileWidthPerColFull = 8;
-    unsigned char sizeOutputTileHeight = 8;
-    bool flagEnableRelu = false;
-    bool flagSparseInput = true;
-    bool flagSparseOutput = true;
-    OPERATION op = CONVOLUTION;
-    float bias = 0.0f;
-    std::vector<float> vecDenseProb = {1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.0};
-    std::vector<int> vecPruneScale = {1, CLUSTER_SIZE};
-    for (auto& pruneScale: vecPruneScale)
-    {
-        for (auto & prob : vecDenseProb)
-        {
-            unsigned char numOutputChannel = numInputChannel;
-            launch(
-                        inputWidth,
-                        inputHeight,
-                        numInputChannel,
-                        numOutputChannel,
-                        numInputGroup,
-                        numOutputGroup,
-                        inputHeightSPUnitSize,
-                        inputWidthSPUnitSize,
-                        sizeOutputTileWidthPerColFull,
-                        sizeOutputTileHeight,
-                        flagEnableRelu,
-                        flagSparseInput,
-                        flagSparseOutput,
-                        op,
-                        bias,
-                        false, //back to back
-                        true, //perf test
-                        prob, //dense prob
-                        pruneScale
-                  );
-        }
-     }
-}
-
-TEST_F (testFixture, perf_test_fully_connected)
+#if defined(THROUGHPUT_DIAGNOSTIC)
+TEST_F (testFixture, throughput_diagnostic_fully_connected)
 {
     unsigned char inputWidth = 1;
     unsigned char inputHeight = 1;
@@ -295,6 +251,7 @@ TEST_F (testFixture, perf_test_fully_connected)
     unsigned char inputWidthSPUnitSize = 1;
     unsigned char sizeOutputTileWidthPerColFull = 8;
     unsigned char sizeOutputTileHeight = 8;
+    unsigned char kernelSize = 3;
     bool flagEnableRelu = false;
     bool flagSparseInput = true;
     bool flagSparseOutput = true;
@@ -318,6 +275,7 @@ TEST_F (testFixture, perf_test_fully_connected)
                         inputWidthSPUnitSize,
                         sizeOutputTileWidthPerColFull,
                         sizeOutputTileHeight,
+                        kernelSize,
                         flagEnableRelu,
                         flagSparseInput,
                         flagSparseOutput,
@@ -332,6 +290,167 @@ TEST_F (testFixture, perf_test_fully_connected)
      }
 }
 
+TEST_F (testFixture, throughput_diagnostic_planar)
+{
+    //unsigned char inputWidth = 1;
+    unsigned char inputHeight = 4;
+    unsigned char numInputChannel = 128;
+    unsigned char numOutputChannel = 1;
+    unsigned char numInputGroup = 1;
+    unsigned char numOutputGroup = 1;
+    unsigned char inputHeightSPUnitSize = 1;
+    unsigned char inputWidthSPUnitSize = 1;
+    unsigned char sizeOutputTileWidthPerColFull = 8;
+    unsigned char sizeOutputTileHeight = inputHeight;
+    std::vector<unsigned char> vecInputWidth = {
+        PE_COLS*sizeOutputTileWidthPerColFull,
+        2*PE_COLS*sizeOutputTileWidthPerColFull,
+        4*PE_COLS*sizeOutputTileWidthPerColFull,
+        6*PE_COLS*sizeOutputTileWidthPerColFull,
+        8*PE_COLS*sizeOutputTileWidthPerColFull,
+        10*PE_COLS*sizeOutputTileWidthPerColFull,
+        12*PE_COLS*sizeOutputTileWidthPerColFull};
+    unsigned char kernelSize = 1;
+    bool flagEnableRelu = false;
+    bool flagSparseInput = true;
+    bool flagSparseOutput = true;
+    OPERATION op = CONVOLUTION;
+    float bias = 0.0f;
+    float prob = 1.0;
+    for (auto& inputWidth: vecInputWidth)
+    {
+        launch(
+                    inputWidth,
+                    inputHeight,
+                    numInputChannel,
+                    numOutputChannel,
+                    numInputGroup,
+                    numOutputGroup,
+                    inputHeightSPUnitSize,
+                    inputWidthSPUnitSize,
+                    sizeOutputTileWidthPerColFull,
+                    sizeOutputTileHeight,
+                    kernelSize,
+                    flagEnableRelu,
+                    flagSparseInput,
+                    flagSparseOutput,
+                    op,
+                    bias,
+                    false, //back to back
+                    true, //perf test
+                    prob, //dense prob
+                    1 //channel prune scale
+              );
+     }
+}
+
+TEST_F (testFixture, throughput_diagnostic_add)
+{
+    //unsigned char inputWidth = 1;
+    unsigned char inputHeight = 4;
+    unsigned char numInputChannel = 128;
+    unsigned char numOutputChannel = 1;
+    unsigned char numInputGroup = 1;
+    unsigned char numOutputGroup = 1;
+    unsigned char inputHeightSPUnitSize = 1;
+    unsigned char inputWidthSPUnitSize = 1;
+    unsigned char sizeOutputTileWidthPerColFull = 8;
+    unsigned char sizeOutputTileHeight = inputHeight;
+    std::vector<unsigned char> vecInputWidth = {
+        PE_COLS*sizeOutputTileWidthPerColFull,
+        2*PE_COLS*sizeOutputTileWidthPerColFull,
+        4*PE_COLS*sizeOutputTileWidthPerColFull,
+        6*PE_COLS*sizeOutputTileWidthPerColFull,
+        8*PE_COLS*sizeOutputTileWidthPerColFull,
+        10*PE_COLS*sizeOutputTileWidthPerColFull,
+        12*PE_COLS*sizeOutputTileWidthPerColFull};
+    unsigned char kernelSize = 1;
+    bool flagEnableRelu = false;
+    bool flagSparseInput = false;
+    bool flagSparseOutput = true;
+    OPERATION op = ELT_ADD;
+    float bias = 0.0f;
+    float prob = 1.0;
+    for (auto& inputWidth: vecInputWidth)
+    {
+        launch(
+                    inputWidth,
+                    inputHeight,
+                    numInputChannel,
+                    numOutputChannel,
+                    numInputGroup,
+                    numOutputGroup,
+                    inputHeightSPUnitSize,
+                    inputWidthSPUnitSize,
+                    sizeOutputTileWidthPerColFull,
+                    sizeOutputTileHeight,
+                    kernelSize,
+                    flagEnableRelu,
+                    flagSparseInput,
+                    flagSparseOutput,
+                    op,
+                    bias,
+                    false, //back to back
+                    true, //perf test
+                    prob, //dense prob
+                    1 //channel prune scale
+              );
+     }
+}
+#endif //THROUGHPUT_DIAGNOSTIC
+#if defined(PERF_TEST)
+TEST_F (testFixture, perf_test_conv_sparse_128x128x3x3x32x16COL)
+{
+    unsigned char inputWidth = 8*2*PE_COLS;
+    unsigned char inputHeight = 32;
+    unsigned char numInputChannel = 128;
+    unsigned char numInputGroup = 1;
+    unsigned char numOutputGroup = 1;
+    unsigned char inputHeightSPUnitSize = 1;
+    unsigned char inputWidthSPUnitSize = 1;
+    unsigned char sizeOutputTileWidthPerColFull = 8;
+    unsigned char sizeOutputTileHeight = 8;
+    unsigned char kernelSize = 3;
+    bool flagEnableRelu = false;
+    bool flagSparseInput = true;
+    bool flagSparseOutput = true;
+    OPERATION op = CONVOLUTION;
+    float bias = 0.0f;
+    std::vector<float> vecDenseProb = {1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.0};
+    std::vector<int> vecPruneScale = {1, CLUSTER_SIZE};
+    for (auto& pruneScale: vecPruneScale)
+    {
+        for (auto & prob : vecDenseProb)
+        {
+            unsigned char numOutputChannel = numInputChannel;
+            launch(
+                        inputWidth,
+                        inputHeight,
+                        numInputChannel,
+                        numOutputChannel,
+                        numInputGroup,
+                        numOutputGroup,
+                        inputHeightSPUnitSize,
+                        inputWidthSPUnitSize,
+                        sizeOutputTileWidthPerColFull,
+                        sizeOutputTileHeight,
+                        kernelSize,
+                        flagEnableRelu,
+                        flagSparseInput,
+                        flagSparseOutput,
+                        op,
+                        bias,
+                        false, //back to back
+                        true, //perf test
+                        prob, //dense prob
+                        pruneScale
+                  );
+        }
+     }
+}
+
+
+
 TEST_F (testFixture, depth_sensitivity)
 {
     unsigned char inputWidth = 8*2*PE_COLS;
@@ -343,6 +462,7 @@ TEST_F (testFixture, depth_sensitivity)
     unsigned char inputWidthSPUnitSize = 1;
     unsigned char sizeOutputTileWidthPerColFull = 8;
     unsigned char sizeOutputTileHeight = 8;
+    unsigned char kernelSize = 3;
     bool flagEnableRelu = false;
     bool flagSparseInput = true;
     bool flagSparseOutput = true;
@@ -364,6 +484,7 @@ TEST_F (testFixture, depth_sensitivity)
                     inputWidthSPUnitSize,
                     sizeOutputTileWidthPerColFull,
                     sizeOutputTileHeight,
+                    kernelSize,
                     flagEnableRelu,
                     flagSparseInput,
                     flagSparseOutput,
@@ -390,6 +511,7 @@ TEST_F (testFixture, perf_test_max_pool_sparse_128x32x32)
     unsigned char inputWidthSPUnitSize = 1;
     unsigned char sizeOutputTileWidthPerColFull = 1;
     unsigned char sizeOutputTileHeight = 1;
+    unsigned char kernelSize = 3;
     bool flagEnableRelu = false;
     bool flagSparseInput = false;
     bool flagSparseOutput = true;
@@ -410,6 +532,7 @@ TEST_F (testFixture, perf_test_max_pool_sparse_128x32x32)
                     inputWidthSPUnitSize,
                     sizeOutputTileWidthPerColFull,
                     sizeOutputTileHeight,
+                    kernelSize,
                     flagEnableRelu,
                     flagSparseInput,
                     flagSparseOutput,
@@ -436,6 +559,7 @@ TEST_F (testFixture, perf_test_elt_add_sparse_128x32x32)
     unsigned char sizeOutputTileWidthPerColFull = ((inputWidth / PE_COLS) > 8) ?
                 8 : (inputWidth / PE_COLS);
     unsigned char sizeOutputTileHeight = 8;
+    unsigned char kernelSize = 3;
     bool flagEnableRelu = false;
     bool flagSparseInput = false;
     bool flagSparseOutput = true;
@@ -456,6 +580,7 @@ TEST_F (testFixture, perf_test_elt_add_sparse_128x32x32)
                     inputWidthSPUnitSize,
                     sizeOutputTileWidthPerColFull,
                     sizeOutputTileHeight,
+                    kernelSize,
                     flagEnableRelu,
                     flagSparseInput,
                     flagSparseOutput,
@@ -481,6 +606,7 @@ TEST_F (testFixture, perf_test_concat_sparse_64x32x32)
     unsigned char inputWidthSPUnitSize = 1;
     unsigned char sizeOutputTileWidthPerColFull = 1;
     unsigned char sizeOutputTileHeight = 1;
+    unsigned char kernelSize = 3;
     bool flagEnableRelu = false;
     bool flagSparseInput = false;
     bool flagSparseOutput = true;
@@ -501,6 +627,7 @@ TEST_F (testFixture, perf_test_concat_sparse_64x32x32)
                     inputWidthSPUnitSize,
                     sizeOutputTileWidthPerColFull,
                     sizeOutputTileHeight,
+                    kernelSize,
                     flagEnableRelu,
                     flagSparseInput,
                     flagSparseOutput,
@@ -527,6 +654,7 @@ TEST_F (testFixture, conv_dense_input_dense_output_plain)
     unsigned char inputWidthSPUnitSize = 1;
     unsigned char sizeOutputTileWidthPerColFull = 2;
     unsigned char sizeOutputTileHeight = 4;
+    unsigned char kernelSize = 3;
     bool flagEnableRelu = false;
     bool flagSparseInput = false;
     bool flagSparseOutput = false;
@@ -544,6 +672,7 @@ TEST_F (testFixture, conv_dense_input_dense_output_plain)
                 inputWidthSPUnitSize,
                 sizeOutputTileWidthPerColFull,
                 sizeOutputTileHeight,
+                kernelSize,
                 flagEnableRelu,
                 flagSparseInput,
                 flagSparseOutput,
@@ -564,6 +693,7 @@ TEST_F (testFixture, max_pool_sparse_output_grouped)
     unsigned char inputWidthSPUnitSize = 1;
     unsigned char sizeOutputTileWidthPerColFull = 2;
     unsigned char sizeOutputTileHeight = 4;
+    unsigned char kernelSize = 3;
     bool flagEnableRelu = false;
     bool flagSparseInput = false;
     bool flagSparseOutput = true;
@@ -581,6 +711,7 @@ TEST_F (testFixture, max_pool_sparse_output_grouped)
                 inputWidthSPUnitSize,
                 sizeOutputTileWidthPerColFull,
                 sizeOutputTileHeight,
+                kernelSize,
                 flagEnableRelu,
                 flagSparseInput,
                 flagSparseOutput,
@@ -601,6 +732,7 @@ TEST_F (testFixture, elt_add_sparse_output)
     unsigned char inputWidthSPUnitSize = 1;
     unsigned char sizeOutputTileWidthPerColFull = 2;
     unsigned char sizeOutputTileHeight = 4;
+    unsigned char kernelSize = 3;
     bool flagEnableRelu = false;
     bool flagSparseInput = false;
     bool flagSparseOutput = true;
@@ -618,6 +750,7 @@ TEST_F (testFixture, elt_add_sparse_output)
                 inputWidthSPUnitSize,
                 sizeOutputTileWidthPerColFull,
                 sizeOutputTileHeight,
+                kernelSize,
                 flagEnableRelu,
                 flagSparseInput,
                 flagSparseOutput,
@@ -638,6 +771,7 @@ TEST_F (testFixture, concat_sparse_output_grouped)
     unsigned char inputWidthSPUnitSize = 1;
     unsigned char sizeOutputTileWidthPerColFull = 2;
     unsigned char sizeOutputTileHeight = 4;
+    unsigned char kernelSize = 3;
     bool flagEnableRelu = false;
     bool flagSparseInput = false;
     bool flagSparseOutput = true;
@@ -655,6 +789,7 @@ TEST_F (testFixture, concat_sparse_output_grouped)
                 inputWidthSPUnitSize,
                 sizeOutputTileWidthPerColFull,
                 sizeOutputTileHeight,
+                kernelSize,
                 flagEnableRelu,
                 flagSparseInput,
                 flagSparseOutput,
@@ -675,6 +810,7 @@ TEST_F (testFixture, global_avg_pool_sparse_output_grouped)
     unsigned char inputWidthSPUnitSize = 1;
     unsigned char sizeOutputTileWidthPerColFull = 2;
     unsigned char sizeOutputTileHeight = 4;
+    unsigned char kernelSize = 3;
     bool flagEnableRelu = false;
     bool flagSparseInput = false;
     bool flagSparseOutput = true;
@@ -692,6 +828,7 @@ TEST_F (testFixture, global_avg_pool_sparse_output_grouped)
                 inputWidthSPUnitSize,
                 sizeOutputTileWidthPerColFull,
                 sizeOutputTileHeight,
+                kernelSize,
                 flagEnableRelu,
                 flagSparseInput,
                 flagSparseOutput,
@@ -713,6 +850,7 @@ TEST_F (testFixture, conv_dense_input_dense_output_grouped)
     unsigned char inputWidthSPUnitSize = 1;
     unsigned char sizeOutputTileWidthPerColFull = 2;
     unsigned char sizeOutputTileHeight = 4;
+    unsigned char kernelSize = 3;
     bool flagEnableRelu = false;
     bool flagSparseInput = false;
     bool flagSparseOutput = false;
@@ -730,6 +868,7 @@ TEST_F (testFixture, conv_dense_input_dense_output_grouped)
                 inputWidthSPUnitSize,
                 sizeOutputTileWidthPerColFull,
                 sizeOutputTileHeight,
+                kernelSize,
                 flagEnableRelu,
                 flagSparseInput,
                 flagSparseOutput,
@@ -750,6 +889,7 @@ TEST_F (testFixture, conv_dense_input_dense_output_strided)
     unsigned char inputWidthSPUnitSize = 2;
     unsigned char sizeOutputTileWidthPerColFull = 2;
     unsigned char sizeOutputTileHeight = 4;
+    unsigned char kernelSize = 3;
     bool flagEnableRelu = false;
     bool flagSparseInput = false;
     bool flagSparseOutput = false;
@@ -767,6 +907,7 @@ TEST_F (testFixture, conv_dense_input_dense_output_strided)
                 inputWidthSPUnitSize,
                 sizeOutputTileWidthPerColFull,
                 sizeOutputTileHeight,
+                kernelSize,
                 flagEnableRelu,
                 flagSparseInput,
                 flagSparseOutput,
@@ -787,6 +928,7 @@ TEST_F (testFixture, conv_sparse_input_sparse_output)
     unsigned char inputWidthSPUnitSize = 1;
     unsigned char sizeOutputTileWidthPerColFull = 2;
     unsigned char sizeOutputTileHeight = 4;
+    unsigned char kernelSize = 3;
     bool flagEnableRelu = false;
     bool flagSparseInput = true;
     bool flagSparseOutput = true;
@@ -804,6 +946,7 @@ TEST_F (testFixture, conv_sparse_input_sparse_output)
                 inputWidthSPUnitSize,
                 sizeOutputTileWidthPerColFull,
                 sizeOutputTileHeight,
+                kernelSize,
                 flagEnableRelu,
                 flagSparseInput,
                 flagSparseOutput,
@@ -824,6 +967,7 @@ TEST_F (testFixture, conv_sparse_input_sparse_output_small_tile)
     unsigned char inputWidthSPUnitSize = 1;
     unsigned char sizeOutputTileWidthPerColFull = 1;
     unsigned char sizeOutputTileHeight = 1;
+    unsigned char kernelSize = 3;
     bool flagEnableRelu = false;
     bool flagSparseInput = true;
     bool flagSparseOutput = true;
@@ -841,6 +985,7 @@ TEST_F (testFixture, conv_sparse_input_sparse_output_small_tile)
                 inputWidthSPUnitSize,
                 sizeOutputTileWidthPerColFull,
                 sizeOutputTileHeight,
+                kernelSize,
                 flagEnableRelu,
                 flagSparseInput,
                 flagSparseOutput,
@@ -863,6 +1008,7 @@ TEST_F (testFixture, back_to_back_identity_conv)
     unsigned char inputWidthSPUnitSize = 1;
     unsigned char sizeOutputTileWidthPerColFull = 2;
     unsigned char sizeOutputTileHeight = 4;
+    unsigned char kernelSize = 3;
     bool flagEnableRelu = false;
     bool flagSparseInput = false;
     bool flagSparseOutput = false;
@@ -881,6 +1027,7 @@ TEST_F (testFixture, back_to_back_identity_conv)
                 inputWidthSPUnitSize,
                 sizeOutputTileWidthPerColFull,
                 sizeOutputTileHeight,
+                kernelSize,
                 flagEnableRelu,
                 flagSparseInput,
                 flagSparseOutput,
@@ -1107,6 +1254,7 @@ void testFixture::launch (
         unsigned char _inputWidthSPUnitSize, //The code will overide this to 1 if the operation is not convolution
         unsigned char _sizeOutputTileWidthPerColFull, //The code will override this to 1 if the operation is not convolution
         unsigned char _sizeOutputTileHeight, //The code will overrid this to 1 if the operation is not convolution
+        unsigned char _kernelSize, //Size of the convolution kernel
         bool _flagEnableRelu,
         bool _flagSparseInput, //The code will override this to FALSE if the operation is not convolution or if the accelerator only supports dense format
         bool _flagSparseOutput, //The code will override this to FALSE if the accelerator only supports dense format.
@@ -1155,7 +1303,7 @@ void testFixture::launch (
             numGroupCurrentLayer = _numInputGroup;
             sizeOutputTileWidthPerCol = _sizeOutputTileWidthPerColFull;
             sizeOutputTileHeight = _sizeOutputTileHeight;
-            kernelSize = 3;
+            kernelSize = _kernelSize;
             stride = 1;
 
             numOutputChannels = _flagPerformanceTest ? _numOutputChannel : _numInputChannel;
