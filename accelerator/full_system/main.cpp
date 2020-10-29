@@ -31,13 +31,13 @@
 //#define THROUGHPUT_DIAGNOSTIC
 //#define VALIDATE
 //Some how if repeat is 100, bad things will happen on concat
-#define REPEAT 1
+#define REPEAT 40
 #ifndef C5SOC
 //#define EMULATE
 #endif
 //#define PERF_TEST
 //#NOOP
-#define PROFILE
+//#define PROFILE
 
 #define FRAC_WIDTH 4
 #define INT_WIDTH 3
@@ -400,6 +400,7 @@ TEST_F (testFixture, throughput_diagnostic_planar)
         8*PE_COLS*sizeOutputTileWidthPerColFull,
         10*PE_COLS*sizeOutputTileWidthPerColFull,
         12*PE_COLS*sizeOutputTileWidthPerColFull};
+
     unsigned char kernelSize = 1;
     bool flagEnableRelu = false;
     bool flagSparseInput = true;
