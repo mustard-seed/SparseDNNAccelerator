@@ -26,18 +26,18 @@
 #include "layerInstructionGenerator.hpp"
 #include "accelerator_wrapper.hpp"
 
-//#define PLAY
+#define PLAY
 //#define PERF_TEST
-#define THROUGHPUT_DIAGNOSTIC
-#define VALIDATE
+//#define THROUGHPUT_DIAGNOSTIC
+//#define VALIDATE
 //Some how if repeat is 100, bad things will happen on concat
-#define REPEAT 40
+#define REPEAT 1
 #ifndef C5SOC
 //#define EMULATE
 #endif
 //#define PERF_TEST
 //#NOOP
-//#define PROFILE
+#define PROFILE
 
 #define FRAC_WIDTH 4
 #define INT_WIDTH 3
@@ -131,20 +131,14 @@ protected:
 }; //testFixture
 
 #ifdef PLAY
-TEST_F (testFixture, perf_test_fully_connected)
+TEST_F (testFixture, throughput_diagnostic_fully_connected)
 {
     unsigned char inputWidth = 1;
     unsigned char inputHeight = 1;
     typedef struct {
-          unsigned int inputChannel;
-          unsigned int outputChannel;
+          unsigned char inputChannel;
+          unsigned char outputChannel;
     } t_fc_pairs;
-//    std::vector<t_fc_pairs> vecTestsPairs = {
-//            {.inputChannel=1, .outputChannel=32},
-//            {.inputChannel=254, .outputChannel=32},
-//            {.inputChannel=1, .outputChannel=254},
-//            {.inputChannel=254, .outputChannel=254}
-//            };
     std::vector<t_fc_pairs> vecTestsPairs = {
             {.inputChannel=254, .outputChannel=254}
             };
@@ -166,8 +160,8 @@ TEST_F (testFixture, perf_test_fully_connected)
     {
         for (auto & prob : vecDenseProb)
         {
-            unsigned int numInputChannel = testPairs.inputChannel;
-            unsigned int numOutputChannel = testPairs.outputChannel;
+            unsigned char numInputChannel = testPairs.inputChannel;
+            unsigned char numOutputChannel = testPairs.outputChannel;
             launch(
                         inputWidth,
                         inputHeight,
@@ -191,6 +185,102 @@ TEST_F (testFixture, perf_test_fully_connected)
                         1 //channel prune scale
                   );
         }
+     }
+}
+
+TEST_F (testFixture, throughput_diagnostic_planar)
+{
+    //unsigned char inputWidth = 1;
+    unsigned char inputHeight = 4;
+    unsigned char numInputChannel = 128;
+    unsigned char numOutputChannel = 1;
+    unsigned char numInputGroup = 1;
+    unsigned char numOutputGroup = 1;
+    unsigned char inputHeightSPUnitSize = 1;
+    unsigned char inputWidthSPUnitSize = 1;
+    unsigned char sizeOutputTileWidthPerColFull = 8;
+    unsigned char sizeOutputTileHeight = inputHeight;
+    std::vector<unsigned char> vecInputWidth = {
+        12*PE_COLS*sizeOutputTileWidthPerColFull};
+    unsigned char kernelSize = 1;
+    bool flagEnableRelu = false;
+    bool flagSparseInput = true;
+    bool flagSparseOutput = true;
+    OPERATION op = CONVOLUTION;
+    float bias = 0.0f;
+    float prob = 1.0;
+    for (auto& inputWidth: vecInputWidth)
+    {
+        launch(
+                    inputWidth,
+                    inputHeight,
+                    numInputChannel,
+                    numOutputChannel,
+                    numInputGroup,
+                    numOutputGroup,
+                    inputHeightSPUnitSize,
+                    inputWidthSPUnitSize,
+                    sizeOutputTileWidthPerColFull,
+                    sizeOutputTileHeight,
+                    kernelSize,
+                    flagEnableRelu,
+                    flagSparseInput,
+                    flagSparseOutput,
+                    op,
+                    bias,
+                    false, //back to back
+                    true, //perf test
+                    prob, //dense prob
+                    1 //channel prune scale
+              );
+     }
+}
+
+TEST_F (testFixture, throughput_diagnostic_add)
+{
+    //unsigned char inputWidth = 1;
+    unsigned char inputHeight = 4;
+    unsigned char numInputChannel = 128;
+    unsigned char numOutputChannel = 1;
+    unsigned char numInputGroup = 1;
+    unsigned char numOutputGroup = 1;
+    unsigned char inputHeightSPUnitSize = 1;
+    unsigned char inputWidthSPUnitSize = 1;
+    unsigned char sizeOutputTileWidthPerColFull = 8;
+    unsigned char sizeOutputTileHeight = inputHeight;
+    std::vector<unsigned char> vecInputWidth = {
+        12*PE_COLS*sizeOutputTileWidthPerColFull};
+    unsigned char kernelSize = 1;
+    bool flagEnableRelu = false;
+    bool flagSparseInput = false;
+    bool flagSparseOutput = true;
+    OPERATION op = ELT_ADD;
+    float bias = 0.0f;
+    float prob = 1.0;
+    for (auto& inputWidth: vecInputWidth)
+    {
+        launch(
+                    inputWidth,
+                    inputHeight,
+                    numInputChannel,
+                    numOutputChannel,
+                    numInputGroup,
+                    numOutputGroup,
+                    inputHeightSPUnitSize,
+                    inputWidthSPUnitSize,
+                    sizeOutputTileWidthPerColFull,
+                    sizeOutputTileHeight,
+                    kernelSize,
+                    flagEnableRelu,
+                    flagSparseInput,
+                    flagSparseOutput,
+                    op,
+                    bias,
+                    false, //back to back
+                    true, //perf test
+                    prob, //dense prob
+                    1 //channel prune scale
+              );
      }
 }
 #endif
