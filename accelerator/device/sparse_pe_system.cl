@@ -7185,6 +7185,7 @@ __kernel void kernelDensePE ()
 	t_transfer_block regActivationTB;
 	t_dense_pe_flag regActivationIsLast = FALSE;
 
+	#pragma ii 1
 	while (1) {
 		//Declare temp variables
 		t_dense_pe_instruction nextWeightInstruction = regWeightInstruction;
