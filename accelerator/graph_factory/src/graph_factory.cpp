@@ -691,7 +691,10 @@ namespace GraphRuntime {
                             .offsetIAMoverInstruction=offsetIAMoverInstruction,
                             .numIAMoverInstruction=numIAMoverInstructions,
                             .offsetOAMoverInstruction=offsetOAMoverInstruction,
-                            .numOAMoverInstructions=numOAMoverInstructions
+                            .numOAMoverInstructions=numOAMoverInstructions,
+                           .outputTileHeight = sizeOutputTileFullHeight,
+                           .outputTileWidthPerCol = sizeOutputTileFullWidthPerCol,
+                           .numActiveColsPartialOutputTile = numActiveColsPartialOutputTile
                             });
                        offsetIAMoverInstruction += numIAMoverInstructions;
                        offsetOAMoverInstruction += numOAMoverInstructions;

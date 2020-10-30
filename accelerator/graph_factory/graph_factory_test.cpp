@@ -9,13 +9,15 @@
 //PLAY > VALIDATE > RESNET56
 //#define PLAY
 //#define VALIDATE
-#define RESNET56
-#define RESNET50
+#define RESNET50_CONV12
+//#define RESNET56
+//#define RESNET50
 #ifndef C5SOC
    // #define EMULATE
 #endif
-#define INFERENCE_REPEAT 20
+#define INFERENCE_REPEAT 1
 #define CHECKOUTPUT
+#define PROFILE
 
 class testFixture : public ::testing::Test {
 protected:
@@ -187,6 +189,19 @@ TEST_F(testFixture, resnet50_imagenet1k)
     launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
 }
 #endif
+#if defined(RESNET50_CONV12)
+TEST_F(testFixture, resnet50_conv12)
+{
+
+    std::string traceFileName = "resnet50_conv12_trace.yaml";
+    std::string traceParameterFile = "resnet50_conv12_parameters.npz";
+    std::string inoutFile = "resnet50_conv12_inout.yaml";
+    std::map<std::string, std::string> traceName2BlobName;
+    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
+    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_2", "output"));
+    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
+}
+#endif
 
 void testFixture::SetUp()
 {
@@ -270,9 +285,14 @@ void testFixture::launch(std::string _traceFileName,
     }
 
     std::cout <<"Step "<<stepCount++<<": Perform inference."<<std::endl;
+#if defined(PROFILE)
+    bool profile = true;
+#else
+    bool profile = false;
+#endif
     for (int i=0; i<INFERENCE_REPEAT; i++)
     {
-        accelerator.inference();
+        accelerator.inference(profile);
     }
 
     std::cout <<"Step "<<stepCount++<<": Performance counts"<<std::endl;

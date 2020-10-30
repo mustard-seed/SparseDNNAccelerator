@@ -38,6 +38,21 @@ namespace GraphRuntime {
         int     offsetOAMoverInstruction;
         //Number of OA mover instructions
         int     numOAMoverInstructions;
+//        //Type of the layer
+//        int     layerType;
+//        //Input width
+//        int     inputSPWidth;
+//        //Input Height
+//        int     inputSPHeight;
+//        int     inputChannels;
+//        int     outputChannels;
+//        int     kernelSize;
+//        int     kernelStride;
+//        int     stridePadUnitSize;
+//        int     numGroups;
+        int     outputTileHeight;
+        int     outputTileWidthPerCol;
+        int     numActiveColsPartialOutputTile;
     } t_layer_info;
 
     typedef struct {

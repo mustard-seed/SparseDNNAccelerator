@@ -1311,6 +1311,9 @@ namespace GraphRuntime {
             for (unsigned int i=0; i<vecLayerExecutionTime.size(); i++)
             {
                 auto layerInfo = vecLayerInfo.at(i);
+                int sizeOutputTileHeight = layerInfo.outputTileHeight;
+                int sizeOutputTileWidthPerCol = layerInfo.outputTileWidthPerCol;
+                int numActiveColsPartialCol = layerInfo.numActiveColsPartialOutputTile;
                 auto layerTime = vecLayerExecutionTime.at(i);
                 std::string name = layerInfo.layerName;
                 if (name.length() > maxName)
@@ -1319,7 +1322,10 @@ namespace GraphRuntime {
                     name += "...";
                 }
                 double averageTimeUs = layerTime / ((double) numRunExecuted);
-                dumpFile <<name<<sep<<std::to_string(averageTimeUs)<<std::endl;
+                dumpFile <<name<<sep<<std::to_string(averageTimeUs)
+                        <<sep<<sizeOutputTileHeight
+                        <<sep<<sizeOutputTileWidthPerCol
+                        <<sep<<numActiveColsPartialCol<<std::endl;
             }
             //Print average outout blob transfer time
             for (unsigned int i=0; i<vecOutputBlobsInfo.size(); i++)
