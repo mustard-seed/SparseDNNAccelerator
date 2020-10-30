@@ -12,14 +12,16 @@
 #define RESNET56
 #define RESNET50
 #ifndef C5SOC
-    #define EMULATE
+   // #define EMULATE
 #endif
 #define INFERENCE_REPEAT 20
+#define CHECKOUTPUT
 
 class testFixture : public ::testing::Test {
 protected:
     std::string aocxBinaryFile;
     GraphRuntime::AcceleratorWrapper accelerator;
+    std::string testPrefix = "/home/jamesliu/thesis/SparseDNNAccelerator/accelerator/test0/";
 
     void SetUp() override;
 
@@ -222,8 +224,8 @@ void testFixture::launch(std::string _traceFileName,
 
     //Load the trace file and the parameter file
     std::cout <<"Step "<<stepCount++<<": Loading trace file and parameter file."<<std::endl;
-    std::cout <<_traceFileName<<" "<<_parameterFileName<<std::endl;
-    GraphRuntime::GraphFactory graphFactory(_traceFileName, _parameterFileName);
+    std::cout <<testPrefix+_traceFileName<<" "<<testPrefix+_parameterFileName<<std::endl;
+    GraphRuntime::GraphFactory graphFactory(testPrefix+_traceFileName, testPrefix+_parameterFileName);
 
     std::cout <<"Step "<<stepCount++<<": Generate the execution graph."<<std::endl;
     auto pGraph = std::move(graphFactory.generateGraph());
@@ -234,7 +236,7 @@ void testFixture::launch(std::string _traceFileName,
 
     std::cout <<"Step "<<stepCount++<<": Load the inputs and send them to the accelerator."<<std::endl;
     {
-       YAML::Node rawBlobs = YAML::LoadFile(_inoutFileName);
+       YAML::Node rawBlobs = YAML::LoadFile(testPrefix+_inoutFileName);
        auto vecInputInfo = accelerator.getInputBlobsInfo();
        int blobID = 0;
        for (const auto& inputInfo: vecInputInfo)
@@ -280,9 +282,10 @@ void testFixture::launch(std::string _traceFileName,
     std::string csvFileName = _traceFileName.substr(0, dotPos) + ".csv";
     accelerator.dumpRuntimeToCSV(csvFileName);
 
+#if defined(CHECKOUTPUT)
     std::cout <<"Step "<<stepCount++<<": Extract output and perform checks"<<std::endl;
     {
-       YAML::Node rawBlobs = YAML::LoadFile(_inoutFileName);
+       YAML::Node rawBlobs = YAML::LoadFile(testPrefix+_inoutFileName);
        auto vecBlobInfo = accelerator.getOutputBlobsInfo();
        int blobID = 0;
        for (const auto& blobInfo: vecBlobInfo)
@@ -321,4 +324,5 @@ void testFixture::launch(std::string _traceFileName,
            blobID++;
        }
     }
+#endif //CHECKOUTPUT
 }
