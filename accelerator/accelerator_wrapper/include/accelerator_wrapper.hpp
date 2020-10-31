@@ -53,6 +53,8 @@ namespace GraphRuntime {
         int     outputTileHeight;
         int     outputTileWidthPerCol;
         int     numActiveColsPartialOutputTile;
+        int     expectedLatency;
+        int     isComputeBound;
     } t_layer_info;
 
     typedef struct {

@@ -19,6 +19,7 @@ using namespace GraphRuntime;
 typedef struct {
     t_graph_output_tile_info tileInfo;
     unsigned int latency;
+    bool flagComputeBound;
 } t_tile_pair;
 /*!
  * \brief calculateTileWidthPerUnit
@@ -190,6 +191,10 @@ namespace GraphRuntime {
             bool isComputeLayer = true; //override
             OPERATION op = ::CONVOLUTION; //override
             std::string layerName;
+
+            //Latency estimation
+            unsigned int estimatedLatency = 0; //override
+            bool flagComputeBound = false; //override
 #if defined(HOST_DEBUG)
            cout <<"Generating for Layer(ID): "<<pLayer->getLayerID()<<endl;
 #endif
@@ -204,6 +209,8 @@ namespace GraphRuntime {
                     sizeOutputTileFullWidthPerCol = tileConfig.tileInfo.sizeOutputTileFullWidthPerCol;
                     numActiveColsPartialOutputTile = tileConfig.tileInfo.numActiveColsForPartialWidthTile;
                     sizeOutputTileFullHeight = tileConfig.tileInfo.sizeOutputTileFullHeight;
+                    estimatedLatency = tileConfig.latency;
+                    flagComputeBound = tileConfig.flagComputeBound;
 
                     kernelSize = pLayerLocal->getKernelSize();
                     stride = pLayerLocal->getKernelStride();
@@ -329,6 +336,8 @@ namespace GraphRuntime {
                     sizeOutputTileFullWidthPerCol = tileConfig.tileInfo.sizeOutputTileFullWidthPerCol;
                     numActiveColsPartialOutputTile = tileConfig.tileInfo.numActiveColsForPartialWidthTile;
                     sizeOutputTileFullHeight = tileConfig.tileInfo.sizeOutputTileFullHeight;
+                    estimatedLatency = tileConfig.latency;
+                    flagComputeBound = tileConfig.flagComputeBound;
 
                     //Align input bits
                     int inputFracBits0 = pLayerLocal->getInputFracBits().at(0);
@@ -694,7 +703,9 @@ namespace GraphRuntime {
                             .numOAMoverInstructions=numOAMoverInstructions,
                            .outputTileHeight = sizeOutputTileFullHeight,
                            .outputTileWidthPerCol = sizeOutputTileFullWidthPerCol,
-                           .numActiveColsPartialOutputTile = numActiveColsPartialOutputTile
+                           .numActiveColsPartialOutputTile = numActiveColsPartialOutputTile,
+                           .expectedLatency = estimatedLatency,
+                           .isComputeBound = flagComputeBound ? 1 : 0
                             });
                        offsetIAMoverInstruction += numIAMoverInstructions;
                        offsetOAMoverInstruction += numOAMoverInstructions;
@@ -770,6 +781,7 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
 
     t_graph_output_tile_info bestTileInfo;
     unsigned int minLatency = 0xFFFFFFFF;
+    bool isComputeBound = true;
 
     while ((outputTileWidthPerCol > 0) && (maxOutputTileHeight > 0))
     {
@@ -832,8 +844,8 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
          bool passCacheRequirement =
                  (iaCachePerColRequirement <= IA_CACHE_DEPTH)
                  && (iaCachePerPartialColRequirement <= IA_CACHE_DEPTH)
-                 && (oaCachePerColRequirement <= OA_CACHE_DEPTH)
-                 && (oaCachePerPartialColRequirement <= OA_CACHE_DEPTH)
+                 && (oaCachePerColRequirement <= (OA_CACHE_DEPTH*CLUSTER_SIZE))
+                 && (oaCachePerPartialColRequirement <= (OA_CACHE_DEPTH*CLUSTER_SIZE))
                  && (sizeInputTileFullHeight <= MAX_INPUT_TILE_HEIGHT)
                  && (sizeInputTileFullWidthPerCol <= MAX_INPUT_TILE_WIDTH_PER_COL)
                  && (sizeInputTilePartialWidthPerCol <= MAX_INPUT_TILE_WIDTH_PER_COL);
@@ -854,7 +866,7 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
 #endif
          if (passCacheRequirement == true)
          {
-            unsigned int maxLatency = deriveConvComputationLatency(
+            unsigned int computeLatency = deriveConvComputationLatency(
                         candidateTileInfo,
                         outputChannels / _convLayer.getCurrentNumberGroups(),
                         inputChannelsPerGroup,
@@ -869,7 +881,7 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
                         _convLayer.getKernelSize(),
                         _convLayer.getKernelStride()
                         );
-            maxLatency = inputLatency > maxLatency ? inputLatency : maxLatency;
+            //maxLatency = inputLatency > maxLatency ? inputLatency : maxLatency;
 
             unsigned int outputLatency = deriveConvOutputTransferLatency(
                         outputHeight,
@@ -877,7 +889,7 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
                         outputChannelsPerNextGroup,
                         _convLayer.getNextNumberGroups()
                         );
-            maxLatency = outputLatency > maxLatency ? outputLatency : maxLatency;
+            //maxLatency = outputLatency > maxLatency ? outputLatency : maxLatency;
 
             unsigned int weightLatency = deriveConvWeightTransferLatency(
                         candidateTileInfo,
@@ -886,12 +898,22 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
                         _convLayer.getCurrentNumberGroups(),
                         _convLayer.getKernelSize()
                         );
-            maxLatency = weightLatency > maxLatency ? weightLatency : maxLatency;
+            //maxLatency = weightLatency > maxLatency ? weightLatency : maxLatency;
+
+            //TODO: determine the adjustment factor more precisely. This factor account of
+            //memory transfer inefficiency
+            unsigned int transferLatencyAdjusted =
+                    (unsigned int) ((float) (weightLatency + outputLatency + inputLatency)
+                    * 1.6f);
+
+            unsigned int maxLatency = computeLatency > transferLatencyAdjusted ?
+                        computeLatency : transferLatencyAdjusted;
 
             if (maxLatency < minLatency)
             {
                 minLatency = maxLatency;
                 bestTileInfo = candidateTileInfo;
+                isComputeBound = (maxLatency == computeLatency);
             }
 
             outputTileWidthPerCol--;
@@ -914,7 +936,7 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
         std::cout <<"Warning: Cannot find a suitable tile configuration for Conv Layer "<<_convLayer.getLayerID()<<std::endl;
         throw;
     }
-    t_tile_pair result = {.tileInfo = bestTileInfo, .latency = minLatency};
+    t_tile_pair result = {.tileInfo = bestTileInfo, .latency = minLatency, .flagComputeBound=isComputeBound};
     return result;
 }
 
@@ -1006,7 +1028,7 @@ t_tile_pair calculateTileSizePerUnit(EltAddLayer &_eltAddLayer)
         std::cout <<"Warning: Cannot find a suitable tile configuration for EltAdd Layer "<<_eltAddLayer.getLayerID()<<std::endl;
         throw;
     }
-    t_tile_pair result = {.tileInfo = bestTileInfo, .latency = minLatency};
+    t_tile_pair result = {.tileInfo = bestTileInfo, .latency = minLatency, .flagComputeBound=false};
     return result;
 }
 
