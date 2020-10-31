@@ -9,15 +9,15 @@
 //PLAY > VALIDATE > RESNET56
 //#define PLAY
 //#define VALIDATE
-#define RESNET50_CONV12
+//#define RESNET50_CONV12
 //#define RESNET56
-//#define RESNET50
+#define RESNET50
 #ifndef C5SOC
    // #define EMULATE
 #endif
-#define INFERENCE_REPEAT 1
-#define CHECKOUTPUT
-#define PROFILE
+#define INFERENCE_REPEAT 20
+//#define CHECKOUTPUT
+//#define PROFILE
 
 class testFixture : public ::testing::Test {
 protected:
