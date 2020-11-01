@@ -996,7 +996,9 @@ t_tile_pair calculateTileSizePerUnit(EltAddLayer &_eltAddLayer)
          if (passCacheRequirement == true)
          {
 
-            unsigned int outputLatency = deriveConvOutputTransferLatency(
+            //Times 3 to account for two input transfers, and one output transfer for each
+            //block of addition
+            unsigned int outputLatency = 3 * deriveConvOutputTransferLatency(
                         outputHeight,
                         outputWidth,
                         outputChannelsPerNextGroup,
