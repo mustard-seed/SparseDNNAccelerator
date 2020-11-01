@@ -585,8 +585,7 @@ __kernel void kernelWMover (
 #define IA_BUFFER_INSTRUCTION_STATE_WRITER_STALL 0x3
 
 #define IA_BUFFER_READ_STRIP_UPDATE_HORIZONTAL 0x0
-#define IA_BUFFER_READ_STRIP_UPDATE_VERTICAL 0x1
-#define IA_BUFFER_READ_STRIP_UPDATE_DONE 0x2
+#define IA_BUFFER_READ_STRIP_UPDATE_DONE 0x1
 
 #if !defined(EMUPRINT)
 typedef uint3_t t_ia_buffer_w_state;
@@ -605,9 +604,9 @@ typedef struct __attribute__((packed))
 {
 	unsigned short addressBase;
 	unsigned short colStride;
-	unsigned short rowStride;
+	//unsigned short rowStride;
 	unsigned short colContribution;
-	unsigned short rowContribution;
+	//unsigned short rowContribution;
 } t_ia_data_buffer_access_info;
 
 
@@ -622,9 +621,9 @@ typedef struct __attribute__((packed))
 	//tbAddress = tbAddressBase + tbAddressRowContribution + tbAddressColContribution
 	unsigned char addressBase;
 	//Don't uncomment. unsigned char colStride = 1;
-	unsigned char rowStride;
+	//unsigned char rowStride;
 	unsigned char colContribution;
-	unsigned char rowContribution;
+	//unsigned char rowContribution;
 } t_ia_tb_buffer_access_info;
 
 #endif
@@ -634,9 +633,9 @@ typedef struct __attribute__((packed))
  */
 typedef struct __attribute__((packed)) 
 {
-	unsigned char iRow;
+	//unsigned char iRow;
 	unsigned char iCol;
-	unsigned char numStripsRow;
+	//unsigned char numStripsRow;
 	unsigned char numStripsCol;
 } t_ia_tile_access_info;
 
@@ -749,7 +748,10 @@ typedef struct __attribute__((packed)) {
 
 	//Instruction on how the dram cache pointer should be updated in update_strip state
 	//Also used to indicate whether the current strip is the last one to be streamed
-	uint2_t stripUpdateMode;
+	uint1_t stripUpdateMode;
+
+	//Whether the IA buffer reader is streaming the last row of a convolution window to the PEs
+	uint1_t flagIsLastRow;
 	
 
 	//Which cache bank to read from
@@ -900,22 +902,16 @@ __kernel void kernelIABuffer ()
 			.iaBlockInfo={
 				.addressBase = 0,
 				.colStride = 0,
-				.rowStride = 0,
-				.colContribution = 0,
-				.rowContribution = 0
+				.colContribution = 0
 			},
 			.tileInfo={
-				.iRow = 0,
 				.iCol = 0,
-				.numStripsRow = 0,
 				.numStripsCol = 0
 			},
 			#if defined(SPARSE_SYSTEM)
 			.tbCountInfo={
 				.addressBase = 0,
-				.rowStride = 0,
-				.colContribution = 0,
-				.rowContribution = 0
+				.colContribution = 0
 			},
 			#endif
 			.numIAAccess=0,
@@ -931,22 +927,16 @@ __kernel void kernelIABuffer ()
 			.iaBlockInfo={
 				.addressBase = 0,
 				.colStride = 0,
-				.rowStride = 0,
-				.colContribution = 0,
-				.rowContribution = 0
+				.colContribution = 0
 			},
 			.tileInfo={
-				.iRow = 0,
 				.iCol = 0,
-				.numStripsRow = 0,
 				.numStripsCol = 0
 			},
 			#if defined(SPARSE_SYSTEM)
 			.tbCountInfo={
 				.addressBase = 0,
-				.rowStride = 0,
-				.colContribution = 0,
-				.rowContribution = 0
+				.colContribution = 0
 			},
 			.flagPadBitmask = 0x0,
 			.iTBInCW = 0x0,
@@ -956,7 +946,8 @@ __kernel void kernelIABuffer ()
 			.iterAccess=0,
 			.accessBank = 0,
 			.maxPeRowID = 0,
-			.stripUpdateMode = 0
+			.stripUpdateMode = 0,
+			.flagIsLastRow = FALSE
 		};
 	t_ia_buffer_r_state regReaderState = IA_BUFFER_READ_STATE_DECODE;
 
@@ -1110,7 +1101,6 @@ __kernel void kernelIABuffer ()
 							"bank=%d, "
 							"addrBase=%d, "
 							"colContribution=%d, "
-							"rowContribution=%d, "
 							"TB index=%d\n"
 							"data[0]=%#04x, "
 							"data[1]=%#04x, "
@@ -1120,7 +1110,6 @@ __kernel void kernelIABuffer ()
 							(unsigned int)(regReaderContext.accessBank),
 							(unsigned int)(regReaderContext.iaBlockInfo.addressBase),
 							(unsigned int)(regReaderContext.iaBlockInfo.colContribution),
-							(unsigned int)(regReaderContext.iaBlockInfo.rowContribution),
 							(unsigned int)((regReaderContext.iterAccess) & WIDE_SIZE_REMAINDER_MASK)
 							,readerTB.values.values[0]
 							,readerTB.values.values[1]
@@ -1275,14 +1264,17 @@ void updateIABufferWriter (
 				 */
 				pCurrentRegisters->iaBlockInfo.addressBase = control.iaDramBlockAddressBase;
 				pCurrentRegisters->iaBlockInfo.colStride = control.iaDramBlockColStride;
-				pCurrentRegisters->iaBlockInfo.rowStride = control.iaDramBlockRowStride;
+				//pCurrentRegisters->iaBlockInfo.rowStride = control.iaDramBlockRowStride;
 				pCurrentRegisters->iaBlockInfo.colContribution = 0;
-				pCurrentRegisters->iaBlockInfo.rowContribution = 0;
+				//pCurrentRegisters->iaBlockInfo.rowContribution = 0;
 
-				pCurrentRegisters->tileInfo.iRow = 0;
+				//pCurrentRegisters->tileInfo.iRow = 0;
 				pCurrentRegisters->tileInfo.iCol = 0;
+				/*
+					Number of strips in WRITER should be interpreted as the total number of strips to arrive.
+				*/
 				pCurrentRegisters->tileInfo.numStripsCol = control.numStripsCol;
-				pCurrentRegisters->tileInfo.numStripsRow = control.numStripsRow;
+				//pCurrentRegisters->tileInfo.numStripsRow = control.numStripsRow;
 
 				pCurrentRegisters->accessBank = control.controlBits & 0x01;
 				pCurrentRegisters->iterAccess = 0;
@@ -1290,53 +1282,40 @@ void updateIABufferWriter (
 
 				#if defined(SPARSE_SYSTEM)
 					pCurrentRegisters->tbCountInfo.addressBase = control.tbAddressBase;
-					pCurrentRegisters->tbCountInfo.rowStride = control.tbAddressRowStride;
+					//pCurrentRegisters->tbCountInfo.rowStride = control.tbAddressRowStride;
 					pCurrentRegisters->tbCountInfo.colContribution = 0;
-					pCurrentRegisters->tbCountInfo.rowContribution = 0;
+					//pCurrentRegisters->tbCountInfo.rowContribution = 0;
 				#endif
 
 				/**
-				 * Update state, if this is not a ghost command
+				 * Update state
 				 */
-				if (control.numStripsRow != 0)
-				{
-					*pCurrentState = IA_BUFFER_WRITE_STATE_COMP_NUM_ACCESS;
-					#if defined(SPARSE_SYSTEM)
+				*pCurrentState = IA_BUFFER_WRITE_STATE_COMP_NUM_ACCESS;
+				#if defined(SPARSE_SYSTEM)
+				EMULATOR_PRINT(("[kernelIABuffer Writer %d] START processing instruction. "
+					"iaDramBlockAddressBase=%#010x, "
+					"iaDramBlockColStride=%#010x, "
+					"tbCountAddressBase=%#010x, "
+					"numStripsCol=%d, "
+					"accessBank=%#04x\n\n",
+					colID, 
+					control.iaDramBlockAddressBase,
+					control.iaDramBlockColStride,
+					control.tbAddressBase,
+					(unsigned int) control.numStripsCol,
+					(unsigned int) pCurrentRegisters->accessBank));
+				#else
 					EMULATOR_PRINT(("[kernelIABuffer Writer %d] START processing instruction. "
 						"iaDramBlockAddressBase=%#010x, "
 						"iaDramBlockColStride=%#010x, "
-						"iaDramBlockRowStride=%#010x, "
-						"tbCountAddressBase=%#010x, "
-						"tbCountRowStride=%#010x, "
-						"numStripsRow=%d, "
 						"numStripsCol=%d, "
 						"accessBank=%#04x\n\n",
 						colID, 
 						control.iaDramBlockAddressBase,
 						control.iaDramBlockColStride,
-						control.iaDramBlockRowStride,
-						control.tbAddressBase,
-						control.tbAddressRowStride,
-						(unsigned int) control.numStripsRow,
 						(unsigned int) control.numStripsCol,
 						(unsigned int) pCurrentRegisters->accessBank));
-					#else
-						EMULATOR_PRINT(("[kernelIABuffer Writer %d] START processing instruction. "
-							"iaDramBlockAddressBase=%#010x, "
-							"iaDramBlockColStride=%#010x, "
-							"iaDramBlockRowStride=%#010x, "
-							"numStripsRow=%d, "
-							"numStripsCol=%d, "
-							"accessBank=%#04x\n\n",
-							colID, 
-							control.iaDramBlockAddressBase,
-							control.iaDramBlockColStride,
-							control.iaDramBlockRowStride,
-							(unsigned int) control.numStripsRow,
-							(unsigned int) control.numStripsCol,
-							(unsigned int) pCurrentRegisters->accessBank));
-					#endif
-				}
+				#endif
 				
 			} // if validControl == TRUE
 		}
@@ -1353,8 +1332,7 @@ void updateIABufferWriter (
 
 				#if defined(SPARSE_SYSTEM)
 					unsigned char depth = pCurrentRegisters->tbCountInfo.addressBase 
-							+ pCurrentRegisters->tbCountInfo.colContribution 
-							+ pCurrentRegisters->tbCountInfo.rowContribution;
+							+ pCurrentRegisters->tbCountInfo.colContribution;
 					if (((pCurrentRegisters->accessBank) & 0x01) == 0x00)
 					{
 						cacheIAStreamBlockAddress0[depth] = numIATransferBlocks;
@@ -1379,12 +1357,10 @@ void updateIABufferWriter (
 					EMULATOR_PRINT(("[kernelIABuffer Writer %d] Writing TB count to bank %d, "
 							"addrBase=%d, "
 							"colContribution=%d, "
-							"rowContribution=%d\n"
 							"TB=%d\n",
 							colID, (unsigned char) (pCurrentRegisters->accessBank),
 							(unsigned int)(pCurrentRegisters->tbCountInfo.addressBase),
 							(unsigned int)(pCurrentRegisters->tbCountInfo.colContribution),
-							(unsigned int)(pCurrentRegisters->tbCountInfo.rowContribution),
 							(unsigned int) numIATransferBlocks
 							));
 				#else
@@ -1410,15 +1386,13 @@ void updateIABufferWriter (
 				cacheIABlocks[(pCurrentRegisters->accessBank) & 0x01]
 					[(pCurrentRegisters->iterAccess) 
 						+ (pCurrentRegisters->iaBlockInfo.addressBase)
-						+ (pCurrentRegisters->iaBlockInfo.colContribution)
-						+ (pCurrentRegisters->iaBlockInfo.rowContribution)]
+						+ (pCurrentRegisters->iaBlockInfo.colContribution)]
 					= dramBlock;
 
 				EMULATOR_PRINT(("[kernelIABuffer Writer %d] Writing new dram block to bank %d, "
 							"iterAccess=%d, "
 							"addrBase=%d, "
-							"colContribution=%d, "
-							"rowContribution=%d\n"
+							"colContribution=%d\n, "
 							"data[0]=%#04x, "
 							"data[1]=%#04x, "
 							"data[2]=%#04x, "
@@ -1427,7 +1401,6 @@ void updateIABufferWriter (
 							(unsigned int)(pCurrentRegisters->iterAccess),
 							(unsigned int)(pCurrentRegisters->iaBlockInfo.addressBase),
 							(unsigned int)(pCurrentRegisters->iaBlockInfo.colContribution),
-							(unsigned int)(pCurrentRegisters->iaBlockInfo.rowContribution),
 							(unsigned int)dramBlock.transferBlocks[0].values[0],
 							(unsigned int)dramBlock.transferBlocks[0].values[1],
 							(unsigned int)dramBlock.transferBlocks[0].values[2],
@@ -1464,20 +1437,8 @@ void updateIABufferWriter (
 
 			if (pCurrentRegisters->tileInfo.iCol == pCurrentRegisters->tileInfo.numStripsCol)
 			{
-				pCurrentRegisters->tileInfo.iCol = 0x0;
-				pCurrentRegisters->tileInfo.iRow += 0x1;
-				pCurrentRegisters->iaBlockInfo.colContribution = 0;
-				pCurrentRegisters->iaBlockInfo.rowContribution += pCurrentRegisters->iaBlockInfo.rowStride;
-				#if defined(SPARSE_SYSTEM)
-					pCurrentRegisters->tbCountInfo.colContribution = 0x0;
-					pCurrentRegisters->tbCountInfo.rowContribution += pCurrentRegisters->tbCountInfo.rowStride;
-				#endif
-
-				if (pCurrentRegisters->tileInfo.iRow == pCurrentRegisters->tileInfo.numStripsRow)
-				{
-					*pCurrentState = IA_BUFFER_WRITE_STATE_DECODE;
-					EMULATOR_PRINT(("[kernelIABuffer WRITER %d] FINISHED processing instruction.\n\n", colID));
-				}
+				*pCurrentState = IA_BUFFER_WRITE_STATE_DECODE;
+				EMULATOR_PRINT(("[kernelIABuffer WRITER %d] FINISHED processing instruction.\n\n", colID));
 			}
 		}
 		break;
@@ -1524,12 +1485,13 @@ void getIABufferReaderOutput (
 		t_dram_block dramBlock = cacheIABlocks[(currentRegisters.accessBank) & 0x01]
 			[currentRegisters.iaBlockInfo.addressBase 
 				+ currentRegisters.iaBlockInfo.colContribution 
-				+ currentRegisters.iaBlockInfo.rowContribution 
 				+ ((unsigned short)(currentRegisters.iterAccess >> WIDE_SIZE_OFFSET))];	
 
 		//TODO: Change this
-		unsigned char isLastTemp =  (((currentRegisters.iterAccess + 1) == currentRegisters.numTBPerStrip) 
-			&& (currentRegisters.stripUpdateMode == IA_BUFFER_READ_STRIP_UPDATE_DONE) )
+		unsigned char isLastTemp =  (
+			((currentRegisters.iterAccess + 1) == currentRegisters.numTBPerStrip) 
+			&& (currentRegisters.stripUpdateMode == IA_BUFFER_READ_STRIP_UPDATE_DONE) 
+			&& (currentRegisters.flagIsLastRow == TRUE))
 			? TRUE : FALSE;
 
 		#if defined(SPARSE_SYSTEM)
@@ -1596,14 +1558,10 @@ void updateIABufferReader (
 				 */
 				pCurrentRegisters->iaBlockInfo.addressBase = control.iaDramBlockAddressBase;
 				pCurrentRegisters->iaBlockInfo.colStride = control.iaDramBlockColStride;
-				pCurrentRegisters->iaBlockInfo.rowStride = control.iaDramBlockRowStride;
 				pCurrentRegisters->iaBlockInfo.colContribution = 0;
-				pCurrentRegisters->iaBlockInfo.rowContribution = 0;
 
-				pCurrentRegisters->tileInfo.iRow = 0;
-				pCurrentRegisters->tileInfo.iCol = 0;
+				pCurrentRegisters->tileInfo.iCol = 1;
 				pCurrentRegisters->tileInfo.numStripsCol = control.numStripsCol;
-				pCurrentRegisters->tileInfo.numStripsRow = control.numStripsRow;
 
 				pCurrentRegisters->accessBank = control.controlBits & 0x01;
 				pCurrentRegisters->iterAccess = 0;
@@ -1611,13 +1569,12 @@ void updateIABufferReader (
 				pCurrentRegisters->numTBPerStrip = 0;
 
 				pCurrentRegisters->maxPeRowID = control.maxPeRowID;
+				pCurrentRegisters->flagIsLastRow = control.flagIsLastRow & 0x01;
 
 				#if defined(SPARSE_SYSTEM)
 					//tbCountInfo
 					pCurrentRegisters->tbCountInfo.addressBase = control.tbAddressBase;
-					pCurrentRegisters->tbCountInfo.rowStride = control.tbAddressRowStride;
-					pCurrentRegisters->tbCountInfo.colContribution = 0;
-					pCurrentRegisters->tbCountInfo.rowContribution = 0;
+					pCurrentRegisters->tbCountInfo.colContribution = 1;
 
 					pCurrentRegisters->flagPadBitmask = (control.controlBits >> 2) & 0x01;
 					pCurrentRegisters->iTBInCW = 0;
@@ -1632,44 +1589,86 @@ void updateIABufferReader (
 				 * Update state
 				 */
 				{
-					*pCurrentState = IA_BUFFER_READ_STATE_UPDATE_STRIP;
+					*pCurrentState = IA_BUFFER_READ_STATE_ACCESS;
 					#if defined(SPARSE_SYSTEM)
 					EMULATOR_PRINT(("[kernelIABuffer Reader %d] START processing instruction. "
 						"iaDramBlockAddressBase=%#010x, "
 						"iaDramBlockColStride=%#010x, "
-						"iaDramBlockRowStride=%#010x, "
 						"tbCountAddressBase=%#010x, "
-						"tbCountRowStride=%#010x, "
-						"numStripsRow=%d, "
 						"numStripsCol=%d, "
 						"accessBank=%#04x\n\n",
 						colID, 
 						control.iaDramBlockAddressBase,
 						control.iaDramBlockColStride,
-						control.iaDramBlockRowStride,
 						control.tbAddressBase,
-						control.tbAddressRowStride,
-						(unsigned int) control.numStripsRow,
 						(unsigned int) control.numStripsCol,
 						(unsigned int) pCurrentRegisters->accessBank));
 					#else
 						EMULATOR_PRINT(("[kernelIABuffer Reader %d] START processing instruction. "
 							"iaDramBlockAddressBase=%#010x, "
 							"iaDramBlockColStride=%#010x, "
-							"iaDramBlockRowStride=%#010x, "
-							"numStripsRow=%d, "
 							"numStripsCol=%d, "
 							"accessBank=%#04x\n\n",
 							colID, 
 							control.iaDramBlockAddressBase,
 							control.iaDramBlockColStride,
-							control.iaDramBlockRowStride,
-							(unsigned int) control.numStripsRow,
 							(unsigned int) control.numStripsCol,
 							(unsigned int) pCurrentRegisters->accessBank));
 					#endif
+
+					#if defined(SPARSE_SYSTEM)
+						unsigned char depth = pCurrentRegisters->tbCountInfo.addressBase;
+						if (((pCurrentRegisters->accessBank) & 0x01) == 0x00)
+						{
+							pCurrentRegisters->numTBPerStrip = 
+								cacheIAStreamBlockAddress0[depth];
+						}
+						else
+						{
+							pCurrentRegisters->numTBPerStrip = 
+								cacheIAStreamBlockAddress1[depth];
+						}
+						// pCurrentRegisters->numTBPerStrip = 
+						// 	cacheIAStreamBlockAddress
+						// 		[(pCurrentRegisters->accessBank) & 0x01] 
+						// 		[pCurrentRegisters->tbCountInfo.addressBase 
+						// 			+ pCurrentRegisters->tbCountInfo.colContribution 
+						// 			+ pCurrentRegisters->tbCountInfo.rowContribution];
+						// pCurrentRegisters->numTBPerStrip = 
+						// 	cacheIAStreamBlockAddress
+						// 		[0] 
+						// 		[pCurrentRegisters->tbCountInfo.addressBase 
+						// 			+ pCurrentRegisters->tbCountInfo.colContribution 
+						// 			+ pCurrentRegisters->tbCountInfo.rowContribution];
+						pCurrentRegisters->iTBInCW = 0;
+						EMULATOR_PRINT(("[kernelIABuffer Reader %d] Fetching TB count from bank %d, "
+									"addrBase=%d, "
+									"colContribution=0\n"
+									"TB=%d\n",
+									colID, (unsigned char) (pCurrentRegisters->accessBank),
+									(unsigned int)(pCurrentRegisters->tbCountInfo.addressBase),
+									(unsigned int) (pCurrentRegisters->numTBPerStrip)
+									));
+					#else
+						pCurrentRegisters->numTBPerStrip = numTBPerStrip [(pCurrentRegisters->accessBank) & 0x01]; 
+					#endif
+
+					/*
+					 * Reset strip counters
+					*/
+					pCurrentRegisters->iterAccess = 0;
+
+					/**
+					 * increment the tile pointer and TB count pointers in advance,
+					 * obtain the strip update mode
+					 */
+					pCurrentRegisters->stripUpdateMode = IA_BUFFER_READ_STRIP_UPDATE_HORIZONTAL;
+					if ((unsigned char ) 1 == pCurrentRegisters->tileInfo.numStripsCol)
+					{
+						pCurrentRegisters->stripUpdateMode = IA_BUFFER_READ_STRIP_UPDATE_DONE;
+					}
 				}
-				
+					
 			} // if validControl == TRUE
 		}
 		break; //IA_BUFFER_READ_STATE_DECODE
@@ -1683,8 +1682,7 @@ void updateIABufferReader (
 			 */
 			#if defined(SPARSE_SYSTEM)
 				unsigned char depth = pCurrentRegisters->tbCountInfo.addressBase 
-							+ pCurrentRegisters->tbCountInfo.colContribution 
-							+ pCurrentRegisters->tbCountInfo.rowContribution;
+							+ pCurrentRegisters->tbCountInfo.colContribution;
 				if (((pCurrentRegisters->accessBank) & 0x01) == 0x00)
 				{
 					pCurrentRegisters->numTBPerStrip = 
@@ -1710,13 +1708,11 @@ void updateIABufferReader (
 				pCurrentRegisters->iTBInCW = 0;
 				EMULATOR_PRINT(("[kernelIABuffer Reader %d] Fetching TB count from bank %d, "
 							"addrBase=%d, "
-							"colContribution=%d, "
-							"rowContribution=%d\n"
+							"colContribution=%d\n"
 							"TB=%d\n",
 							colID, (unsigned char) (pCurrentRegisters->accessBank),
 							(unsigned int)(pCurrentRegisters->tbCountInfo.addressBase),
 							(unsigned int)(pCurrentRegisters->tbCountInfo.colContribution),
-							(unsigned int)(pCurrentRegisters->tbCountInfo.rowContribution),
 							(unsigned int) (pCurrentRegisters->numTBPerStrip)
 							));
 			#else
@@ -1740,20 +1736,7 @@ void updateIABufferReader (
 
 			if (pCurrentRegisters->tileInfo.iCol == pCurrentRegisters->tileInfo.numStripsCol)
 			{
-				pCurrentRegisters->tileInfo.iCol = 0x0;
-				pCurrentRegisters->tileInfo.iRow += 0x1;
-
-				pCurrentRegisters->stripUpdateMode = IA_BUFFER_READ_STRIP_UPDATE_VERTICAL;
-
-				#if defined(SPARSE_SYSTEM)
-					pCurrentRegisters->tbCountInfo.colContribution = 0x0;
-					pCurrentRegisters->tbCountInfo.rowContribution += pCurrentRegisters->tbCountInfo.rowStride;
-				#endif
-
-				if (pCurrentRegisters->tileInfo.iRow == pCurrentRegisters->tileInfo.numStripsRow)
-				{
-					pCurrentRegisters->stripUpdateMode = IA_BUFFER_READ_STRIP_UPDATE_DONE;
-				}
+				pCurrentRegisters->stripUpdateMode = IA_BUFFER_READ_STRIP_UPDATE_DONE;
 			}
 		}
 		break;
@@ -1796,15 +1779,6 @@ void updateIABufferReader (
 					{
 						pCurrentRegisters->iaBlockInfo.colContribution +=
 							pCurrentRegisters->iaBlockInfo.colStride;
-
-						*pCurrentState = IA_BUFFER_READ_STATE_UPDATE_STRIP;
-					}
-					else if (pCurrentRegisters->stripUpdateMode == IA_BUFFER_READ_STRIP_UPDATE_VERTICAL)
-					{
-						pCurrentRegisters->iaBlockInfo.colContribution = 0;
-
-						pCurrentRegisters->iaBlockInfo.rowContribution +=
-							pCurrentRegisters->iaBlockInfo.rowStride;
 
 						*pCurrentState = IA_BUFFER_READ_STATE_UPDATE_STRIP;
 					}
@@ -1991,13 +1965,9 @@ __kernel void kernelIATileController (
 
 			unsigned char inputTileWidth = instruction.localTileWidth;
 		    unsigned char inputTileHeight = instruction.localTileHeight;
-		    unsigned char stride = instruction.kernelStride;
-		    unsigned char kernelSize = instruction.kernelSize;
-	        unsigned int numOutputInstructions = instruction.numOutputInstructions;
 		    unsigned char numActivePeCols = instruction.flagPadBitmaskCatNumActiveCols & 0x7F;
 		    unsigned short numOutputChannelsInGroup = instruction.numOutputChannelsInGroup;
 		    unsigned short iaCacheColStride = instruction.cacheIAStripColStride;
-		    unsigned short iaCacheRowStride = iaCacheColStride * ((unsigned short)(inputTileWidth));
 
 			/*
 			2. Send load instructions to the tile buffer
@@ -2014,18 +1984,19 @@ __kernel void kernelIATileController (
 				tileBufferControlPacket.iaDramBlockAddressBase = 0;
 
 				tileBufferControlPacket.iaDramBlockColStride = iaCacheColStride;
-				tileBufferControlPacket.iaDramBlockRowStride = iaCacheRowStride;
 				
 				tileBufferControlPacket.controlBits = ((numActivePeCols-1) << 0x3) 
 					| (((unsigned char) writeSideIndex) & 0x01);
 
 				#if defined(SPARSE_SYSTEM)
 	                tileBufferControlPacket.tbAddressBase = 0;
-	                tileBufferControlPacket.tbAddressRowStride = inputTileWidth;
 			    #endif
 
-			    tileBufferControlPacket.numStripsCol = inputTileWidth;
-			 	tileBufferControlPacket.numStripsRow = inputTileHeight;
+	            /*
+	             *	For the writer, 
+	             *	the number of strips should be interpreted as the total number of strips
+	             */
+			    tileBufferControlPacket.numStripsCol = inputTileWidth*inputTileHeight;
 
 				write_channel_intel(channel_control_to_ia_buffer[0], tileBufferControlPacket);
 			}
@@ -2043,6 +2014,7 @@ __kernel void kernelIATileController (
 			unsigned short iFilterInGroup = 0;
 			unsigned char iInputTileWidth = 0;
 			unsigned char iInputTileHeight = 0;
+			unsigned char iRowInTile = 0;
 
 			unsigned char inputTileWidth = drainInstruction.localTileWidth;
 		    unsigned char inputTileHeight = drainInstruction.localTileHeight;
@@ -2052,7 +2024,6 @@ __kernel void kernelIATileController (
 		    unsigned char numActivePeCols = drainInstruction.flagPadBitmaskCatNumActiveCols & 0x7F;
 		    unsigned short numOutputChannelsInGroup = drainInstruction.numOutputChannelsInGroup;
 			unsigned short iaCacheColStride = drainInstruction.cacheIAStripColStride;
-		    unsigned short iaCacheRowStride = iaCacheColStride * ((unsigned short)(inputTileWidth));
 
 		    #if defined(SPARSE_SYSTEM)
 		    	uint1_t flagPadBitmask = ((drainInstruction.flagPadBitmaskCatNumActiveCols & 0x80) >> 7);
@@ -2063,18 +2034,16 @@ __kernel void kernelIATileController (
 				unsigned char numActivePeRows = ((numOutputChannelsInGroup - iFilterInGroup) < (unsigned short) (PE_ROWS)) ?
 					(unsigned char) (numOutputChannelsInGroup - iFilterInGroup) : PE_ROWS;
 
-				unsigned char iStripInTile = iInputTileHeight * inputTileWidth + iInputTileWidth;
+				unsigned char iStripInTile = (iInputTileHeight + iRowInTile) * inputTileWidth + iInputTileWidth;
 
 				t_input_buffer_tile_buffer_packet tileBufferControlPacket;
 				tileBufferControlPacket.iaDramBlockAddressBase = ((unsigned short) iStripInTile) * ((unsigned short) iaCacheColStride);
 				tileBufferControlPacket.maxPeRowID = (numActivePeRows - 1);
 				
 				tileBufferControlPacket.iaDramBlockColStride = iaCacheColStride;
-				tileBufferControlPacket.iaDramBlockRowStride = iaCacheRowStride;
 
 				#if defined(SPARSE_SYSTEM)
 			    	tileBufferControlPacket.tbAddressBase = iStripInTile;
-			    	tileBufferControlPacket.tbAddressRowStride = inputTileWidth;
 			    #endif
 				unsigned char sendInstructionType = 0x2; //Stream from the buffer
 				tileBufferControlPacket.controlBits =
@@ -2091,7 +2060,7 @@ __kernel void kernelIATileController (
 					}
 				#endif
 				tileBufferControlPacket.numStripsCol = kernelSize;
-				tileBufferControlPacket.numStripsRow = kernelSize;
+				tileBufferControlPacket.flagIsLastRow = ((iRowInTile + 1) == kernelSize) ? TRUE : FALSE;
 
 				//bool success = write_channel_nb_intel(channel_control_to_ia_buffer[0], tileBufferControlPacket);
 				write_channel_intel(channel_control_to_ia_buffer[0], tileBufferControlPacket);	
@@ -2110,24 +2079,29 @@ __kernel void kernelIATileController (
 					iInstructionCycle, numActivePeRows, iInputTileHeight, iInputTileWidth));
 				#endif
 					
-
-				if ((iInputTileWidth + kernelSize) >= inputTileWidth)
+				iRowInTile++;
+				if (iRowInTile == kernelSize)
 				{
-					iInputTileWidth = 0;
+					iRowInTile = 0;
 
-					if ((iInputTileHeight + kernelSize) >= inputTileHeight)
+					if ((iInputTileWidth + kernelSize) >= inputTileWidth)
 					{
-						iInputTileHeight = 0;
-						iFilterInGroup += numActivePeRows;
+						iInputTileWidth = 0;
+
+						if ((iInputTileHeight + kernelSize) >= inputTileHeight)
+						{
+							iInputTileHeight = 0;
+							iFilterInGroup += numActivePeRows;
+						}
+						else
+						{
+							iInputTileHeight += stride;
+						}
 					}
 					else
 					{
-						iInputTileHeight += stride;
+						iInputTileWidth += stride;
 					}
-				}
-				else
-				{
-					iInputTileWidth += stride;
 				}
 			} // for
 		}

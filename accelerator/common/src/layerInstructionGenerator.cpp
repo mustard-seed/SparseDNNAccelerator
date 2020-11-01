@@ -720,8 +720,8 @@ void instruction_generator(
                             instructionIAControl.localTileHeight = (t_uchar) maxTM;
                             instructionIAControl.kernelStride = (t_uchar) kernelStride;
                             instructionIAControl.kernelSize = (t_uchar) kernelSize;
-                            instructionIAControl.numOutputInstructions = (t_ushort)
-                                    ((t_ushort) maxTP * (t_ushort) maxTQPerCol * numComputeFoldPerGroup);
+                            instructionIAControl.numOutputInstructions = (t_uint)
+                                    ((t_uint) maxTP * (t_uint) maxTQPerCol * numComputeFoldPerGroup * (t_uint) kernelSize);
                             //Number of TBs in an uncompressed strip
                             unsigned short cacheIAStripColStrideTBCount = 1 + (numIAMoverInputChannelsPerGroup0-1) / TRANSFER_SIZE / CLUSTER_SIZE;
                             //Number of TBs needed for encoding the bitmask

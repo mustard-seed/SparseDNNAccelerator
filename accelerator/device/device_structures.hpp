@@ -275,7 +275,7 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
 
 //====================================================================
 //Instructions for the input tile controller
-typedef struct __attribute__((packed)) __attribute__((aligned(16)))
+typedef struct __attribute__((packed)) __attribute__((aligned(32)))
 {
     //Input tile width per compute column
     t_uchar localTileWidth;
@@ -286,7 +286,7 @@ typedef struct __attribute__((packed)) __attribute__((aligned(16)))
     //Filter planar kernel size
     t_uchar kernelSize;
     //Number of streaming instruction for this tile
-    t_ushort numOutputInstructions;
+    t_uint numOutputInstructions;
     //Column stride of IA strip in IA cache in terms of dram block
     t_ushort cacheIAStripColStride;
     //Number of output channels in the output group
@@ -440,10 +440,8 @@ typedef struct __attribute__((packed))
 {
     unsigned short iaDramBlockAddressBase;
     unsigned short iaDramBlockColStride;
-    unsigned short iaDramBlockRowStride;
     #if defined(SPARSE_SYSTEM)
         unsigned char tbAddressBase;
-        unsigned char tbAddressRowStride;
     #endif
     unsigned char maxPeRowID; //Only relevant for sending
 
@@ -454,12 +452,13 @@ typedef struct __attribute__((packed))
     //Bit 7:3: Max PE Cols to send to; 
     unsigned char controlBits; 
 
+    //Whether the IA buffer reader is streaming the last row of a convolution window to the PEs
+    //Only useful during streaming from the IA buffer
+    unsigned char flagIsLastRow;
+
     //Number of columns in the transfer command
     unsigned char numStripsCol;
     
-    //Number of rows in the transfer command
-    //If this is ZERO, then this is a ghost command!
-    unsigned char numStripsRow;
     #if defined(SPARSE_SYSTEM)
         //Bit mask for the last compression window, which might be incomplete
         unsigned char partialBitmask[COMPRESSION_WINDOW_SIZE / 8];
