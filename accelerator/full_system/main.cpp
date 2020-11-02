@@ -379,7 +379,7 @@ TEST_F (testFixture, throughput_diagnostic_fully_connected)
     unsigned char inputWidthSPUnitSize = 1;
     unsigned short sizeOutputTileWidthPerColFull = 8;
     unsigned short sizeOutputTileHeight = 8;
-    unsigned char kernelSize = 1;
+    unsigned char kernelSize = 3;
     bool flagEnableRelu = false;
     bool flagSparseInput = true;
     bool flagSparseOutput = true;
@@ -485,7 +485,7 @@ TEST_F (testFixture, throughput_diagnostic_add)
     unsigned char inputWidthSPUnitSize = 1;
     unsigned char sizeOutputTileWidthPerColFull = 8;
     unsigned char sizeOutputTileHeight = inputHeight;
-    std::vector<unsigned char> vecInputWidth = {
+    std::vector<unsigned short> vecInputWidth = {
         PE_COLS*sizeOutputTileWidthPerColFull,
         2*PE_COLS*sizeOutputTileWidthPerColFull,
         4*PE_COLS*sizeOutputTileWidthPerColFull,
