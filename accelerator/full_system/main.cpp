@@ -26,12 +26,12 @@
 #include "layerInstructionGenerator.hpp"
 #include "accelerator_wrapper.hpp"
 
-#define PLAY
-//#define PERF_TEST
-//#define THROUGHPUT_DIAGNOSTIC
-//#define VALIDATE
+//#define PLAY
+#define PERF_TEST
+#define THROUGHPUT_DIAGNOSTIC
+#define VALIDATE
 //Some how if repeat is 100, bad things will happen on concat
-#define REPEAT 40
+#define REPEAT 50
 #ifndef C5SOC
 //#define EMULATE
 #endif
@@ -69,15 +69,15 @@ protected:
      * \return The tensor generated
      */
     std::vector<float> generateInputTensor (
-                unsigned char _inputWidth,
-                unsigned char _inputHeight,
+                unsigned short _inputWidth,
+                unsigned short _inputHeight,
                 unsigned int _numInputChannel,
                 unsigned char _numGroupCurrentLayer,
                 bool _alternateSign = true
             );
 
-    std::vector<float> generateSparseInput (unsigned char _inputWidth,
-                unsigned char _inputHeight,
+    std::vector<float> generateSparseInput (unsigned short _inputWidth,
+                unsigned short _inputHeight,
                 unsigned int _numInputChannel,
                 unsigned char _numGroupCurrentLayer,
                 float denseProb = 1.0f
@@ -107,16 +107,16 @@ protected:
                     float denseProb = 1.0f
                 , int channelPruneScale = CLUSTER_SIZE);
 
-    void launch (unsigned char _inputWidth,
-            unsigned char _inputHeight,
+    void launch (unsigned short _inputWidth,
+            unsigned short _inputHeight,
             unsigned int _numInputChannel,
             unsigned int _numOutputChannel,
             unsigned char _numInputGroup, //The code will override this to 1 if the operation is not convolution
             unsigned char _numGroupNext, //Number of groups for the next layer
             unsigned char _inputHeightSPUnitSize, //The code will override this to 1 if the operation is not convolution
             unsigned char _inputWidthSPUnitSize, //The code will overide this to 1 if the operation is not convolution
-            unsigned char _sizeOutputTileWidthPerColFull, //The code will override this to 1 if the operation is not convolution
-            unsigned char _sizeOutputTileHeight, //The code will overrid this to 1 if the operation is not convolution
+            unsigned short _sizeOutputTileWidthPerColFull, //The code will override this to 1 if the operation is not convolution
+            unsigned short _sizeOutputTileHeight, //The code will overrid this to 1 if the operation is not convolution
             unsigned char _kernelSize, //convolution kernel size
             bool _flagEnableRelu,
             bool _flagSparseInput, //The code will override this to FALSE if the operation is not convolution
@@ -131,158 +131,196 @@ protected:
 }; //testFixture
 
 #ifdef PLAY
-TEST_F (testFixture, throughput_diagnostic_fully_connected)
+TEST_F (testFixture, conv_dense_input_dense_output_grouped)
 {
-    unsigned char inputWidth = 1;
-    unsigned char inputHeight = 1;
-    typedef struct {
-          unsigned char inputChannel;
-          unsigned char outputChannel;
-    } t_fc_pairs;
-    std::vector<t_fc_pairs> vecTestsPairs = {
-            {.inputChannel=254, .outputChannel=254}
-            };
-    //std::vector<unsigned char> vecInputChannel = {1};
-    unsigned char numInputGroup = 1;
-    unsigned char numOutputGroup = 1;
+    unsigned char inputWidth = 4;
+    unsigned char inputHeight = 4;
+    unsigned char numInputChannel = 16;
+    unsigned char numOutputChannel = numInputChannel;
+    unsigned char numInputGroup = 2;
+    unsigned char numOutputGroup = 2;
     unsigned char inputHeightSPUnitSize = 1;
     unsigned char inputWidthSPUnitSize = 1;
-    unsigned char sizeOutputTileWidthPerColFull = 8;
-    unsigned char sizeOutputTileHeight = 8;
+    unsigned char sizeOutputTileWidthPerColFull = 2;
+    unsigned char sizeOutputTileHeight = 4;
     unsigned char kernelSize = 3;
     bool flagEnableRelu = false;
-    bool flagSparseInput = true;
-    bool flagSparseOutput = true;
-    OPERATION op = CONVOLUTION;
-    float bias = 0.0f;
-    std::vector<float> vecDenseProb = {1.0};
-    for (auto& testPairs: vecTestsPairs)
-    {
-        for (auto & prob : vecDenseProb)
-        {
-            unsigned char numInputChannel = testPairs.inputChannel;
-            unsigned char numOutputChannel = testPairs.outputChannel;
-            launch(
-                        inputWidth,
-                        inputHeight,
-                        numInputChannel,
-                        numOutputChannel,
-                        numInputGroup,
-                        numOutputGroup,
-                        inputHeightSPUnitSize,
-                        inputWidthSPUnitSize,
-                        sizeOutputTileWidthPerColFull,
-                        sizeOutputTileHeight,
-                        kernelSize,
-                        flagEnableRelu,
-                        flagSparseInput,
-                        flagSparseOutput,
-                        op,
-                        bias,
-                        false, //back to back
-                        true, //perf test
-                        prob, //dense prob
-                        1 //channel prune scale
-                  );
-        }
-     }
-}
-
-TEST_F (testFixture, throughput_diagnostic_planar)
-{
-    //unsigned char inputWidth = 1;
-    unsigned char inputHeight = 4;
-    unsigned char numInputChannel = 128;
-    unsigned char numOutputChannel = 1;
-    unsigned char numInputGroup = 1;
-    unsigned char numOutputGroup = 1;
-    unsigned char inputHeightSPUnitSize = 1;
-    unsigned char inputWidthSPUnitSize = 1;
-    unsigned char sizeOutputTileWidthPerColFull = 8;
-    unsigned char sizeOutputTileHeight = inputHeight;
-    std::vector<unsigned char> vecInputWidth = {
-        12*PE_COLS*sizeOutputTileWidthPerColFull};
-    unsigned char kernelSize = 1;
-    bool flagEnableRelu = false;
-    bool flagSparseInput = true;
-    bool flagSparseOutput = true;
-    OPERATION op = CONVOLUTION;
-    float bias = 0.0f;
-    float prob = 1.0;
-    for (auto& inputWidth: vecInputWidth)
-    {
-        launch(
-                    inputWidth,
-                    inputHeight,
-                    numInputChannel,
-                    numOutputChannel,
-                    numInputGroup,
-                    numOutputGroup,
-                    inputHeightSPUnitSize,
-                    inputWidthSPUnitSize,
-                    sizeOutputTileWidthPerColFull,
-                    sizeOutputTileHeight,
-                    kernelSize,
-                    flagEnableRelu,
-                    flagSparseInput,
-                    flagSparseOutput,
-                    op,
-                    bias,
-                    false, //back to back
-                    true, //perf test
-                    prob, //dense prob
-                    1 //channel prune scale
-              );
-     }
-}
-
-TEST_F (testFixture, throughput_diagnostic_add)
-{
-    //unsigned char inputWidth = 1;
-    unsigned char inputHeight = 4;
-    unsigned char numInputChannel = 128;
-    unsigned char numOutputChannel = 1;
-    unsigned char numInputGroup = 1;
-    unsigned char numOutputGroup = 1;
-    unsigned char inputHeightSPUnitSize = 1;
-    unsigned char inputWidthSPUnitSize = 1;
-    unsigned char sizeOutputTileWidthPerColFull = 8;
-    unsigned char sizeOutputTileHeight = inputHeight;
-    std::vector<unsigned char> vecInputWidth = {
-        12*PE_COLS*sizeOutputTileWidthPerColFull};
-    unsigned char kernelSize = 1;
-    bool flagEnableRelu = false;
     bool flagSparseInput = false;
-    bool flagSparseOutput = true;
-    OPERATION op = ELT_ADD;
+    bool flagSparseOutput = false;
+    OPERATION op = CONVOLUTION;
     float bias = 0.0f;
-    float prob = 1.0;
-    for (auto& inputWidth: vecInputWidth)
-    {
-        launch(
-                    inputWidth,
-                    inputHeight,
-                    numInputChannel,
-                    numOutputChannel,
-                    numInputGroup,
-                    numOutputGroup,
-                    inputHeightSPUnitSize,
-                    inputWidthSPUnitSize,
-                    sizeOutputTileWidthPerColFull,
-                    sizeOutputTileHeight,
-                    kernelSize,
-                    flagEnableRelu,
-                    flagSparseInput,
-                    flagSparseOutput,
-                    op,
-                    bias,
-                    false, //back to back
-                    true, //perf test
-                    prob, //dense prob
-                    1 //channel prune scale
-              );
-     }
+
+    launch(
+                inputWidth,
+                inputHeight,
+                numInputChannel,
+                numOutputChannel,
+                numInputGroup,
+                numOutputGroup,
+                inputHeightSPUnitSize,
+                inputWidthSPUnitSize,
+                sizeOutputTileWidthPerColFull,
+                sizeOutputTileHeight,
+                kernelSize,
+                flagEnableRelu,
+                flagSparseInput,
+                flagSparseOutput,
+                op,
+                bias
+          );
 }
+//TEST_F (testFixture, throughput_diagnostic_fully_connected)
+//{
+//    unsigned char inputWidth = 1;
+//    unsigned char inputHeight = 1;
+//    typedef struct {
+//          unsigned char inputChannel;
+//          unsigned char outputChannel;
+//    } t_fc_pairs;
+//    std::vector<t_fc_pairs> vecTestsPairs = {
+//            {.inputChannel=254, .outputChannel=254}
+//            };
+//    //std::vector<unsigned char> vecInputChannel = {1};
+//    unsigned char numInputGroup = 1;
+//    unsigned char numOutputGroup = 1;
+//    unsigned char inputHeightSPUnitSize = 1;
+//    unsigned char inputWidthSPUnitSize = 1;
+//    unsigned char sizeOutputTileWidthPerColFull = 8;
+//    unsigned char sizeOutputTileHeight = 8;
+//    unsigned char kernelSize = 3;
+//    bool flagEnableRelu = false;
+//    bool flagSparseInput = true;
+//    bool flagSparseOutput = true;
+//    OPERATION op = CONVOLUTION;
+//    float bias = 0.0f;
+//    std::vector<float> vecDenseProb = {1.0};
+//    for (auto& testPairs: vecTestsPairs)
+//    {
+//        for (auto & prob : vecDenseProb)
+//        {
+//            unsigned char numInputChannel = testPairs.inputChannel;
+//            unsigned char numOutputChannel = testPairs.outputChannel;
+//            launch(
+//                        inputWidth,
+//                        inputHeight,
+//                        numInputChannel,
+//                        numOutputChannel,
+//                        numInputGroup,
+//                        numOutputGroup,
+//                        inputHeightSPUnitSize,
+//                        inputWidthSPUnitSize,
+//                        sizeOutputTileWidthPerColFull,
+//                        sizeOutputTileHeight,
+//                        kernelSize,
+//                        flagEnableRelu,
+//                        flagSparseInput,
+//                        flagSparseOutput,
+//                        op,
+//                        bias,
+//                        false, //back to back
+//                        true, //perf test
+//                        prob, //dense prob
+//                        1 //channel prune scale
+//                  );
+//        }
+//     }
+//}
+
+//TEST_F (testFixture, throughput_diagnostic_planar)
+//{
+//    //unsigned char inputWidth = 1;
+//    unsigned char inputHeight = 4;
+//    unsigned char numInputChannel = 128;
+//    unsigned char numOutputChannel = 1;
+//    unsigned char numInputGroup = 1;
+//    unsigned char numOutputGroup = 1;
+//    unsigned char inputHeightSPUnitSize = 1;
+//    unsigned char inputWidthSPUnitSize = 1;
+//    unsigned char sizeOutputTileWidthPerColFull = 8;
+//    unsigned char sizeOutputTileHeight = inputHeight;
+//    std::vector<unsigned char> vecInputWidth = {
+//        12*PE_COLS*sizeOutputTileWidthPerColFull};
+//    unsigned char kernelSize = 1;
+//    bool flagEnableRelu = false;
+//    bool flagSparseInput = true;
+//    bool flagSparseOutput = true;
+//    OPERATION op = CONVOLUTION;
+//    float bias = 0.0f;
+//    float prob = 1.0;
+//    for (auto& inputWidth: vecInputWidth)
+//    {
+//        launch(
+//                    inputWidth,
+//                    inputHeight,
+//                    numInputChannel,
+//                    numOutputChannel,
+//                    numInputGroup,
+//                    numOutputGroup,
+//                    inputHeightSPUnitSize,
+//                    inputWidthSPUnitSize,
+//                    sizeOutputTileWidthPerColFull,
+//                    sizeOutputTileHeight,
+//                    kernelSize,
+//                    flagEnableRelu,
+//                    flagSparseInput,
+//                    flagSparseOutput,
+//                    op,
+//                    bias,
+//                    false, //back to back
+//                    true, //perf test
+//                    prob, //dense prob
+//                    1 //channel prune scale
+//              );
+//     }
+//}
+
+//TEST_F (testFixture, throughput_diagnostic_add)
+//{
+//    //unsigned char inputWidth = 1;
+//    unsigned char inputHeight = 4;
+//    unsigned char numInputChannel = 128;
+//    unsigned char numOutputChannel = 1;
+//    unsigned char numInputGroup = 1;
+//    unsigned char numOutputGroup = 1;
+//    unsigned char inputHeightSPUnitSize = 1;
+//    unsigned char inputWidthSPUnitSize = 1;
+//    unsigned char sizeOutputTileWidthPerColFull = 8;
+//    unsigned char sizeOutputTileHeight = inputHeight;
+//    std::vector<unsigned char> vecInputWidth = {
+//        12*PE_COLS*sizeOutputTileWidthPerColFull};
+//    unsigned char kernelSize = 1;
+//    bool flagEnableRelu = false;
+//    bool flagSparseInput = false;
+//    bool flagSparseOutput = true;
+//    OPERATION op = ELT_ADD;
+//    float bias = 0.0f;
+//    float prob = 1.0;
+//    for (auto& inputWidth: vecInputWidth)
+//    {
+//        launch(
+//                    inputWidth,
+//                    inputHeight,
+//                    numInputChannel,
+//                    numOutputChannel,
+//                    numInputGroup,
+//                    numOutputGroup,
+//                    inputHeightSPUnitSize,
+//                    inputWidthSPUnitSize,
+//                    sizeOutputTileWidthPerColFull,
+//                    sizeOutputTileHeight,
+//                    kernelSize,
+//                    flagEnableRelu,
+//                    flagSparseInput,
+//                    flagSparseOutput,
+//                    op,
+//                    bias,
+//                    false, //back to back
+//                    true, //perf test
+//                    prob, //dense prob
+//                    1 //channel prune scale
+//              );
+//     }
+//}
 #endif
 #if defined(THROUGHPUT_DIAGNOSTIC)
 TEST_F (testFixture, throughput_diagnostic_fully_connected)
@@ -290,8 +328,8 @@ TEST_F (testFixture, throughput_diagnostic_fully_connected)
     unsigned char inputWidth = 1;
     unsigned char inputHeight = 1;
     typedef struct {
-          unsigned char inputChannel;
-          unsigned char outputChannel;
+          unsigned short inputChannel;
+          unsigned short outputChannel;
     } t_fc_pairs;
     std::vector<t_fc_pairs> vecTestsPairs = {
             {.inputChannel=1, .outputChannel=32},
@@ -339,9 +377,9 @@ TEST_F (testFixture, throughput_diagnostic_fully_connected)
     unsigned char numOutputGroup = 1;
     unsigned char inputHeightSPUnitSize = 1;
     unsigned char inputWidthSPUnitSize = 1;
-    unsigned char sizeOutputTileWidthPerColFull = 8;
-    unsigned char sizeOutputTileHeight = 8;
-    unsigned char kernelSize = 3;
+    unsigned short sizeOutputTileWidthPerColFull = 8;
+    unsigned short sizeOutputTileHeight = 8;
+    unsigned char kernelSize = 1;
     bool flagEnableRelu = false;
     bool flagSparseInput = true;
     bool flagSparseOutput = true;
@@ -352,8 +390,8 @@ TEST_F (testFixture, throughput_diagnostic_fully_connected)
     {
         for (auto & prob : vecDenseProb)
         {
-            unsigned char numInputChannel = testPairs.inputChannel;
-            unsigned char numOutputChannel = testPairs.outputChannel;
+            unsigned short numInputChannel = testPairs.inputChannel;
+            unsigned short numOutputChannel = testPairs.outputChannel;
             launch(
                         inputWidth,
                         inputHeight,
@@ -390,9 +428,9 @@ TEST_F (testFixture, throughput_diagnostic_planar)
     unsigned char numOutputGroup = 1;
     unsigned char inputHeightSPUnitSize = 1;
     unsigned char inputWidthSPUnitSize = 1;
-    unsigned char sizeOutputTileWidthPerColFull = 8;
-    unsigned char sizeOutputTileHeight = inputHeight;
-    std::vector<unsigned char> vecInputWidth = {
+    unsigned short sizeOutputTileWidthPerColFull = 8;
+    unsigned short sizeOutputTileHeight = inputHeight;
+    std::vector<unsigned short> vecInputWidth = {
         PE_COLS*sizeOutputTileWidthPerColFull,
         2*PE_COLS*sizeOutputTileWidthPerColFull,
         4*PE_COLS*sizeOutputTileWidthPerColFull,
@@ -1163,8 +1201,8 @@ void testFixture::SetUp()
 }
 
 std::vector<float> testFixture::generateInputTensor(
-            unsigned char _inputWidth,
-            unsigned char _inputHeight,
+            unsigned short _inputWidth,
+            unsigned short _inputHeight,
             unsigned int _numInputChannel,
             unsigned char _numGroupCurrentLayer,
             bool _alternateSign
@@ -1176,9 +1214,9 @@ std::vector<float> testFixture::generateInputTensor(
     std::vector<float> inputVector;
     for (unsigned char g=0; g<_numGroupCurrentLayer;g++)
     {
-        for (unsigned char h=0; h<_inputHeight; h++)
+        for (unsigned short h=0; h<_inputHeight; h++)
         {
-            for (unsigned char w=0; w<_inputWidth; w++)
+            for (unsigned short w=0; w<_inputWidth; w++)
             {
                 for (unsigned int c=0; c<numICPerGroup; c++)
                 {
@@ -1196,8 +1234,8 @@ std::vector<float> testFixture::generateInputTensor(
 }
 
 std::vector<float> testFixture::generateSparseInput(
-            unsigned char _inputWidth,
-            unsigned char _inputHeight,
+            unsigned short _inputWidth,
+            unsigned short _inputHeight,
             unsigned int _numInputChannel,
             unsigned char _numGroupCurrentLayer,
             float denseProb,
@@ -1212,9 +1250,9 @@ std::vector<float> testFixture::generateSparseInput(
      bool writePositive = true;
      for (unsigned char g=0; g<_numGroupCurrentLayer;g++)
      {
-         for (unsigned char h=0; h<_inputHeight; h++)
+         for (unsigned short h=0; h<_inputHeight; h++)
          {
-             for (unsigned char w=0; w<_inputWidth; w++)
+             for (unsigned short w=0; w<_inputWidth; w++)
              {
                  bool flagNonZero = false;
                  for (unsigned int c=0; c<numICPerGroup; c++)
@@ -1335,16 +1373,16 @@ std::vector<fixedPointNumber> testFixture::generateSparseWeights (
 }
 
 void testFixture::launch (
-        unsigned char _inputWidth,
-        unsigned char _inputHeight,
+        unsigned short _inputWidth,
+        unsigned short _inputHeight,
         unsigned int _numInputChannel,
         unsigned int  _numOutputChannel,
         unsigned char _numInputGroup, //The code will override this to 1 if the operation is not convolution
         unsigned char _numGroupNext, //Number of groups for the next layer
         unsigned char _inputHeightSPUnitSize, //The code will override this to 1 if the operation is not convolution
         unsigned char _inputWidthSPUnitSize, //The code will overide this to 1 if the operation is not convolution
-        unsigned char _sizeOutputTileWidthPerColFull, //The code will override this to 1 if the operation is not convolution
-        unsigned char _sizeOutputTileHeight, //The code will overrid this to 1 if the operation is not convolution
+        unsigned short _sizeOutputTileWidthPerColFull, //The code will override this to 1 if the operation is not convolution
+        unsigned short _sizeOutputTileHeight, //The code will overrid this to 1 if the operation is not convolution
         unsigned char _kernelSize, //Size of the convolution kernel
         bool _flagEnableRelu,
         bool _flagSparseInput, //The code will override this to FALSE if the operation is not convolution or if the accelerator only supports dense format
@@ -1366,15 +1404,15 @@ void testFixture::launch (
     unsigned int numInputChannel1;
     unsigned int numOutputChannels;
     unsigned int numOutputChannelPerGroup;
-    unsigned char numOutputWidth;
-    unsigned char numOutputHeight;
+    unsigned short numOutputWidth;
+    unsigned short numOutputHeight;
     unsigned char numGroupCurrentLayer;
     unsigned char inputHeightSPUnitSize;
     unsigned char inputWidthSPUnitSize;
-    unsigned char inputHeightSPSize;
-    unsigned char inputWidthSPSize;
-    unsigned char sizeOutputTileWidthPerCol;
-    unsigned char sizeOutputTileHeight;
+    unsigned short inputHeightSPSize;
+    unsigned short inputWidthSPSize;
+    unsigned short sizeOutputTileWidthPerCol;
+    unsigned short sizeOutputTileHeight;
     unsigned char verticalBorderPadding;
     unsigned char horizontalBorderPadding;
     bool flagSparseInput;
@@ -1842,7 +1880,10 @@ void testFixture::launch (
                  .offsetIAMoverInstruction=offsetIAMoverInstruction,
                  .numIAMoverInstruction=numIAMoverInstructions,
                  .offsetOAMoverInstruction=offsetOAMoverInstruction,
-                 .numOAMoverInstructions=numOAMoverInstructions
+                 .numOAMoverInstructions=numOAMoverInstructions,
+                .outputTileHeight = sizeOutputTileHeight,
+                .outputTileWidthPerCol = sizeOutputTileWidthPerCol,
+                .numActiveColsPartialOutputTile = numActiveColsPartialOutputTile
                  });
             offsetIAMoverInstruction += numIAMoverInstructions;
             offsetOAMoverInstruction += numOAMoverInstructions;
@@ -1978,7 +2019,10 @@ void testFixture::launch (
                  .offsetIAMoverInstruction=offsetIAMoverInstruction,
                  .numIAMoverInstruction=numIAMoverInstructions,
                  .offsetOAMoverInstruction=offsetOAMoverInstruction,
-                 .numOAMoverInstructions=numOAMoverInstructions
+                 .numOAMoverInstructions=numOAMoverInstructions,
+                .outputTileHeight = sizeOutputTileHeight,
+                .outputTileWidthPerCol = sizeOutputTileWidthPerCol,
+                .numActiveColsPartialOutputTile = numActiveColsPartialOutputTile
                  });
             offsetIAMoverInstruction += numIAMoverInstructions;
             offsetOAMoverInstruction += numOAMoverInstructions;
@@ -2111,7 +2155,10 @@ void testFixture::launch (
                  .offsetIAMoverInstruction=offsetIAMoverInstruction,
                  .numIAMoverInstruction=numIAMoverInstructions,
                  .offsetOAMoverInstruction=offsetOAMoverInstruction,
-                 .numOAMoverInstructions=numOAMoverInstructions
+                 .numOAMoverInstructions=numOAMoverInstructions,
+                .outputTileHeight = sizeOutputTileHeight,
+                .outputTileWidthPerCol = sizeOutputTileWidthPerCol,
+                .numActiveColsPartialOutputTile = numActiveColsPartialOutputTile
                  });
             offsetIAMoverInstruction += numIAMoverInstructions;
             offsetOAMoverInstruction += numOAMoverInstructions;
