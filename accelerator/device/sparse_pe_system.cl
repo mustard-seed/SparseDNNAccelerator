@@ -1771,7 +1771,10 @@ void updateIABufferReader (
 					{
 						pCurrentRegisters->iaBlockInfo.colContribution +=
 							pCurrentRegisters->iaBlockInfo.colStride;
+
+						#if defined(SPARSE_SYSTEM)
 						pCurrentRegisters->tbCountInfo.addressBase += 0x01;
+						#endif
 
 						*pCurrentState = IA_BUFFER_READ_STATE_UPDATE_STRIP;
 					}
