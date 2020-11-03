@@ -80,14 +80,15 @@
 #define PACKET_SIZE 1
 
 #if defined(FULL_SYSTEM)
-	#define PE_ROWS 1
-	#define PE_COLS 1
+	#define PE_ROWS 2
+	#define PE_COLS 2
 #else
 	#define PE_ROWS 2
 	#define PE_COLS 2
 #endif
 
-#define CHANNEL_DEPTH 2
+#define CHANNEL_DEPTH 4
+#define OA_DRAIN_CHANNEL_DEPTH 8
 
 //Encoding weight length
 #define ENCODING_LENGTH 64
@@ -136,7 +137,7 @@
 #define SURVIVING_COUNT_CLUSTER_INDEX 0X1
 #define SURVIVING_COUNT_TRANSFER_BLOCK_INDEX 0x1
 
-#define BURST_SIZE_BYTE 8
+#define BURST_SIZE_BYTE 16
 
 #define WMOVER_FILTER_DRAM_BLOCK_ACCESS_UNROLL_FACTOR 4
 #define KERNEL_CACHE_LANES PE_ROWS
@@ -167,8 +168,8 @@
 
 //TODO: Change WIDE_SIZE and related offsets when compression configuration changes
 #define WIDE_SIZE (BURST_SIZE_BYTE/CLUSTER_SIZE/TRANSFER_SIZE)  //Each transfer block takes 4 bytes, so need 8 transfer blocks to populate 256 bits
-#define WIDE_SIZE_OFFSET 0x0 //Numnber of bits to shift the transfer block index to the right in order to recover the wide offset
-#define WIDE_SIZE_REMAINDER_MASK 0x0
+#define WIDE_SIZE_OFFSET 0x1 //Numnber of bits to shift the transfer block index to the right in order to recover the wide offset
+#define WIDE_SIZE_REMAINDER_MASK 0x1
 
 #define NUM_CLUSTER_IN_DRAM_SIZE BURST_SIZE_BYTE/CLUSTER_SIZE
 

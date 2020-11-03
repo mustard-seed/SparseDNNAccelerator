@@ -587,14 +587,14 @@ __kernel void kernelWMover (
 #define IA_BUFFER_READ_STRIP_UPDATE_HORIZONTAL 0x0
 #define IA_BUFFER_READ_STRIP_UPDATE_DONE 0x1
 
-#if !defined(EMUPRINT)
-typedef uint3_t t_ia_buffer_w_state;
-typedef uint3_t t_ia_buffer_r_state;
-typedef uint2_t t_ia_buffer_d_state;
-#else
+#if defined(EMULATOR) && defined(EMUPRINT)
 typedef unsigned char t_ia_buffer_w_state;
 typedef unsigned char t_ia_buffer_r_state;
 typedef unsigned char t_ia_buffer_d_state;
+#else
+typedef uint3_t t_ia_buffer_w_state;
+typedef uint3_t t_ia_buffer_r_state;
+typedef uint2_t t_ia_buffer_d_state;
 #endif
 
 /**
@@ -879,7 +879,7 @@ __attribute__((autorun))
 __attribute__((num_compute_units(PE_COLS)))
 __kernel void kernelIABuffer ()
 {
-	#if defined(EMUPRINT)
+	#if defined(EMULATOR) && defined(EMUPRINT)
 		int iReceived = 0;
 		int iSent = 0;
 	#endif
@@ -1075,7 +1075,7 @@ __kernel void kernelIABuffer ()
 			if (success == true)
 			{
 				writerBlockValid = TRUE;
-				#if defined(EMUPRINT)
+				#if defined(EMULATOR) && defined(EMUPRINT)
 					EMULATOR_PRINT(("[kernelIABuffer %d] RECEIVED dram block %d. TB[0-3]: %#04x %#04x %#04x %#04x \n\n",
 					colID,
 					iReceived
@@ -1117,7 +1117,7 @@ __kernel void kernelIABuffer ()
 							,readerTB.values.values[3]
 							));
 
-				#if defined(EMUPRINT)
+				#if defined(EMULATOR) && defined(EMUPRINT)
 					EMULATOR_PRINT(("[kernelIABuffer %d] Sent iSent=%d\n",
 					colID, iSent
 					));
@@ -1283,7 +1283,7 @@ void updateIABufferWriter (
 				#if defined(SPARSE_SYSTEM)
 					pCurrentRegisters->tbCountInfo.addressBase = control.tbAddressBase;
 					//pCurrentRegisters->tbCountInfo.rowStride = control.tbAddressRowStride;
-					pCurrentRegisters->tbCountInfo.colContribution = 0;
+					//pCurrentRegisters->tbCountInfo.colContribution = 0;
 					//pCurrentRegisters->tbCountInfo.rowContribution = 0;
 				#endif
 
@@ -1327,12 +1327,13 @@ void updateIABufferWriter (
 				t_streamblock_address numIATransferBlocks = getTBCount(dramBlock);
 
 				pCurrentRegisters->numIAAccess = 
-					1 + ((numIATransferBlocks-1) >> WIDE_SIZE_OFFSET);
+					((unsigned short) 1) + ((numIATransferBlocks-((unsigned short) 1)) >> WIDE_SIZE_OFFSET);
 				pCurrentRegisters->iterAccess = 0;
 
 				#if defined(SPARSE_SYSTEM)
-					unsigned char depth = pCurrentRegisters->tbCountInfo.addressBase 
-							+ pCurrentRegisters->tbCountInfo.colContribution;
+					// unsigned char depth = pCurrentRegisters->tbCountInfo.addressBase 
+					// 		+ pCurrentRegisters->tbCountInfo.colContribution;
+					unsigned char depth = pCurrentRegisters->tbCountInfo.addressBase;
 					if (((pCurrentRegisters->accessBank) & 0x01) == 0x00)
 					{
 						cacheIAStreamBlockAddress0[depth] = numIATransferBlocks;
@@ -1356,11 +1357,9 @@ void updateIABufferWriter (
 					// 	
 					EMULATOR_PRINT(("[kernelIABuffer Writer %d] Writing TB count to bank %d, "
 							"addrBase=%d, "
-							"colContribution=%d, "
 							"TB=%d\n",
 							colID, (unsigned char) (pCurrentRegisters->accessBank),
 							(unsigned int)(pCurrentRegisters->tbCountInfo.addressBase),
-							(unsigned int)(pCurrentRegisters->tbCountInfo.colContribution),
 							(unsigned int) numIATransferBlocks
 							));
 				#else
@@ -1429,7 +1428,7 @@ void updateIABufferWriter (
 			pCurrentRegisters->tileInfo.iCol += 0x1;
 			pCurrentRegisters->iaBlockInfo.colContribution += pCurrentRegisters->iaBlockInfo.colStride;
 			#if defined(SPARSE_SYSTEM)
-				pCurrentRegisters->tbCountInfo.colContribution += 0x1;
+				pCurrentRegisters->tbCountInfo.addressBase += 0x1;
 			#endif
 
 			*pCurrentState = IA_BUFFER_WRITE_STATE_COMP_NUM_ACCESS;
@@ -1574,7 +1573,7 @@ void updateIABufferReader (
 				#if defined(SPARSE_SYSTEM)
 					//tbCountInfo
 					pCurrentRegisters->tbCountInfo.addressBase = control.tbAddressBase;
-					pCurrentRegisters->tbCountInfo.colContribution = 1;
+					//pCurrentRegisters->tbCountInfo.colContribution = 1;
 
 					pCurrentRegisters->flagPadBitmask = (control.controlBits >> 2) & 0x01;
 					pCurrentRegisters->iTBInCW = 0;
@@ -1643,7 +1642,6 @@ void updateIABufferReader (
 						pCurrentRegisters->iTBInCW = 0;
 						EMULATOR_PRINT(("[kernelIABuffer Reader %d] Fetching TB count from bank %d, "
 									"addrBase=%d, "
-									"colContribution=0\n"
 									"TB=%d\n",
 									colID, (unsigned char) (pCurrentRegisters->accessBank),
 									(unsigned int)(pCurrentRegisters->tbCountInfo.addressBase),
@@ -1681,8 +1679,7 @@ void updateIABufferReader (
 			 * Access the number of IA cache number of access in the upcoming strip
 			 */
 			#if defined(SPARSE_SYSTEM)
-				unsigned char depth = pCurrentRegisters->tbCountInfo.addressBase 
-							+ pCurrentRegisters->tbCountInfo.colContribution;
+				unsigned char depth = pCurrentRegisters->tbCountInfo.addressBase;
 				if (((pCurrentRegisters->accessBank) & 0x01) == 0x00)
 				{
 					pCurrentRegisters->numTBPerStrip = 
@@ -1708,11 +1705,9 @@ void updateIABufferReader (
 				pCurrentRegisters->iTBInCW = 0;
 				EMULATOR_PRINT(("[kernelIABuffer Reader %d] Fetching TB count from bank %d, "
 							"addrBase=%d, "
-							"colContribution=%d\n"
 							"TB=%d\n",
 							colID, (unsigned char) (pCurrentRegisters->accessBank),
 							(unsigned int)(pCurrentRegisters->tbCountInfo.addressBase),
-							(unsigned int)(pCurrentRegisters->tbCountInfo.colContribution),
 							(unsigned int) (pCurrentRegisters->numTBPerStrip)
 							));
 			#else
@@ -1730,9 +1725,6 @@ void updateIABufferReader (
 			 */
 			pCurrentRegisters->tileInfo.iCol += 0x1;
 			pCurrentRegisters->stripUpdateMode = IA_BUFFER_READ_STRIP_UPDATE_HORIZONTAL;
-			#if defined(SPARSE_SYSTEM)
-				pCurrentRegisters->tbCountInfo.colContribution += 0x1;
-			#endif
 
 			if (pCurrentRegisters->tileInfo.iCol == pCurrentRegisters->tileInfo.numStripsCol)
 			{
@@ -1779,6 +1771,7 @@ void updateIABufferReader (
 					{
 						pCurrentRegisters->iaBlockInfo.colContribution +=
 							pCurrentRegisters->iaBlockInfo.colStride;
+						pCurrentRegisters->tbCountInfo.addressBase += 0x01;
 
 						*pCurrentState = IA_BUFFER_READ_STATE_UPDATE_STRIP;
 					}
@@ -6395,7 +6388,7 @@ __kernel void kernelOperandFilter ()
 		int idy = 0;
 	#endif	
 
-	#if defined (EMUPRINT)
+	#if defined(EMULATOR) && defined(EMUPRINT)
 		unsigned short countPrint = 0x0;
 	#endif
 
