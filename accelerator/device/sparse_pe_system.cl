@@ -2555,6 +2555,7 @@ __kernel void kernelOAMover (
 						#endif
 					}
 				#else
+					#pragma ii 1
 					for (unsigned int i=0; i<inst.numDramBlockPerStrip;)
 					{
 						bool readSuccess = false;
@@ -6866,16 +6867,24 @@ __kernel void kernelOperandFilter ()
 				{
 					EMULATOR_PRINT(("[Op Filter DRAIN (%d, %d)] Received a value from others.\n", idy, idx));
 					readPreviousPESuccess = TRUE;
+					sendToNextPE = TRUE;
 				}
 			}
 		}
-		//Reading and sending are mutually exclusive
+
 		if (sendToNextPE == TRUE)
 		{
 			bool success = false;
 			t_conv_drain_tagged drainTransportBlock;
-			drainTransportBlock.value = pSum[drainSide & 0x01] & ACCUM_MASK;
-			drainTransportBlock.isLast = (unsigned char) regIsMaxRow[drainSide & 0x01];
+			if (readPreviousPE == TRUE)
+			{
+				drainTransportBlock = taggedBlockPreviousPE;
+			}
+			else
+			{
+				drainTransportBlock.value = pSum[drainSide & 0x01] & ACCUM_MASK;
+				drainTransportBlock.isLast = (unsigned char) regIsMaxRow[drainSide & 0x01];
+			}
 			success = write_channel_nb_intel(
 					channel_drain_conv[idy][idx],
 					drainTransportBlock
@@ -7355,6 +7364,7 @@ __kernel void kernelDensePE ()
 				{
 					EMULATOR_PRINT(("[DENSE PE DRAIN (%d, %d)] Received a value from others.\n", idy, idx));
 					readPreviousPESuccess = TRUE;
+					sendToNextPE = TRUE;
 				}
 			}
 		}
@@ -7363,8 +7373,15 @@ __kernel void kernelDensePE ()
 		{
 			bool success = false;
 			t_conv_drain_tagged drainTransportBlock;
-			drainTransportBlock.value = (pSum[drainSide & 0x01] & ACCUM_MASK);
-			drainTransportBlock.isLast = (unsigned char) regIsMaxRow[drainSide & 0x01];
+			if (readPreviousPE == TRUE)
+			{
+				drainTransportBlock = taggedBlockPreviousPE;
+			}
+			else
+			{
+				drainTransportBlock.value = pSum[drainSide & 0x01] & ACCUM_MASK;
+				drainTransportBlock.isLast = (unsigned char) regIsMaxRow[drainSide & 0x01];
+			}
 			success = write_channel_nb_intel(
 					channel_drain_conv[idy][idx],
 					drainTransportBlock
@@ -7538,6 +7555,18 @@ void updateDrainTransport (
 				*pNextState = STATE_DRAIN_TRANSPORT_SEND_OTHERS;
 				*pNextIsLast = taggedBlockPreviousPE.isLast;
 				*pNextPSum = taggedBlockPreviousPE.value;
+
+				if (sendNextPESuccess == TRUE)
+				{
+					if (taggedBlockPreviousPE.isLast == TRUE)
+					{
+						*pNextState = STATE_DRAIN_TRANSPORT_SYNC;
+					}
+					else
+					{
+						*pNextState = STATE_DRAIN_TRANSPORT_DRAIN_OTHERS;
+					}
+				}
 			}
 		}
 		break;

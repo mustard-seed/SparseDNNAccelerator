@@ -97,7 +97,7 @@ channel t_output_cluster_tagged channel_compressor_to_tee[PE_COLS] __attribute__
 #else
 channel t_output_cluster_tagged channel_oa_buffer_to_oa_tee[PE_COLS] __attribute__((depth(0)));
 #endif
-channel t_output_dram_block_tagged channel_output_wide[PE_COLS] __attribute__((depth(0)));
+channel t_output_dram_block_tagged channel_output_wide[PE_COLS] __attribute__((depth(OA_DRAIN_CHANNEL_DEPTH)));
 
 /*
  *=========================================================
