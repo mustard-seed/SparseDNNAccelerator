@@ -131,43 +131,53 @@ protected:
 }; //testFixture
 
 #ifdef PLAY
-TEST_F (testFixture, conv_dense_input_dense_output_grouped)
+TEST_F (testFixture, throughput_diagnostic_conv3x3_input_channel_size)
 {
-    unsigned char inputWidth = 4;
-    unsigned char inputHeight = 4;
-    unsigned char numInputChannel = 16;
-    unsigned char numOutputChannel = numInputChannel;
-    unsigned char numInputGroup = 2;
-    unsigned char numOutputGroup = 2;
+    unsigned short inputWidth = 8*PE_COLS;
+    unsigned short inputHeight = 8;
+    unsigned char numOutputChannel = PE_ROWS;
+    unsigned char numInputGroup = 1;
+    unsigned char numOutputGroup = 1;
     unsigned char inputHeightSPUnitSize = 1;
     unsigned char inputWidthSPUnitSize = 1;
-    unsigned char sizeOutputTileWidthPerColFull = 2;
-    unsigned char sizeOutputTileHeight = 4;
+    unsigned short sizeOutputTileWidthPerColFull = 4;
+    unsigned short sizeOutputTileHeight = 4;
+    std::vector<unsigned int> vecInputChannel = {
+        8* COMPRESSION_WINDOW_SIZE * CLUSTER_SIZE
+        };
+
     unsigned char kernelSize = 3;
     bool flagEnableRelu = false;
-    bool flagSparseInput = false;
-    bool flagSparseOutput = false;
+    bool flagSparseInput = true;
+    bool flagSparseOutput = true;
     OPERATION op = CONVOLUTION;
     float bias = 0.0f;
-
-    launch(
-                inputWidth,
-                inputHeight,
-                numInputChannel,
-                numOutputChannel,
-                numInputGroup,
-                numOutputGroup,
-                inputHeightSPUnitSize,
-                inputWidthSPUnitSize,
-                sizeOutputTileWidthPerColFull,
-                sizeOutputTileHeight,
-                kernelSize,
-                flagEnableRelu,
-                flagSparseInput,
-                flagSparseOutput,
-                op,
-                bias
-          );
+    float prob = 1.0;
+    for (auto& inputChannel: vecInputChannel)
+    {
+        launch(
+                    inputWidth,
+                    inputHeight,
+                    inputChannel,
+                    numOutputChannel,
+                    numInputGroup,
+                    numOutputGroup,
+                    inputHeightSPUnitSize,
+                    inputWidthSPUnitSize,
+                    sizeOutputTileWidthPerColFull,
+                    sizeOutputTileHeight,
+                    kernelSize,
+                    flagEnableRelu,
+                    flagSparseInput,
+                    flagSparseOutput,
+                    op,
+                    bias,
+                    false, //back to back
+                    true, //perf test
+                    prob, //dense prob
+                    1 //channel prune scale
+              );
+     }
 }
 //TEST_F (testFixture, throughput_diagnostic_fully_connected)
 //{
@@ -332,36 +342,6 @@ TEST_F (testFixture, throughput_diagnostic_fully_connected)
           unsigned short outputChannel;
     } t_fc_pairs;
     std::vector<t_fc_pairs> vecTestsPairs = {
-            {.inputChannel=1, .outputChannel=32},
-            {.inputChannel=32, .outputChannel=32},
-            {.inputChannel=64, .outputChannel=32},
-            {.inputChannel=96, .outputChannel=32},
-            {.inputChannel=128, .outputChannel=32},
-            {.inputChannel=160, .outputChannel=32},
-            {.inputChannel=192, .outputChannel=32},
-            {.inputChannel=224, .outputChannel=32},
-            {.inputChannel=254, .outputChannel=32},
-
-            {.inputChannel=1, .outputChannel=64},
-            {.inputChannel=32, .outputChannel=64},
-            {.inputChannel=64, .outputChannel=64},
-            {.inputChannel=96, .outputChannel=64},
-            {.inputChannel=128, .outputChannel=64},
-            {.inputChannel=160, .outputChannel=64},
-            {.inputChannel=192, .outputChannel=64},
-            {.inputChannel=224, .outputChannel=64},
-            {.inputChannel=254, .outputChannel=64},
-
-            {.inputChannel=1, .outputChannel=128},
-            {.inputChannel=32, .outputChannel=128},
-            {.inputChannel=64, .outputChannel=128},
-            {.inputChannel=96, .outputChannel=128},
-            {.inputChannel=128, .outputChannel=128},
-            {.inputChannel=160, .outputChannel=128},
-            {.inputChannel=192, .outputChannel=128},
-            {.inputChannel=224, .outputChannel=128},
-            {.inputChannel=254, .outputChannel=128},
-
             {.inputChannel=1, .outputChannel=254},
             {.inputChannel=32, .outputChannel=254},
             {.inputChannel=64, .outputChannel=254},
@@ -418,7 +398,7 @@ TEST_F (testFixture, throughput_diagnostic_fully_connected)
      }
 }
 
-TEST_F (testFixture, throughput_diagnostic_planar)
+TEST_F (testFixture, throughput_diagnostic_conv1x1_feature_map_size)
 {
     //unsigned char inputWidth = 1;
     unsigned char inputHeight = 4;
@@ -473,6 +453,124 @@ TEST_F (testFixture, throughput_diagnostic_planar)
      }
 }
 
+TEST_F (testFixture, throughput_diagnostic_conv3x3_input_channel_size)
+{
+    unsigned short inputWidth = 8*PE_COLS;
+    unsigned short inputHeight = 8;
+    unsigned char numOutputChannel = PE_ROWS;
+    unsigned char numInputGroup = 1;
+    unsigned char numOutputGroup = 1;
+    unsigned char inputHeightSPUnitSize = 1;
+    unsigned char inputWidthSPUnitSize = 1;
+    unsigned short sizeOutputTileWidthPerColFull = 4;
+    unsigned short sizeOutputTileHeight = 4;
+    unsigned int UNIT_SIZE = 8;
+    std::vector<unsigned int> vecInputChannel = {
+        UNIT_SIZE,
+        2* UNIT_SIZE,
+        3* UNIT_SIZE,
+        4* UNIT_SIZE,
+        5* UNIT_SIZE,
+        6* UNIT_SIZE,
+        7* UNIT_SIZE,
+        8* UNIT_SIZE,
+        9* UNIT_SIZE,
+        10* UNIT_SIZE
+        };
+
+    unsigned char kernelSize = 3;
+    bool flagEnableRelu = false;
+    bool flagSparseInput = true;
+    bool flagSparseOutput = true;
+    OPERATION op = CONVOLUTION;
+    float bias = 0.0f;
+    float prob = 1.0;
+    for (auto& inputChannel: vecInputChannel)
+    {
+        launch(
+                    inputWidth,
+                    inputHeight,
+                    inputChannel,
+                    numOutputChannel,
+                    numInputGroup,
+                    numOutputGroup,
+                    inputHeightSPUnitSize,
+                    inputWidthSPUnitSize,
+                    sizeOutputTileWidthPerColFull,
+                    sizeOutputTileHeight,
+                    kernelSize,
+                    flagEnableRelu,
+                    flagSparseInput,
+                    flagSparseOutput,
+                    op,
+                    bias,
+                    false, //back to back
+                    true, //perf test
+                    prob, //dense prob
+                    1 //channel prune scale
+              );
+     }
+}
+
+TEST_F (testFixture, throughput_diagnostic_conv1x1_output_channel_size)
+{
+    unsigned short inputWidth = 8*PE_COLS;
+    unsigned short inputHeight = 8;
+    unsigned char numInputChannel = COMPRESSION_WINDOW_SIZE*CLUSTER_SIZE;
+    unsigned char numInputGroup = 1;
+    unsigned char numOutputGroup = 1;
+    unsigned char inputHeightSPUnitSize = 1;
+    unsigned char inputWidthSPUnitSize = 1;
+    unsigned short sizeOutputTileWidthPerColFull = 4;
+    unsigned short sizeOutputTileHeight = 4;
+    unsigned int UNIT_SIZE = 8;
+    std::vector<unsigned int> vecOutputChannel = {
+        UNIT_SIZE,
+        2* UNIT_SIZE,
+        3* UNIT_SIZE,
+        4* UNIT_SIZE,
+        5* UNIT_SIZE,
+        6* UNIT_SIZE,
+        7* UNIT_SIZE,
+        8* UNIT_SIZE,
+        9* UNIT_SIZE,
+        10* UNIT_SIZE
+        };
+
+    unsigned char kernelSize = 1;
+    bool flagEnableRelu = false;
+    bool flagSparseInput = true;
+    bool flagSparseOutput = true;
+    OPERATION op = CONVOLUTION;
+    float bias = 0.0f;
+    float prob = 1.0;
+    for (auto& outputChannel: vecOutputChannel)
+    {
+        launch(
+                    inputWidth,
+                    inputHeight,
+                    numInputChannel,
+                    outputChannel,
+                    numInputGroup,
+                    numOutputGroup,
+                    inputHeightSPUnitSize,
+                    inputWidthSPUnitSize,
+                    sizeOutputTileWidthPerColFull,
+                    sizeOutputTileHeight,
+                    kernelSize,
+                    flagEnableRelu,
+                    flagSparseInput,
+                    flagSparseOutput,
+                    op,
+                    bias,
+                    false, //back to back
+                    true, //perf test
+                    prob, //dense prob
+                    1 //channel prune scale
+              );
+     }
+}
+
 TEST_F (testFixture, throughput_diagnostic_add)
 {
     //unsigned char inputWidth = 1;
@@ -483,8 +581,8 @@ TEST_F (testFixture, throughput_diagnostic_add)
     unsigned char numOutputGroup = 1;
     unsigned char inputHeightSPUnitSize = 1;
     unsigned char inputWidthSPUnitSize = 1;
-    unsigned char sizeOutputTileWidthPerColFull = 8;
-    unsigned char sizeOutputTileHeight = inputHeight;
+    unsigned char sizeOutputTileWidthPerColFull = 4;
+    unsigned char sizeOutputTileHeight = 4;
     std::vector<unsigned short> vecInputWidth = {
         PE_COLS*sizeOutputTileWidthPerColFull,
         2*PE_COLS*sizeOutputTileWidthPerColFull,
@@ -1220,7 +1318,7 @@ std::vector<float> testFixture::generateInputTensor(
             {
                 for (unsigned int c=0; c<numICPerGroup; c++)
                 {
-                    unsigned char globalChannel = g*numICPerGroup+c;
+                    unsigned int globalChannel = g*numICPerGroup+c;
                     signed char fpBits = ((w % 2 == 1) && _alternateSign)
                             ? -1*((signed char) globalChannel) : globalChannel;
                     fixedPointNumber fpNumber(fpBits, FRAC_WIDTH, INT_WIDTH);
@@ -1245,7 +1343,7 @@ std::vector<float> testFixture::generateSparseInput(
      std::mt19937 generator(INPUT_SEED);
      std::bernoulli_distribution bernDistribution(denseProb);
      assert(_numInputChannel % _numGroupCurrentLayer == 0);
-     unsigned char numICPerGroup = _numInputChannel / _numGroupCurrentLayer;
+     unsigned int numICPerGroup = _numInputChannel / _numGroupCurrentLayer;
      std::vector<float> inputVector;
      bool writePositive = true;
      for (unsigned char g=0; g<_numGroupCurrentLayer;g++)
@@ -2191,7 +2289,7 @@ void testFixture::launch (
     */
     graph.vecInputInfo.emplace_back(GraphRuntime::t_blob_info{
                                         .memoryRegionID=0,
-                                        .channelPerGroup=numInputChannel0 / numGroupCurrentLayer,
+                                        .channelPerGroup=numInputChannel0 / (unsigned int) numGroupCurrentLayer,
                                         .group=numGroupCurrentLayer,
                                         .height=_inputHeight,
                                         .width=_inputWidth,
