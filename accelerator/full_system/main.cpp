@@ -996,6 +996,124 @@ TEST_F (testFixture, throughput_diagnostic_resnet50_conv6_ic384)
      }
 }
 
+TEST_F (testFixture, throughput_diagnostic_resnet50_conv6_oc320)
+{
+    unsigned short numInputChannel = 64;
+    unsigned short numOutputChannel = 320;
+    unsigned char numInputGroup = 1;
+    unsigned char numOutputGroup = 1;
+    unsigned char inputHeightSPUnitSize = 1;
+    unsigned char inputWidthSPUnitSize = 1;
+    unsigned short sizeOutputTileWidthPerColFull = 2;
+    unsigned short sizeOutputTileHeight = 8;
+    typedef struct {
+        unsigned int numTileVertical;
+        unsigned int numTileHorizontal;
+    } t_num_tile;
+    std::vector<t_num_tile> vecTileConfigs = {
+      {.numTileVertical=1, .numTileHorizontal=1},
+      {.numTileVertical=2, .numTileHorizontal=1},
+      {.numTileVertical=3, .numTileHorizontal=1},
+      {.numTileVertical=4, .numTileHorizontal=1},
+      {.numTileVertical=5, .numTileHorizontal=1},
+      {.numTileVertical=6, .numTileHorizontal=1},
+      {.numTileVertical=7, .numTileHorizontal=1}
+    };
+    unsigned char kernelSize = 1;
+    bool flagEnableRelu = false;
+    bool flagSparseInput = true;
+    bool flagSparseOutput = true;
+    OPERATION op = CONVOLUTION;
+    float bias = 0.0f;
+    float prob = 1.0;
+    for (t_num_tile& tileConfig: vecTileConfigs)
+    {
+        unsigned short inputWidth = tileConfig.numTileHorizontal * PE_COLS * sizeOutputTileWidthPerColFull;
+        unsigned short inputHeight = tileConfig.numTileVertical * sizeOutputTileHeight;
+        launch(
+                    inputWidth,
+                    inputHeight,
+                    numInputChannel,
+                    numOutputChannel,
+                    numInputGroup,
+                    numOutputGroup,
+                    inputHeightSPUnitSize,
+                    inputWidthSPUnitSize,
+                    sizeOutputTileWidthPerColFull,
+                    sizeOutputTileHeight,
+                    kernelSize,
+                    flagEnableRelu,
+                    flagSparseInput,
+                    flagSparseOutput,
+                    op,
+                    bias,
+                    false, //back to back
+                    true, //perf test
+                    prob, //dense prob
+                    1 //channel prune scale
+              );
+     }
+}
+
+TEST_F (testFixture, throughput_diagnostic_resnet50_conv6_oc384)
+{
+    unsigned short numInputChannel = 64;
+    unsigned short numOutputChannel = 384;
+    unsigned char numInputGroup = 1;
+    unsigned char numOutputGroup = 1;
+    unsigned char inputHeightSPUnitSize = 1;
+    unsigned char inputWidthSPUnitSize = 1;
+    unsigned short sizeOutputTileWidthPerColFull = 2;
+    unsigned short sizeOutputTileHeight = 8;
+    typedef struct {
+        unsigned int numTileVertical;
+        unsigned int numTileHorizontal;
+    } t_num_tile;
+    std::vector<t_num_tile> vecTileConfigs = {
+      {.numTileVertical=1, .numTileHorizontal=1},
+      {.numTileVertical=2, .numTileHorizontal=1},
+      {.numTileVertical=3, .numTileHorizontal=1},
+      {.numTileVertical=4, .numTileHorizontal=1},
+      {.numTileVertical=5, .numTileHorizontal=1},
+      {.numTileVertical=6, .numTileHorizontal=1},
+      {.numTileVertical=7, .numTileHorizontal=1}
+    };
+    unsigned char kernelSize = 1;
+    bool flagEnableRelu = false;
+    bool flagSparseInput = true;
+    bool flagSparseOutput = true;
+    OPERATION op = CONVOLUTION;
+    float bias = 0.0f;
+    float prob = 1.0;
+    for (t_num_tile& tileConfig: vecTileConfigs)
+    {
+        unsigned short inputWidth = tileConfig.numTileHorizontal * PE_COLS * sizeOutputTileWidthPerColFull;
+        unsigned short inputHeight = tileConfig.numTileVertical * sizeOutputTileHeight;
+        launch(
+                    inputWidth,
+                    inputHeight,
+                    numInputChannel,
+                    numOutputChannel,
+                    numInputGroup,
+                    numOutputGroup,
+                    inputHeightSPUnitSize,
+                    inputWidthSPUnitSize,
+                    sizeOutputTileWidthPerColFull,
+                    sizeOutputTileHeight,
+                    kernelSize,
+                    flagEnableRelu,
+                    flagSparseInput,
+                    flagSparseOutput,
+                    op,
+                    bias,
+                    false, //back to back
+                    true, //perf test
+                    prob, //dense prob
+                    1 //channel prune scale
+              );
+     }
+}
+
 TEST_F (testFixture, throughput_diagnostic_resnet50_conv6_oc512)
 {
     unsigned short numInputChannel = 64;
@@ -1017,15 +1135,7 @@ TEST_F (testFixture, throughput_diagnostic_resnet50_conv6_oc512)
       {.numTileVertical=4, .numTileHorizontal=1},
       {.numTileVertical=5, .numTileHorizontal=1},
       {.numTileVertical=6, .numTileHorizontal=1},
-      {.numTileVertical=7, .numTileHorizontal=1},
-
-    {.numTileVertical=1, .numTileHorizontal=2},
-    {.numTileVertical=2, .numTileHorizontal=2},
-    {.numTileVertical=3, .numTileHorizontal=2},
-    {.numTileVertical=4, .numTileHorizontal=2},
-    {.numTileVertical=5, .numTileHorizontal=2},
-    {.numTileVertical=6, .numTileHorizontal=2},
-    {.numTileVertical=7, .numTileHorizontal=2}
+      {.numTileVertical=7, .numTileHorizontal=1}
     };
     unsigned char kernelSize = 1;
     bool flagEnableRelu = false;
