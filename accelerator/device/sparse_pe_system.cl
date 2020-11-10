@@ -5560,46 +5560,6 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 	return output;
 }
 
-#define STATE_DRAIN_TRANSPORT_SYNC 0x0
-#define STATE_DRAIN_TRANSPORT_DRAIN_SELF 0X1
-#define STATE_DRAIN_TRANSPORT_DRAIN_OTHERS 0x2
-#define STATE_DRAIN_TRANSPORT_SEND_OTHERS 0x3
-
-typedef uint2_t t_drain_state;
-
-/**
- * @brief      Derive the interface outputs for the drainer
- *
- * @param[in]  currentState     The current state
- * @param      pReadPreviousPE  Pointer to the enable flag of reading from the PE below in the column
- * @param      pSendToNextPE    Pointer to the enable flag of writing to the PE above in the column
- */
-void getDrainTransportOutput (
-	t_drain_state currentState,
-
-	//Interface outputs
-	t_flag* pReadPreviousPE,
-	t_flag* pSendToNextPE
-	);
-
-void updateDrainTransport (
-	t_drain_state currentState,
-	t_flag currentIsLast,
-	t_accumulator currentPSum,
-
-	t_flag readPreviousPESuccess,
-	t_conv_drain_tagged taggedBlockPreviousPE,
-
-	t_flag sendNextPESuccess,
-
-	t_flag swap,
-	int idy,
-
-	t_drain_state *pNextState,
-	t_flag *pNextIsLast,
-	t_accumulator *pNextPSum
-	);
-
 #if defined (SPARSE_SYSTEM)
 
 
@@ -5610,11 +5570,6 @@ void updateDrainTransport (
 #define OPERAND_FILTER_MAC_SYNC 0x4
 #define OPERAND_FILTER_FILTER_SYNC 0x5
 #define OPERAND_FILTER_COMMIT 0x6
-
-#define STATE_DRAIN_TRANSPORT_SYNC 0x0
-#define STATE_DRAIN_TRANSPORT_DRAIN_SELF 0X1
-#define STATE_DRAIN_TRANSPORT_DRAIN_OTHERS 0x2
-typedef uint2_t t_drain_instruction;
 
 #ifndef SPARSE_UTILITY
 #define SPARSE_UTILITY
@@ -6396,17 +6351,12 @@ __kernel void kernelOperandFilter ()
 	#endif
 
 	//Psum and drain parameters
-	t_accumulator pSum[2];
+	t_accumulator pSum;
 	//unsigned char regMaxTransportID[2];
-	t_flag regIsMaxRow[2];
-	#pragma unroll
-	for (int i=0; i<2; i++)
-	{
-		pSum[i] = 0x0 & ACCUM_MASK;
-		regIsMaxRow[i] = 0;
-	}
-	uint1_t drainSide = 0;
-	t_drain_state drainInstruction = STATE_DRAIN_TRANSPORT_SYNC;
+	t_flag regIsMaxRow;
+
+	pSum = 0x0 & ACCUM_MASK;
+	regIsMaxRow = 0x0;
 
 	//========Weight filter states=========
 	t_instruction weightFilterInstruction = OPERAND_FILTER_READ_BIAS;
@@ -6526,13 +6476,10 @@ __kernel void kernelOperandFilter ()
 		t_start nextActivationWindowIndex = regActivationWindowStartIndex;
 		t_buffer_size nextActivationBufferSize = regActivationBufferSize;
 
-		t_flag swap = FALSE;
+		t_flag commit = FALSE;
 		//GOTTCHA: MUST APPLY THE AND MASK AFTER NEGATION !!!
-		t_flag nextIsMaxRow = regIsMaxRow[(~drainSide) & 0x01];
+		t_flag nextIsMaxRow = regIsMaxRow;
 
-		t_flag nextDrainIsMaxRow = regIsMaxRow[drainSide & 0x01];
-		t_accumulator nextDrainPSum = pSum[drainSide & 0x01] & ACCUM_MASK;
-		t_drain_state nextDrainInstruction = drainInstruction;
 
 		//t_bitmask nextMutualBitmask = regMutualBitmask;
 
@@ -6807,7 +6754,7 @@ __kernel void kernelOperandFilter ()
 		if ( (weightFilterInstruction == OPERAND_FILTER_READ_BIAS) && (weightTBAvailable == TRUE) )
 		{
 			//GOTTCHA: MUST APPLY THE AND MASK AFTER NEGATION !!!
-			pSum[(~drainSide) & 0x01] = ACCUM_MASK & ((t_accumulator) transferBlock2Bias(weightBlock.values));
+			pSum = ACCUM_MASK & ((t_accumulator) transferBlock2Bias(weightBlock.values));
 		}
 		else if ( (validActivationMac == TRUE) && (validWeightMac == TRUE))
 		{
@@ -6825,7 +6772,7 @@ __kernel void kernelOperandFilter ()
 
 			t_accumulator tempPSum = madd(nextMacActivationBuffer, nextMacWeightBuffer);
 			//GOTTCHA: MUST APPLY THE AND MASK AFTER NEGATION !!!
-			pSum[(~drainSide) & 0x01] += (MULT_MASK & tempPSum);
+			pSum += (MULT_MASK & tempPSum);
 		}
 
 		//=====================================
@@ -6833,106 +6780,25 @@ __kernel void kernelOperandFilter ()
 		/**
 		 * Perform drain transaction
 		 */
-		t_flag readPreviousPE = FALSE;
-		t_flag sendToNextPE = FALSE;
-
-		getDrainTransportOutput (
-			//currentState
-			drainInstruction,
-
-			//pReadPreviousPE
-			&readPreviousPE,
-			//pSendToNextPE
-			&sendToNextPE
-			);
-
-		t_flag readPreviousPESuccess = FALSE;
-		t_conv_drain_tagged taggedBlockPreviousPE;
-		t_flag sendNextPESuccess = FALSE;
-
-		if (idy < (PE_ROWS - 1))
+		if ( (weightFilterInstruction == OPERAND_FILTER_COMMIT) 
+			&& (activationFilterInstruction == OPERAND_FILTER_COMMIT)
+			)
 		{
-			if (readPreviousPE == TRUE)
-			{
-				bool success = false;
-				taggedBlockPreviousPE = read_channel_nb_intel(
-						channel_drain_conv[idy+1][idx]
-						, &success
-					);
-				if (success == true)
-				{
-					EMULATOR_PRINT(("[Op Filter DRAIN (%d, %d)] Received a value from others.\n", idy, idx));
-					readPreviousPESuccess = TRUE;
-					sendToNextPE = TRUE;
-				}
-			}
-		}
-
-		if (sendToNextPE == TRUE)
-		{
-			bool success = false;
 			t_conv_drain_tagged drainTransportBlock;
-			if (readPreviousPE == TRUE)
-			{
-				drainTransportBlock = taggedBlockPreviousPE;
-			}
-			else
-			{
-				drainTransportBlock.value = pSum[drainSide & 0x01] & ACCUM_MASK;
-				drainTransportBlock.isLast = (unsigned char) regIsMaxRow[drainSide & 0x01];
-			}
-			success = write_channel_nb_intel(
-					channel_drain_conv[idy][idx],
+			drainTransportBlock.value = pSum & ACCUM_MASK;
+			drainTransportBlock.isLast = (unsigned char) regIsMaxRow;
+			bool success = write_channel_nb_intel(
+					channel_drain_conv_local[idy][idx],
 					drainTransportBlock
 					);
 			if (success == true)
 			{
 				EMULATOR_PRINT(("[Op Filter DRAIN (%d, %d)] Sent a value: %#06x\n", idy, idx, (int) drainTransportBlock.value));
-				sendNextPESuccess = TRUE;
+				commit = TRUE;
 			}
 		}
 
-		//GOTTCHA: MUST APPLY THE AND MASK AFTER NEGATION !!!
-		regIsMaxRow [(~drainSide) & 0x01] = nextIsMaxRow;
-
-		if ( (weightFilterInstruction == OPERAND_FILTER_COMMIT) && (activationFilterInstruction == OPERAND_FILTER_COMMIT)
-				&& (drainInstruction == STATE_DRAIN_TRANSPORT_SYNC) 
-			)
-		{
-			swap = TRUE;
-		}
-
-		//=========Next state update==============
-		updateDrainTransport (
-			//t_drain_state currentState,
-			drainInstruction,
-			//t_flag currentIsLast,
-			regIsMaxRow[drainSide & 0x1],
-
-			//t_accumulator currentPSum,
-			pSum [drainSide & 0x1],
-
-			//t_flag readPreviousPESuccess,
-			readPreviousPESuccess,
-			//t_transferblock_tagged taggedBlockPreviousPE,
-			taggedBlockPreviousPE,
-
-			//t_flag sendNextPESuccess,
-			sendNextPESuccess,
-
-			//t_flag swap,
-			swap,
-			idy,
-
-			//t_drain_state *pNextState,
-			&nextDrainInstruction,
-			//t_flag *pNextIsLast,
-			&nextDrainIsMaxRow,
-			//t_accumulator *pNextPSum
-			&nextDrainPSum
-			);
-
-
+		regIsMaxRow = nextIsMaxRow;
 
 		nextWeightFilterInstruction = sparseOperandFilterStateUpdate (
 				weightFilterInstruction, //current instruction
@@ -6946,7 +6812,7 @@ __kernel void kernelOperandFilter ()
 				activationFilterDone,
 				validWeightMac,
 				validActivationMac,
-				swap
+				commit
 			);
 
 		nextActivationFilterInstruction = sparseOperandFilterStateUpdate (
@@ -6961,7 +6827,7 @@ __kernel void kernelOperandFilter ()
 				weightFilterDone,
 				validActivationMac,
 				validWeightMac,
-				swap
+				commit
 			);
 
 		// #if defined(EMUPRINT)
@@ -7035,15 +6901,6 @@ __kernel void kernelOperandFilter ()
 			regActivationBitmaskBytes.bytes[i] = nextActivationBitmaskBytes.bytes[i];
 		}
 
-		drainInstruction = nextDrainInstruction;
-		pSum[drainSide & 0x01] = nextDrainPSum;
-		regIsMaxRow[drainSide & 0x01] = nextDrainIsMaxRow;
-
-		if ( swap == TRUE )
-		{
-			//GOTTCHA: MUST APPLY THE AND MASK AFTER NEGATION !!!
-			drainSide = (~drainSide) & 0x01;	
-		}
 		
 		//=====================================================
 	} //while
@@ -7142,17 +6999,12 @@ __kernel void kernelDensePE ()
 	#endif
 	//====================registers===============
 	//Psum and drain parameters
-	t_accumulator pSum[2];
+	t_accumulator pSum;
 	//unsigned char regMaxTransportID[2];
-	t_flag regIsMaxRow[2];
-	#pragma unroll
-	for (int i=0; i<2; i++)
-	{
-		pSum[i] = 0 & ACCUM_MASK;
-		regIsMaxRow[i] = 0;
-	}
-	uint1_t drainSide = 0;
-	t_drain_state drainInstruction = STATE_DRAIN_TRANSPORT_SYNC;
+	t_flag regIsMaxRow;
+
+	pSum = 0x0 & ACCUM_MASK;
+	regIsMaxRow = 0x0;
 
 	//=============Weight side instruction============
 	t_dense_pe_instruction regWeightInstruction= DENSE_PE_INSTRUCTION_READ_BIAS;
@@ -7179,13 +7031,11 @@ __kernel void kernelDensePE ()
 		t_dense_pe_flag nextActivationIsLast = regActivationIsLast;
 		t_dense_pe_flag validActivationMac = FALSE;
 
-		t_flag swap = FALSE;
-		//GOTTCHA: MUST APPLY THE AND MASK AFTER NEGATION !!!
-		t_flag nextIsMaxRow = regIsMaxRow[(~drainSide) & 0x01];
+		t_flag commit = FALSE;
 
-		t_flag nextDrainIsMaxRow = regIsMaxRow[drainSide & 0x01];
-		t_accumulator nextDrainPSum = pSum[drainSide & 0x01];
-		t_drain_state nextDrainInstruction = drainInstruction;
+		t_flag nextIsMaxRow = regIsMaxRow;
+
+		t_accumulator nextDrainPSum = pSum;
 
 		//Handling reading from the W channel
 		if ( (regWeightInstruction == DENSE_PE_INSTRUCTION_READ_BIAS)
@@ -7297,7 +7147,7 @@ __kernel void kernelDensePE ()
 			 && (weightTBAvailable == TRUE))
 		{
 			//GOTTCHA: MUST APPLY THE AND MASK AFTER NEGATION !!!
-			pSum[(~drainSide) & 0x01] = ACCUM_MASK & ((t_accumulator) transferBlock2Bias(nextWeightTB));
+			pSum = ACCUM_MASK & ((t_accumulator) transferBlock2Bias(nextWeightTB));
 		}
 		else if ( (validActivationMac == TRUE) && (validWeightMac == TRUE))
 		{
@@ -7324,109 +7174,32 @@ __kernel void kernelDensePE ()
 
 			t_accumulator tempPSum = madd(simdActivation, simdWeight);
 			//GOTTCHA: MUST APPLY THE AND MASK AFTER NEGATION !!!
-			pSum[(~drainSide) & 0x01] += (MULT_MASK & tempPSum);
+			pSum += (MULT_MASK & tempPSum);
 		}
 
 		/**
 		 * Perform drain transaction
 		 */
-		t_flag readPreviousPE = FALSE;
-		t_flag sendToNextPE = FALSE;
-
-		getDrainTransportOutput (
-			//currentState
-			drainInstruction,
-
-			//pReadPreviousPE
-			&readPreviousPE,
-			//pSendToNextPE
-			&sendToNextPE
-			);
-
-		t_flag readPreviousPESuccess = FALSE;
-		t_conv_drain_tagged taggedBlockPreviousPE;
-		t_flag sendNextPESuccess = FALSE;
-
-		if (idy < PE_ROWS - 1)
+		if ( (regWeightInstruction == DENSE_PE_INSTRUCTION_COMMIT) 
+			&& (regActivationInstruction == DENSE_PE_INSTRUCTION_COMMIT)
+			)
 		{
-			if (readPreviousPE == TRUE)
-			{
-				bool success = false;
-				taggedBlockPreviousPE = read_channel_nb_intel(
-						channel_drain_conv[idy+1][idx]
-						, &success
-					);
-				if (success == true)
-				{
-					EMULATOR_PRINT(("[DENSE PE DRAIN (%d, %d)] Received a value from others.\n", idy, idx));
-					readPreviousPESuccess = TRUE;
-					sendToNextPE = TRUE;
-				}
-			}
-		}
-
-		if (sendToNextPE == TRUE)
-		{
-			bool success = false;
 			t_conv_drain_tagged drainTransportBlock;
-			if (readPreviousPE == TRUE)
-			{
-				drainTransportBlock = taggedBlockPreviousPE;
-			}
-			else
-			{
-				drainTransportBlock.value = pSum[drainSide & 0x01] & ACCUM_MASK;
-				drainTransportBlock.isLast = (unsigned char) regIsMaxRow[drainSide & 0x01];
-			}
-			success = write_channel_nb_intel(
-					channel_drain_conv[idy][idx],
+			drainTransportBlock.value = pSum & ACCUM_MASK;
+			drainTransportBlock.isLast = (unsigned char) regIsMaxRow;
+			bool success = write_channel_nb_intel(
+					channel_drain_conv_local[idy][idx],
 					drainTransportBlock
 					);
 			if (success == true)
 			{
 				EMULATOR_PRINT(("[DENSE PE DRAIN (%d, %d)] Sent a value. %#06x \n", idy, idx, drainTransportBlock.value));
-				sendNextPESuccess = TRUE;
+				commit = TRUE;	
 			}
 		}
 
 		//Update registers
-		regIsMaxRow [(~drainSide) & 0x01] = nextIsMaxRow;
-
-		if ( (regWeightInstruction == DENSE_PE_INSTRUCTION_COMMIT) && (regActivationInstruction == DENSE_PE_INSTRUCTION_COMMIT)
-				&& (drainInstruction == STATE_DRAIN_TRANSPORT_SYNC) 
-			)
-		{
-			swap = TRUE;	
-		}
-
-		updateDrainTransport (
-			//t_drain_state currentState,
-			drainInstruction,
-			//t_flag currentIsLast,
-			regIsMaxRow[drainSide & 0x1],
-
-			//t_accumulator currentPSum,
-			pSum [drainSide & 0x1],
-
-			//t_flag readPreviousPESuccess,
-			readPreviousPESuccess,
-			//t_transferblock_tagged taggedBlockPreviousPE,
-			taggedBlockPreviousPE,
-
-			//t_flag sendNextPESuccess,
-			sendNextPESuccess,
-
-			//t_flag swap,
-			swap,
-			idy,
-
-			//t_drain_state *pNextState,
-			&nextDrainInstruction,
-			//t_flag *pNextIsLast,
-			&nextDrainIsMaxRow,
-			//t_accumulator *pNextPSum
-			&nextDrainPSum
-			);
+		regIsMaxRow = nextIsMaxRow;
 
 		nextWeightInstruction = densePEInstructionUpdate (
 				regWeightInstruction, //current Instruction
@@ -7434,7 +7207,7 @@ __kernel void kernelDensePE ()
 				activationTBAvailable, //otherTBAvailable,
 				nextWeightIsLast, //thisIsLast
 				nextActivationIsLast, //otherIsLast
-				swap
+				commit
 			);
 
 		nextActivationInstruction = densePEInstructionUpdate (
@@ -7443,7 +7216,7 @@ __kernel void kernelDensePE ()
 				weightTBAvailable, //otherTBAvailable,
 				nextActivationIsLast, //thisIsLast
 				nextWeightIsLast, //otherIsLast
-				swap
+				commit
 			);
 
 		regWeightInstruction = nextWeightInstruction;
@@ -7454,139 +7227,183 @@ __kernel void kernelDensePE ()
 		regActivationIsLast = nextActivationIsLast;
 		regActivationTB = nextActivationTB;
 
-		drainInstruction = nextDrainInstruction;
-		pSum[drainSide & 0x01] = nextDrainPSum;
-		regIsMaxRow[drainSide & 0x01] = nextDrainIsMaxRow;
-
-		if ( (regWeightInstruction == DENSE_PE_INSTRUCTION_COMMIT) && (regActivationInstruction == DENSE_PE_INSTRUCTION_COMMIT)
-		&& (drainInstruction == STATE_DRAIN_TRANSPORT_SYNC) 
-			)
-		{
-			//GOTTCHA: MUST APPLY THE AND MASK AFTER NEGATION !!!
-			drainSide = (~drainSide) & 0x01;	
-			nextDrainInstruction = STATE_DRAIN_TRANSPORT_DRAIN_SELF;	
-		}	
 	} // while-loop
 
 }
 #endif //SPARSE SYSTEM
-void getDrainTransportOutput (
-	t_drain_state currentState,
 
-	//Interface outputs
-	t_flag* pReadPreviousPE,
-	t_flag* pSendToNextPE
-	)
+//#define STATE_DRAIN_TRANSPORT_SYNC 0x0
+#define STATE_DRAIN_TRANSPORT_DRAIN_SELF 0X0
+#define STATE_DRAIN_TRANSPORT_SEND_SELF_RETRY 0X1
+#define STATE_DRAIN_TRANSPORT_DRAIN_OTHERS 0x2
+#define STATE_DRAIN_TRANSPORT_SEND_OTHERS_RETRY 0x3
+
+typedef uint2_t t_drain_state;
+
+__attribute__((task))
+__attribute__((max_global_work_dim(0)))
+#ifdef FULL_SYSTEM
+__attribute__((num_compute_units(PE_ROWS, PE_COLS)))
+#endif
+__attribute__((autorun))
+__kernel void kernelDrainTransport ()
 {
-	*pSendToNextPE = FALSE;
-	if ((currentState == STATE_DRAIN_TRANSPORT_DRAIN_SELF)
-			|| (currentState == STATE_DRAIN_TRANSPORT_SEND_OTHERS))
+	//Obtain kernel location
+	#ifdef FULL_SYSTEM
+		int idx = get_compute_id(1);
+		int idy = get_compute_id(0);
+	#else
+		int idx = 0;
+		int idy = 0;
+	#endif	
+
+	#if defined(EMULATOR) && defined(EMUPRINT)
+		unsigned short countPrint = 0x0;
+	#endif
+
+	/**
+	 * Registers
+	 */
+	t_drain_state regDrainState = STATE_DRAIN_TRANSPORT_DRAIN_SELF;
+	t_conv_drain_tagged regDrainPacket;
+
+
+	#pragma ii 1
+	while (1)
 	{
-		*pSendToNextPE = TRUE;
-	}
+		/**
+		 * 	Local signals
+		 */
+		t_flag flagDrainLocalPeSuccess = FALSE;
+		t_flag flagDrainPreviousPeSuccess = FALSE;
+		t_flag flagSendToNextPeRequest = FALSE;
+		t_flag flagSendToNextPeSuccess = FALSE;
 
-	*pReadPreviousPE = FALSE;
-	if (currentState == STATE_DRAIN_TRANSPORT_DRAIN_OTHERS)
-	{
-		*pReadPreviousPE = TRUE;
-	}
+		t_drain_state nextDrainState = regDrainState;
 
-}
+		t_conv_drain_tagged nextDrainPacket = regDrainPacket;
 
-void updateDrainTransport (
-	t_drain_state currentState,
-	t_flag currentIsLast,
-	t_accumulator currentPSum,
-
-	t_flag readPreviousPESuccess,
-	t_conv_drain_tagged taggedBlockPreviousPE,
-
-	t_flag sendNextPESuccess,
-
-	t_flag swap,
-	int idy,
-
-	t_drain_state *pNextState,
-	t_flag *pNextIsLast,
-	t_accumulator *pNextPSum
-	)
-{
-	*pNextState = currentState;
-	*pNextIsLast = currentIsLast;
-	*pNextPSum = currentPSum;
-	switch (currentState) {
-		case STATE_DRAIN_TRANSPORT_SYNC: {
-			if (swap == TRUE)
+		/**
+		 * Data path
+		 */
+		if (regDrainState == STATE_DRAIN_TRANSPORT_DRAIN_SELF)
+		{
+			bool success = false;
+			nextDrainPacket = read_channel_nb_intel(
+					channel_drain_conv_local[idy][idx],
+					&success
+				);
+			flagDrainLocalPeSuccess = success ? TRUE : FALSE;
+		} //if (drainState == STATE_DRAIN_TRANSPORT_DRAIN_SELF)
+		else if (regDrainState == STATE_DRAIN_TRANSPORT_DRAIN_OTHERS)
+		{
+			if (idy < (PE_ROWS - 1))
 			{
-				*pNextState = STATE_DRAIN_TRANSPORT_DRAIN_SELF;
+				bool success = false;
+				nextDrainPacket = read_channel_nb_intel(
+						channel_drain_conv[idy+1][idx],
+						&success
+					);
+				flagDrainPreviousPeSuccess = success ? TRUE : FALSE;
 			}
-		}
-		break;
+		} //else if (drainState == STATE_DRAIN_TRANSPORT_DRAIN_OTHERS)
 
-		case STATE_DRAIN_TRANSPORT_DRAIN_SELF: {
-			if (sendNextPESuccess == TRUE)
-			{
-				if (idy < (PE_ROWS-1))
+		flagSendToNextPeRequest = 
+			((regDrainState == STATE_DRAIN_TRANSPORT_SEND_SELF_RETRY)
+			|| (regDrainState == STATE_DRAIN_TRANSPORT_SEND_OTHERS_RETRY)
+			|| (flagDrainLocalPeSuccess == TRUE)
+			|| (flagDrainPreviousPeSuccess == TRUE)) ? TRUE : FALSE;
+
+		if (flagSendToNextPeRequest == TRUE)
+		{
+			bool success = write_channel_nb_intel(
+					channel_drain_conv[idy][idx],
+					nextDrainPacket
+				);
+			flagSendToNextPeSuccess = success ? TRUE : FALSE;
+		}
+
+		/**
+		 * State update
+		 *  #define STATE_DRAIN_TRANSPORT_DRAIN_SELF 0X0
+			#define STATE_DRAIN_TRANSPORT_SEND_SELF_RETRY 0X1
+			#define STATE_DRAIN_TRANSPORT_DRAIN_OTHERS 0x2
+			#define STATE_DRAIN_TRANSPORT_SEND_OTHERS_RETRY 0x3
+		 */
+		switch (regDrainState) {
+			case STATE_DRAIN_TRANSPORT_DRAIN_SELF: {
+				if (flagDrainLocalPeSuccess == TRUE)
 				{
-					if (currentIsLast == TRUE)
+					nextDrainState = STATE_DRAIN_TRANSPORT_SEND_SELF_RETRY;
+					if (flagSendToNextPeSuccess == TRUE)
 					{
-						*pNextState = STATE_DRAIN_TRANSPORT_SYNC;
+						if (idy == (PE_ROWS-1))
+						{
+							nextDrainState = STATE_DRAIN_TRANSPORT_DRAIN_SELF;
+						}
+						else
+						{
+							nextDrainState = STATE_DRAIN_TRANSPORT_DRAIN_OTHERS;
+							if (nextDrainPacket.isLast == TRUE)
+							{
+								nextDrainState = STATE_DRAIN_TRANSPORT_DRAIN_SELF;
+							}
+						}
+					}
+				}
+			}	
+			break; //STATE_DRAIN_TRANSPORT_DRAIN_SELF
+			case STATE_DRAIN_TRANSPORT_SEND_SELF_RETRY: {
+				if (flagSendToNextPeSuccess == TRUE)
+				{
+					if (idy == (PE_ROWS-1))
+					{
+						nextDrainState = STATE_DRAIN_TRANSPORT_DRAIN_SELF;
 					}
 					else
 					{
-						*pNextState = STATE_DRAIN_TRANSPORT_DRAIN_OTHERS;
+						nextDrainState = STATE_DRAIN_TRANSPORT_DRAIN_OTHERS;
+						if (nextDrainPacket.isLast == TRUE)
+						{
+							nextDrainState = STATE_DRAIN_TRANSPORT_DRAIN_SELF;
+						}
 					}
 				}
-				else
+			}	
+			break; //STATE_DRAIN_TRANSPORT_DRAIN_SELF
+			case STATE_DRAIN_TRANSPORT_DRAIN_OTHERS: {
+				if (flagDrainPreviousPeSuccess == TRUE)
 				{
-					*pNextState = STATE_DRAIN_TRANSPORT_SYNC;
-				}
-			}
-		}
-		break;
-
-		case STATE_DRAIN_TRANSPORT_DRAIN_OTHERS: {
-			if (readPreviousPESuccess == TRUE)
-			{
-				*pNextState = STATE_DRAIN_TRANSPORT_SEND_OTHERS;
-				*pNextIsLast = taggedBlockPreviousPE.isLast;
-				*pNextPSum = taggedBlockPreviousPE.value;
-
-				if (sendNextPESuccess == TRUE)
-				{
-					if (taggedBlockPreviousPE.isLast == TRUE)
+					nextDrainState = STATE_DRAIN_TRANSPORT_SEND_OTHERS_RETRY;
+					if (flagSendToNextPeSuccess == TRUE)
 					{
-						*pNextState = STATE_DRAIN_TRANSPORT_SYNC;
+						if (nextDrainPacket.isLast == TRUE)
+						{
+							nextDrainState = STATE_DRAIN_TRANSPORT_DRAIN_SELF;
+						}
 					}
-					else
+				}
+			}	
+			break; //STATE_DRAIN_TRANSPORT_DRAIN_SELF
+			case STATE_DRAIN_TRANSPORT_SEND_OTHERS_RETRY: {
+				if (flagSendToNextPeSuccess == TRUE)
+				{
+					if (nextDrainPacket.isLast == TRUE)
 					{
-						*pNextState = STATE_DRAIN_TRANSPORT_DRAIN_OTHERS;
+						nextDrainState = STATE_DRAIN_TRANSPORT_DRAIN_SELF;
 					}
 				}
-			}
-		}
-		break;
+			}	
+			break; //STATE_DRAIN_TRANSPORT_DRAIN_SELF
+		} //switch (regDrainState)
 
-		case STATE_DRAIN_TRANSPORT_SEND_OTHERS: {
-			if (sendNextPESuccess == TRUE)
-			{
-				if (currentIsLast == TRUE)
-				{
-					*pNextState = STATE_DRAIN_TRANSPORT_SYNC;
-				}
-				else
-				{
-					*pNextState = STATE_DRAIN_TRANSPORT_DRAIN_OTHERS;
-				}
-			}
-		}
-		break;
 
-		default:
-		break;
+		/**
+		 * Register updates
+		 */
+		regDrainPacket = nextDrainPacket;
+		regDrainState = nextDrainState;
 	}
-}
-
-
+} //kernelDrainTransport
 #endif //PE_SYSTEM
 
