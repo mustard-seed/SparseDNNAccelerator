@@ -7377,6 +7377,7 @@ __kernel void kernelDrainTransport ()
 					nextDrainState = STATE_DRAIN_TRANSPORT_SEND_OTHERS_RETRY;
 					if (flagSendToNextPeSuccess == TRUE)
 					{
+						nextDrainState = STATE_DRAIN_TRANSPORT_DRAIN_OTHERS;
 						if (nextDrainPacket.isLast == TRUE)
 						{
 							nextDrainState = STATE_DRAIN_TRANSPORT_DRAIN_SELF;
@@ -7388,6 +7389,7 @@ __kernel void kernelDrainTransport ()
 			case STATE_DRAIN_TRANSPORT_SEND_OTHERS_RETRY: {
 				if (flagSendToNextPeSuccess == TRUE)
 				{
+					nextDrainState = STATE_DRAIN_TRANSPORT_DRAIN_OTHERS;
 					if (nextDrainPacket.isLast == TRUE)
 					{
 						nextDrainState = STATE_DRAIN_TRANSPORT_DRAIN_SELF;
