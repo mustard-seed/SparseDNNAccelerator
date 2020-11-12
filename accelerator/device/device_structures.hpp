@@ -64,7 +64,9 @@ Types involved in operations
 ==================================================================
 */
 #ifdef INTELFPGA_CL
-#if (ACCUMULATOR_WIDTH == 32)
+#if defined(EMULATOR)
+typedef signed int t_accumulator;
+#elif (ACCUMULATOR_WIDTH == 32)
 typedef signed int t_accumulator;
 #elif (ACCUMULATOR_WIDTH == 24)
 typedef int24_t t_accumulator;
@@ -355,18 +357,24 @@ typedef struct __attribute__((aligned(16)))
     //Number of dram blocks to reduce per output dram block
     t_ushort numDramBlocksToReduce;
 
-    //Number of output dram blocks to produce in a tile
-    t_ushort numOutputBlocks;
+    //Number of output dram blocks to be processed per col
+    //Seen by the misc units ONLY
+    t_ushort numOutputBlocksPerCol;
 
-    //Number of output dram blocks per strip
+    // //Number of output dram blocks per group.
+    // //Seen by the misc controller ONLY
+    // t_ushort numOutputBlocksPerGroup;
+
+    //Number of output dram blocks summmed along a strip across on groups
+    //Seen by the misc controller ONLY
     t_ushort numOutputBlocksPerStrip;
 
     //Bit [2:0] Shift amount
     //Bit [3] Flag for left/right shift. 0 for right, 1 for left
     //t_uchar flagLeftShiftCatShiftAmount;
 
-    ////Number of effective values in the final dram block
-    t_uchar numEffectiveValuesInLastStrip;
+    ////Number of effective values in the final dram block in a group
+    t_uchar numEffectiveValuesInLastOutputBlockInGroup;
 
 } t_misc_instruction;
 
@@ -524,21 +532,14 @@ typedef struct __attribute__((packed))
     //Bit[5:4]: OpCode. 00: Add; 01: Max Pooling; 10: Stream
     t_uchar controlBits;
 
-    //Number of dram blocks to reduce per output dram block
+    //Number of dram blocks to reduce for eaach output dram block
     unsigned short numDramBlocksToReduce;
 
-    //Number of output dram blocks to produce in a tile
+    //Number of output dram blocks to produce by a MISC engine in a tile plane
     unsigned short numOutputBlocks;
 
-    //Number of output dram blocks per strip
-    unsigned short numOutputBlocksPerStrip;
-
-    //Bit [2:0] Shift amount
-    //Bit [3] Flag for left/right shift. 0 for right, 1 for left
-    //t_uchar flagLeftShiftCatShiftAmount;
-
-    ////Number of effective values in the final dram block
-    t_uchar numEffectiveValuesInLastStrip;
+    ////Number of effective values per output block in the tile;
+    t_uchar numEffectiveValuesPerOutputBlock;
 
 } t_misc_control_packet;
 

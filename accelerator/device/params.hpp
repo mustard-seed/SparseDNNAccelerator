@@ -87,8 +87,8 @@
 	#define PE_COLS 2
 #endif
 
-#define CHANNEL_DEPTH 4
-#define OA_DRAIN_CHANNEL_DEPTH 8
+#define CHANNEL_DEPTH 2
+#define OA_DRAIN_CHANNEL_DEPTH 2
 
 //Encoding weight length
 #define ENCODING_LENGTH 64
@@ -175,7 +175,12 @@
 
 //Accumulator width
 #define ACCUMULATOR_WIDTH 20
-#if (ACCUMULATOR_WIDTH == 32)
+#if defined(EMULATOR)
+#pragma message("WARNING: IN EMULATOR MODE, ACCUMULATOR_WIDTH IS FIXED TO 32")
+#define ACCUM_MASK 0x0FFFFFFFF
+#define MULT_MASK 0x0FFFFFFFF
+#define ACCUM_MIN 0x80000000
+#elif (ACCUMULATOR_WIDTH == 32)
 #define ACCUM_MASK 0x0FFFFFFFF
 #define MULT_MASK 0x0FFFFFFFF
 #define ACCUM_MIN 0x80000000

@@ -2277,15 +2277,26 @@ __kernel void kernelMiscControlMover (
 	for (int i=0; i<numInstruction; i++)
 	{
 		t_misc_instruction instruction = pInstruction[i];
-		t_misc_control_packet packet;
-		packet.controlBits = instruction.controlBits;
-		packet.numDramBlocksToReduce = instruction.numDramBlocksToReduce;
-		packet.numOutputBlocks	=	instruction.numOutputBlocks;
-		packet.numOutputBlocksPerStrip = instruction.numOutputBlocksPerStrip;
-		packet.numEffectiveValuesInLastStrip = instruction.numEffectiveValuesInLastStrip;
-		write_channel_intel(channel_misc_instruction[0], packet);
-		EMULATOR_PRINT(("[kernelMiscControlMover] Sent instruction %d \n",
-						i));
+		unsigned short numDramBlocksToReduce = instruction.numDramBlocksToReduce;
+		unsigned short numOutputBlocksPerCol = instruction.numOutputBlocksPerCol;
+		unsigned short numOutputBlocksPerStrip = instruction.numOutputBlocksPerStrip;
+		unsigned char numEffectiveValuesInLastOutputBlockInGroup = instruction.numEffectiveValuesInLastOutputBlockInGroup;
+		for (unsigned short iChunk=0; iChunk<numOutputBlocksPerStrip; iChunk++)
+		{
+			t_misc_control_packet packet;
+			packet.controlBits = instruction.controlBits;
+			packet.numDramBlocksToReduce = numDramBlocksToReduce;
+			packet.numOutputBlocks	=	numOutputBlocksPerCol;
+			packet.numEffectiveValuesPerOutputBlock = 
+				((iChunk+1) == numOutputBlocksPerStrip) ? 
+					numEffectiveValuesInLastOutputBlockInGroup
+					: BURST_SIZE_BYTE;
+
+			write_channel_intel(channel_misc_instruction[0], packet);
+			EMULATOR_PRINT(("[kernelMiscControlMover] Sent instruction (%d:%d) \n",
+							i, iChunk));
+
+		}
 	}
 }
 
@@ -2316,38 +2327,30 @@ __kernel void kernelMisc ()
 		uint2_t opcode = (controlPacket.controlBits >> 4) & 0x03;
 		unsigned short numDramBlocksToReduce = controlPacket.numDramBlocksToReduce;
 		unsigned short numOutputBlocks = controlPacket.numOutputBlocks;
-		unsigned short numOutputBlocksPerStrip = controlPacket.numOutputBlocksPerStrip;
-		unsigned char numEffectiveValuesInLastStrip = controlPacket.numEffectiveValuesInLastStrip;
+		unsigned char numEffectiveValuesPerOutputBlock = controlPacket.numEffectiveValuesPerOutputBlock;
 
 		EMULATOR_PRINT(("[kernelMisc %d] Received command "
 						"opcode=%#04x, "
 						"numOutputBlocks=%d, "
 						"numDramBlocksToReduce=%d, "
-						"numOutputBlocksPerStrip=%d, "
-						"numEffectiveValuesInLastStrip=%d \n",
+						"numEffectiveValuesPerOutputBlock=%d \n",
 						colID, 
 						((unsigned char)opcode), 
 						numOutputBlocks, 
 						numDramBlocksToReduce, 
-						numOutputBlocksPerStrip,
-						numEffectiveValuesInLastStrip));
+						numEffectiveValuesPerOutputBlock));
 
-		unsigned short iterDramBlockInOutputStrip = 0;
 		for (unsigned short iOutput=0; iOutput < numOutputBlocks; iOutput++)
 		{
-			unsigned char numEffectiveValues = (iterDramBlockInOutputStrip < (numOutputBlocksPerStrip-1)) ? BURST_SIZE_BYTE : numEffectiveValuesInLastStrip;
+			unsigned char numEffectiveValues = numEffectiveValuesPerOutputBlock;
 			//Initialize the reductionBlock
 			#pragma unroll
-			for (int iCluster=0; iCluster<NUM_CLUSTER_IN_DRAM_SIZE; iCluster++)
+			for (int iVal=0; iVal < BURST_SIZE_BYTE; iVal++)
 			{
-				#pragma unroll
-				for (int iVal=0; iVal < BURST_SIZE_BYTE; iVal++)
-				{
-					//If max pooling, then intialize the values to the minimum, else zero
-					t_accumulator min = ACCUM_MIN;
-					reductionBlock[iVal] = (opcode == ((uint2_t) 0x01)) ? 
-						min : 0x0000;
-				}
+				//If max pooling, then intialize the values to the minimum, else zero
+				t_accumulator min = ACCUM_MIN;
+				reductionBlock[iVal] = (opcode == ((uint2_t) 0x01)) ? 
+					min : 0x0000;
 			}
 
 			//Perform reduction
@@ -2357,6 +2360,14 @@ __kernel void kernelMisc ()
 				t_dram_block_ia_to_misc inputDramBlockTagged = read_channel_intel(channel_ia_wide_misc[colID]);
 				unsigned char numLeftShiftAmount = inputDramBlockTagged.miscLeftShiftAmount;
 				t_dram_block inputDramBlock = inputDramBlockTagged.dramBlock;
+
+				EMULATOR_PRINT(("[Kernel MISC (%d)] iInputBlock=%d, numBlocksToReduce=%d, iOutput=%d, numOutputBlocks=%d\n"
+					"Inputblock[0-3]: %#04x %#04x %#04x %#04x \n",
+					colID, iBlock, numDramBlocksToReduce, iOutput, numOutputBlocks,
+					inputDramBlock.transferBlocks[0].values[0] & 0xFF, 
+					inputDramBlock.transferBlocks[0].values[1] & 0xFF, 
+					inputDramBlock.transferBlocks[0].values[2] & 0xFF, 
+					inputDramBlock.transferBlocks[0].values[3] & 0xFF));
 				#pragma unroll
 				for (int iValue=0; iValue < BURST_SIZE_BYTE; iValue++)
 				{
@@ -2398,12 +2409,6 @@ __kernel void kernelMisc ()
 			}
 
 			EMULATOR_PRINT(("[kernelMisc %d] Finished processing output block %d / %d of the command.\n", colID, iOutput, numOutputBlocks));
-		
-			iterDramBlockInOutputStrip++;
-			if (iterDramBlockInOutputStrip == numOutputBlocksPerStrip)
-			{
-				iterDramBlockInOutputStrip = 0;
-			}
 		}  //iOutput
 		
 
@@ -6912,10 +6917,6 @@ __kernel void kernelOperandFilter ()
 #define DENSE_PE_INSTRUCTION_MAC 0X1
 #define DENSE_PE_INSTRUCTION_MAC_SYNC 0X2
 #define DENSE_PE_INSTRUCTION_COMMIT 0x3
-
-#define STATE_DRAIN_TRANSPORT_SYNC 0x0
-#define STATE_DRAIN_TRANSPORT_DRAIN_SELF 0X1
-#define STATE_DRAIN_TRANSPORT_DRAIN_OTHERS 0x2
 
 typedef uint2_t t_drain_instruction;
 typedef uint2_t t_dense_pe_instruction;

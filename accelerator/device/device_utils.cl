@@ -12,18 +12,19 @@ t_operand modifyOutput (
     uint1_t shiftLeft = (shiftDirectionCatShiftAmount >> 0x4) & 0x01;
     unsigned char shiftAmount = shiftDirectionCatShiftAmount & 0x0F;
     uint1_t preShiftIsNonNegative;
+    t_accumulator ZERO = 0x0;
 
 
 	t_accumulator comparedAccumulator;
 	if (enableRelu == TRUE)
 	{
-		comparedAccumulator = (accumulator > 0x0) ? accumulator : 0x0;
+		comparedAccumulator = (accumulator > ZERO) ? accumulator : 0x0;
         preShiftIsNonNegative = TRUE;
 	}
 	else
 	{
 		comparedAccumulator = accumulator;
-        preShiftIsNonNegative = (accumulator >= 0x0) ? TRUE : FALSE;
+        preShiftIsNonNegative = (accumulator >= ZERO) ? TRUE : FALSE;
 	}
 
     //Handle the right shift case
