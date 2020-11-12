@@ -137,7 +137,7 @@ void instruction_generator(
             / ((unsigned int) kernelStride) + 1;
 
     unsigned char numActiveColsPartialOutputTile =
-            ((op == MAX_POOL) || (op == AVG_POOL) || (ELT_ADD) || (op == CONCATENATION)) ?
+            ((op == MAX_POOL) || (op == AVG_POOL) || (op == ELT_ADD) || (op == CONCATENATION)) ?
                 (outputWidth % PE_COLS)
                 : _numActiveColsPartialOutputTile;
 
