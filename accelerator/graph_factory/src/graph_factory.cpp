@@ -20,6 +20,7 @@ typedef struct {
     t_graph_output_tile_info tileInfo;
     unsigned int latency;
     bool flagComputeBound;
+    unsigned int ops;
 } t_tile_pair;
 /*!
  * \brief calculateTileWidthPerUnit
@@ -195,6 +196,7 @@ namespace GraphRuntime {
             //Latency estimation
             unsigned int estimatedLatency = 0; //override
             bool flagComputeBound = false; //override
+            unsigned int ops = 0; //override
 #if defined(HOST_DEBUG)
            cout <<"Generating for Layer(ID): "<<pLayer->getLayerID()<<endl;
 #endif
@@ -211,6 +213,7 @@ namespace GraphRuntime {
                     sizeOutputTileFullHeight = tileConfig.tileInfo.sizeOutputTileFullHeight;
                     estimatedLatency = tileConfig.latency;
                     flagComputeBound = tileConfig.flagComputeBound;
+                    ops = tileConfig.ops;
 
                     kernelSize = pLayerLocal->getKernelSize();
                     stride = pLayerLocal->getKernelStride();
@@ -333,11 +336,12 @@ namespace GraphRuntime {
                     numInputChannelPerGroup1 = numInputChannel1 / numGroupCurrentLayer;
 
                     t_tile_pair tileConfig = calculateTileSizePerUnit(*pLayerLocal.get());
-                    sizeOutputTileFullWidthPerCol = tileConfig.tileInfo.sizeOutputTileFullWidthPerCol;
-                    numActiveColsPartialOutputTile = tileConfig.tileInfo.numActiveColsForPartialWidthTile;
+                    sizeOutputTileFullWidthPerCol = 1;
+                    numActiveColsPartialOutputTile = pLayerLocal->getOutputWidth() % PE_COLS;
                     sizeOutputTileFullHeight = tileConfig.tileInfo.sizeOutputTileFullHeight;
                     estimatedLatency = tileConfig.latency;
                     flagComputeBound = tileConfig.flagComputeBound;
+                    ops = tileConfig.ops;
 
                     //Align input bits
                     int inputFracBits0 = pLayerLocal->getInputFracBits().at(0);
@@ -427,6 +431,7 @@ namespace GraphRuntime {
                     verticalBorderPadding = pLayerLocal->getInputBorderPadding();
                     horizontalBorderPadding = pLayerLocal->getInputBorderPadding();
                     numActiveColsPartialOutputTile = numOutputWidth % PE_COLS;
+                    ops = pLayerLocal->getOutputHeight() * pLayerLocal->getOutputWidth() * pLayerLocal->getOutputChannel();
                     //TODO: add precision stuff
                     //TODO: Modify the shift direction and amounts, to simulate the effect of the integer divisor
                     int divisorShift = (int) std::ceil(log2(pLayerLocal->getDivisor()));
@@ -705,7 +710,8 @@ namespace GraphRuntime {
                            .outputTileWidthPerCol = sizeOutputTileFullWidthPerCol,
                            .numActiveColsPartialOutputTile = numActiveColsPartialOutputTile,
                            .expectedLatency = estimatedLatency,
-                           .isComputeBound = flagComputeBound ? 1 : 0
+                           .isComputeBound = flagComputeBound ? 1 : 0,
+                           .ops = ops
                             });
                        offsetIAMoverInstruction += numIAMoverInstructions;
                        offsetOAMoverInstruction += numOAMoverInstructions;
@@ -936,19 +942,25 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
         std::cout <<"Warning: Cannot find a suitable tile configuration for Conv Layer "<<_convLayer.getLayerID()<<std::endl;
         throw;
     }
-    t_tile_pair result = {.tileInfo = bestTileInfo, .latency = minLatency, .flagComputeBound=isComputeBound};
+    unsigned int ops = _convLayer.getCurrentNumberGroups() * (
+                    outputChannels / _convLayer.getCurrentNumberGroups()
+                        * outputHeight * outputWidth
+                        * _convLayer.getKernelSize() * _convLayer.getKernelSize() * inputChannelsPerGroup
+                        *2
+                );
+    t_tile_pair result = {.tileInfo = bestTileInfo,
+                          .latency = minLatency,
+                          .flagComputeBound=isComputeBound,
+                          .ops = ops};
     return result;
 }
 
 t_tile_pair calculateTileSizePerUnit(EltAddLayer &_eltAddLayer)
 {
-    unsigned int maxOutputTileWidthPerCol = MAX_OUTPUT_TILE_WIDTH_PER_COL;
     unsigned int maxOutputTileHeight = MAX_OUTPUT_TILE_HEIGHT;
 
     //Search all possible solutions tile solution exhautively.
-    unsigned int tempOutputTileWidthPerCol = 1 + (_eltAddLayer.getOutputWidth()-1)/ PE_COLS;
-    unsigned int outputTileWidthPerCol = tempOutputTileWidthPerCol < MAX_OUTPUT_TILE_WIDTH_PER_COL ?
-        tempOutputTileWidthPerCol : MAX_OUTPUT_TILE_WIDTH_PER_COL;
+    unsigned int outputTileWidthPerCol = 1;
 
     unsigned int outputHeight = _eltAddLayer.getOutputHeight();
     unsigned int outputWidth = _eltAddLayer.getOutputWidth();
@@ -1030,7 +1042,11 @@ t_tile_pair calculateTileSizePerUnit(EltAddLayer &_eltAddLayer)
         std::cout <<"Warning: Cannot find a suitable tile configuration for EltAdd Layer "<<_eltAddLayer.getLayerID()<<std::endl;
         throw;
     }
-    t_tile_pair result = {.tileInfo = bestTileInfo, .latency = minLatency, .flagComputeBound=false};
+    unsigned int ops = outputChannels * outputHeight * outputWidth;
+    t_tile_pair result = {.tileInfo = bestTileInfo,
+                          .latency = minLatency,
+                          .flagComputeBound=false,
+                          .ops = ops};
     return result;
 }
 

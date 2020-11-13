@@ -55,6 +55,7 @@ namespace GraphRuntime {
         int     numActiveColsPartialOutputTile;
         int     expectedLatency;
         int     isComputeBound;
+        unsigned int ops;
     } t_layer_info;
 
     typedef struct {

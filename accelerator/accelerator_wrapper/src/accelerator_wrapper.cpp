@@ -1316,6 +1316,7 @@ namespace GraphRuntime {
                 int numActiveColsPartialCol = layerInfo.numActiveColsPartialOutputTile;
                 unsigned int expectedLatency = layerInfo.expectedLatency;
                 unsigned int isComputeBound = layerInfo.isComputeBound;
+                unsigned int ops = layerInfo.ops;
                 auto layerTime = vecLayerExecutionTime.at(i);
                 std::string name = layerInfo.layerName;
                 if (name.length() > maxName)
@@ -1329,7 +1330,9 @@ namespace GraphRuntime {
                         <<sep<<sizeOutputTileWidthPerCol
                         <<sep<<numActiveColsPartialCol
                         <<sep<<expectedLatency
-                        <<sep<<isComputeBound<<std::endl;
+                        <<sep<<ops
+                        <<sep<<isComputeBound
+                        <<std::endl;
             }
             //Print average outout blob transfer time
             for (unsigned int i=0; i<vecOutputBlobsInfo.size(); i++)
