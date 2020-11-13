@@ -408,7 +408,9 @@ typedef struct __attribute__((packed)){
 
 typedef struct __attribute__((packed)){
     t_accumulator value;
-    unsigned char isLast;
+    //[7:1] row ID or the row that issued the packed
+    //[0] Whether this is the last.
+    unsigned char sourceRowIDCatIsLast;
 } t_conv_drain_tagged;
 
 /*

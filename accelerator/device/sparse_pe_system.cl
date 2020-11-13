@@ -3112,7 +3112,7 @@ __kernel void kernelOABuffer ()
 		{
 			bool success = false;
 			t_conv_drain_tagged wideOutputTagged = 
-				read_channel_nb_intel(channel_drain_conv[0][colID], &success);
+				read_channel_nb_intel(channel_drain_conv[PE_ROWS-1][colID], &success);
 			if (success == true)
 			{
 				writerBlockFromPEData = wideOutputTagged.value;
@@ -4000,7 +4000,7 @@ __kernel void kernelOABuffer ()
 				if (flagSourceIsMisc == FALSE)
 				{
 					t_conv_drain_tagged wideOutputTagged;
-					wideOutputTagged = read_channel_nb_intel(channel_drain_conv[0][colID], &readSuccess);
+					wideOutputTagged = read_channel_nb_intel(channel_drain_conv[PE_ROWS-1][colID], &readSuccess);
 					wideOutput = wideOutputTagged.value;
 				}
 				else
@@ -6791,7 +6791,9 @@ __kernel void kernelOperandFilter ()
 		{
 			t_conv_drain_tagged drainTransportBlock;
 			drainTransportBlock.value = pSum & ACCUM_MASK;
-			drainTransportBlock.isLast = (unsigned char) regIsMaxRow;
+			drainTransportBlock.sourceRowIDCatIsLast = 
+				(unsigned char) ( ((((unsigned char) idy) & 0x7F) << 0x01) 
+									| (regIsMaxRow & 0x01));
 			bool success = write_channel_nb_intel(
 					channel_drain_conv_local[idy][idx],
 					drainTransportBlock
@@ -7187,7 +7189,9 @@ __kernel void kernelDensePE ()
 		{
 			t_conv_drain_tagged drainTransportBlock;
 			drainTransportBlock.value = pSum & ACCUM_MASK;
-			drainTransportBlock.isLast = (unsigned char) regIsMaxRow;
+			drainTransportBlock.sourceRowIDCatIsLast = 
+				(unsigned char) ( ((((unsigned char) idy) & 0x7F) << 0x01) 
+									| (regIsMaxRow & 0x01));
 			bool success = write_channel_nb_intel(
 					channel_drain_conv_local[idy][idx],
 					drainTransportBlock
@@ -7265,7 +7269,8 @@ __kernel void kernelDrainTransport ()
 	/**
 	 * Registers
 	 */
-	t_drain_state regDrainState = STATE_DRAIN_TRANSPORT_DRAIN_SELF;
+	t_drain_state regDrainState = (idy==0) ? 
+		STATE_DRAIN_TRANSPORT_DRAIN_SELF : STATE_DRAIN_TRANSPORT_DRAIN_OTHERS;
 	t_conv_drain_tagged regDrainPacket;
 
 
@@ -7298,11 +7303,11 @@ __kernel void kernelDrainTransport ()
 		} //if (drainState == STATE_DRAIN_TRANSPORT_DRAIN_SELF)
 		else if (regDrainState == STATE_DRAIN_TRANSPORT_DRAIN_OTHERS)
 		{
-			if (idy < (PE_ROWS - 1))
+			if (idy > 0)
 			{
 				bool success = false;
 				nextDrainPacket = read_channel_nb_intel(
-						channel_drain_conv[idy+1][idx],
+						channel_drain_conv[idy-1][idx],
 						&success
 					);
 				flagDrainPreviousPeSuccess = success ? TRUE : FALSE;
@@ -7338,17 +7343,13 @@ __kernel void kernelDrainTransport ()
 					nextDrainState = STATE_DRAIN_TRANSPORT_SEND_SELF_RETRY;
 					if (flagSendToNextPeSuccess == TRUE)
 					{
-						if (idy == (PE_ROWS-1))
+						if (idy == 0)
 						{
 							nextDrainState = STATE_DRAIN_TRANSPORT_DRAIN_SELF;
 						}
 						else
 						{
 							nextDrainState = STATE_DRAIN_TRANSPORT_DRAIN_OTHERS;
-							if (nextDrainPacket.isLast == TRUE)
-							{
-								nextDrainState = STATE_DRAIN_TRANSPORT_DRAIN_SELF;
-							}
 						}
 					}
 				}
@@ -7357,17 +7358,13 @@ __kernel void kernelDrainTransport ()
 			case STATE_DRAIN_TRANSPORT_SEND_SELF_RETRY: {
 				if (flagSendToNextPeSuccess == TRUE)
 				{
-					if (idy == (PE_ROWS-1))
+					if (idy == 0)
 					{
 						nextDrainState = STATE_DRAIN_TRANSPORT_DRAIN_SELF;
 					}
 					else
 					{
 						nextDrainState = STATE_DRAIN_TRANSPORT_DRAIN_OTHERS;
-						if (nextDrainPacket.isLast == TRUE)
-						{
-							nextDrainState = STATE_DRAIN_TRANSPORT_DRAIN_SELF;
-						}
 					}
 				}
 			}	
@@ -7379,7 +7376,9 @@ __kernel void kernelDrainTransport ()
 					if (flagSendToNextPeSuccess == TRUE)
 					{
 						nextDrainState = STATE_DRAIN_TRANSPORT_DRAIN_OTHERS;
-						if (nextDrainPacket.isLast == TRUE)
+						unsigned char isLast = nextDrainPacket.sourceRowIDCatIsLast & 0x01;
+						unsigned char sourceRowID = (nextDrainPacket.sourceRowIDCatIsLast >> 0x01) & 0x07F;
+						if ((isLast == FALSE) && (sourceRowID == (idy-1)))
 						{
 							nextDrainState = STATE_DRAIN_TRANSPORT_DRAIN_SELF;
 						}
@@ -7391,7 +7390,9 @@ __kernel void kernelDrainTransport ()
 				if (flagSendToNextPeSuccess == TRUE)
 				{
 					nextDrainState = STATE_DRAIN_TRANSPORT_DRAIN_OTHERS;
-					if (nextDrainPacket.isLast == TRUE)
+					unsigned char isLast = nextDrainPacket.sourceRowIDCatIsLast & 0x01;
+					unsigned char sourceRowID = (nextDrainPacket.sourceRowIDCatIsLast >> 0x01) & 0x07F;
+					if ((isLast == FALSE) && (sourceRowID == (idy-1)))
 					{
 						nextDrainState = STATE_DRAIN_TRANSPORT_DRAIN_SELF;
 					}
