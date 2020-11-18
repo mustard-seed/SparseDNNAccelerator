@@ -1121,19 +1121,19 @@ __kernel void kernelIABuffer ()
 					EMULATOR_PRINT(("[kernelIABuffer %d] Sent iSent=%d\n",
 					colID, iSent
 					));
-					if ((regReaderContext.numTBPerStrip == 1) && (readerTB.values.values[0] != 0))
-					{
-						EMULATOR_PRINT(("[kernelIABuffer %d] ERROR. iSent=%d " 
-							"Number of TB in strip is 1, but bitmask is not 1.\n",
-							colID, iSent));
-					}
-					//TODO: the following condition only for shallow tensor input.
-					else if ((regReaderContext.numTBPerStrip > 1) && (regReaderContext.iterAccess == 0) && (readerTB.values.values[0] == 0))
-					{
-						EMULATOR_PRINT(("[kernelIABuffer %d] ERROR. iSent=%d " 
-							"Number of TB in strip is greater than 1, but bitmask is 0.\n",
-							colID, iSent));
-					}
+					// if ((regReaderContext.numTBPerStrip == 1) && (readerTB.values.values[0] != 0))
+					// {
+					// 	EMULATOR_PRINT(("[kernelIABuffer %d] ERROR. iSent=%d " 
+					// 		"Number of TB in strip is 1, but bitmask is not 1.\n",
+					// 		colID, iSent));
+					// }
+					// //TODO: the following condition only for shallow tensor input.
+					// else if ((regReaderContext.numTBPerStrip > 1) && (regReaderContext.iterAccess == 0) && (readerTB.values.values[0] == 0))
+					// {
+					// 	EMULATOR_PRINT(("[kernelIABuffer %d] ERROR. iSent=%d " 
+					// 		"Number of TB in strip is greater than 1, but bitmask is 0.\n",
+					// 		colID, iSent));
+					// }
 					iSent++;
 				#endif
 			}
@@ -2442,25 +2442,31 @@ __kernel void kernelOAMover (
 	{
 		/*! Read the instruction and decode the packed field*/
 		t_oa_mover_instruction inst = pInstruction[offsetInstruction+iInst];
-		uint1_t outputMemSelect = (inst.memSelectCatSparseFlagCatSyncFlagCatNumActiveCols >> 7) & 0x01;
-		uint1_t enableSparsification = (inst.memSelectCatSparseFlagCatSyncFlagCatNumActiveCols >> 6) & 0x01;
+		t_flag enableSparsification = (inst.memSelectCatSparseFlagCatSyncFlagCatNumActiveCols >> 6) & 0x01;
 		t_flag enableSendSync = (inst.memSelectCatSparseFlagCatSyncFlagCatNumActiveCols >> 4) & 0x01;
 		unsigned char numActivePeCols = inst.memSelectCatSparseFlagCatSyncFlagCatNumActiveCols & 0x0F;
-		//Select the memory region
-		// __global t_output_dram_block* pOA;
-		// pOA = (outputMemSelect == 0x01) ? pOA1 : pOA0;
-		// #if defined(SPARSE_SYSTEM)
-		// 	__global t_streamblock_address* pTB;
-		// 	pTB = (outputMemSelect == 0x01) ? pTBCount1 : pTBCount0;
-		// #endif
+		
+		unsigned char numOutputTileHeightPerCol = inst.tileHeight;
+		unsigned char numOutputTileWidthPerCol = inst.columnTileWidth;
+		unsigned short numNominalDramBlocksPerStrip = inst.numNominalDramBlocksPerStrip;
+		#if defined(SPARSE_SYSTEM)
+			//Plus 1 to numNominalDramBlocksPerStrip to account for count
+			unsigned short numNominalDramBlocksPerStripPlusCount = numNominalDramBlocksPerStrip + 1;
+		#else
+			unsigned short numNominalDramBlocksPerStripPlusCount = numNominalDramBlocksPerStrip;
+		#endif
+		//numNominalDramBlocksPerStripPlusCount * numActivePeCols
+		unsigned short numNominalDramBlocksAcrossActivePeCols = 
+			((unsigned short) numActivePeCols)
+			* ((unsigned short) numNominalDramBlocksPerStripPlusCount);
+
+		unsigned char numOutputTileHeightxWidthPerCol = numOutputTileHeightPerCol * numOutputTileWidthPerCol;
 
 		//Control variables
 		unsigned char iOutputHeightInColTile = 0;
 		unsigned char iOutputWidthInColTile = 0;
-		unsigned char iCol = 0; //iterator for the PE columns
 
 		//Memory pointer contribution
-		signed int addrOAPeColContribution = 0;
 		signed int addrOAColContribution = 0;
 		signed int addrOARowContribution = 0;
 		//signed int addrOAGroupContribution = 0;
@@ -2469,12 +2475,11 @@ __kernel void kernelOAMover (
 				//Total output width covered by all the PE column tiles
 				unsigned short totalTileWidth = ((unsigned short) numActivePeCols) 
 					* ((unsigned short) inst.columnTileWidth);
-
-				//Iterator over all columns in a tile
-				unsigned short iTotalCol = 0;
+				unsigned short totalNumStrips = ((unsigned short) numActivePeCols) 
+					* ((unsigned short) inst.columnTileWidth) 
+					* ((unsigned short) numOutputTileHeightPerCol);
 				//signed int addrTBGroupContribution = 0;
 			#else //OAMOVER_TB_STREAM_CACHE
-				signed int addrTBPeColContribution = 0;
 				signed int addrTBColContribution = 0;
 				signed int addrTBRowContribution = 0;
 			#endif
@@ -2490,132 +2495,175 @@ __kernel void kernelOAMover (
 
 		if (instructionProceed == true)
 		{
-			for (unsigned short iter=0; iter<inst.numColumnTileWidthxTileHeightxNumActiveCols; iter++)
-			{
-
-				//int addrOA = inst.memOAStart + addrOAGroupContribution + addrOARowContribution + addrOAColContribution + addrOAPeColContribution;
-				int addrOA = inst.memOAStart + addrOARowContribution + addrOAColContribution + addrOAPeColContribution;
-				EMULATOR_PRINT(("[kernelOAMover] START strip transfer. "
+			EMULATOR_PRINT(("[kernelOAMover] START processing instruction. "
 							"offsetInstruction=%d, "
 							"iInst=%d, "
-							"iCol=%d, " 
-	                        "iOutputWidthInColTile=%d, "
-							"iOutputHeightInColTile=%d, "
-							"enableSparsification=%#03x, "
-							"addrOA=%#08x, "
+							"memOAStart=%#08x, "
+							"memOAPEColStride=%#08x, "
+							"memOAColStride=%#08x, "
+							"memOARowStride=%#08x, "
+							"numActivePeCols=%d, " 
+	                        "numNominalDramBlocksPerStrip=%d, "
+	                        "numNominalDramBlocksAcrossActivePeCols=%d, "
+							"numOutputTileWidthPerCol=%#03x, "
+							"numOutputTileHeightPerCol=%#03x, "
 							"numActivePeCols=%d\n",
 							offsetInstruction,
 							iInst, 
-							iCol,
-							iOutputWidthInColTile,
-							iOutputHeightInColTile,
-							(unsigned char) enableSparsification,
-							addrOA,
-							numActivePeCols));
+							(unsigned int) inst.memOAStart,
+							(unsigned int) inst.memOAPEColStride,
+							(unsigned int) inst.memOAColStride,
+							(unsigned int) inst.memOARowStride,
+							(unsigned int) numActivePeCols,
+							(unsigned int) numNominalDramBlocksPerStrip,
+							(unsigned int) numNominalDramBlocksAcrossActivePeCols,
+							(unsigned int) numOutputTileWidthPerCol,
+							(unsigned int) numOutputTileHeightPerCol,
+							(unsigned int) numActivePeCols));
+
+			for (
+					unsigned char iterOutputTileHeightxWidthPerCol=0;
+					iterOutputTileHeightxWidthPerCol < numOutputTileHeightxWidthPerCol;
+					iterOutputTileHeightxWidthPerCol++
+				)
+			{
+				unsigned short iterNominalDramBlocksAcrossActivePeCols = 0;
+
+				//iterator for the PE columns
+				unsigned char iPeCol = 0;
+				unsigned short iNominalDramBlockInStrip = 0;
+				signed int addrOAPeColContribution = 0;
+				signed int addrOABase = 
+					inst.memOAStart + addrOARowContribution + addrOAColContribution;
+
 				#if defined(SPARSE_SYSTEM)
-					//int addrTB = inst.memTBStart + addrTBGroupContribution + addrTBRowContribution + addrTBColContribution + addrTBPeColContribution;
+					signed int addrTBPeColContribution = 0;
 					#if defined(OAMOVER_TB_STREAM_CACHE)
-						unsigned short addrCacheTB = iTotalCol 
-							+ (unsigned short) iOutputHeightInColTile * (unsigned short) totalTileWidth;
-					#else //OAMOVER_TB_STREAM_CACHE
-						int addrTB = inst.memTBStart + addrTBRowContribution + addrTBColContribution + addrTBPeColContribution;
-					#endif
-					bool proceed = true;
-					unsigned short clusterCount = 0;
-					#pragma ii 1
-					while (proceed)
-					{
-						bool readSuccess = false;
-						t_output_dram_block_tagged receivedBlock = read_channel_nb_intel(channel_output_wide[0], &readSuccess);
-						if (readSuccess == true)
-						{
-							if ((receivedBlock.isLastFlag & 0x1) == TRUE)
-							{
-								proceed = false;
-							}
-								clusterCount = outputDramBlock2ClusterCount(receivedBlock.block);
-							
-							//When output sparsification is disabled, no TB count is transferred
-							if (((receivedBlock.isLastFlag & 0x1) == FALSE) || (enableSparsification == FALSE))
-							{
-								//Store the dram block
-								pOA[addrOA++] = receivedBlock.block;
-							}
-						}
-					} //while
-
-					t_streamblock_address tbBlockCount = ((clusterCount-1) >> CLUSTER_TO_TRANSFER_BLOCK_SHIFT) + 1;
-					
-					if (enableSparsification == TRUE)
-					{
-						//Store the cluster count
-						#if defined(OAMOVER_TB_STREAM_CACHE)
-							cacheTBCount[addrCacheTB] = tbBlockCount;
-						#else
-							pTBCount[addrTB++] = tbBlockCount;
-						#endif
-					}
-				#else
-					#pragma ii 1
-					for (unsigned int i=0; i<inst.numDramBlockPerStrip;)
-					{
-						bool readSuccess = false;
-						t_output_dram_block_tagged receivedBlock = read_channel_nb_intel(channel_output_wide[0], &readSuccess);
-						if (readSuccess == true)
-						{
-							pOA[addrOA++] = receivedBlock.block;
-							i++;
-						}
-					}
-				#endif
-
-
-				/*
-				Loop parameters update
-				*/
-				iCol++;
-				addrOAPeColContribution += (signed int) inst.memOAPEColStride;
-				#if defined(SPARSE_SYSTEM)
-					#if defined(OAMOVER_TB_STREAM_CACHE)
-						iTotalCol += inst.columnTileWidth;
+						unsigned short addrCacheTBBase =  
+							(unsigned short) iOutputHeightInColTile * (unsigned short) totalTileWidth
+							+ (unsigned short) iOutputWidthInColTile;
 					#else
-						addrTBPeColContribution += (signed int) inst.memTBPEColStride;
+						signed int addrTBBase = inst.memTBStart + addrTBRowContribution + addrTBColContribution;
 					#endif
 				#endif
-				if (iCol==numActivePeCols)
-				{
-					iCol = 0;
-					addrOAPeColContribution = 0;
 
-					iOutputWidthInColTile++;
-					addrOAColContribution += (signed int) inst.memOAColStride;
+				#pragma ii 1
+				while (iterNominalDramBlocksAcrossActivePeCols<numNominalDramBlocksAcrossActivePeCols)
+				{
+					int addrOA = 
+						addrOABase + addrOAPeColContribution + (int) iNominalDramBlockInStrip;
 					#if defined(SPARSE_SYSTEM)
 						#if defined(OAMOVER_TB_STREAM_CACHE)
-							iTotalCol = iOutputWidthInColTile;
-						#else
-							addrTBPeColContribution = 0;
-							addrTBColContribution += (signed int) inst.memTBColStride;
+							unsigned short addrCacheTB = addrCacheTBBase + addrTBPeColContribution;
+						#else //OAMOVER_TB_STREAM_CACHE
+							int addrTB = addrTBBase + addrTBPeColContribution;
 						#endif
 					#endif
-					if (iOutputWidthInColTile==inst.columnTileWidth)
+
+					bool readSuccess = false;
+					t_output_dram_block_tagged receivedBlock 
+						= read_channel_nb_intel(channel_output_wide[0], &readSuccess);
+
+					#if defined(SPARSE_SYSTEM)
+						//Predication: get the cluster count. Might not necessarily be needed
+						unsigned short clusterCount = outputDramBlock2ClusterCount(receivedBlock.block);
+						t_streamblock_address tbBlockCount = 
+										((clusterCount-1) >> CLUSTER_TO_TRANSFER_BLOCK_SHIFT) + 1;
+					#endif
+					if (readSuccess == true)
 					{
-						iOutputWidthInColTile = 0;
-						addrOAColContribution = 0;
+						t_flag flagValid = (receivedBlock.flags >> 1) & 0x01;
+						EMULATOR_PRINT(("[kernelOAMover] Received a dram block.\n"
+								"flagValid=%d, "
+								"iPeCol=%#03x, "
+								"iNominalDramBlockInStrip=%d, "
+								"iterNominalDramBlocksAcrossActivePeCols=%d, "
+								"numNominalDramBlocksAcrossActivePeCols=%d, "
+								"iOutputWidthInColTile=%#04x, "
+								"iOutputHeightInColTile=%d\n",
+								(unsigned int) flagValid, 
+								(unsigned int) iPeCol,
+								(unsigned int) iNominalDramBlockInStrip,
+								(unsigned int) iterNominalDramBlocksAcrossActivePeCols,
+								(unsigned int) numNominalDramBlocksAcrossActivePeCols,
+								(unsigned int) iOutputWidthInColTile,
+								(unsigned int) iOutputHeightInColTile
+								));
+
+						/**
+						 * Data access
+						 */
 						#if defined(SPARSE_SYSTEM)
-							#if defined(OAMOVER_TB_STREAM_CACHE)
-								iTotalCol = 0;
-							#else
-								addrTBColContribution = 0;
-								addrTBRowContribution += (signed int) inst.memTBRowStride;
-							#endif
+							//Handle writing data block
+							if (iNominalDramBlockInStrip < numNominalDramBlocksPerStrip)
+							{
+								if (flagValid == TRUE)
+								{
+									pOA[addrOA] = receivedBlock.block;
+								}
+							}
+							else if (enableSparsification == TRUE)
+							{
+								//Store the cluster count
+								#if defined(OAMOVER_TB_STREAM_CACHE)
+									cacheTBCount[addrCacheTB] = tbBlockCount;
+								#else
+									pTBCount[addrTB] = tbBlockCount;
+								#endif
+							}
+						#else //DENSE SYSTEM
+							pOA[addrOA] = receivedBlock.block;
 						#endif
 
-						iOutputHeightInColTile++;
-						addrOARowContribution += (signed int) inst.memOARowStride;
-					}
-				}
-				EMULATOR_PRINT(("[kernelOAMover] FINISHED a strip transfer.\n"));
-			} //for. strip inside the OA tile
+						/*State update*/
+						iterNominalDramBlocksAcrossActivePeCols++;
+
+						iPeCol++;
+						addrOAPeColContribution += (signed int) inst.memOAPEColStride;
+						#if defined(SPARSE_SYSTEM)
+							if (iNominalDramBlockInStrip == numNominalDramBlocksPerStrip)
+							{
+								addrTBPeColContribution += (signed int) inst.memTBPEColStride;
+							}
+						#endif
+
+						if (iPeCol == numActivePeCols)
+						{
+							iPeCol = 0x0;
+							addrOAPeColContribution = 0;
+
+							iNominalDramBlockInStrip++;
+						}
+					} //(readSuccess == true)
+				} //while iterNominalDramBlocksAcrossActivePeCols
+
+
+				iOutputWidthInColTile++;
+				addrOAColContribution += (signed int) inst.memOAColStride;
+				#if defined(SPARSE_SYSTEM)
+					#if defined(OAMOVER_TB_STREAM_CACHE)
+
+					#else
+						addrTBColContribution += (signed int) inst.memTBColStride;
+					#endif
+				#endif
+				if (iOutputWidthInColTile == numOutputTileWidthPerCol)
+				{
+					iOutputWidthInColTile = 0;
+					addrOAColContribution = 0;
+					addrOARowContribution += (signed int) inst.memOARowStride;
+					#if defined(SPARSE_SYSTEM)
+						#if defined(OAMOVER_TB_STREAM_CACHE)
+						#else
+							addrTBColContribution = 0;
+							addrTBRowContribution += (signed int) inst.memTBRowStride;
+						#endif
+					#endif
+
+					iOutputHeightInColTile++;
+				} //if (iOutputWidthInColTile == numOutputTileWidthPerCol)
+			} //iterOutputTileHeightxWidthPerCol 
+			
 
 			//Write the TB count from the cache to the off-chip memory
 			#if (defined(SPARSE_SYSTEM) && defined(OAMOVER_TB_STREAM_CACHE))
@@ -2625,7 +2673,7 @@ __kernel void kernelOAMover (
 				unsigned char iRowTB = 0;
 
 				unsigned short numTBCountToTransfer = (enableSparsification == TRUE) ?
-					inst.numColumnTileWidthxTileHeightxNumActiveCols : 0x0;
+					totalNumStrips : 0x0;
 
 				for (unsigned short iter=0; iter<numTBCountToTransfer; iter++)
 				{	
@@ -4232,10 +4280,20 @@ __kernel void kernelOATileController (
 	    		| (((unsigned short) 0x1) << 0x8 ) 
 	    		| ((unsigned short) outputModifierBits);
 
-	    	bufferPacketTagged.bufferPacket.numGroupsNextLayer = inst.numMemInstructions;
+	    	bufferPacketTagged.bufferPacket.numGroupsNextLayer = inst.numGroupsNextLayer;
 	    	bufferPacketTagged.bufferPacket.numLocalChannelsPerNextGroup = inst.numLocalChannelsPerNextGroup;
 
 	    	bufferPacketTagged.maxColID = (numActivePeCols - 1);
+
+	    	/**
+	    	 * Information for OA Tee only
+	    	 */
+	    	bufferPacketTagged.bufferPacket.numNominalDramBlocksPerOATee = 
+	    		inst.numNominalDramBlocksPerStrip * inst.numLocalTilePerColHxW * inst.numGroupsNextLayer;
+	    	#if defined(SPARSE_SYSTEM)
+	    		bufferPacketTagged.bufferPacket.numNominalDramBlocksPerStrip = 
+	    			inst.numNominalDramBlocksPerStrip;
+	    	#endif
 
 
 	    	write_channel_intel(channel_oa_noc_control[0], bufferPacketTagged);
@@ -4870,8 +4928,10 @@ __kernel void kernelOAControlTee ()
 
 		//Send instruction to the OA tee, if this is a drain command
 		t_output_tile_tee_packet teePacket;
-		teePacket.numLocalTileHeightxLocalTileWidth = controlPacketTagged.bufferPacket.numStripsToAccess;
-		teePacket.numGroups = controlPacketTagged.bufferPacket.numGroupsNextLayer;
+		teePacket.numNominalDramBlocksPerOATee = controlPacketTagged.bufferPacket.numNominalDramBlocksPerOATee;
+		#if defined(SPARSE_SYSTEM)
+			teePacket.numNominalDramBlocksPerStrip = controlPacketTagged.bufferPacket.numNominalDramBlocksPerStrip;
+		#endif
 		teePacket.flagSourceCatFlagSparseFlagMaxColID = (
 				((unsigned char) (maxColID & 0x0F))
 				| (controlPacketTagged.bufferPacket.controlBits & 0x060));
@@ -4893,298 +4953,549 @@ __kernel void kernelOAControlTee ()
 }
 
 
-#define OA_TEE_INSTRUCTION_DRAIN_CONV 0X0
-#define OA_TEE_INSTRUCTION_DRAIN_PADD 0X1
-#define OA_TEE_INSTRUCTION_SEND_SELF 0x2
-#define OA_TEE_INSTRUCTION_DRAIN_OTHERS 0X3
-#define OA_TEE_INSTRUCTION_DECODE_COMMAND 0X4
-#define OA_TEE_INSTRUCTION_SEND_COUNT 0x5
-#define OA_TEE_INSTRUCTION_LOOP_UPDATE 0x6
-//#define OA_TEE_INSTRUCTION_DRAIN_MISC 0x7
+#define OA_TEE_STATE_DECODE 0X0
+#define OA_TEE_STATE_DRAIN_CONV 0X1
+#define OA_TEE_STATE_SEND_SELF 0x2
+#define OA_TEE_STATE_DRAIN_OTHER 0X3
+#define OA_TEE_STATE_RESEND_OTHER 0X4
+#if defined(SPARSE_SYSTEM)
+	#define OA_TEE_STATE_SEND_GHOST 0x5
+	// #define OA_TEE_STATE_SEND_SELF_COUNT 0x6
+	// #define OA_TEE_STATE_DRAIN_OTHER_COUNT 0x7
+	// #define OA_TEE_STATE_RESEND_OTHER_COUNT 0X8
+#endif
 __attribute__((max_global_work_dim(0)))
 __attribute__((autorun))
 __attribute__((num_compute_units(PE_COLS)))
 __kernel void kernelOATee ()
 {
-	//TODO: Weak review
-	typedef uint3_t t_instruction;
+	#if defined(SPARSE_SYSTEM)
+		typedef uint3_t t_state;
+	#else
+		typedef uint3_t t_state;
+	#endif
 	int colID = get_compute_id(0);
 
-	//Registers
-	//Registers of the number of groups
-	unsigned char regNumGroups = 0;
-	unsigned char iGroup = 0;
-	//Register of the number of strips that we need to drain from this computing column
-	unsigned char regStripsInTile = 0;
-	//Iterator that keeps track of the number of strips that we have drained from the computing column
-	unsigned short iStripsInTile = 0;
-	//Flag that indicates whether this computing column is the right-most in this drain transfer
-	uint1_t regIsLastTee = FALSE;
-	//State
-	t_instruction regInstruction = OA_TEE_INSTRUCTION_DECODE_COMMAND;
+	/**
+	 * Loop-carried registers -- commmon to both sparse and dense
+	 */
+	t_state regState = OA_TEE_STATE_DECODE;
+	//Number of nominal blocks that this unit has created.
+	unsigned short regCountSelfNominalBlocks = 0;
+	//Total number of nominal blocks that this unit should create
+	unsigned short regTotalSelfNominalBlocks = 0;
+	//Pointer to the cluster register bank
+	unsigned char regIdxClusterInDramBlock = 0;
+	//Flag. Whether this unit is the last column
+	t_flag regIsLastCol = (colID == (PE_COLS-1)) ? TRUE : FALSE;
 
-	//Iterator that keeps track of the numbers of clusters that we have drained from a strip
-	unsigned short iClustersInStrip = 0;
-	//Iterator that keeps track of the number of clusters that we have drained from a dram block 
-	unsigned char iClusterInDramBlock = 0;
+	//Register bank of the clusters
+	t_output_dram_block_tagged regDramBlockTagged;
 
-	//Flag that indicates whether the tee should drain from the MISC kernel or from the convolution engine
-	uint1_t regFlagDrainMisc = FALSE;
-	//Flag that indicates whether the clusters drained from the CONV kernel are sparsified.
-	uint1_t regFlagSparse = FALSE;
-
-	//Shift register that keeps track of the convolution clusters within the same dram block
-	t_output_dram_block regConvDramBlock;
-	//Flag the keeps track of whether the dram block is the last in the convolution strip that is currently being drained.
-	uint1_t regFlagLastDramBlockInStrip = FALSE;
-
+	#if defined(SPARSE_SYSTEM)
+		/**
+		 * Loop-carried registers -- ONLY seen by the sparse architecture
+		 */
+		unsigned short regCountSelfNominalBlocksInStrip = 0;
+		unsigned short regTotalSelfNominalBlocksInStrip = 0;
+		//Cluster count
+		unsigned short regCountSelfClusterInStrip = 0;
+		t_flag regEncounteredLastClusterInStrip = FALSE;
+		//Whether the unit should be sending cluster count
+		t_flag regSendCount = FALSE;
+	#endif
 
 	#pragma ii 1
 	while (true)
 	{
-		bool sendDramBlockEnable = false;
+		/**
+		 * Local signals -- seen by both type of architectures
+		 */
+		t_state sigState = regState;
+		unsigned short sigCountSelfNominalBlocks = regCountSelfNominalBlocks;
+		unsigned short sigTotalSelfNominalBlocks = regTotalSelfNominalBlocks;
+		unsigned char sigIdxClusterInDramBlock = regIdxClusterInDramBlock;
+		t_flag sigIsLastCol = (colID == (PE_COLS-1)) ? TRUE : regIsLastCol;
+		t_output_dram_block_tagged sigDramBlockTagged = regDramBlockTagged;
 
-		bool shiftInNewCluster = false;
-
-		t_instruction tempInstruction = regInstruction;
-		t_output_cluster_tagged tempClusterTagged;
-		t_output_tile_tee_packet tempTeeControl;
-		t_output_dram_block_tagged tempDramBlockTagged;
-
-		//uint1_t transferIsLast = regDramBlockTagged.isLastFlag & 0x01;
-
-		bool readSuccess = false;
-
-		//Select the output instruction to read
-		if (regInstruction == OA_TEE_INSTRUCTION_DECODE_COMMAND)
-		{
-			tempTeeControl = read_channel_nb_intel(channel_oa_tee_local[colID], &readSuccess);
-		}
-
-		//Select the output cluster to read
-		if (regInstruction == OA_TEE_INSTRUCTION_DRAIN_CONV)
-		{
-			#if defined(SPARSE_SYSTEM)
-				tempClusterTagged = read_channel_nb_intel(channel_compressor_to_tee[colID], &readSuccess);
-			#else
-				tempClusterTagged = read_channel_nb_intel(channel_oa_buffer_to_oa_tee[colID], &readSuccess);
-			#endif
-		}
-		else
-		{
-			tempClusterTagged.isLastInStrip = true;
-			#pragma unroll
-			for (int i=0; i<CLUSTER_SIZE; i++)
-			{
-				tempClusterTagged.cluster.cluster_values[i] = 0x0;
-			}
-		}
-
-		//Select the output dram block to be sent back
-		if (regInstruction == OA_TEE_INSTRUCTION_DRAIN_OTHERS)
-		{
-			if ( (colID < (PE_COLS-1)))
-			{
-				tempDramBlockTagged = read_channel_nb_intel(channel_output_wide[colID+1], &readSuccess);
-				if (readSuccess == true)
-				{
-					sendDramBlockEnable = true;
-				}
-			}
-		}
-		else if (regInstruction == OA_TEE_INSTRUCTION_SEND_SELF)
-		{
-			//transferIsLast = (regDramBlockTagged.isLastFlag & 0x1);
-            #if defined(SPARSE_SYSTEM)
-                tempDramBlockTagged.isLastFlag = (regFlagSparse == TRUE) ?
-                	 ( ( (unsigned char) regIsLastTee) << 0x1 ):
-                	 ( ( (unsigned char) regIsLastTee) << 0x1 ) | ((unsigned char) regFlagLastDramBlockInStrip);
-            #else
-				tempDramBlockTagged.isLastFlag = ( ( (unsigned char) regIsLastTee) << 0x1 ) | ((unsigned char) regFlagLastDramBlockInStrip);
-            #endif
-			tempDramBlockTagged.block = regConvDramBlock;
-			sendDramBlockEnable = true;
-		}
-		// else if (regInstruction == OA_TEE_INSTRUCTION_DRAIN_MISC)
-		// {
-		// 	t_output_dram_block miscOutput = read_channel_nb_intel(channel_drain_misc[colID], &readSuccess);
-		// 	if (readSuccess)
-		// 	{
-		// 		tempDramBlockTagged.block = miscOutput;
-		// 		tempDramBlockTagged.isLastFlag = ((regIsLastTee & 0x1) << 0x1) | 0x1;
-		// 		sendDramBlockEnable = true;
-		// 	}
-		// }
 		#if defined(SPARSE_SYSTEM)
-			else if (regInstruction == OA_TEE_INSTRUCTION_SEND_COUNT)
-			{
-				tempDramBlockTagged.isLastFlag = ((regIsLastTee & 0x1) << 0x1) | 0x01;
-				t_output_dram_block countDramBlock = clusterCount2OutputDramBlock(iClustersInStrip);
-				tempDramBlockTagged.block = countDramBlock;
-				sendDramBlockEnable = true;
-            }
+			/**
+			 * Local signals -- ONLY seen by the sparse architecture
+			 */
+			unsigned short sigCountSelfNominalBlocksInStrip = regCountSelfNominalBlocksInStrip;
+			unsigned short sigTotalSelfNominalBlocksInStrip = regTotalSelfNominalBlocksInStrip;
+			//Cluster count
+			unsigned short sigCountSelfClusterInStrip = regCountSelfClusterInStrip;
+			t_flag sigEncounteredLastClusterInStrip = regEncounteredLastClusterInStrip;
+			t_flag sigSendCount = regSendCount;
 		#endif
 
+		/**
+		 * Interface signals of the self-draining channel
+		 */
+		t_flag readSuccessInstruction = FALSE;
 
-		//Write channels: output dram block passing
-		if ( sendDramBlockEnable == true)
+		t_flag readSuccessDrainSelf = FALSE;
+
+		/**
+		 * Interface signals of the other-draining channel
+		 */
+		t_flag readRequestDrainOther = FALSE;
+		t_flag readSuccessDrainOther = FALSE;
+
+		/**
+		 * Interface signals of the sending channel
+		 */
+		t_flag writeRequestSendBlock = FALSE;
+		t_flag writeSuccessSendBlock = FALSE;
+
+		/**
+		 * Interaction with the instruction channel
+		 * Modify: sigTeeControl
+		 */
+		t_output_tile_tee_packet sigTeeControl;
+		if (regState == OA_TEE_STATE_DECODE)
 		{
-			write_channel_intel(channel_output_wide[colID], tempDramBlockTagged);
+			bool readSuccess = false;
+			sigTeeControl = read_channel_nb_intel(channel_oa_tee_local[colID], &readSuccess);
+			if (readSuccess == true)
+			{
+				readSuccessInstruction = TRUE;
+			}
 		}
 
-		//State and register update (excluding the shift register)
-
-		switch (regInstruction) {
-			case (OA_TEE_INSTRUCTION_DRAIN_CONV) :
+		/**
+		 * Interaction with the local cluster input channel
+		 */
+		t_output_cluster_tagged sigClusterTagged;
+		if (regState == OA_TEE_STATE_DRAIN_CONV)
+		{
+			bool readSuccess = false;
+			#if defined(SPARSE_SYSTEM)
+				sigClusterTagged = 
+					read_channel_nb_intel(channel_compressor_to_tee[colID], &readSuccess);
+			#else
+				sigClusterTagged =
+					read_channel_nb_intel(channel_oa_buffer_to_oa_tee[colID], &readSuccess);
+			#endif
+			if (readSuccess == true)
 			{
+				readSuccessDrainSelf = TRUE;
+			}
+		}
+
+		/**
+		 * Interaction with the drain-other channel
+		 */
+		if (colID < (PE_COLS-1))
+		{
+			#if defined(SPARSE_SYSTEM)
+				if (
+					(regState == OA_TEE_STATE_DRAIN_OTHER)
+					)
+				{
+					readRequestDrainOther = TRUE;
+				}
+			#else
+				if (regState == OA_TEE_STATE_DRAIN_OTHER)
+				{
+					readRequestDrainOther = TRUE;
+				}
+			#endif
+
+			if (readRequestDrainOther == TRUE)
+			{
+				bool readSuccess = false;
+				sigDramBlockTagged = 
+					read_channel_nb_intel(channel_output_wide[colID+1], &readSuccess);
 				if (readSuccess == true)
 				{
-					shiftInNewCluster = true;
-					iClustersInStrip++;
-					iClusterInDramBlock++;
-					regFlagLastDramBlockInStrip = tempClusterTagged.isLastInStrip ? TRUE : FALSE;
-
-					if ( iClusterInDramBlock == NUM_CLUSTER_IN_DRAM_SIZE )
-					{
-						tempInstruction = OA_TEE_INSTRUCTION_SEND_SELF;
-					}
-	                else if ( tempClusterTagged.isLastInStrip == true )
-					{
-						tempInstruction = OA_TEE_INSTRUCTION_DRAIN_PADD;
-					}
+					readSuccessDrainOther = TRUE;
 				}
-			} //OA_TEE_INSTRUCTION_DRAIN_CONV
-			break;
-			case (OA_TEE_INSTRUCTION_DRAIN_PADD) :
-			{
-				shiftInNewCluster = true;	
-				iClusterInDramBlock++;
+			}
+		}
 
-				if ( iClusterInDramBlock == NUM_CLUSTER_IN_DRAM_SIZE )
+		/**
+		 * Interaction with the send channel
+		 */
+		#if defined(SPARSE_SYSTEM)
+			if (
+					(readSuccessDrainOther == TRUE)
+					|| (regState == OA_TEE_STATE_SEND_SELF)
+					|| (regState == OA_TEE_STATE_SEND_GHOST)
+					|| (regState == OA_TEE_STATE_RESEND_OTHER)
+			   )
+			{
+				writeRequestSendBlock = TRUE;
+
+				//If the block will take on this unit's data,
+				//then we need to set the flags and payload accordingly.
+				if (regState == OA_TEE_STATE_SEND_SELF)
 				{
-					tempInstruction = OA_TEE_INSTRUCTION_SEND_SELF;
+					sigDramBlockTagged.flags = ((unsigned char) 0x02) 
+													| (((unsigned char) sigIsLastCol) & 0x01);
+					 //If the unit is sending its count
+					//then we need to convert the count to dram block
+					if (regSendCount == TRUE)
+					{
+						t_output_dram_block countDramBlock = 
+						clusterCount2OutputDramBlock(regCountSelfClusterInStrip);
+						sigDramBlockTagged.block = countDramBlock;
+						//Set the flags: is valid cat whether this is the last col
+					}
 				}
-			} //OA_TEE_INSTRUCTION_DRAIN_PADD
-			break;
-			case (OA_TEE_INSTRUCTION_SEND_SELF) :
+				else if (regState == OA_TEE_STATE_SEND_GHOST)
+				{
+					//Set the flags: is NOT valid cat whether this is the last col
+					sigDramBlockTagged.flags = ((unsigned char) 0x00) 
+												| (((unsigned char) sigIsLastCol) & 0x01);
+				}
+			}
+		#else
+			if (
+					(readSuccessDrainOther == TRUE)
+					|| (regState == OA_TEE_STATE_SEND_SELF)
+					|| (regState == OA_TEE_STATE_RESEND_OTHER)	
+			   )
 			{
-				iClusterInDramBlock = 0;
-				if (regFlagLastDramBlockInStrip == TRUE)
+				writeRequestSendBlock = TRUE;
+
+				//If the block will take on this unit's data,
+				//then we need to set the flags and payload accordingly.
+				if (regState == OA_TEE_STATE_SEND_SELF)
+				{
+					//Set the flags: is valid cat whether this is the last col
+					sigDramBlockTagged.flags = ((unsigned char) 0x02) 
+												| (((unsigned char) sigIsLastCol) & 0x01);
+				}
+			}
+		#endif
+
+		if (writeRequestSendBlock == TRUE)
+		{
+			bool writeSuccess = write_channel_nb_intel(channel_output_wide[colID], sigDramBlockTagged);
+			writeSuccessSendBlock = (writeSuccess == true) ? TRUE : FALSE;
+
+			#if defined(EMULATOR)
+				if (writeSuccess == true)
 				{
 					#if defined(SPARSE_SYSTEM)
-						if (regFlagSparse == TRUE)
+						EMULATOR_PRINT(("[kernelOATee %d] Sent a dram block.\n"
+								"regCountSelfClusterInStrip=%d, "
+								"regCountSelfNominalBlocks=%d, "
+								"regSendCount=%#03x, "
+								"regState=%#04x, "
+								"regIsLastCol=%d\n",
+								(unsigned int) colID, 
+								(unsigned int) regCountSelfClusterInStrip,
+								(unsigned int) regCountSelfNominalBlocks,
+								(unsigned int) regSendCount,
+								(unsigned int) regState,
+								(unsigned int) regIsLastCol
+								));
+					#else
+						EMULATOR_PRINT(("[kernelOATee %d] Sent a dram block.\n"
+								"regCountSelfNominalBlocks=%d, "
+								"regState=%#04x, "
+								"regIsLastCol=%d\n",
+								(unsigned int) colID, 
+								(unsigned int) regCountSelfNominalBlocks,
+								(unsigned int) regState,
+								(unsigned int) regIsLastCol
+								));
+					#endif
+				}
+			#endif
+		}
+
+		/**
+		 * State transition and variable update
+		 */
+		switch (regState) {
+			case (OA_TEE_STATE_DECODE): {
+				if (readSuccessInstruction == TRUE)
+				{
+					sigCountSelfNominalBlocks = 0;
+					sigTotalSelfNominalBlocks = sigTeeControl.numNominalDramBlocksPerOATee;
+					sigIdxClusterInDramBlock = 0;
+
+					unsigned char maxColID = 
+						sigTeeControl.flagSourceCatFlagSparseFlagMaxColID & 0x0F;
+					sigIsLastCol = (maxColID > colID) ? FALSE : TRUE;
+
+					#if defined(SPARSE_SYSTEM)
+						sigCountSelfNominalBlocksInStrip = 0;
+						sigTotalSelfNominalBlocksInStrip = sigTeeControl.numNominalDramBlocksPerStrip;
+
+						sigCountSelfClusterInStrip = 0;
+						sigEncounteredLastClusterInStrip = FALSE;
+						sigSendCount = FALSE;
+					#endif
+
+					//State transition
+					sigState = OA_TEE_STATE_DRAIN_CONV;
+
+					#if defined(SPARSE_SYSTEM)
+						EMULATOR_PRINT(("[kernelOATee %d] Received instruction \n"
+								"numNominalDramBlocksPerOATee=%d, "
+								"numNominalDramBlocksPerStrip=%d, "
+								"maxColID=%d\n",
+								(unsigned int) colID, 
+								(unsigned int) sigTotalSelfNominalBlocks,
+								(unsigned int) sigTotalSelfNominalBlocksInStrip,
+								(unsigned int) maxColID
+								));
+					#else
+						EMULATOR_PRINT(("[kernelOATee %d] Received instruction \n"
+								"numNominalDramBlocksPerOATee=%d, "
+								"maxColID=%d\n",
+								(unsigned int) colID, 
+								(unsigned int) sigTotalSelfNominalBlocks,
+								(unsigned int) maxColID
+								));
+					#endif
+				}
+			} //case (OA_TEE_STATE_DECODE)
+			break;
+			case (OA_TEE_STATE_DRAIN_CONV): {
+				if (readSuccessDrainSelf == TRUE)
+				{
+					sigDramBlockTagged.block.clusters[sigIdxClusterInDramBlock] 
+						= sigClusterTagged.cluster;
+					sigIdxClusterInDramBlock++;
+					bool isLastInStrip = sigClusterTagged.isLastInStrip;
+
+					#if defined(SPARSE_SYSTEM)
+						sigEncounteredLastClusterInStrip = 
+							(isLastInStrip == true) ? TRUE : FALSE;
+
+						sigCountSelfClusterInStrip++;
+					#endif
+
+					//If the last cluster in the current cluster has been encountered
+					//OR, a dram block has been formed:
+					if (
+							(isLastInStrip == true)
+							|| (sigIdxClusterInDramBlock == ((unsigned char) NUM_CLUSTER_IN_DRAM_SIZE))
+						)
+					{
+						sigState = OA_TEE_STATE_SEND_SELF;
+						#if defined(SPARSE_SYSTEM)
+							EMULATOR_PRINT(("[kernelOATee %d] Formed a dram block from local clusters \n"
+									"sigCountSelfClusterInStrip=%d, "
+									"regIsLastCol=%d\n",
+									(unsigned int) colID, 
+									(unsigned int) sigCountSelfClusterInStrip,
+									(unsigned int) regIsLastCol
+									));
+						#else
+							EMULATOR_PRINT(("[kernelOATee %d] Formed a dram block from local clusters \n"
+									"regIsLastCol=%d\n",
+									(unsigned int) colID, 
+									(unsigned int) regIsLastCol
+									));
+						#endif
+					}
+
+				}
+			} //case (OA_TEE_STATE_DRAIN_CONV)
+			break;
+			case (OA_TEE_STATE_SEND_SELF): {
+				if (writeSuccessSendBlock == TRUE)
+				{
+					
+					sigIdxClusterInDramBlock = 0;
+					#if defined(SPARSE_SYSTEM)
+						if (regSendCount == FALSE)
 						{
-							tempInstruction = OA_TEE_INSTRUCTION_SEND_COUNT;
+							sigCountSelfNominalBlocksInStrip++;
+							sigCountSelfNominalBlocks++;
 						}
 						else
 						{
-							tempInstruction = OA_TEE_INSTRUCTION_DRAIN_OTHERS;
+							sigCountSelfNominalBlocksInStrip = 0;
+							sigCountSelfClusterInStrip = 0;
 						}
 					#else
-						tempInstruction = OA_TEE_INSTRUCTION_DRAIN_OTHERS;
+						sigCountSelfNominalBlocks++;
 					#endif
-				}
-				else 
-				{
-					tempInstruction = OA_TEE_INSTRUCTION_DRAIN_CONV;
-				}
-			} //OA_TEE_INSTRUCTION_SEND_SELF
-			break;
-			case (OA_TEE_INSTRUCTION_DRAIN_OTHERS) :
-			{
-				if (regIsLastTee == TRUE)
-				{
-					tempInstruction = OA_TEE_INSTRUCTION_LOOP_UPDATE;
-				}
-				else if (readSuccess == true)
-				{
-					if ((tempDramBlockTagged.isLastFlag & 0x3) == 0x3)
+
+					sigState = OA_TEE_STATE_DRAIN_OTHER;
+					if (sigIsLastCol == TRUE)
 					{
-						tempInstruction = OA_TEE_INSTRUCTION_LOOP_UPDATE;
+						#if defined(SPARSE_SYSTEM)
+							if (regSendCount == FALSE)
+							{
+								sigState = OA_TEE_STATE_DRAIN_CONV;
+								if (regEncounteredLastClusterInStrip == TRUE)
+								{
+									sigState = OA_TEE_STATE_SEND_GHOST;
+
+									if (sigCountSelfNominalBlocksInStrip == regTotalSelfNominalBlocksInStrip)
+									{
+										sigState = OA_TEE_STATE_SEND_SELF;
+										sigSendCount = TRUE;
+
+									}
+								}
+							}
+							else //regSendCount == TRUE
+							{
+								sigState = OA_TEE_STATE_DRAIN_CONV;
+								sigSendCount = FALSE;
+								if (sigCountSelfNominalBlocks == regTotalSelfNominalBlocks)
+								{
+									sigState = OA_TEE_STATE_DECODE;
+								}
+
+							}
+						#else //Dense System
+							sigState = OA_TEE_STATE_DRAIN_CONV;
+							if (sigCountSelfNominalBlocks == regTotalSelfNominalBlocks)
+							{
+								sigState = OA_TEE_STATE_DECODE;
+							}
+						#endif
 					}
 				}
-			} //OA_TEE_INSTRUCTION_DRAIN_OTHERS
+			} //(OA_TEE_STATE_SEND_SELF_DATA)
 			break;
-			// case (OA_TEE_INSTRUCTION_DRAIN_MISC) :
-			// {
-			// 	if (readSuccess == true)
-			// 	{
-			// 		tempInstruction = OA_TEE_INSTRUCTION_DRAIN_OTHERS;
-			// 	}
-			// } //OA_TEE_INSTRUCTION_DRAIN_MISC
-			// break;
-			case (OA_TEE_INSTRUCTION_DECODE_COMMAND) :
-			{
-				if (readSuccess == true)
+			case (OA_TEE_STATE_DRAIN_OTHER): {
+				if (readSuccessDrainOther == TRUE)
 				{
-					regIsLastTee = ((tempTeeControl.flagSourceCatFlagSparseFlagMaxColID & 0x0F) > colID) ? FALSE: TRUE;
-					regNumGroups = (unsigned char) tempTeeControl.numGroups;
-					regStripsInTile = (unsigned char) tempTeeControl.numLocalTileHeightxLocalTileWidth;
-					iStripsInTile = 0;
-					iGroup = 0;
-					regFlagSparse = tempTeeControl.flagSourceCatFlagSparseFlagMaxColID >> 5;
-					//uint1_t tempFlagDrainMisc = tempTeeControl.flagSourceCatFlagSparseFlagMaxColID >> 5;
+					sigState = OA_TEE_STATE_RESEND_OTHER;
 
-					// if (tempFlagDrainMisc == TRUE)
-					// {
-					// 	tempInstruction = OA_TEE_INSTRUCTION_DRAIN_MISC;
-					// }
-					// else
-					// {
-					// 	tempInstruction = OA_TEE_INSTRUCTION_DRAIN_CONV;
-					// }
-					tempInstruction = OA_TEE_INSTRUCTION_DRAIN_CONV;
-					//regFlagDrainMisc = tempFlagDrainMisc;
-				}
-			} //OA_TEE_INSTRUCTION_DECODE_COMMAND
-			break;
-			case (OA_TEE_INSTRUCTION_LOOP_UPDATE) :
-			{
-				tempInstruction = OA_TEE_INSTRUCTION_DRAIN_CONV;
-
-				iClustersInStrip = 0;
-				//iColDrained = 0;
-				iStripsInTile++;
-				if (iStripsInTile == regStripsInTile)
-				{
-					iStripsInTile = 0;
-					iGroup++;
-					if (iGroup == regNumGroups)
+					if (writeSuccessSendBlock == TRUE)
 					{
-						tempInstruction = OA_TEE_INSTRUCTION_DECODE_COMMAND;
-					}
+						sigState = OA_TEE_STATE_DRAIN_OTHER;
+						t_flag sigIsFromLastCol = sigDramBlockTagged.flags & ((unsigned char ) 0x01);
+						if (sigIsFromLastCol == TRUE)
+						{
+							#if defined(SPARSE_SYSTEM)
+								if (regSendCount == FALSE)
+								{
+									sigState = OA_TEE_STATE_DRAIN_CONV;
+									if (regEncounteredLastClusterInStrip == TRUE)
+									{
+										sigState = OA_TEE_STATE_SEND_GHOST;
+
+										if (sigCountSelfNominalBlocksInStrip == regTotalSelfNominalBlocksInStrip)
+										{
+											sigState = OA_TEE_STATE_SEND_SELF;
+											sigSendCount = TRUE;
+										}
+									}
+								}
+								else //sigSendCount == TRUE
+								{
+									sigSendCount = FALSE;
+									sigState = OA_TEE_STATE_DRAIN_CONV;
+									if (sigCountSelfNominalBlocks == regTotalSelfNominalBlocks)
+									{
+										sigState = OA_TEE_STATE_DECODE;
+									}
+								}
+							#else //Dense system
+								sigState = OA_TEE_STATE_DRAIN_CONV;
+								if (sigCountSelfNominalBlocks == regTotalSelfNominalBlocks)
+								{
+									sigState = OA_TEE_STATE_DECODE;
+								}
+							#endif
+						} //(sigIsFromLastCol == TRUE)
+					} //(writeSuccessSendBlock == TRUE)
 				}
-				
-			} //OA_TEE_INSTRUCTION_LOOP_UPDATE
+			} //case (OA_TEE_STATE_DRAIN_OTHER_DATA)
+			break;
+			case (OA_TEE_STATE_RESEND_OTHER): {
+				if (writeSuccessSendBlock == TRUE)
+				{
+					sigState = OA_TEE_STATE_DRAIN_OTHER;
+					t_flag sigIsFromLastCol = sigDramBlockTagged.flags & ((unsigned char ) 0x01);
+					if (sigIsFromLastCol == TRUE)
+					{
+						#if defined(SPARSE_SYSTEM)
+							if (regSendCount == FALSE)
+							{
+								sigState = OA_TEE_STATE_DRAIN_CONV;
+								if (regEncounteredLastClusterInStrip == TRUE)
+								{
+									sigState = OA_TEE_STATE_SEND_GHOST;
+
+									if (sigCountSelfNominalBlocksInStrip == regTotalSelfNominalBlocksInStrip)
+									{
+										sigState = OA_TEE_STATE_SEND_SELF;
+										sigSendCount = TRUE;
+									}
+								}
+							}
+							else //sigSendCount == TRUE
+							{
+								sigSendCount = FALSE;
+								sigState = OA_TEE_STATE_DRAIN_CONV;
+								if (sigCountSelfNominalBlocks == regTotalSelfNominalBlocks)
+								{
+									sigState = OA_TEE_STATE_DECODE;
+								}
+							}
+						#else //Dense system
+							sigState = OA_TEE_STATE_DRAIN_CONV;
+							if (sigCountSelfNominalBlocks == regTotalSelfNominalBlocks)
+							{
+								sigState = OA_TEE_STATE_DECODE;
+							}
+						#endif
+					} //(sigIsFromLastCol == TRUE)
+				} //(writeSuccessSendBlock == TRUE)
+			} //case (OA_TEE_STATE_RESEND_OTHER_DATA)
 			break;
 			#if defined(SPARSE_SYSTEM)
-				case (OA_TEE_INSTRUCTION_SEND_COUNT) :
-				{
-					tempInstruction = OA_TEE_INSTRUCTION_DRAIN_OTHERS;
+				case (OA_TEE_STATE_SEND_GHOST): {
+					if (writeSuccessSendBlock == TRUE)
+					{
+						sigCountSelfNominalBlocks++;
+						sigCountSelfNominalBlocksInStrip++;
+
+						sigState = OA_TEE_STATE_DRAIN_OTHER;
+						if (sigIsLastCol == TRUE)
+						{
+							sigState = OA_TEE_STATE_SEND_GHOST;
+							sigSendCount = FALSE;
+
+							if (sigCountSelfNominalBlocksInStrip == regTotalSelfNominalBlocksInStrip)
+							{
+								sigState = OA_TEE_STATE_SEND_SELF;
+								sigSendCount = TRUE;
+							}
+						}
+					}
 				}
 				break;
 			#endif
-			default:
-			break;
-		}
+			default: break;
+		} //switch (regState_)
 
-		regInstruction = tempInstruction;
 
-		#pragma unroll
-		for (int i=0; i<NUM_CLUSTER_IN_DRAM_SIZE-1; i++)
-		{
-			if (shiftInNewCluster == true)
-			{
-				regConvDramBlock.clusters[i] = regConvDramBlock.clusters[i+1];
-			}
-		}
-		if (shiftInNewCluster == true)
-		{
-			regConvDramBlock.clusters[NUM_CLUSTER_IN_DRAM_SIZE-1] = tempClusterTagged.cluster;
-		}
+
+		/**
+		 * Register update assignment
+		 */
+		regState = sigState;
+		regCountSelfNominalBlocks = sigCountSelfNominalBlocks;
+		regTotalSelfNominalBlocks = sigTotalSelfNominalBlocks;
+		regIdxClusterInDramBlock = sigIdxClusterInDramBlock;
+		regIsLastCol = sigIsLastCol;
+		regDramBlockTagged = sigDramBlockTagged;
+		#if defined(SPARSE_SYSTEM)
+			regCountSelfNominalBlocksInStrip = sigCountSelfNominalBlocksInStrip;
+			regTotalSelfNominalBlocksInStrip = sigTotalSelfNominalBlocksInStrip;
+			regCountSelfClusterInStrip = sigCountSelfClusterInStrip;
+			regEncounteredLastClusterInStrip = sigEncounteredLastClusterInStrip;
+			regSendCount = sigSendCount;
+		#endif
 
 	}//while
-}
+} //kernelOATee
 #endif  //OA_MEMORY
 
 

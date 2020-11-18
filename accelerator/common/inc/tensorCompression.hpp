@@ -11,9 +11,9 @@
  * \param group
  * \param height
  * \param width
- * \param clusterSize
- * \param transferBlockSize
- * \param compressionWindowSize
+ * \param clusterSize Number of scalar per cluster
+ * \param transferBlockSize Number of clusters per transfer block
+ * \param compressionWindowSize Number of clusters in a compression window
  * \param numTransferBlockPerDramBlock
  * \param isKernel
  * \param isDense

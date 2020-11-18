@@ -449,6 +449,21 @@ void instruction_generator(
                 sizeOutputTileFullWidthPerCol : sizeOutputTilePartialWidthPerCol;
 
 
+    #if defined(SPARSE_SYSTEM)
+        unsigned int numTransferBlocksPerCompressionBlock
+                = 1 + (COMPRESSION_WINDOW_SIZE + TRANSFER_SIZE - 1) / TRANSFER_SIZE;
+        unsigned int numCompressionBlocksInChannelGroup =
+                1 + (numOutputChannelsPerGroupNextLayer - 1) / (COMPRESSION_WINDOW_SIZE * TRANSFER_SIZE);
+        unsigned int numNominalTransferBlockPerOutputStrip =
+                numTransferBlocksPerCompressionBlock * numCompressionBlocksInChannelGroup;
+        unsigned int numNominalDramBlocksPerOutputStrip =
+               1+ (numNominalTransferBlockPerOutputStrip-1) / (WIDE_SIZE);
+    #else
+        unsigned int numNominalTransferBlockPerOutputStrip =
+                (t_ushort) (1 + (numOutputChannelsPerGroupNextLayer - 1) / (CLUSTER_SIZE * TRANSFER_SIZE));
+        unsigned int numNominalDramBlocksPerOutputStrip =
+               (t_ushort) (1+ (numNominalTransferBlockPerOutputStrip-1) / (WIDE_SIZE));
+    #endif
 
     //x & y planar coordinates in the input planar dimension
     unsigned int iterPGlobal = 0;
@@ -544,7 +559,7 @@ void instruction_generator(
                 instructionOAControl.numLocalTilePerColHxW = (t_uchar)(maxTQPerCol*maxTP);
                 instructionOAControl.numRoundedLocalChannels = (t_ushort)((1 + (numOutputChannels-1) / CLUSTER_SIZE) * CLUSTER_SIZE);
                 instructionOAControl.numDrainInstructions = (t_ushort) ( numComputeFoldPerGroup * numOAGroupsCurrentLayer);
-                instructionOAControl.numMemInstructions = (t_uchar) numGroupsNextLayer;
+                instructionOAControl.numGroupsNextLayer = (t_uchar) numGroupsNextLayer;
                 instructionOAControl.numFoldsInGroupCurrentLayer = (t_ushort) numComputeFoldPerGroup;
                 instructionOAControl.numFullFoldsInCurrentLayer = (t_ushort) numFullComputeFoldPerGroup;
                 instructionOAControl.numActiveElementsInFullFold = (t_ushort) numActiveElementsInFullComputeFold;
@@ -552,6 +567,8 @@ void instruction_generator(
                 instructionOAControl.numLocalChannelsPerCurrentGroup = (t_ushort) numOutputChannelsPerGroupCurrentLayer;
                 instructionOAControl.numLocalChannelsPerNextGroup = (t_ushort) numOutputChannelsPerGroupNextLayer;
                 instructionOAControl.numActiveCols = (t_uchar) numActiveCols;
+                instructionOAControl.numNominalDramBlocksPerStrip = numNominalDramBlocksPerOutputStrip;
+
                 unsigned char leftShift = flagOutputShiftLeft;
                 unsigned char scaleShift = outputShiftBits;
 
@@ -605,7 +622,7 @@ void instruction_generator(
                 instructionOA.memOAPEColStride = (t_uint)((unsigned int) maxTQPerCol * memOADramBlockColStride);
                 instructionOA.memOARowStride = (t_ushort)((unsigned int) outputWidth * memOADramBlockColStride);
                 instructionOA.memOAColStride = (t_ushort) memOADramBlockColStride;
-
+                instructionOA.numNominalDramBlocksPerStrip = (t_ushort) numNominalDramBlocksPerOutputStrip;
     #if defined(SPARSE_SYSTEM)
                 instructionOA.memTBStart = (t_int)
                         (memOATBCountStart
@@ -618,16 +635,9 @@ void instruction_generator(
                 instructionOA.memTBPEColStride = (t_uint)((unsigned int) maxTQPerCol * memOATBCountColStride);
                 instructionOA.memTBRowStride = (t_ushort)((unsigned int) outputWidth * memOATBCountColStride);
                 instructionOA.memTBColStride = (t_ushort) memOATBCountColStride;
-    #else
-                unsigned int numTBPerGroupNextLayer =
-                        1 + (numOutputChannelsPerGroupNextLayer-1) / CLUSTER_SIZE / TRANSFER_SIZE;
-                instructionOA.numDramBlockPerStrip =
-                        (t_uint) (1 + (numTBPerGroupNextLayer-1)/WIDE_SIZE);
     #endif
                 instructionOA.tileHeight = (t_uchar) maxTP;
                 instructionOA.columnTileWidth = (t_uchar) maxTQPerCol;
-                instructionOA.numColumnTileWidthxTileHeightxNumActiveCols
-                        = (t_ushort) (maxTQPerCol * maxTP * numActiveCols);
 
                 vecOAMoverInstruction.push_back(instructionOA);
             } //OA mover instructions for the current planar tile

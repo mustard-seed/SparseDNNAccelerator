@@ -16,7 +16,7 @@
    // #define EMULATE
 #endif
 #define INFERENCE_REPEAT 20
-//#define CHECKOUTPUT
+#define CHECKOUTPUT
 //#define PROFILE
 
 class testFixture : public ::testing::Test {

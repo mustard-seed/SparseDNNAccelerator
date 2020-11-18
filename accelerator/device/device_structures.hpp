@@ -221,6 +221,10 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
     //Arch. parameter: row stride in terms of dram block in the output memory region
     t_ushort memOARowStride;
 
+    //Problem parameter: Number of dram blocks per strip 
+    //(not including the block used to transfer TB count when processing sparse data)
+    t_ushort numNominalDramBlocksPerStrip;
+
 #if defined(SPARSE_SYSTEM)
     //Arch. parameter: Index of the first TB count element of this transfer in memory
     t_int memTBStart;
@@ -232,8 +236,6 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
     t_ushort memTBColStride;
     //Arch. parameter: row stride in terms of TB count in the TB moveremory.
     t_ushort memTBRowStride;
-#else
-    t_uint numDramBlockPerStrip;
 #endif
 
     //Problem parameter: Output tile group to drain from   
@@ -242,8 +244,6 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
     t_uchar tileHeight; 
     //Problem parameter: Output tile width per compute column
     t_uchar columnTileWidth; 
-    //Auxillary parameter: Total number of strips to drain.
-    t_ushort numColumnTileWidthxTileHeightxNumActiveCols;
 
 } t_oa_mover_instruction;
 
@@ -314,7 +314,7 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
     //Number of compute drain instructions
     t_ushort numDrainInstructions;
     //Number of memory transfer instructions
-    t_uchar numMemInstructions;
+    t_uchar numGroupsNextLayer;
 
     //TODO: Change data type to t_ushort
     //Number of folds required per group to drain the current tile
@@ -334,6 +334,10 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
 
     //Number of active compute columns
     t_uchar numActiveCols;
+
+    //Number of dram blocks that belong to the same group at the same planar index
+    //This should be calculated assuming 100% density.
+    t_ushort numNominalDramBlocksPerStrip;
 
     //Concatenated signal
     //[3:0] number of bits to shift the convolution output
@@ -476,6 +480,9 @@ typedef struct __attribute__((packed))
 } t_input_buffer_tile_buffer_packet;
 
 
+/**
+ * Sees by the OA Buffer
+ */
 typedef struct __attribute__((packed))
 {
     //Index of the output buffer at the start of the transaction
@@ -496,6 +503,16 @@ typedef struct __attribute__((packed))
 
     //Number of channels per group in the next layer, used for draining the cahce only
     unsigned short numLocalChannelsPerNextGroup;
+
+    //Number of dram blocks to send to the OA mover 
+    //over tile W * tile H * num_groups_next_layer
+    //Seen by the OA Tee only
+    unsigned short numNominalDramBlocksPerOATee;
+
+    #if defined(SPARSE_SYSTEM)
+    //Seen  by the OA Tee only
+    unsigned short numNominalDramBlocksPerStrip;
+    #endif
 
 
     //TODO: Add bit for output access bank
@@ -518,10 +535,18 @@ typedef struct __attribute__((packed))
     unsigned char maxColID;
 } t_output_tile_buffer_packet_tagged;
 
+/**
+ * Sees by the OA Tee
+ */
 typedef struct __attribute__((packed))
 {
-    unsigned char numLocalTileHeightxLocalTileWidth;
-    unsigned char numGroups;
+    //Number of dram blocks to send to the OA mover 
+    //over tile W * tile H * num_groups_next_layer
+    unsigned short numNominalDramBlocksPerOATee;
+
+    #if defined(SPARSE_SYSTEM)
+    unsigned short numNominalDramBlocksPerStrip;
+    #endif
 
     //Bit [3:0] Maximum column ID
     //Bit [5] Flag for sparse draining sparse input (1 for true)
@@ -575,7 +600,10 @@ typedef struct {
 
 typedef struct __attribute__((packed)) {
     t_output_dram_block block;
-    unsigned char isLastFlag; //Bit 0: Is last dram block in a transfer. Bit 1: Is last column
+
+    //Bit 0: Is issued by the last column
+    //Bit 1: Is valid block
+    unsigned char flags;
 } t_output_dram_block_tagged;
 #endif
 //#endif
