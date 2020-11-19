@@ -26,14 +26,14 @@
 #include "layerInstructionGenerator.hpp"
 #include "accelerator_wrapper.hpp"
 
-//#define PLAY
-#define PERF_TEST
-#define THROUGHPUT_DIAGNOSTIC
-#define VALIDATE
+#define PLAY
+//#define PERF_TEST
+//#define THROUGHPUT_DIAGNOSTIC
+//#define VALIDATE
 //Some how if repeat is 100, bad things will happen on concat
-#define REPEAT 50
+#define REPEAT 1
 #ifndef C5SOC
-//#define EMULATE
+#define EMULATE
 #endif
 //#define PERF_TEST
 //#NOOP
@@ -131,6 +131,45 @@ protected:
 }; //testFixture
 
 #ifdef PLAY
+TEST_F (testFixture, global_avg_pool_sparse_output_grouped)
+{
+    unsigned char inputWidth = 4;
+    unsigned char inputHeight = 4;
+    unsigned char numInputChannel = 120;
+    unsigned char numOutputChannel = numInputChannel;
+    unsigned char numInputGroup = 1;
+    unsigned char numOutputGroup = 2;
+    unsigned char inputHeightSPUnitSize = 1;
+    unsigned char inputWidthSPUnitSize = 1;
+    unsigned char sizeOutputTileWidthPerColFull = 2;
+    unsigned char sizeOutputTileHeight = 4;
+    unsigned char kernelSize = 3;
+    bool flagEnableRelu = false;
+    bool flagSparseInput = false;
+    bool flagSparseOutput = true;
+    OPERATION op = AVG_POOL;
+    float bias = 0.0f;
+
+    launch(
+                inputWidth,
+                inputHeight,
+                numInputChannel,
+                numOutputChannel,
+                numInputGroup,
+                numOutputGroup,
+                inputHeightSPUnitSize,
+                inputWidthSPUnitSize,
+                sizeOutputTileWidthPerColFull,
+                sizeOutputTileHeight,
+                kernelSize,
+                flagEnableRelu,
+                flagSparseInput,
+                flagSparseOutput,
+                op,
+                bias
+          );
+}
+
 TEST_F (testFixture, conv_dense_input_dense_output_plain)
 {
     unsigned char inputWidth = 4;

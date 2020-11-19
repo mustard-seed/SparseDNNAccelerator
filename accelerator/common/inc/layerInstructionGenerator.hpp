@@ -180,12 +180,11 @@ typedef struct {
     unsigned int numOutputTileAlongHeight;
 } t_graph_output_tile_info;
 
-t_graph_output_tile_info deriveConvOutputTileShape(
-        unsigned int outputHeight,
+t_graph_output_tile_info deriveConvOutputTileShape(unsigned int outputHeight,
         unsigned int outputWidth,
         unsigned int sizeOutputFullTileHeight,
         unsigned int sizeOutputFullTileWidthPerCol
-        );
+        , bool isConv);
 
 unsigned int deriveConvInputDimension1D(
         unsigned int outputDimension1D,

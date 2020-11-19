@@ -2245,17 +2245,20 @@ __kernel void kernelIATee ()
 			//Logic for routing dram blocks to the MISC unit
 			//Only forward data blocks	
 			bool write2Misc = false;
-			if ( (regState == IA_TEE_COMMAND_TRANSFER) && (regFlagRoute2Misc == TRUE))
+			if (colID < MISC_COLS)
 			{
-				write2Misc = true;
-			}
+				if ( (regState == IA_TEE_COMMAND_TRANSFER) && (regFlagRoute2Misc == TRUE))
+				{
+					write2Misc = true;
+				}
 
-			if (write2Misc == true)
-			{
-				t_dram_block_ia_to_misc blockToMisc;
-				blockToMisc.dramBlock = taggedBlock.dramBlock;
-				blockToMisc.miscLeftShiftAmount = taggedBlock.miscLeftShiftAmount;
-				write_channel_intel(channel_ia_wide_misc[colID], blockToMisc);
+				if (write2Misc == true)
+				{
+					t_dram_block_ia_to_misc blockToMisc;
+					blockToMisc.dramBlock = taggedBlock.dramBlock;
+					blockToMisc.miscLeftShiftAmount = taggedBlock.miscLeftShiftAmount;
+					write_channel_intel(channel_ia_wide_misc[colID], blockToMisc);
+				}
 			}
 		
 		} // if read is successful
@@ -2300,9 +2303,121 @@ __kernel void kernelMiscControlMover (
 	}
 }
 
+#define KERNEL_MISC_TEE_FETCH 0x0
+#define KERNEL_MISC_TEE_RESEND 0x1
 __attribute__((max_global_work_dim(0)))
 __attribute__((autorun))
-__attribute__((num_compute_units(PE_COLS)))
+__attribute__((num_compute_units(MISC_COLS)))
+__kernel void kernelMiscControlTee ()
+{
+	typedef uint1_t t_state;
+	int colID = get_compute_id(0);
+	t_misc_control_packet regControlPacket;
+	t_flag regNeedResendToSelf = FALSE;
+	t_flag regNeedResendToOther = FALSE;
+	t_state regState = KERNEL_MISC_TEE_FETCH;
+
+	#pragma ii 1
+	while (1)
+	{
+		//Local signals
+		t_misc_control_packet sigControlPacket = regControlPacket;
+		t_flag sigNeedResendToSelf = regNeedResendToSelf;
+		t_flag sigNeedResendToOther = regNeedResendToOther;
+		t_flag sigState = regState;
+
+		//Interaction with the upstream channel
+		t_flag readUpstreamSuccess = FALSE;
+		if (regState == KERNEL_MISC_TEE_FETCH)
+		{
+			bool success = false;
+			sigControlPacket = read_channel_nb_intel(channel_misc_instruction[colID], &success);
+			readUpstreamSuccess = (success == true) ? TRUE : FALSE;
+		}
+
+		//Interaction with the local channel
+		t_flag sendToSelfSuccess = (regNeedResendToSelf==TRUE) ? FALSE : TRUE;
+		if (
+			(readUpstreamSuccess == TRUE)
+			|| ((regState == KERNEL_MISC_TEE_RESEND) && (regNeedResendToSelf == TRUE))
+		   )
+		{
+			bool success = 
+				write_channel_nb_intel(channel_misc_instruction_local[colID], sigControlPacket);
+			sendToSelfSuccess = (success == true) ? TRUE : FALSE;
+		}
+
+		//Interaction with the downstream channel
+		t_flag sendToOtherSuccess = TRUE;
+		if (colID < (MISC_COLS-1))
+		{
+			sendToOtherSuccess = (regNeedResendToOther==TRUE) ? FALSE : TRUE;
+			uint4_t numActiveCol = (sigControlPacket.controlBits & 0x0F);
+			if (
+				(readUpstreamSuccess == TRUE)
+				|| ((regState == KERNEL_MISC_TEE_RESEND) && (regNeedResendToOther == TRUE))
+			   )
+			{
+				if (colID < (numActiveCol - 1))
+				{
+					bool success = 
+						write_channel_nb_intel(channel_misc_instruction[colID+1], sigControlPacket);
+					sendToOtherSuccess = (success == true) ? TRUE : FALSE;
+				}
+				else
+				{
+					sendToOtherSuccess = TRUE;
+				}
+			}
+		}
+
+		//State update
+		if (regState == KERNEL_MISC_TEE_FETCH)
+		{
+			if ((sendToSelfSuccess == FALSE) || (sendToOtherSuccess == FALSE))
+			{
+				sigState = KERNEL_MISC_TEE_RESEND;
+				if (sendToSelfSuccess == FALSE)
+				{
+					sigNeedResendToSelf = TRUE;
+				}
+
+				if (sendToOtherSuccess == FALSE)
+				{
+					sigNeedResendToOther = TRUE;
+				}
+			}
+		}
+		else //regState == KERNEL_MISC_TEE_RESEND
+		{
+			if (sendToSelfSuccess == TRUE)
+			{
+				sigNeedResendToSelf = FALSE;
+			}
+
+			if (sendToOtherSuccess == TRUE)
+			{
+				sigNeedResendToOther = FALSE;
+			}
+
+			if ((sendToSelfSuccess == TRUE) && (sendToOtherSuccess == TRUE))
+			{
+				sigState = KERNEL_MISC_TEE_FETCH;
+			}
+		}
+
+		//Loop-variable update
+		regControlPacket = sigControlPacket;
+		regNeedResendToSelf = sigNeedResendToSelf;
+		regNeedResendToOther = sigNeedResendToOther;
+		regState = sigState;
+	}
+
+}
+
+__attribute__((max_global_work_dim(0)))
+__attribute__((autorun))
+__attribute__((num_compute_units(MISC_COLS)))
 __kernel void kernelMisc ()
 {
 	int colID = get_compute_id(0);
@@ -2310,17 +2425,8 @@ __kernel void kernelMisc ()
 	{
 		t_accumulator reductionBlock[BURST_SIZE_BYTE];
 
-		t_misc_control_packet controlPacket = read_channel_intel(channel_misc_instruction[colID]);
-
-		//Handle the passing over the control Packet
-		if (colID < (PE_COLS - 1))
-		{
-			uint4_t numActiveCol = (controlPacket.controlBits & 0x0F);
-			if (colID < (numActiveCol - 1))
-			{
-				write_channel_intel(channel_misc_instruction[colID+1], controlPacket);
-			}
-		}
+		t_misc_control_packet controlPacket = 
+			read_channel_intel(channel_misc_instruction_local[colID]);
 
 		//Decode
 		//OpCode. 00: Add; 01: Max Pooling; 10: Stream
@@ -2340,6 +2446,7 @@ __kernel void kernelMisc ()
 						numDramBlocksToReduce, 
 						numEffectiveValuesPerOutputBlock));
 
+		#pragma max_concurrency 1
 		for (unsigned short iOutput=0; iOutput < numOutputBlocks; iOutput++)
 		{
 			unsigned char numEffectiveValues = numEffectiveValuesPerOutputBlock;
@@ -2355,9 +2462,11 @@ __kernel void kernelMisc ()
 
 			//Perform reduction
 			#pragma ii 1
-			for (unsigned short iBlock=0; iBlock<numDramBlocksToReduce; iBlock++)
+			#pragma max_concurrency 2
+			for (unsigned short iBlock=0; iBlock <numDramBlocksToReduce; iBlock++)
 			{
-				t_dram_block_ia_to_misc inputDramBlockTagged = read_channel_intel(channel_ia_wide_misc[colID]);
+				t_dram_block_ia_to_misc inputDramBlockTagged = 
+					read_channel_intel(channel_ia_wide_misc[colID]);
 				unsigned char numLeftShiftAmount = inputDramBlockTagged.miscLeftShiftAmount;
 				t_dram_block inputDramBlock = inputDramBlockTagged.dramBlock;
 
@@ -2400,12 +2509,15 @@ __kernel void kernelMisc ()
 			}
 
 			//Drain the output
-			for (unsigned char iVal=0; iVal < BURST_SIZE_BYTE; iVal++)
+			unsigned char iOutputInBlock = 0;
+			#if (defined(ARRIA10) || defined(STRATIX10))
+				#pragma speculated_iterations BURST_SIZE_BYTE
+			#endif
+			#pragma ii 1
+			while (iOutputInBlock < numEffectiveValues)
 			{
-				if (iVal<numEffectiveValues)
-				{
-					write_channel_intel(channel_drain_misc[colID], reductionBlock[iVal]);
-				}
+				write_channel_intel(channel_drain_misc[colID], reductionBlock[iOutputInBlock]);
+				iOutputInBlock++;
 			}
 
 			EMULATOR_PRINT(("[kernelMisc %d] Finished processing output block %d / %d of the command.\n", colID, iOutput, numOutputBlocks));
@@ -3171,10 +3283,17 @@ __kernel void kernelOABuffer ()
 		//Writer <===> data channel from Misc
 		if (writerBlockFromMiscRequest == TRUE)
 		{
-			bool success = false;
-			writerBlockFromMiscData = 
-				read_channel_nb_intel(channel_drain_misc[colID], &success);
-			if (success == true)
+			if (colID < MISC_COLS)
+			{
+				bool success = false;
+				writerBlockFromMiscData = 
+					read_channel_nb_intel(channel_drain_misc[colID], &success);
+				if (success == true)
+				{
+					writerBlockFromMiscValid = TRUE;
+				}
+			}
+			else
 			{
 				writerBlockFromMiscValid = TRUE;
 			}
@@ -4053,7 +4172,14 @@ __kernel void kernelOABuffer ()
 				}
 				else
 				{
-					wideOutput = read_channel_nb_intel(channel_drain_misc[colID], &readSuccess);
+					if (colID < MISC_COLS)
+					{
+						wideOutput = read_channel_nb_intel(channel_drain_misc[colID], &readSuccess);
+					}
+					else
+					{
+						readSuccess = true;
+					}
 
 				}
 				

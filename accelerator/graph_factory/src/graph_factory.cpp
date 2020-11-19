@@ -337,7 +337,7 @@ namespace GraphRuntime {
 
                     t_tile_pair tileConfig = calculateTileSizePerUnit(*pLayerLocal.get());
                     sizeOutputTileFullWidthPerCol = 1;
-                    numActiveColsPartialOutputTile = pLayerLocal->getOutputWidth() % PE_COLS;
+                    numActiveColsPartialOutputTile = pLayerLocal->getOutputWidth() % MISC_COLS;
                     sizeOutputTileFullHeight = tileConfig.tileInfo.sizeOutputTileFullHeight;
                     estimatedLatency = tileConfig.latency;
                     flagComputeBound = tileConfig.flagComputeBound;
@@ -400,7 +400,7 @@ namespace GraphRuntime {
                     stride = pLayerLocal->getKernelStride();
                     verticalBorderPadding = pLayerLocal->getInputBorderPadding();
                     horizontalBorderPadding = pLayerLocal->getInputBorderPadding();
-                    numActiveColsPartialOutputTile = numOutputWidth % PE_COLS;
+                    numActiveColsPartialOutputTile = numOutputWidth % MISC_COLS;
 
                     //TODO: add precision stuff
                     int inputFracBits = pLayerLocal->getInputFracBits().at(0);
@@ -430,7 +430,7 @@ namespace GraphRuntime {
                     stride = pLayerLocal->getKernelStride();
                     verticalBorderPadding = pLayerLocal->getInputBorderPadding();
                     horizontalBorderPadding = pLayerLocal->getInputBorderPadding();
-                    numActiveColsPartialOutputTile = numOutputWidth % PE_COLS;
+                    numActiveColsPartialOutputTile = numOutputWidth % MISC_COLS;
                     ops = pLayerLocal->getOutputHeight() * pLayerLocal->getOutputWidth() * pLayerLocal->getOutputChannel();
                     //TODO: add precision stuff
                     //TODO: Modify the shift direction and amounts, to simulate the effect of the integer divisor
@@ -804,7 +804,8 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
                         outputHeight,
                         outputWidth,
                         sizeOutputFullTileHeight,
-                        outputTileWidthPerCol
+                        outputTileWidthPerCol,
+                        true //isConv
                      );
 
          //Check that the tile configuration can work wit the IA/OA cache limit
@@ -986,7 +987,8 @@ t_tile_pair calculateTileSizePerUnit(EltAddLayer &_eltAddLayer)
                         outputHeight,
                         outputWidth,
                         sizeOutputFullTileHeight,
-                        outputTileWidthPerCol
+                        outputTileWidthPerCol,
+                        false //isConv
                      );
 
          int oaCachePerColRequirement =

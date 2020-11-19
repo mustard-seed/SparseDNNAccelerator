@@ -136,12 +136,14 @@ void instruction_generator(
             + 2* ((unsigned int) inputWidthPadding) - ((unsigned int) kernelSize))
             / ((unsigned int) kernelStride) + 1;
 
+    unsigned char numActiveColsFullOutputTile =
+            (op == CONVOLUTION) ?  PE_COLS : MISC_COLS;
+
     unsigned char numActiveColsPartialOutputTile =
             ((op == MAX_POOL) || (op == AVG_POOL) || (op == ELT_ADD) || (op == CONCATENATION)) ?
-                (outputWidth % PE_COLS)
+                (outputWidth % numActiveColsFullOutputTile)
                 : _numActiveColsPartialOutputTile;
 
-    unsigned char numActiveColsFullOutputTile = PE_COLS;
     //Input height and width before stretch and padding
     if ((inputSPHeightUnit != 1) && ((inputSPHeight-1) % inputSPHeightUnit != 0))
     {
@@ -1047,10 +1049,12 @@ t_graph_output_tile_info deriveConvOutputTileShape(
         unsigned int outputHeight,
         unsigned int outputWidth,
         unsigned int sizeOutputFullTileHeight,
-        unsigned int sizeOutputFullTileWidthPerCol
+        unsigned int sizeOutputFullTileWidthPerCol,
+        bool isConv
         )
 {
     t_graph_output_tile_info tileInfo;
+    unsigned int fullCols = (isConv == true) ? PE_COLS : MISC_COLS;
     tileInfo.sizeOutputTileFullHeight = sizeOutputFullTileHeight;
     tileInfo.sizeOutputTileFullWidthPerCol = sizeOutputFullTileWidthPerCol;
     tileInfo.numOutputTileAlongHeight =
@@ -1059,7 +1063,7 @@ t_graph_output_tile_info deriveConvOutputTileShape(
             outputHeight / sizeOutputFullTileHeight;
 
     unsigned int sizeOutputTileFullWidth =
-            sizeOutputFullTileWidthPerCol * PE_COLS;
+            sizeOutputFullTileWidthPerCol * fullCols;
     tileInfo.numOutputTileAlongWidth =
             1 + (outputWidth-1) / sizeOutputTileFullWidth;
     tileInfo.numFullOutputTileAlongWidth =
@@ -1079,7 +1083,7 @@ t_graph_output_tile_info deriveConvOutputTileShape(
     }
     else
     {
-        unsigned int numColsForPartialWidthTile = PE_COLS;
+        unsigned int numColsForPartialWidthTile = fullCols;
         while (sizeOutputTilePartialWidth % numColsForPartialWidthTile != 0)
         {
             numColsForPartialWidthTile--;
