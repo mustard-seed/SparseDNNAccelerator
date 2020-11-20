@@ -2446,7 +2446,6 @@ __kernel void kernelMisc ()
 						numDramBlocksToReduce, 
 						numEffectiveValuesPerOutputBlock));
 
-		#pragma max_concurrency 1
 		for (unsigned short iOutput=0; iOutput < numOutputBlocks; iOutput++)
 		{
 			unsigned char numEffectiveValues = numEffectiveValuesPerOutputBlock;
@@ -2462,7 +2461,6 @@ __kernel void kernelMisc ()
 
 			//Perform reduction
 			#pragma ii 1
-			#pragma max_concurrency 2
 			for (unsigned short iBlock=0; iBlock <numDramBlocksToReduce; iBlock++)
 			{
 				t_dram_block_ia_to_misc inputDramBlockTagged = 
@@ -2510,9 +2508,6 @@ __kernel void kernelMisc ()
 
 			//Drain the output
 			unsigned char iOutputInBlock = 0;
-			#if (defined(ARRIA10) || defined(STRATIX10))
-				#pragma speculated_iterations BURST_SIZE_BYTE
-			#endif
 			#pragma ii 1
 			while (iOutputInBlock < numEffectiveValues)
 			{

@@ -82,7 +82,7 @@
 #if defined(FULL_SYSTEM)
 	#define PE_ROWS 2
 	#define PE_COLS 4
-	#define MISC_COLS 2
+	#define MISC_COLS 4
 #else
 	#define PE_ROWS 2
 	#define PE_COLS 2
