@@ -759,7 +759,7 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
 #if defined(SPARSE_SYSTEM)
     bool inputIsDense = _convLayer.getInputSparseFlag() ? false: true;
 #else
-    bool inputIsDense = false;
+    bool inputIsDense = true;
 #endif
     unsigned int numTBPerInputGroupStrip = calculateExternalMemoryAddressStride(
                 inputChannelsPerGroup,
@@ -991,21 +991,21 @@ t_tile_pair calculateTileSizePerUnit(EltAddLayer &_eltAddLayer)
                         false //isConv
                      );
 
-         int oaCachePerColRequirement =
+         int oaCachePerColRequirementInWords =
                  oa_cache_boundary_check(
                      candidateTileInfo.sizeOutputTileFullHeight,
                      candidateTileInfo.sizeOutputTileFullWidthPerCol,
                      outputChannels
                      );
-         int oaCachePerPartialColRequirement =
+         int oaCachePerPartialColRequirementInWords =
                  oa_cache_boundary_check(
                      candidateTileInfo.sizeOutputTileFullHeight,
                      candidateTileInfo.sizeOutputTilePartialWidthPerCol,
                      outputChannels
                      );
          bool passCacheRequirement =
-                (oaCachePerColRequirement <= OA_CACHE_DEPTH)
-                 && (oaCachePerPartialColRequirement <= OA_CACHE_DEPTH);
+                (oaCachePerColRequirementInWords <= (OA_CACHE_DEPTH*CLUSTER_SIZE))
+                 && (oaCachePerPartialColRequirementInWords <= (OA_CACHE_DEPTH*CLUSTER_SIZE));
 
          if (passCacheRequirement == true)
          {
