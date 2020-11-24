@@ -1210,17 +1210,22 @@ unsigned int deriveConvInputTransferLatency(
     return latency;
  }
 
-unsigned int deriveConvOutputTransferLatency(
-        unsigned int _outputHeight,
-        unsigned int _outputWidth,
+unsigned int deriveOutputTransferLatency(
+        t_graph_output_tile_info _outputTileInfo,
+        unsigned int _sizeOutputHeight,
         unsigned int _numOutputChannelsPerNextGroup,
-        unsigned int _numNextGroups
-        )
+        unsigned int _numNextGroups)
 {
-    unsigned int numTransferBlockPerChannelGroup = 1 + ( _numOutputChannelsPerNextGroup -1) / (CLUSTER_SIZE*TRANSFER_SIZE);
-    unsigned int numDramBlockPerStrip = 1 + (numTransferBlockPerChannelGroup-1) / WIDE_SIZE;
-
-    unsigned int latency = _outputHeight * _outputWidth * numDramBlockPerStrip * _numNextGroups;
+    //Adjust for the face that the output bandwidth is the number of compute columns
+    unsigned int latency =
+            _numOutputChannelsPerNextGroup
+            * _numNextGroups
+            * _sizeOutputHeight
+           * (
+                _outputTileInfo.numFullOutputTileAlongWidth * _outputTileInfo.sizeOutputTileFullWidthPerCol
+                + (_outputTileInfo.numOutputTileAlongWidth - _outputTileInfo.numFullOutputTileAlongWidth)
+                    * _outputTileInfo.sizeOutputTilePartialWidthPerCol
+             );
     return latency;
 }
 

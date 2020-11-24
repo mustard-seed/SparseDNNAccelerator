@@ -53,6 +53,10 @@ namespace GraphRuntime {
         int     outputTileHeight;
         int     outputTileWidthPerCol;
         int     numActiveColsPartialOutputTile;
+        int     inputTransferLatency;
+        int     weightTransferLatency;
+        int     outputTransferLatency;
+        int     computeLatency;
         int     expectedLatency;
         int     isComputeBound;
         unsigned int ops;

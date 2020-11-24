@@ -18,6 +18,10 @@ using namespace GraphRuntime;
  */
 typedef struct {
     t_graph_output_tile_info tileInfo;
+    int     inputTransferLatency;
+    int     weightTransferLatency;
+    int     outputTransferLatency;
+    int     computeLatency;
     unsigned int latency;
     bool flagComputeBound;
     unsigned int ops;
@@ -195,6 +199,10 @@ namespace GraphRuntime {
 
             //Latency estimation
             unsigned int estimatedLatency = 0; //override
+            unsigned int inputTransferLatency = 0;
+            unsigned int weightTransferLatency = 0;
+            unsigned int outputTransferLatency = 0;
+            unsigned int computeLatency = 0;
             bool flagComputeBound = false; //override
             unsigned int ops = 0; //override
 #if defined(HOST_DEBUG)
@@ -212,6 +220,10 @@ namespace GraphRuntime {
                     numActiveColsPartialOutputTile = tileConfig.tileInfo.numActiveColsForPartialWidthTile;
                     sizeOutputTileFullHeight = tileConfig.tileInfo.sizeOutputTileFullHeight;
                     estimatedLatency = tileConfig.latency;
+                    inputTransferLatency = tileConfig.inputTransferLatency;
+                    weightTransferLatency = tileConfig.weightTransferLatency;
+                    outputTransferLatency = tileConfig.outputTransferLatency;
+                    computeLatency = tileConfig.computeLatency;
                     flagComputeBound = tileConfig.flagComputeBound;
                     ops = tileConfig.ops;
 
@@ -339,6 +351,10 @@ namespace GraphRuntime {
                     sizeOutputTileFullWidthPerCol = 1;
                     numActiveColsPartialOutputTile = pLayerLocal->getOutputWidth() % MISC_COLS;
                     sizeOutputTileFullHeight = tileConfig.tileInfo.sizeOutputTileFullHeight;
+                    inputTransferLatency = tileConfig.inputTransferLatency;
+                    weightTransferLatency = 0;
+                    outputTransferLatency = tileConfig.outputTransferLatency;
+                    computeLatency = tileConfig.computeLatency;
                     estimatedLatency = tileConfig.latency;
                     flagComputeBound = tileConfig.flagComputeBound;
                     ops = tileConfig.ops;
@@ -688,7 +704,6 @@ namespace GraphRuntime {
                         pLayer->getNextNumberGroups()
                         );
 
-                    //Filling the rest of the information for the first layer
                    {
                        std::copy(vecIAMoverInstruction.begin(),
                                  vecIAMoverInstruction.end(),
@@ -709,6 +724,10 @@ namespace GraphRuntime {
                            .outputTileHeight = sizeOutputTileFullHeight,
                            .outputTileWidthPerCol = sizeOutputTileFullWidthPerCol,
                            .numActiveColsPartialOutputTile = numActiveColsPartialOutputTile,
+                           .inputTransferLatency = inputTransferLatency,
+                           .weightTransferLatency = weightTransferLatency,
+                           .outputTransferLatency = outputTransferLatency,
+                            .computeLatency = computeLatency,
                            .expectedLatency = estimatedLatency,
                            .isComputeBound = flagComputeBound ? 1 : 0,
                            .ops = ops
@@ -787,6 +806,10 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
 
     t_graph_output_tile_info bestTileInfo;
     unsigned int minLatency = 0xFFFFFFFF;
+    int     bestInputTransferLatency = 0x0;
+    int     bestWeightTransferLatency = 0x0;
+    int     bestOutputTransferLatency = 0x0;
+    int     bestComputeLatency = 0x0;
     bool isComputeBound = true;
 
     while ((outputTileWidthPerCol > 0) && (maxOutputTileHeight > 0))
@@ -890,9 +913,9 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
                         );
             //maxLatency = inputLatency > maxLatency ? inputLatency : maxLatency;
 
-            unsigned int outputLatency = deriveConvOutputTransferLatency(
+            unsigned int outputLatency = deriveOutputTransferLatency(
+                        candidateTileInfo,
                         outputHeight,
-                        outputWidth,
                         outputChannelsPerNextGroup,
                         _convLayer.getNextNumberGroups()
                         );
@@ -911,7 +934,7 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
             //memory transfer inefficiency
             unsigned int transferLatencyAdjusted =
                     (unsigned int) ((float) (weightLatency + outputLatency + inputLatency)
-                    * 1.6f);
+                    * 1.0f);
 
             unsigned int maxLatency = computeLatency > transferLatencyAdjusted ?
                         computeLatency : transferLatencyAdjusted;
@@ -921,6 +944,10 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
                 minLatency = maxLatency;
                 bestTileInfo = candidateTileInfo;
                 isComputeBound = (maxLatency == computeLatency);
+                bestComputeLatency = computeLatency;
+                bestInputTransferLatency = inputLatency;
+                bestWeightTransferLatency = weightLatency;
+                bestOutputTransferLatency = outputLatency;
             }
 
             outputTileWidthPerCol--;
@@ -950,9 +977,14 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
                         *2
                 );
     t_tile_pair result = {.tileInfo = bestTileInfo,
+                          .inputTransferLatency = bestInputTransferLatency,
+                          .weightTransferLatency = bestWeightTransferLatency,
+                          .outputTransferLatency = bestOutputTransferLatency,
+                          .computeLatency = bestComputeLatency,
                           .latency = minLatency,
                           .flagComputeBound=isComputeBound,
-                          .ops = ops};
+                          .ops = ops
+                         };
     return result;
 }
 
@@ -972,7 +1004,8 @@ t_tile_pair calculateTileSizePerUnit(EltAddLayer &_eltAddLayer)
 
     t_graph_output_tile_info bestTileInfo;
     unsigned int minLatency = 0xFFFFFFFF;
-
+    int     bestInputTransferLatency = 0x0;
+    int     bestOutputTransferLatency = 0x0;
     while (outputTileWidthPerCol > 0)
     {
         //Generate a candidate tile configuration
@@ -1012,9 +1045,16 @@ t_tile_pair calculateTileSizePerUnit(EltAddLayer &_eltAddLayer)
 
             //Times 3 to account for two input transfers, and one output transfer for each
             //block of addition
-            unsigned int outputLatency = 3 * deriveConvOutputTransferLatency(
+            unsigned int inputLatency = deriveConvInputTransferLatency(
+                        candidateTileInfo,
+                        outputChannels,
+                        1,
+                        1,
+                        1
+                        );
+            unsigned int outputLatency = deriveOutputTransferLatency(
+                        candidateTileInfo,
                         outputHeight,
-                        outputWidth,
                         outputChannelsPerNextGroup,
                         _eltAddLayer.getNextNumberGroups()
                         );
@@ -1022,6 +1062,8 @@ t_tile_pair calculateTileSizePerUnit(EltAddLayer &_eltAddLayer)
             {
                 minLatency = outputLatency;
                 bestTileInfo = candidateTileInfo;
+                bestInputTransferLatency = inputLatency;
+                bestOutputTransferLatency = outputLatency;
                 break;
             }
             outputTileWidthPerCol--;
@@ -1046,6 +1088,10 @@ t_tile_pair calculateTileSizePerUnit(EltAddLayer &_eltAddLayer)
     }
     unsigned int ops = outputChannels * outputHeight * outputWidth;
     t_tile_pair result = {.tileInfo = bestTileInfo,
+                          .inputTransferLatency = bestInputTransferLatency,
+                          .weightTransferLatency = 0x0,
+                          .outputTransferLatency = bestOutputTransferLatency,
+                          .computeLatency = 0x0,
                           .latency = minLatency,
                           .flagComputeBound=false,
                           .ops = ops};

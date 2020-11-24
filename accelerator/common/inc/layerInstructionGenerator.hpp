@@ -216,11 +216,9 @@ unsigned int deriveConvWeightTransferLatency(
         unsigned int _sizeKernel
         );
 
-unsigned int deriveConvOutputTransferLatency(
-        unsigned int _outputHeight,
-        unsigned int _outputWidth,
+unsigned int deriveOutputTransferLatency(t_graph_output_tile_info _outputTileInfo,
+        unsigned int _sizeOutputHeight,
         unsigned int _numOutputChannelsPerNextGroup,
-        unsigned int _numNextGroups
-        );
+        unsigned int _numNextGroups);
 
 #endif
