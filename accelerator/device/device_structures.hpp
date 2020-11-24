@@ -110,6 +110,10 @@ typedef struct {
 } t_dram_block;
 
 typedef struct {
+    t_transfer_block transferBlocks[WEIGHT_WIDE_SIZE];
+} t_weight_dram_block;
+
+typedef struct {
         unsigned char bytes[NUM_BITMASK_BYTES];
 } t_bitmask;
 
@@ -391,7 +395,7 @@ Datatypes relevant to the filter transportation system
 */
 //Raw data packet travelling on the channels that link the WeightTees.
 typedef struct {
-    t_dram_block dramBlock;
+    t_weight_dram_block dramBlock;
     unsigned char destinationRow;
 } t_dram_block_w_tagged;
 

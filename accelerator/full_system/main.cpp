@@ -131,51 +131,51 @@ protected:
 }; //testFixture
 
 #ifdef PLAY
-TEST_F (testFixture, global_avg_pool_sparse_output_grouped)
-{
-    unsigned char inputWidth = 4;
-    unsigned char inputHeight = 4;
-    unsigned char numInputChannel = 120;
-    unsigned char numOutputChannel = numInputChannel;
-    unsigned char numInputGroup = 1;
-    unsigned char numOutputGroup = 2;
-    unsigned char inputHeightSPUnitSize = 1;
-    unsigned char inputWidthSPUnitSize = 1;
-    unsigned char sizeOutputTileWidthPerColFull = 2;
-    unsigned char sizeOutputTileHeight = 4;
-    unsigned char kernelSize = 3;
-    bool flagEnableRelu = false;
-    bool flagSparseInput = false;
-    bool flagSparseOutput = true;
-    OPERATION op = AVG_POOL;
-    float bias = 0.0f;
+//TEST_F (testFixture, global_avg_pool_sparse_output_grouped)
+//{
+//    unsigned char inputWidth = 4;
+//    unsigned char inputHeight = 4;
+//    unsigned char numInputChannel = 120;
+//    unsigned char numOutputChannel = numInputChannel;
+//    unsigned char numInputGroup = 1;
+//    unsigned char numOutputGroup = 2;
+//    unsigned char inputHeightSPUnitSize = 1;
+//    unsigned char inputWidthSPUnitSize = 1;
+//    unsigned char sizeOutputTileWidthPerColFull = 2;
+//    unsigned char sizeOutputTileHeight = 4;
+//    unsigned char kernelSize = 3;
+//    bool flagEnableRelu = false;
+//    bool flagSparseInput = false;
+//    bool flagSparseOutput = true;
+//    OPERATION op = AVG_POOL;
+//    float bias = 0.0f;
 
-    launch(
-                inputWidth,
-                inputHeight,
-                numInputChannel,
-                numOutputChannel,
-                numInputGroup,
-                numOutputGroup,
-                inputHeightSPUnitSize,
-                inputWidthSPUnitSize,
-                sizeOutputTileWidthPerColFull,
-                sizeOutputTileHeight,
-                kernelSize,
-                flagEnableRelu,
-                flagSparseInput,
-                flagSparseOutput,
-                op,
-                bias
-          );
-}
+//    launch(
+//                inputWidth,
+//                inputHeight,
+//                numInputChannel,
+//                numOutputChannel,
+//                numInputGroup,
+//                numOutputGroup,
+//                inputHeightSPUnitSize,
+//                inputWidthSPUnitSize,
+//                sizeOutputTileWidthPerColFull,
+//                sizeOutputTileHeight,
+//                kernelSize,
+//                flagEnableRelu,
+//                flagSparseInput,
+//                flagSparseOutput,
+//                op,
+//                bias
+//          );
+//}
 
 TEST_F (testFixture, conv_dense_input_dense_output_plain)
 {
     unsigned char inputWidth = 4;
     unsigned char inputHeight = 4;
     //DOESN'T WORK!?
-    unsigned char numInputChannel = 13;
+    unsigned char numInputChannel = 18;
     //unsigned char numInputChannel = 2;
     unsigned char numOutputChannel = numInputChannel;
     unsigned char numInputGroup = 1;
@@ -2089,6 +2089,7 @@ void testFixture::launch (
               <<"CLUSTER_SIZE: "<<CLUSTER_SIZE<<std::endl
               <<"TRANSFER_SIZE: "<<TRANSFER_SIZE<<std::endl
               <<"WIDE_SIZE "<<WIDE_SIZE<<std::endl
+              <<"WEIGHT_WIDE_SIZE "<<WEIGHT_WIDE_SIZE<<std::endl
               <<"Output planar dimensions (H, W): "<<(unsigned int)numOutputHeight<<" "<<(unsigned int)numOutputWidth<<std::endl
               <<"Full output tile per col planar sizes (H, W): "<<(unsigned int)sizeOutputTileHeight<<" "<<(unsigned int)sizeOutputTileWidthPerCol<<std::endl
               <<"Input channels 0: "<<(unsigned int) numInputChannel0<<std::endl
@@ -2178,7 +2179,7 @@ void testFixture::launch (
     //assign memDramBlockFilterStride conditionally, otherwise there might be seg fault.
     if (op == CONVOLUTION)
     {
-        memDramBlockFilterStride = (pWeight->getExternalMemoryAddressStride()) >> WIDE_SIZE_OFFSET;
+        memDramBlockFilterStride = (pWeight->getExternalMemoryAddressStride()) >> WEIGHT_WIDE_SIZE_OFFSET;
     }
     else
     {
@@ -2426,7 +2427,7 @@ void testFixture::launch (
                 graph.pWeights.push_back(pWeight);
                 graph.pBiasVector.push_back(pBiasVector);
                 offsetWeightsDramBlock +=
-                        (pWeight->getExternalMemoryAddressStride() >> WIDE_SIZE_OFFSET)
+                        (pWeight->getExternalMemoryAddressStride() >> WEIGHT_WIDE_SIZE_OFFSET)
                         * numOutputChannels ;
                 offsetBiasesDramBlock += numOutputChannels;
                 #if defined(SPARSE_SYSTEM)
@@ -2565,7 +2566,7 @@ void testFixture::launch (
                 graph.pWeights.push_back(pWeight);
                 graph.pBiasVector.push_back(pBiasVector);
                 offsetWeightsDramBlock +=
-                        (pWeight->getExternalMemoryAddressStride() >> WIDE_SIZE_OFFSET)
+                        (pWeight->getExternalMemoryAddressStride() >> WEIGHT_WIDE_SIZE_OFFSET)
                         * numOutputChannels ;
                 offsetBiasesDramBlock += numOutputChannels;
                 #if defined(SPARSE_SYSTEM)
@@ -2701,7 +2702,7 @@ void testFixture::launch (
                 graph.pWeights.push_back(pWeight);
                 graph.pBiasVector.push_back(pBiasVector);
                 offsetWeightsDramBlock +=
-                        (pWeight->getExternalMemoryAddressStride() >> WIDE_SIZE_OFFSET)
+                        (pWeight->getExternalMemoryAddressStride() >> WEIGHT_WIDE_SIZE_OFFSET)
                         * numOutputChannels ;
                 offsetBiasesDramBlock += numOutputChannels;
                 #if defined(SPARSE_SYSTEM)

@@ -97,7 +97,7 @@ AlignedTensor::AlignedTensor(
                     maxScalarIndexInCluster+1, //clusterSize
                     maxClusterIndexInTransferBlock+1, //transferBlockSize
                     1, //compressionWindowSize, unused
-                    WIDE_SIZE, //numTransferBlockPerDramBlock
+                    WEIGHT_WIDE_SIZE, //numTransferBlockPerDramBlock
                     true, //isKernel
                     true //isDense
                     );
@@ -332,7 +332,7 @@ FlexibleDirectCompressedTensor::FlexibleDirectCompressedTensor (
                     maxScalarIndexInCluster+1, //clusterSize
                     maxClusterIndexInTransferBlock+1, //transferBlockSize
                     maxClusterIndexInCompressionBlock+1, //compressionWindowSize, unused
-                    WIDE_SIZE, //numTransferBlockPerDramBlock
+                    WEIGHT_WIDE_SIZE, //numTransferBlockPerDramBlock
                     true, //isKernel
                     false //isDense
                     );

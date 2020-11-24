@@ -43,9 +43,9 @@ t_transfer_block bias2TransferBlock (t_bias bias);
 
 t_bias transferBlock2Bias (t_transfer_block block);
 
-t_filter_streamer_control dramBlock2FilterStreamerControl (t_dram_block block);
+t_filter_streamer_control dramBlock2FilterStreamerControl (t_weight_dram_block block);
 
-t_dram_block filterStreamerControl2dramBlock (t_filter_streamer_control control);
+t_weight_dram_block filterStreamerControl2dramBlock (t_filter_streamer_control control);
 
 unsigned char outputModifier2RightShiftAmount (unsigned char outputModifier);
 

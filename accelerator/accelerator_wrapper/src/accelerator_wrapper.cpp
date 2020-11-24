@@ -425,7 +425,7 @@ namespace GraphRuntime {
             cl_uint argIdx = 0;
             //volatile __global t_weight_mover_instruction* restrict pInst,
             kernelWMover.setArg(argIdx++, bufferWMoverInstructions);
-            //volatile __global t_dram_block* restrict pW,
+            //volatile __global t_weight_dram_block* restrict pW,
             kernelWMover.setArg(argIdx++, bufferWMoverWDramBlocks);
             //vola<tile __global t_bias* restrict pBias,
             kernelWMover.setArg(argIdx++, bufferWMoverBias);

@@ -2,7 +2,7 @@
 #define PARAMS_DEFINED
 
 //#define HOST_DEBUG
-#define SPARSE_SYSTEM
+//#define SPARSE_SYSTEM
 #define OA_PING_PONG
 //#define WMOVER_STREAM_CACHE
 //#define OAMOVER_TB_STREAM_CACHE
@@ -80,9 +80,9 @@
 #define PACKET_SIZE 1
 
 #if defined(FULL_SYSTEM)
-	#define PE_ROWS 28
-	#define PE_COLS 7
-	#define MISC_COLS 4
+	#define PE_ROWS 2
+	#define PE_COLS 2
+	#define MISC_COLS 2
 #else
 	#define PE_ROWS 2
 	#define PE_COLS 2
@@ -143,13 +143,24 @@
 #define SURVIVING_COUNT_CLUSTER_INDEX 0X1
 #define SURVIVING_COUNT_TRANSFER_BLOCK_INDEX 0x1
 
-#define BURST_SIZE_BYTE 32
+#define BURST_SIZE_BYTE 16
+//TODO: Change WIDE_SIZE and related offsets when compression configuration changes
+#define WIDE_SIZE (BURST_SIZE_BYTE/CLUSTER_SIZE/TRANSFER_SIZE)  //Each transfer block takes 4 bytes, so need 8 transfer blocks to populate 256 bits
+#define WIDE_SIZE_OFFSET 0x1 //Numnber of bits to shift the transfer block index to the right in order to recover the wide offset
+#define WIDE_SIZE_REMAINDER_MASK 0x1
+
+#define NUM_CLUSTER_IN_DRAM_SIZE BURST_SIZE_BYTE/CLUSTER_SIZE
+
+#define WEIGHT_BURST_SIZE_BYTE 32
+#define WEIGHT_WIDE_SIZE (WEIGHT_BURST_SIZE_BYTE/CLUSTER_SIZE/TRANSFER_SIZE)  //Each transfer block takes 4 bytes, so need 8 transfer blocks to populate 256 bits
+#define WEIGHT_WIDE_SIZE_OFFSET 0x2 //Numnber of bits to shift the transfer block index to the right in order to recover the wide offset
+#define WEIGHT_WIDE_SIZE_REMAINDER_MASK 0x3
 
 #define WMOVER_FILTER_DRAM_BLOCK_ACCESS_UNROLL_FACTOR 4
 #define KERNEL_CACHE_LANES PE_ROWS
 #define KERNEL_CACHE_LANE_MASK 0x7
 #define KERNEL_CACHE_SIZE_BYTE 8192
-#define KERNEL_CACHE_DEPTH (KERNEL_CACHE_SIZE_BYTE/BURST_SIZE_BYTE)
+#define KERNEL_CACHE_DEPTH (KERNEL_CACHE_SIZE_BYTE/WEIGHT_BURST_SIZE_BYTE)
 #define KERNEL_CACHE_DEPTH_MASK 0x03FF
 
 #define MAX_OUTPUT_TILE_WIDTH_PER_COL 7 
@@ -172,14 +183,6 @@
 //#define OA_CACHE_SIZE_BYTE 8192
 #define OA_CACHE_SIZE_BYTE 32768
 #define OA_CACHE_DEPTH (OA_CACHE_SIZE_BYTE/CLUSTER_SIZE)
-
-
-//TODO: Change WIDE_SIZE and related offsets when compression configuration changes
-#define WIDE_SIZE (BURST_SIZE_BYTE/CLUSTER_SIZE/TRANSFER_SIZE)  //Each transfer block takes 4 bytes, so need 8 transfer blocks to populate 256 bits
-#define WIDE_SIZE_OFFSET 0x2 //Numnber of bits to shift the transfer block index to the right in order to recover the wide offset
-#define WIDE_SIZE_REMAINDER_MASK 0x3
-
-#define NUM_CLUSTER_IN_DRAM_SIZE BURST_SIZE_BYTE/CLUSTER_SIZE
 
 //Accumulator width
 #define ACCUMULATOR_WIDTH 20

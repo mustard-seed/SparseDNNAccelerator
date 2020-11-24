@@ -387,7 +387,7 @@ __attribute__((max_global_work_dim(0)))
 __kernel void kernelWMover (
 		//Memory port for instructions
 		__global const t_weight_mover_instruction* restrict pInst,
-		__global const t_dram_block* restrict pW,
+		__global const t_weight_dram_block* restrict pW,
 		__global const t_bias* restrict pBias,
 		#if defined(SPARSE_SYSTEM)
 		 //Pointer to filter transfer block count
@@ -404,7 +404,7 @@ __kernel void kernelWMover (
 	#endif //WMOVER_STREAM_CACHE
 
 	#if defined(WMOVER_WEIGHT_COALESCE_CACHE)
-	t_dram_block cacheFilter[KERNEL_CACHE_DEPTH];
+	t_weight_dram_block cacheFilter[KERNEL_CACHE_DEPTH];
 	#endif
 
 	for (unsigned int iInst=0; iInst<numInstruction; iInst++)
@@ -467,7 +467,7 @@ __kernel void kernelWMover (
 				t_bias bias = pBias[addrBias];
 			#endif
 
-			unsigned short numDramBlockInFilter = ((numTransferBlockInFilter-1) >> WIDE_SIZE_OFFSET) + 1;
+			unsigned short numDramBlockInFilter = ((numTransferBlockInFilter-1) >> WEIGHT_WIDE_SIZE_OFFSET) + 1;
 			
 			t_filter_streamer_control control;
 			control.numOutputs = inst.filterReuse;
@@ -475,7 +475,7 @@ __kernel void kernelWMover (
 			control.numTransferBlocks = numTransferBlockInFilter;
 			control.maxPeCols = (inst.numActivePeCols - 1);
 
-			t_dram_block dramControl = filterStreamerControl2dramBlock(control);
+			t_weight_dram_block dramControl = filterStreamerControl2dramBlock(control);
 
 			int iDramBlock = addrWeightFilterBase;
 
@@ -517,7 +517,7 @@ __kernel void kernelWMover (
 			//one extra for filter stream control
 			for (unsigned short iTransmitCount=0; iTransmitCount<=numDramBlockInFilter; iTransmitCount++)
 			{
-				t_dram_block block;
+				t_weight_dram_block block;
 				if (iTransmitCount == 0) 
 				{
 					block = dramControl;
@@ -5680,7 +5680,7 @@ __kernel void kernelFilterBuffer ()
 
 	typedef uint3_t t_state;
 	//important to size the bankwidth, otherwise the default 32 bit will be used, resulting in complex store logic
-	t_dram_block cacheNzBlocks [2][KERNEL_CACHE_DEPTH] __attribute__((bankwidth(BURST_SIZE_BYTE))); 
+	t_weight_dram_block cacheNzBlocks [2][KERNEL_CACHE_DEPTH] __attribute__((bankwidth(WEIGHT_BURST_SIZE_BYTE))); 
 	uint1_t regWriteSide = 0x0;
 	unsigned short maxOutputCount[2];
 	//unsigned char maxOutputHeightTileSize[2]; //maxTP
@@ -5711,7 +5711,7 @@ __kernel void kernelFilterBuffer ()
 		t_state nextStateWriteCache = stateWriteCache;
 		{
 			bool success = false;
-			t_dram_block writeBlock;
+			t_weight_dram_block writeBlock;
 			if ( (stateWriteCache == STATE_FILTER_STREAMER_WRITE_CACHE_SETUP_CONTROL)
 				|| (stateWriteCache == STATE_FILTER_STREAMER_WRITE_CACHE_WRITE) )
 			{
@@ -5744,9 +5744,9 @@ __kernel void kernelFilterBuffer ()
 			{
 				if (success)
 				{
-					unsigned short dramBlockIndex = (iTransferBlockInFilterWrite >> WIDE_SIZE_OFFSET);
+					unsigned short dramBlockIndex = (iTransferBlockInFilterWrite >> WEIGHT_WIDE_SIZE_OFFSET);
 					cacheNzBlocks[regWriteSide][dramBlockIndex] = writeBlock;
-					iTransferBlockInFilterWrite += WIDE_SIZE;
+					iTransferBlockInFilterWrite += WEIGHT_WIDE_SIZE;
 					if (iTransferBlockInFilterWrite >= maxTransferBlockInFilter[regWriteSide])
 					{
 						nextStateWriteCache = STATE_FILTER_STREAMER_WRITE_CACHE_WAIT;
@@ -5782,9 +5782,9 @@ __kernel void kernelFilterBuffer ()
 
 			if (iTransferBlockInFilterRead > 0)
 			{
-				unsigned short dramIndex = (iTransferBlockInFilterRead - 1) >> WIDE_SIZE_OFFSET;
-				unsigned short indexInDramBlock = (iTransferBlockInFilterRead - 1) & WIDE_SIZE_REMAINDER_MASK;
-				t_dram_block dramBlock = cacheNzBlocks[(~regWriteSide) & 0x1][dramIndex];
+				unsigned short dramIndex = (iTransferBlockInFilterRead - 1) >> WEIGHT_WIDE_SIZE_OFFSET;
+				unsigned short indexInDramBlock = (iTransferBlockInFilterRead - 1) & WEIGHT_WIDE_SIZE_REMAINDER_MASK;
+				t_weight_dram_block dramBlock = cacheNzBlocks[(~regWriteSide) & 0x1][dramIndex];
 				t_transfer_block tblock = dramBlock.transferBlocks[indexInDramBlock];
 				weightBlockTagged.values = tblock;
 				tempIsLast = ((iTransferBlockInFilterRead) >= maxTransferBlockInFilter[(~regWriteSide) & 0x1]) ?

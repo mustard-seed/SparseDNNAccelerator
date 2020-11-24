@@ -177,7 +177,7 @@ t_bias transferBlock2Bias (t_transfer_block block)
 #endif
 
 #ifdef INTELFPGA_CL
-t_filter_streamer_control dramBlock2FilterStreamerControl (t_dram_block block)
+t_filter_streamer_control dramBlock2FilterStreamerControl (t_weight_dram_block block)
 {
     t_filter_streamer_control control;
     control.numOutputs =
@@ -208,9 +208,9 @@ t_filter_streamer_control dramBlock2FilterStreamerControl (t_dram_block block)
     return control;
 }
 
-t_dram_block filterStreamerControl2dramBlock (t_filter_streamer_control control)
+t_weight_dram_block filterStreamerControl2dramBlock (t_filter_streamer_control control)
 {
-    t_dram_block block;
+    t_weight_dram_block block;
     block.transferBlocks[0].values[0] = control.numOutputs & 0xFF;
     block.transferBlocks[0].values[1] = ((control.numOutputs >> 8) & 0xFF);
 

@@ -1037,7 +1037,7 @@ int filter_cache_boundary_check(
             1 + (inputChannelSize - 1) / (COMPRESSION_WINDOW_SIZE * CLUSTER_SIZE);
     unsigned int tempStride = kernelSize*kernelSize*((unsigned int) numTransferBlocksPerCompressionBlock* (unsigned int) numCompressionBlocksInChannel);
     //externalMemoryAddressStride = lcm(tempStride, (unsigned int) WIDE_SIZE); //DRAM stride needs to be a multiple of DRAM width and the storage requirement per filter
-    int requirement = (tempStride-1) / WIDE_SIZE + 1;
+    int requirement = (tempStride-1) / WEIGHT_WIDE_SIZE + 1;
 #else
     int requirement = (inputChannelSize * kernelSize * kernelSize - 1) / BURST_SIZE_BYTE + 1;
 #endif
@@ -1241,7 +1241,7 @@ unsigned int deriveConvWeightTransferLatency(
     unsigned int numTileAlongWidth = _outputTileInfo.numOutputTileAlongWidth;
     unsigned int numTBPerStrip = 1 + (_numInputChannelsPerGroup - 1) / (CLUSTER_SIZE * TRANSFER_SIZE);
     unsigned int numDramBlocksInFilter =
-            1 + (_sizeKernel*_sizeKernel*numTBPerStrip - 1) / WIDE_SIZE;
+            1 + (_sizeKernel*_sizeKernel*numTBPerStrip - 1) / WEIGHT_WIDE_SIZE;
     unsigned int latency =
             _numGroups * _numOutputChannelsPerGroup * numTileAlongHeight * numTileAlongWidth * numDramBlocksInFilter;
 
