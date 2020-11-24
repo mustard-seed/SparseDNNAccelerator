@@ -680,7 +680,7 @@ namespace GraphRuntime {
                 auto sizeElement = sizeof(typeof((pWeights->getTransferBlockVector()).at(0)));
 
                 int byteOffset = _executionGraph.vecWeightDramBlockStart.at(idxTensor++)
-                        * (BURST_SIZE_BYTE);
+                        * (WEIGHT_BURST_SIZE_BYTE);
 
                 weightTransferBytes += numElements*sizeElement;
                 if (weightTransferBytes > MAX_DRAM_BYTE_INPUT_WEIGHT)

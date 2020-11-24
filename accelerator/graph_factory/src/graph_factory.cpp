@@ -302,7 +302,7 @@ namespace GraphRuntime {
                                         ));
                     #endif
                     //Filter stride
-                    memDramBlockFilterStride = (pWeight->getExternalMemoryAddressStride()) >> WIDE_SIZE_OFFSET;
+                    memDramBlockFilterStride = (pWeight->getExternalMemoryAddressStride()) >> WEIGHT_WIDE_SIZE_OFFSET;
 
                     //Prepare the fixed-point bias vector
                     std::shared_ptr<t_aligned_short_vector> pBiasVector = std::make_shared<t_aligned_short_vector>(numOutputChannels, 0x0);
@@ -327,7 +327,7 @@ namespace GraphRuntime {
                     pGraph->pWeights.push_back(pWeight);
                     pGraph->pBiasVector.push_back(pBiasVector);
                     offsetWeightsDramBlockIncrement =
-                            (pWeight->getExternalMemoryAddressStride() >> WIDE_SIZE_OFFSET) * numOutputChannels;
+                            (pWeight->getExternalMemoryAddressStride() >> WEIGHT_WIDE_SIZE_OFFSET) * numOutputChannels;
                     offsetBiasesDramBlockIncrement = numOutputChannels;
                     #if defined(SPARSE_SYSTEM)
                         offsetWeightTBCountIncrement = numOutputChannels;

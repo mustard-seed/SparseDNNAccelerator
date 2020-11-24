@@ -1039,7 +1039,7 @@ int filter_cache_boundary_check(
     //externalMemoryAddressStride = lcm(tempStride, (unsigned int) WIDE_SIZE); //DRAM stride needs to be a multiple of DRAM width and the storage requirement per filter
     int requirement = (tempStride-1) / WEIGHT_WIDE_SIZE + 1;
 #else
-    int requirement = (inputChannelSize * kernelSize * kernelSize - 1) / BURST_SIZE_BYTE + 1;
+    int requirement = (inputChannelSize * kernelSize * kernelSize - 1) / WEIGHT_BURST_SIZE_BYTE + 1;
 #endif
 
     return requirement;
