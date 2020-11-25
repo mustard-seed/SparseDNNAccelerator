@@ -598,6 +598,7 @@ typedef struct __attribute__((packed)) {
 
 } t_output_cluster_tagged;
 
+//Output of the OA coalescer
 typedef struct {
     t_cluster clusters[NUM_CLUSTER_IN_DRAM_SIZE];
 } t_output_dram_block;
@@ -607,8 +608,20 @@ typedef struct __attribute__((packed)) {
 
     //Bit 0: Is issued by the last column
     //Bit 1: Is valid block
+    //Bit 2: Read by sparse only. Is last valid dram block in strip.
     unsigned char flags;
+    #if defined(SPARSE_SYSTEM)
+    unsigned short clusterCount;
+    #endif 
 } t_output_dram_block_tagged;
+
+typedef struct __attribute__((packed)) {
+    t_output_dram_block outputDramBlock;
+    #if defined(SPARSE_SYSTEM)
+    unsigned short numClustersInStrip;
+    #endif
+    bool isLastInStrip;
+} t_output_coalescer_packet;
 #endif
 //#endif
 

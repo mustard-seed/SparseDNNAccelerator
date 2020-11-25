@@ -455,7 +455,7 @@ void instruction_generator(
         unsigned int numTransferBlocksPerCompressionBlock
                 = 1 + (COMPRESSION_WINDOW_SIZE + TRANSFER_SIZE - 1) / TRANSFER_SIZE;
         unsigned int numCompressionBlocksInChannelGroup =
-                1 + (numOutputChannelsPerGroupNextLayer - 1) / (COMPRESSION_WINDOW_SIZE * TRANSFER_SIZE);
+                1 + (numOutputChannelsPerGroupNextLayer - 1) / (COMPRESSION_WINDOW_SIZE * CLUSTER_SIZE);
         unsigned int numNominalTransferBlockPerOutputStrip =
                 numTransferBlocksPerCompressionBlock * numCompressionBlocksInChannelGroup;
         unsigned int numNominalDramBlocksPerOutputStrip =
