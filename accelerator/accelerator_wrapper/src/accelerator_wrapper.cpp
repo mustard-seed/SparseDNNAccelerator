@@ -1320,7 +1320,8 @@ namespace GraphRuntime {
                 unsigned int inputLatency = layerInfo.inputTransferLatency;
                 unsigned int outputLatency = layerInfo.outputTransferLatency;
                 unsigned int weightLatency = layerInfo.weightTransferLatency;
-                unsigned int computeLatency = layerInfo.computeLatency;
+                unsigned int rawComputeLatency = layerInfo.rawComputeLatency;
+                unsigned int computeLatencyWithOverhead = layerInfo.computeLatencyWithOverhead;
                 auto layerTime = vecLayerExecutionTime.at(i);
                 std::string name = layerInfo.layerName;
                 if (name.length() > maxName)
@@ -1339,7 +1340,8 @@ namespace GraphRuntime {
                         <<sep<<inputLatency
                         <<sep<<weightLatency
                         <<sep<<outputLatency
-                        <<sep<<computeLatency
+                        <<sep<<rawComputeLatency
+                        <<sep<<computeLatencyWithOverhead
                         <<std::endl;
             }
             //Print average outout blob transfer time

@@ -22,6 +22,7 @@ typedef struct {
     int     weightTransferLatency;
     int     outputTransferLatency;
     int     computeLatency;
+    int     computeLatencyWithOverhead;
     unsigned int latency;
     bool flagComputeBound;
     unsigned int ops;
@@ -203,6 +204,7 @@ namespace GraphRuntime {
             unsigned int weightTransferLatency = 0;
             unsigned int outputTransferLatency = 0;
             unsigned int computeLatency = 0;
+            unsigned int computeLatencyWithOverhead = 0;
             bool flagComputeBound = false; //override
             unsigned int ops = 0; //override
 #if defined(HOST_DEBUG)
@@ -224,6 +226,7 @@ namespace GraphRuntime {
                     weightTransferLatency = tileConfig.weightTransferLatency;
                     outputTransferLatency = tileConfig.outputTransferLatency;
                     computeLatency = tileConfig.computeLatency;
+                    computeLatencyWithOverhead = tileConfig.computeLatencyWithOverhead;
                     flagComputeBound = tileConfig.flagComputeBound;
                     ops = tileConfig.ops;
 
@@ -727,7 +730,8 @@ namespace GraphRuntime {
                            .inputTransferLatency = inputTransferLatency,
                            .weightTransferLatency = weightTransferLatency,
                            .outputTransferLatency = outputTransferLatency,
-                            .computeLatency = computeLatency,
+                           .rawComputeLatency = computeLatency,
+                           .computeLatencyWithOverhead = computeLatencyWithOverhead,
                            .expectedLatency = estimatedLatency,
                            .isComputeBound = flagComputeBound ? 1 : 0,
                            .ops = ops
@@ -763,7 +767,7 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
     unsigned int maxOutputTileHeight =
             (MAX_INPUT_TILE_HEIGHT - _convLayer.getKernelSize()) / _convLayer.getKernelStride() + 1;
 
-    //Search all possible solutions tile solution exhautively.
+    //Generate the starting point of for the width of the tile per col
     unsigned int tempOutputTileWidthPerCol = 1 + (_convLayer.getOutputWidth()-1)/ PE_COLS;
     unsigned int outputTileWidthPerCol = tempOutputTileWidthPerCol < maxOutputTileWidthPerCol ?
         tempOutputTileWidthPerCol : maxOutputTileWidthPerCol;
@@ -806,13 +810,15 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
 
     t_graph_output_tile_info bestTileInfo;
     unsigned int minLatency = 0xFFFFFFFF;
+    bool solutionExists = false;
     int     bestInputTransferLatency = 0x0;
     int     bestWeightTransferLatency = 0x0;
     int     bestOutputTransferLatency = 0x0;
-    int     bestComputeLatency = 0x0;
+    int     bestRawComputeLatency = 0x0;
+    int     bestCompuateLatencyWithOverhead = 0x0;
     bool isComputeBound = true;
 
-    while ((outputTileWidthPerCol > 0) && (maxOutputTileHeight > 0))
+    for (;outputTileWidthPerCol > 0; outputTileWidthPerCol--)
     {
         //Generate a candidate tile configuration
         unsigned int sizeOutputFullTileHeightTemp =
@@ -822,148 +828,158 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
         unsigned int sizeOutputFullTileHeight = sizeOutputFullTileHeightTemp < maxOutputTileHeight?
                 sizeOutputFullTileHeightTemp : maxOutputTileHeight;
 
-         t_graph_output_tile_info candidateTileInfo =
-                 deriveConvOutputTileShape(
-                        outputHeight,
-                        outputWidth,
-                        sizeOutputFullTileHeight,
-                        outputTileWidthPerCol,
-                        true //isConv
-                     );
-
-         //Check that the tile configuration can work wit the IA/OA cache limit
-         unsigned int sizeInputTileFullHeight = deriveConvInputDimension1D(
-                        sizeOutputFullTileHeight,
-                        _convLayer.getKernelSize(),
-                        _convLayer.getKernelStride()
-                     );
-         unsigned int sizeInputTileFullWidthPerCol = deriveConvInputDimension1D(
-                        candidateTileInfo.sizeOutputTileFullWidthPerCol,
-                        _convLayer.getKernelSize(),
-                        _convLayer.getKernelStride()
-                     );
-         unsigned int sizeInputTilePartialWidthPerCol = deriveConvInputDimension1D(
-                        candidateTileInfo.sizeOutputTilePartialWidthPerCol,
-                        _convLayer.getKernelSize(),
-                        _convLayer.getKernelStride()
-                     );
-         int iaCachePerColRequirement =
-                 ia_cache_boundary_check(
-                     sizeInputTileFullHeight,
-                     sizeInputTileFullWidthPerCol,
-                     numTBPerInputGroupStrip / WIDE_SIZE
-                     );
-         int iaCachePerPartialColRequirement =
-                 ia_cache_boundary_check(
-                     sizeInputTileFullHeight,
-                     sizeInputTilePartialWidthPerCol,
-                     numTBPerInputGroupStrip / WIDE_SIZE
-                     );
-         int oaCachePerColRequirement =
-                 oa_cache_boundary_check(
-                     candidateTileInfo.sizeOutputTileFullHeight,
-                     candidateTileInfo.sizeOutputTileFullWidthPerCol,
-                     outputChannels
-                     );
-         int oaCachePerPartialColRequirement =
-                 oa_cache_boundary_check(
-                     candidateTileInfo.sizeOutputTileFullHeight,
-                     candidateTileInfo.sizeOutputTilePartialWidthPerCol,
-                     outputChannels
-                     );
-         bool passCacheRequirement =
-                 (iaCachePerColRequirement <= IA_CACHE_DEPTH)
-                 && (iaCachePerPartialColRequirement <= IA_CACHE_DEPTH)
-                 && (oaCachePerColRequirement <= (OA_CACHE_DEPTH*CLUSTER_SIZE))
-                 && (oaCachePerPartialColRequirement <= (OA_CACHE_DEPTH*CLUSTER_SIZE))
-                 && (sizeInputTileFullHeight <= MAX_INPUT_TILE_HEIGHT)
-                 && (sizeInputTileFullWidthPerCol <= MAX_INPUT_TILE_WIDTH_PER_COL)
-                 && (sizeInputTilePartialWidthPerCol <= MAX_INPUT_TILE_WIDTH_PER_COL);
-#if defined(SPARSE_SYSTEM)
-         int iaTBCachePerColRequirement =
-                 ia_tbcount_cache_boundary_check(
-                     sizeInputTileFullHeight,
-                     sizeInputTileFullWidthPerCol
-                     );
-         int iaTBCachePerPartialColRequirement =
-                 ia_tbcount_cache_boundary_check(
-                     sizeInputTileFullHeight,
-                     sizeInputTilePartialWidthPerCol
-                     );
-         passCacheRequirement = passCacheRequirement
-                 && (iaTBCachePerColRequirement <= IA_BUFFER_TBCOUNT_CACHE_SIZE)
-                 && (iaTBCachePerPartialColRequirement <= IA_BUFFER_TBCOUNT_CACHE_SIZE);
-#endif
-         if (passCacheRequirement == true)
+         for (; sizeOutputFullTileHeight > 0; sizeOutputFullTileHeight--)
          {
-            unsigned int computeLatency = deriveConvComputationLatency(
-                        candidateTileInfo,
-                        outputChannels / _convLayer.getCurrentNumberGroups(),
-                        inputChannelsPerGroup,
-                        _convLayer.getCurrentNumberGroups(),
-                        _convLayer.getKernelSize()
-                        );
+             t_graph_output_tile_info candidateTileInfo =
+                     deriveConvOutputTileShape(
+                            outputHeight,
+                            outputWidth,
+                            sizeOutputFullTileHeight,
+                            outputTileWidthPerCol,
+                            true //isConv
+                         );
 
-            unsigned int inputLatency = deriveConvInputTransferLatency(
-                        candidateTileInfo,
-                        inputChannelsPerGroup,
-                        _convLayer.getCurrentNumberGroups(),
-                        _convLayer.getKernelSize(),
-                        _convLayer.getKernelStride()
-                        );
-            //maxLatency = inputLatency > maxLatency ? inputLatency : maxLatency;
-
-            unsigned int outputLatency = deriveOutputTransferLatency(
-                        candidateTileInfo,
-                        outputHeight,
-                        outputChannelsPerNextGroup,
-                        _convLayer.getNextNumberGroups()
-                        );
-            //maxLatency = outputLatency > maxLatency ? outputLatency : maxLatency;
-
-            unsigned int weightLatency = deriveConvWeightTransferLatency(
-                        candidateTileInfo,
-                        inputChannelsPerGroup,
-                        outputChannels / _convLayer.getCurrentNumberGroups(),
-                        _convLayer.getCurrentNumberGroups(),
-                        _convLayer.getKernelSize()
-                        );
-            //maxLatency = weightLatency > maxLatency ? weightLatency : maxLatency;
-
-            //TODO: determine the adjustment factor more precisely. This factor account of
-            //memory transfer inefficiency
-            unsigned int transferLatencyAdjusted =
-                    (unsigned int) ((float) (weightLatency + outputLatency + inputLatency)
-                    * 1.0f);
-
-            unsigned int maxLatency = computeLatency > transferLatencyAdjusted ?
-                        computeLatency : transferLatencyAdjusted;
-
-            if (maxLatency < minLatency)
-            {
-                minLatency = maxLatency;
-                bestTileInfo = candidateTileInfo;
-                isComputeBound = (maxLatency == computeLatency);
-                bestComputeLatency = computeLatency;
-                bestInputTransferLatency = inputLatency;
-                bestWeightTransferLatency = weightLatency;
-                bestOutputTransferLatency = outputLatency;
-            }
-
-            outputTileWidthPerCol--;
-         } // if passCacheRequirement == true
-         else
-         {
-             if (maxOutputTileHeight < outputTileWidthPerCol)
+             //Check that the tile configuration can work wit the IA/OA cache limit
+             unsigned int sizeInputTileFullHeight = deriveConvInputDimension1D(
+                            sizeOutputFullTileHeight,
+                            _convLayer.getKernelSize(),
+                            _convLayer.getKernelStride()
+                         );
+             unsigned int sizeInputTileFullWidthPerCol = deriveConvInputDimension1D(
+                            candidateTileInfo.sizeOutputTileFullWidthPerCol,
+                            _convLayer.getKernelSize(),
+                            _convLayer.getKernelStride()
+                         );
+             unsigned int sizeInputTilePartialWidthPerCol = deriveConvInputDimension1D(
+                            candidateTileInfo.sizeOutputTilePartialWidthPerCol,
+                            _convLayer.getKernelSize(),
+                            _convLayer.getKernelStride()
+                         );
+             int iaCachePerColRequirement =
+                     ia_cache_boundary_check(
+                         sizeInputTileFullHeight,
+                         sizeInputTileFullWidthPerCol,
+                         numTBPerInputGroupStrip / WIDE_SIZE
+                         );
+             int iaCachePerPartialColRequirement =
+                     ia_cache_boundary_check(
+                         sizeInputTileFullHeight,
+                         sizeInputTilePartialWidthPerCol,
+                         numTBPerInputGroupStrip / WIDE_SIZE
+                         );
+             int oaCachePerColRequirement =
+                     oa_cache_boundary_check(
+                         candidateTileInfo.sizeOutputTileFullHeight,
+                         candidateTileInfo.sizeOutputTileFullWidthPerCol,
+                         outputChannels
+                         );
+             int oaCachePerPartialColRequirement =
+                     oa_cache_boundary_check(
+                         candidateTileInfo.sizeOutputTileFullHeight,
+                         candidateTileInfo.sizeOutputTilePartialWidthPerCol,
+                         outputChannels
+                         );
+             bool passCacheRequirement =
+                     (iaCachePerColRequirement <= IA_CACHE_DEPTH)
+                     && (iaCachePerPartialColRequirement <= IA_CACHE_DEPTH)
+                     && (oaCachePerColRequirement <= (OA_CACHE_DEPTH*CLUSTER_SIZE))
+                     && (oaCachePerPartialColRequirement <= (OA_CACHE_DEPTH*CLUSTER_SIZE))
+                     && (sizeInputTileFullHeight <= MAX_INPUT_TILE_HEIGHT)
+                     && (sizeInputTileFullWidthPerCol <= MAX_INPUT_TILE_WIDTH_PER_COL)
+                     && (sizeInputTilePartialWidthPerCol <= MAX_INPUT_TILE_WIDTH_PER_COL);
+    #if defined(SPARSE_SYSTEM)
+             int iaTBCachePerColRequirement =
+                     ia_tbcount_cache_boundary_check(
+                         sizeInputTileFullHeight,
+                         sizeInputTileFullWidthPerCol
+                         );
+             int iaTBCachePerPartialColRequirement =
+                     ia_tbcount_cache_boundary_check(
+                         sizeInputTileFullHeight,
+                         sizeInputTilePartialWidthPerCol
+                         );
+             passCacheRequirement = passCacheRequirement
+                     && (iaTBCachePerColRequirement <= IA_BUFFER_TBCOUNT_CACHE_SIZE)
+                     && (iaTBCachePerPartialColRequirement <= IA_BUFFER_TBCOUNT_CACHE_SIZE);
+    #endif
+             if (passCacheRequirement == true)
              {
-                 outputTileWidthPerCol--;
-             }
-             else
-             {
-                 maxOutputTileHeight--;
-             }
-         }
-    } //while
+                unsigned int computeLatency = deriveConvComputationLatency(
+                            candidateTileInfo,
+                            outputChannels / _convLayer.getCurrentNumberGroups(),
+                            inputChannelsPerGroup,
+                            _convLayer.getCurrentNumberGroups(),
+                            _convLayer.getKernelSize()
+                            );
+
+                unsigned int inputLatency = deriveConvInputTransferLatency(
+                            candidateTileInfo,
+                            inputChannelsPerGroup,
+                            _convLayer.getCurrentNumberGroups(),
+                            _convLayer.getKernelSize(),
+                            _convLayer.getKernelStride()
+                            );
+                //maxLatency = inputLatency > maxLatency ? inputLatency : maxLatency;
+
+                unsigned int outputLatency = deriveOutputTransferLatency(
+                            candidateTileInfo,
+                            outputHeight,
+                            outputChannelsPerNextGroup,
+                            _convLayer.getNextNumberGroups()
+                            );
+                //maxLatency = outputLatency > maxLatency ? outputLatency : maxLatency;
+
+                unsigned int weightLatency = deriveConvWeightTransferLatency(
+                            candidateTileInfo,
+                            inputChannelsPerGroup,
+                            outputChannels / _convLayer.getCurrentNumberGroups(),
+                            _convLayer.getCurrentNumberGroups(),
+                            _convLayer.getKernelSize()
+                            );
+
+                unsigned int firstTileInputLatency = deriveFirstTileConvInputTransferLatency
+                        (
+                            candidateTileInfo,
+                            inputChannelsPerGroup,
+                            _convLayer.getKernelSize(),
+                            _convLayer.getKernelStride()
+                        );
+
+                unsigned int lastTileOutputLatency = deriveLastTileOutputTransferLatency
+                        (
+                            candidateTileInfo,
+                            outputChannelsPerNextGroup
+                        );
+
+                unsigned int computeLatencyWithOverhead =
+                        computeLatency + firstTileInputLatency + lastTileOutputLatency;
+                //maxLatency = weightLatency > maxLatency ? weightLatency : maxLatency;
+
+                //TODO: determine the adjustment factor more precisely. This factor account of
+                //memory transfer inefficiency
+                unsigned int transferLatencyAdjusted =
+                        (unsigned int) ((float) (weightLatency + outputLatency + inputLatency)
+                        * 1.0f);
+
+                unsigned int maxLatency = computeLatencyWithOverhead > transferLatencyAdjusted ?
+                            computeLatencyWithOverhead : transferLatencyAdjusted;
+
+                if (maxLatency < minLatency)
+                {
+                    minLatency = maxLatency;
+                    bestTileInfo = candidateTileInfo;
+                    isComputeBound = (maxLatency <= computeLatencyWithOverhead);
+                    bestRawComputeLatency = computeLatency;
+                    bestCompuateLatencyWithOverhead = computeLatencyWithOverhead;
+                    bestInputTransferLatency = inputLatency;
+                    bestWeightTransferLatency = weightLatency;
+                    bestOutputTransferLatency = outputLatency;
+                }
+
+             } // if passCacheRequirement == true
+         } //for over possible tile height
+
+    } //for over possible tile width
 
     if (minLatency == 0xFFFFFFFF)
     {
@@ -980,7 +996,8 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
                           .inputTransferLatency = bestInputTransferLatency,
                           .weightTransferLatency = bestWeightTransferLatency,
                           .outputTransferLatency = bestOutputTransferLatency,
-                          .computeLatency = bestComputeLatency,
+                          .computeLatency = bestRawComputeLatency,
+                          .computeLatencyWithOverhead = bestCompuateLatencyWithOverhead,
                           .latency = minLatency,
                           .flagComputeBound=isComputeBound,
                           .ops = ops
@@ -1092,6 +1109,7 @@ t_tile_pair calculateTileSizePerUnit(EltAddLayer &_eltAddLayer)
                           .weightTransferLatency = 0x0,
                           .outputTransferLatency = bestOutputTransferLatency,
                           .computeLatency = 0x0,
+                          .computeLatencyWithOverhead = 0x0,
                           .latency = minLatency,
                           .flagComputeBound=false,
                           .ops = ops};

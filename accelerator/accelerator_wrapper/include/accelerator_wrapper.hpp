@@ -56,7 +56,8 @@ namespace GraphRuntime {
         int     inputTransferLatency;
         int     weightTransferLatency;
         int     outputTransferLatency;
-        int     computeLatency;
+        int     rawComputeLatency;
+        int     computeLatencyWithOverhead;
         int     expectedLatency;
         int     isComputeBound;
         unsigned int ops;

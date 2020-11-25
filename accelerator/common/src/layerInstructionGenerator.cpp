@@ -1109,6 +1109,24 @@ unsigned int deriveConvInputDimension1D(
     return inputSPWithBorderPaddingDimension1D;
 }
 
+unsigned int deriveNumActivationDramBlockPerStrip(
+        unsigned int _numInputChannelsPerGroup
+    )
+{
+    unsigned int numTransferBlockPerChannelGroup = 1 + ( _numInputChannelsPerGroup -1) / (CLUSTER_SIZE*TRANSFER_SIZE);
+    unsigned int numDramBlockPerStrip = 1 + (numTransferBlockPerChannelGroup-1) / WIDE_SIZE;
+
+    return numDramBlockPerStrip;
+}
+
+/*!
+ * Loop idle cycles.
+ * Need to be verified against AOCL early estimation report
+ */
+#define NUM_IDLE_CYCLES_PER_FILTER_TRANSFER_FROM_W_MOVER 2
+#define NUM_IDLE_CYCLES_PER_STRIP_TRANSFER_FROM_IA_MOVER 3
+#define NUM_IDLE_CYCLES_PER_STRIP_TRANSFER_TO_OA_MOVER 0
+
 unsigned int deriveConvComputationLatency(
         t_graph_output_tile_info _outputTileInfo,
         unsigned int _numOutputChannelsPerGroup,
@@ -1196,11 +1214,11 @@ unsigned int deriveConvInputTransferLatency(
                     _sizeStride
                 );
 
-    unsigned int numTransferBlockPerChannelGroup = 1 + ( _numInputChannelsPerGroup -1) / (CLUSTER_SIZE*TRANSFER_SIZE);
-    unsigned int numDramBlockPerStrip = 1 + (numTransferBlockPerChannelGroup-1) / WIDE_SIZE;
-
+    unsigned int numDramBlockPerStrip =
+            deriveNumActivationDramBlockPerStrip(_numInputChannelsPerGroup);
+    //TODO: adjust the number of idle cycles after HW changes.
     unsigned int latency =
-            _numGroups * numDramBlockPerStrip
+            _numGroups * (numDramBlockPerStrip + NUM_IDLE_CYCLES_PER_STRIP_TRANSFER_FROM_IA_MOVER)
             * (
                 numFullOutputTileAlongHeight*numFullOutputTileAlongWidth*sizeFullTileInputHeight*sizeFullTileInputWidth
                 + numFullOutputTileAlongHeight*numPartialTileAlongWidth*sizeFullTileInputHeight*sizePartialTileInputWidth
@@ -1243,7 +1261,73 @@ unsigned int deriveConvWeightTransferLatency(
     unsigned int numDramBlocksInFilter =
             1 + (_sizeKernel*_sizeKernel*numTBPerStrip - 1) / WEIGHT_WIDE_SIZE;
     unsigned int latency =
-            _numGroups * _numOutputChannelsPerGroup * numTileAlongHeight * numTileAlongWidth * numDramBlocksInFilter;
+            _numGroups * _numOutputChannelsPerGroup * numTileAlongHeight * numTileAlongWidth
+            * (numDramBlocksInFilter + NUM_IDLE_CYCLES_PER_FILTER_TRANSFER_FROM_W_MOVER);
+
+    return latency;
+}
+
+unsigned int deriveFirstTileConvInputTransferLatency(
+        t_graph_output_tile_info _outputTileInfo,
+        unsigned int _numInputChannelsPerGroup,
+        unsigned int _sizeKernel,
+        unsigned _sizeStride
+        )
+{
+    unsigned int sizeFirstTileOutputHeight =
+        (_outputTileInfo.numFullOutputTileAlongHeight==0) ?
+                 _outputTileInfo.sizeOutputTilePartialHeight
+              : _outputTileInfo.sizeOutputTileFullHeight;
+
+    unsigned int sizeFirstTileOuputWidth =
+         (_outputTileInfo.numFullOutputTileAlongWidth==0) ?
+                _outputTileInfo.sizeOutputTilePartialWidthPerCol
+                    * _outputTileInfo.numActiveColsForPartialWidthTile
+               : _outputTileInfo.sizeOutputTileFullWidthPerCol
+                    * PE_COLS;
+
+    //Convert to input height and width
+    unsigned int sizeFirstTileInputHeight =
+            deriveConvInputDimension1D(
+                sizeFirstTileOutputHeight,
+                _sizeKernel,
+                _sizeStride
+                );
+    unsigned int sizeFirstTileInputWidth =
+            deriveConvInputDimension1D(
+                sizeFirstTileOuputWidth,
+                _sizeKernel,
+                _sizeStride
+                );
+
+    unsigned int numDramBlockPerStrip =
+            deriveNumActivationDramBlockPerStrip(_numInputChannelsPerGroup);
+
+    unsigned int latency =
+            sizeFirstTileInputHeight
+            * sizeFirstTileInputWidth
+            * (numDramBlockPerStrip + NUM_IDLE_CYCLES_PER_STRIP_TRANSFER_FROM_IA_MOVER);
+
+    return latency;
+}
+
+unsigned int deriveLastTileOutputTransferLatency(
+        t_graph_output_tile_info _outputTileInfo,
+        unsigned int _numOutputChannelsPerNextGroup
+        )
+{
+    unsigned int sizeLastTileOutputHeight =
+            (_outputTileInfo.numFullOutputTileAlongHeight == _outputTileInfo.numOutputTileAlongHeight)?
+                _outputTileInfo.sizeOutputTileFullHeight :
+                _outputTileInfo.sizeOutputTilePartialHeight;
+
+    unsigned int sizeLastTileOutputWidthPerCol =
+            (_outputTileInfo.numFullOutputTileAlongWidth == _outputTileInfo.numOutputTileAlongWidth)?
+                _outputTileInfo.sizeOutputTileFullWidthPerCol
+              : _outputTileInfo.sizeOutputTilePartialWidthPerCol;
+
+    unsigned int latency =
+            sizeLastTileOutputHeight * sizeLastTileOutputWidthPerCol * _numOutputChannelsPerNextGroup;
 
     return latency;
 }

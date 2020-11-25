@@ -216,9 +216,26 @@ unsigned int deriveConvWeightTransferLatency(
         unsigned int _sizeKernel
         );
 
-unsigned int deriveOutputTransferLatency(t_graph_output_tile_info _outputTileInfo,
+unsigned int deriveOutputTransferLatency(
+        t_graph_output_tile_info _outputTileInfo,
         unsigned int _sizeOutputHeight,
         unsigned int _numOutputChannelsPerNextGroup,
         unsigned int _numNextGroups);
+
+unsigned int deriveNumActivationDramBlockPerStrip(
+        unsigned int _numInputChannelsPerGroup
+    );
+
+unsigned int deriveFirstTileConvInputTransferLatency(
+        t_graph_output_tile_info _outputTileInfo,
+        unsigned int _numInputChannelsPerGroup,
+        unsigned int _sizeKernel,
+        unsigned _sizeStride
+        );
+
+unsigned int deriveLastTileOutputTransferLatency(
+        t_graph_output_tile_info _outputTileInfo,
+        unsigned int _numOutputChannelsPerNextGroup
+        );
 
 #endif
