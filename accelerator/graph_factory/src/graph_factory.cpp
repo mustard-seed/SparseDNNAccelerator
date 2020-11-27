@@ -961,6 +961,9 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
 
                 unsigned int computeLatencyWithOverhead =
                         computeLatency + firstTileInputLatency + lastTileOutputLatency;
+
+                unsigned int weightBoundedLatency =
+                        weightLatency + firstTileInputLatency + lastTileOutputLatency;
                 //maxLatency = weightLatency > maxLatency ? weightLatency : maxLatency;
 
                unsigned int adjustedOutputLatency =
@@ -976,8 +979,15 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
                     actualTransferLatency = adjustedOutputLatency;
                 }
 
-                unsigned int maxLatency = computeLatencyWithOverhead > actualTransferLatency ?
-                            computeLatencyWithOverhead : actualTransferLatency;
+                unsigned int maxLatency = computeLatencyWithOverhead;
+                if (maxLatency < weightBoundedLatency)
+                {
+                    maxLatency = weightBoundedLatency;
+                }
+                if (maxLatency < adjustedOutputLatency)
+                {
+                    maxLatency = adjustedOutputLatency;
+                }
 
                 if (maxLatency < minLatency)
                 {
