@@ -233,6 +233,13 @@ unsigned int deriveFirstTileConvInputTransferLatency(
         unsigned _sizeStride
         );
 
+unsigned int deriveFirstTileConvComputationLatency(
+        t_graph_output_tile_info _outputTileInfo,
+        unsigned int _numOutputChannelsPerGroup,
+        unsigned int _numInputChannelsPerGroup,
+        unsigned int _sizeKernel
+        );
+
 unsigned int deriveLastTileOutputTransferLatency(
         t_graph_output_tile_info _outputTileInfo,
         unsigned int _numOutputChannelsPerNextGroup

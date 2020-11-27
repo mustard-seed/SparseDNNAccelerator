@@ -945,6 +945,14 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
                             _convLayer.getKernelStride()
                         );
 
+                unsigned int firstTileComputeLatency = deriveFirstTileConvComputationLatency
+                        (
+                            candidateTileInfo,
+                            outputChannels / _convLayer.getCurrentNumberGroups(),
+                            inputChannelsPerGroup,
+                            _convLayer.getKernelSize()
+                         );
+
                 unsigned int lastTileOutputLatency = deriveLastTileOutputTransferLatency
                         (
                             candidateTileInfo,
@@ -955,14 +963,21 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
                         computeLatency + firstTileInputLatency + lastTileOutputLatency;
                 //maxLatency = weightLatency > maxLatency ? weightLatency : maxLatency;
 
-                //TODO: determine the adjustment factor more precisely. This factor account of
-                //memory transfer inefficiency
-                unsigned int transferLatencyAdjusted =
-                        (unsigned int) ((float) (weightLatency + outputLatency + inputLatency)
-                        * 1.0f);
+               unsigned int adjustedOutputLatency =
+                        firstTileInputLatency + firstTileComputeLatency + outputLatency;
 
-                unsigned int maxLatency = computeLatencyWithOverhead > transferLatencyAdjusted ?
-                            computeLatencyWithOverhead : transferLatencyAdjusted;
+                unsigned int actualTransferLatency = inputLatency;
+                if (actualTransferLatency < weightLatency)
+                {
+                    actualTransferLatency = weightLatency;
+                }
+                if (actualTransferLatency <adjustedOutputLatency)
+                {
+                    actualTransferLatency = adjustedOutputLatency;
+                }
+
+                unsigned int maxLatency = computeLatencyWithOverhead > actualTransferLatency ?
+                            computeLatencyWithOverhead : actualTransferLatency;
 
                 if (maxLatency < minLatency)
                 {

@@ -1139,8 +1139,11 @@ unsigned int deriveConvComputationLatency(
             1 + (_numOutputChannelsPerGroup-1) / PE_ROWS;
     unsigned int numTranferBlockPerInputGroup =
             1 + (_numInputChannelsPerGroup-1) / (TRANSFER_SIZE * CLUSTER_SIZE);
+    unsigned int numIdealTransfersPerConvWindow = numTranferBlockPerInputGroup * _sizeKernel * _sizeKernel;
+    unsigned int numTransfersPerConvWindow =
+            numIdealTransfersPerConvWindow > PE_ROWS ? numIdealTransfersPerConvWindow : PE_ROWS;
     unsigned int latency =
-            _numGroups * numPERowFoldPerGroup * numTranferBlockPerInputGroup * _sizeKernel * _sizeKernel
+            _numGroups * numPERowFoldPerGroup * numTransfersPerConvWindow
             * (
                 _outputTileInfo.numFullOutputTileAlongHeight
                     * ( _outputTileInfo.numFullOutputTileAlongWidth
@@ -1308,6 +1311,39 @@ unsigned int deriveFirstTileConvInputTransferLatency(
             * sizeFirstTileInputWidth
             * (numDramBlockPerStrip + NUM_IDLE_CYCLES_PER_STRIP_TRANSFER_FROM_IA_MOVER);
 
+    return latency;
+}
+
+unsigned int deriveFirstTileConvComputationLatency(
+        t_graph_output_tile_info _outputTileInfo,
+        unsigned int _numOutputChannelsPerGroup,
+        unsigned int _numInputChannelsPerGroup,
+        unsigned int _sizeKernel
+        )
+{
+    unsigned int numPERowFoldPerGroup =
+            1 + (_numOutputChannelsPerGroup-1) / PE_ROWS;
+    unsigned int numTranferBlockPerInputGroup =
+            1 + (_numInputChannelsPerGroup-1) / (TRANSFER_SIZE * CLUSTER_SIZE);
+    unsigned int numIdealTransfersPerConvWindow = numTranferBlockPerInputGroup * _sizeKernel * _sizeKernel;
+    unsigned int numTransfersPerConvWindow =
+            numIdealTransfersPerConvWindow > PE_ROWS ? numIdealTransfersPerConvWindow : PE_ROWS;
+
+    unsigned int sizeFirstTileOutputHeight =
+        (_outputTileInfo.numFullOutputTileAlongHeight==0) ?
+                 _outputTileInfo.sizeOutputTilePartialHeight
+              : _outputTileInfo.sizeOutputTileFullHeight;
+
+    unsigned int sizeFirstTileOuputWidthPerCol =
+         (_outputTileInfo.numFullOutputTileAlongWidth==0) ?
+                _outputTileInfo.sizeOutputTilePartialWidthPerCol
+               : _outputTileInfo.sizeOutputTileFullWidthPerCol;
+
+    unsigned int latency =
+            numPERowFoldPerGroup
+            * numTransfersPerConvWindow
+            * sizeFirstTileOutputHeight
+            * sizeFirstTileOuputWidthPerCol;
     return latency;
 }
 
