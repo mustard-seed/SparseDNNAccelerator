@@ -118,19 +118,19 @@ __kernel void kernelIAMover (
 		uint4_t rowSPSize = (inst.concatSPSize >> 0x04) & 0x0F;
 
 		/*! Iterators for keeping track of current strip's position in the strided-padded unit.*/
-		uint4_t iColSPUnitIndex = hInitSPIndex;
+		//uint4_t iColSPUnitIndex = hInitSPIndex;
 		uint4_t iRowSPUnitIndex = vInitSPIndex;
 
 		//Iterators of the column and row positions of the strip inside the tile
-		signed char iColInSPTile = 0;
-		signed char iRowInSPTile = 0;
+		//signed char iColInSPTile = 0;
+		//signed char iRowInSPTile = 0;
 
 		//Address offset contributions from row and column movements in the tile
 		signed int offsetIADramBlockRow = 0;
-		signed int offsetIADramBlockCol = 0;
+		//signed int offsetIADramBlockCol = 0;
 		#if defined(SPARSE_SYSTEM)
 			signed int offsetTBCountRow = 0;
-			signed int offsetTBCountCol = 0;
+			//signed int offsetTBCountCol = 0;
 		#endif
 
 		bool instructionProceed = true;
@@ -142,122 +142,132 @@ __kernel void kernelIAMover (
 
 		if (instructionProceed == true)
 		{
-			//iterate over all IA strips in tile
-			for (unsigned short iter=0; iter < inst.tileSPWidthxTileSPHeight; iter++)
+			//iterate over IA tile height
+			for (
+					signed char iRowInSPTile=0;
+					iRowInSPTile < ((unsigned char) inst.tileSPHeight);
+					iRowInSPTile++
+				)
 			{
-				/*!Setup the strip transfer parameters*/
-				//Determine whether the strip consists of padding, or actual values from memory
-				bool colIsDense = (iColInSPTile >= ((signed char) tileLeftPadding))
-					&& (iColInSPTile < (inst.tileSPWidth - ((unsigned char) tileRightPadding)) )
-					&& (iColSPUnitIndex == 0);
-				bool rowIsDense = (iRowInSPTile >= ((signed char) tileTopPadding))
-					&& (iRowInSPTile < (inst.tileSPHeight - ((unsigned char) tileBottomPadding)) )
-					&& (iRowSPUnitIndex == 0);
+				uint4_t iColSPUnitIndex = hInitSPIndex;
+				signed int offsetIADramBlockCol = 0;
+				#if defined(SPARSE_SYSTEM)
+					signed int offsetTBCountCol = 0;
+				#endif
 
-				bool realStrip = colIsDense && rowIsDense;
-
-				unsigned char numInputInterleavePerDramblock = (inputArrangement == 0x01) ? 0x02 : 0x01;
-
+				#pragma ii 1
+				for (
+						signed char iColInSPTile=0;
+						iColInSPTile < ((signed char) inst.tileSPWidth);
+						iColInSPTile++
+					)
 				{
-					int addressIADramBlockDDR0 = 
-						((t_int) inst.memBlockStart0) + offsetIADramBlockCol + offsetIADramBlockRow;
+					/*!Setup the strip transfer parameters*/
+					//Determine whether the strip consists of padding, or actual values from memory
+					bool colIsDense = (iColInSPTile >= ((signed char) tileLeftPadding))
+						&& (iColInSPTile < (inst.tileSPWidth - ((unsigned char) tileRightPadding)) )
+						&& (iColSPUnitIndex == 0);
+					bool rowIsDense = (iRowInSPTile >= ((signed char) tileTopPadding))
+						&& (iRowInSPTile < (inst.tileSPHeight - ((unsigned char) tileBottomPadding)) )
+						&& (iRowSPUnitIndex == 0);
 
-					//The second iter is special, used during elementwise addition only
-					//hence the mixing of indices from 1 and 0
-					int addressIADramBlockDDR1 = 
-						((t_int) inst.memBlockStart1) + offsetIADramBlockCol + offsetIADramBlockRow;
+					bool realStrip = colIsDense && rowIsDense;
 
-					#if defined(SPARSE_SYSTEM)
-						//For the sparse case, we need to consider whether the input is actually sparse,
-						//whether the input is padding
-						int addressTBCountDDR = ((t_int) inst.memTBCountStart) + offsetTBCountCol + offsetTBCountRow;
-						unsigned short numTBInStrip;
-						if (realStrip == true)
-						{
-							if (sparseInput == 0x1)
+					unsigned char numInputInterleavePerDramblock = (inputArrangement == 0x01) ? 0x02 : 0x01;
+
+					{
+						int addressIADramBlockDDR0 = 
+							((t_int) inst.memBlockStart0) + offsetIADramBlockCol + offsetIADramBlockRow;
+
+						//The second iter is special, used during elementwise addition only
+						//hence the mixing of indices from 1 and 0
+						int addressIADramBlockDDR1 = 
+							((t_int) inst.memBlockStart1) + offsetIADramBlockCol + offsetIADramBlockRow;
+
+						#if defined(SPARSE_SYSTEM)
+							//For the sparse case, we need to consider whether the input is actually sparse,
+							//whether the input is padding
+							int addressTBCountDDR = ((t_int) inst.memTBCountStart) + offsetTBCountCol + offsetTBCountRow;
+							unsigned short numTBInStrip;
+							if (realStrip == true)
 							{
-								// if (memRegion == 0x0)
-								// {
-								// 	numTBInStrip = pTBCount1[addressTBCountDDR];
-								// }
-								// else
-								// {
-								// 	numTBInStrip = pTBCount2[addressTBCountDDR];
-								// }
-								numTBInStrip = pTBCount[addressTBCountDDR];
+								if (sparseInput == 0x1)
+								{
+									// if (memRegion == 0x0)
+									// {
+									// 	numTBInStrip = pTBCount1[addressTBCountDDR];
+									// }
+									// else
+									// {
+									// 	numTBInStrip = pTBCount2[addressTBCountDDR];
+									// }
+									numTBInStrip = pTBCount[addressTBCountDDR];
+								}
+								else
+								{
+									numTBInStrip = (t_ushort) inst.numCWOrTBInGroup;
+								}
 							}
 							else
 							{
 								numTBInStrip = (t_ushort) inst.numCWOrTBInGroup;
 							}
-						}
-						else
-						{
-							numTBInStrip = (t_ushort) inst.numCWOrTBInGroup;
-						}
-					#else
-						unsigned short numTBInStrip = (t_ushort) inst.numTBPerStrip;
-					#endif
+						#else
+							unsigned short numTBInStrip = (t_ushort) inst.numTBPerStrip;
+						#endif
 
-					//dramBlockCount = ceil(numTBInStrip / WIDE_SIZE)
-					//Compute the number of dram block transfers needed for the strip
-					unsigned short dramBlockCount = (numInputInterleavePerDramblock == 0x01) ?
-						 1 + ( (numTBInStrip-1) >> WIDE_SIZE_OFFSET )
-						: (1 + ( (numTBInStrip-1) >> WIDE_SIZE_OFFSET )) << 1;
-					//The actual number of transfer is one more than the number of DRAM block.
-					//The extra block is in the beginning, and it contains routing information
-					//as well as the number of TB count, which is required by the convolution PE array
-					unsigned short numTransferActions = dramBlockCount + 1;
+						//dramBlockCount = ceil(numTBInStrip / WIDE_SIZE)
+						//Compute the number of dram block transfers needed for the strip
+						unsigned short dramBlockCount = (numInputInterleavePerDramblock == 0x01) ?
+							 1 + ( (numTBInStrip-1) >> WIDE_SIZE_OFFSET )
+							: (1 + ( (numTBInStrip-1) >> WIDE_SIZE_OFFSET )) << 1;
+						//The actual number of transfer is one more than the number of DRAM block.
+						//The extra block is in the beginning, and it contains routing information
+						//as well as the number of TB count, which is required by the convolution PE array
+						unsigned short numTransferActions = dramBlockCount;
 
-					EMULATOR_PRINT(("[kernelIAMover] START strip transfer. "
-								"offsetInstruction=%d, "
-								"iInst=%d, "
-								"iStrip=%d, "
-								"tileSPWidthxTileSPHeight=%d, "
-								"iRowInSPTile=%d, " 
-		                        "iColInSPTile=%d, "
-								"rowIsDense=%#03x, "
-								"colIsDense=%#03x, "
-								"inputArrangement=%#03x, "
-								"numInputInterleavePerDramblock=%#03x, "
-								"numTBInStrip=%d, "
-								"numActiveCols=%d, "
-								"addressIADramBlockDDR0=%#010x, "
-								"addressIADramBlockDDR1=%#010x, "
-								"leftShiftAmount=%#04x"
-								"destinationMisc=%#03x\n",
-								offsetInstruction,
-								iInst,
-								iter,
-								(unsigned int) inst.tileSPWidthxTileSPHeight, 
-								iRowInSPTile,
-								iColInSPTile,
-								rowIsDense,
-								colIsDense,
-								inputArrangement,
-								numInputInterleavePerDramblock,
-								numTBInStrip,
-								numActiveCols,
-								(unsigned int) addressIADramBlockDDR0,
-								(unsigned int) addressIADramBlockDDR1,
-								(unsigned int) inst.inputShiftAmounts,
-								(unsigned int) destinationMisc));
+						EMULATOR_PRINT(("[kernelIAMover] START strip transfer. "
+									"offsetInstruction=%d, "
+									"iInst=%d, "
+									"tileSPWidthxTileSPHeight=%d, "
+									"iRowInSPTile=%d, " 
+			                        "iColInSPTile=%d, "
+									"rowIsDense=%#03x, "
+									"colIsDense=%#03x, "
+									"inputArrangement=%#03x, "
+									"numInputInterleavePerDramblock=%#03x, "
+									"numTBInStrip=%d, "
+									"numActiveCols=%d, "
+									"addressIADramBlockDDR0=%#010x, "
+									"addressIADramBlockDDR1=%#010x, "
+									"leftShiftAmount=%#04x"
+									"destinationMisc=%#03x\n",
+									offsetInstruction,
+									iInst,
+									(unsigned int) inst.tileSPWidthxTileSPHeight, 
+									iRowInSPTile,
+									iColInSPTile,
+									rowIsDense,
+									colIsDense,
+									inputArrangement,
+									numInputInterleavePerDramblock,
+									numTBInStrip,
+									numActiveCols,
+									(unsigned int) addressIADramBlockDDR0,
+									(unsigned int) addressIADramBlockDDR1,
+									(unsigned int) inst.inputShiftAmounts,
+									(unsigned int) destinationMisc));
 
-					unsigned char iterInputDramblockInterleave = 0x0;
-					for (unsigned short iterTransfer=0; iterTransfer<numTransferActions; iterTransfer++)
-					{
-						t_dram_block_ia_tagged iaBlock;
-						if (iterTransfer==0)
+						unsigned char iterInputDramblockInterleave = 0x0;
+						#pragma ii 1
+						for (unsigned short iterTransfer=0; iterTransfer<numTransferActions; iterTransfer++)
 						{
-							iaBlock.dramBlock = iaMetadata2DramBlock(
-									numTBInStrip, //tbCount
-									inst.columnSPWidth, //colSPWidth
-									inst.columnWidthStride, //colSPStride	
-									iColInSPTile //iColInSPTile
-								);
-						}
-						else
-						{
+							t_dram_block_ia_tagged iaBlock;
+
+							iaBlock.colSPWidth = inst.columnSPWidth;
+							iaBlock.colSPStride = inst.columnWidthStride;
+							iaBlock.iColInSPTile = iColInSPTile;
+							iaBlock.numTB = numTBInStrip;
 							if (realStrip == true)
 							{
 								// iaBlock.dramBlock = (memRegion == 0x0) ? 
@@ -304,78 +314,67 @@ __kernel void kernelIAMover (
 									}
 								}
 							}
+
+							unsigned char isLastField = ((iterTransfer+1) == numTransferActions) ?
+								0x80 : 0x00;
+							unsigned char isMiscField = (destinationMisc == 0x1) ?
+								0x40 : 0x00;
+							iaBlock.route = isLastField | isMiscField | ((numActiveCols-1) & 0x3F);
+							iaBlock.miscLeftShiftAmount = input0LeftShiftAmount;
+							if (inputArrangement == 0x01)
+							{
+								if (iterInputDramblockInterleave == 0x00)
+								{
+									iaBlock.miscLeftShiftAmount = input0LeftShiftAmount;
+								}
+								else
+								{
+									iaBlock.miscLeftShiftAmount = input1LeftShiftAmount;
+								}
+								//Toggle between 0 and 1
+								iterInputDramblockInterleave = (iterInputDramblockInterleave + 0x01) & 0x01;
+							}
+
+							write_channel_intel(channel_ia_wide[0], iaBlock);
 						}
 
-						unsigned char isLastField = ((iterTransfer+1) == numTransferActions) ?
-							0x80 : 0x00;
-						unsigned char isMiscField = (destinationMisc == 0x1) ?
-							0x40 : 0x00;
-						iaBlock.route = isLastField | isMiscField | ((numActiveCols-1) & 0x3F);
-						iaBlock.miscLeftShiftAmount = input0LeftShiftAmount;
-						if (inputArrangement == 0x01)
-						{
-							if (iterInputDramblockInterleave == 0x00)
-							{
-								iaBlock.miscLeftShiftAmount = input0LeftShiftAmount;
-							}
-							else
-							{
-								iaBlock.miscLeftShiftAmount = input1LeftShiftAmount;
-							}
-							//Toggle between 0 and 1
-							iterInputDramblockInterleave = (iterInputDramblockInterleave + 0x01) & 0x01;
-						}
-
-						write_channel_intel(channel_ia_wide[0], iaBlock);
+						EMULATOR_PRINT(("[kernelIAMover] FINISHED strip transfer.\n\n"));
 					}
 
-					EMULATOR_PRINT(("[kernelIAMover] FINISHED strip transfer.\n\n"));
-				}
+					
 
-				
-
-				/*! Loop carried variable updates*/
-				//TODO: Double check the iColSPUnitIndex and iRowSPUnitIndex update conditions
-				iColInSPTile++;
-				if ( (iColInSPTile > ((signed char) tileLeftPadding)) 
-					&& (iColInSPTile < (inst.tileSPWidth - ((unsigned char) tileRightPadding))) )
-				{
-					iColSPUnitIndex++;
-					if (iColSPUnitIndex >= ((unsigned char) colSPSize))
+					/*! Loop carried variable updates*/
+					//TODO: Double check the iColSPUnitIndex and iRowSPUnitIndex update conditions
+					if ( (iColInSPTile >= ((signed char) tileLeftPadding)) 
+						&& (iColInSPTile < (inst.tileSPWidth - ((unsigned char) tileRightPadding) - (unsigned char ) 1)) )
 					{
-						iColSPUnitIndex = 0;
-						offsetIADramBlockCol += ((t_int) inst.memBlockColStripStride);
-						#if defined(SPARSE_SYSTEM)
-							offsetTBCountCol +=(t_int) inst.memTBCountColStride;
-						#endif
-					}
-				}
-				
-				if (iColInSPTile == ((signed char) inst.tileSPWidth))
-				{
-					iColInSPTile = 0;
-					iColSPUnitIndex = hInitSPIndex;
-					offsetIADramBlockCol = 0;
-					#if defined(SPARSE_SYSTEM)
-						offsetTBCountCol = 0;
-					#endif
-
-					iRowInSPTile++;
-					if ( (iRowInSPTile > ((signed char) tileTopPadding)) 
-						&& (iRowInSPTile < (inst.tileSPHeight - ((unsigned char) tileBottomPadding)) ) )
-					{
-						iRowSPUnitIndex++;
-						if (iRowSPUnitIndex >= ((unsigned char) rowSPSize))
+						iColSPUnitIndex++;
+						if (iColSPUnitIndex >= ((unsigned char) colSPSize))
 						{
-							iRowSPUnitIndex = 0;
-							offsetIADramBlockRow += ((t_int) inst.memBlockRowStripStride);
+							iColSPUnitIndex = 0;
+							offsetIADramBlockCol += ((t_int) inst.memBlockColStripStride);
 							#if defined(SPARSE_SYSTEM)
-								offsetTBCountRow += (t_int) inst.memTBCountRowStride;
+								offsetTBCountCol +=(t_int) inst.memTBCountColStride;
 							#endif
 						}
 					}
+
+				} //for over iColInSPTile
+				
+				if ( (iRowInSPTile >= ((signed char) tileTopPadding)) 
+						&& (iRowInSPTile < (inst.tileSPHeight - ((unsigned char) tileBottomPadding)) - (unsigned char ) 1 ) )
+				{
+					iRowSPUnitIndex++;
+					if (iRowSPUnitIndex >= ((unsigned char) rowSPSize))
+					{
+						iRowSPUnitIndex = 0;
+						offsetIADramBlockRow += ((t_int) inst.memBlockRowStripStride);
+						#if defined(SPARSE_SYSTEM)
+							offsetTBCountRow += (t_int) inst.memTBCountRowStride;
+						#endif
+					}
 				}
-			} //for. iter
+			} // for over iRowInSPTile
 
 			iInst++;
 		} // if proceed
@@ -571,9 +570,8 @@ __kernel void kernelWMover (
 
 #ifdef IA_MEMORY
 #define IA_BUFFER_WRITE_STATE_DECODE 0x0
-#define IA_BUFFER_WRITE_STATE_COMP_NUM_ACCESS 0x1
-#define IA_BUFFER_WRITE_STATE_ACCESS 0x2
-#define IA_BUFFER_WRITE_STATE_UPDATE_STRIP 0x3
+#define IA_BUFFER_WRITE_STATE_ACCESS 0x1
+#define IA_BUFFER_WRITE_STATE_UPDATE_STRIP 0x2
 
 #define IA_BUFFER_READ_STATE_DECODE 0x0
 #define IA_BUFFER_READ_STATE_ACCESS 0x1
@@ -700,7 +698,7 @@ void updateIABufferWriter (
 		t_input_buffer_tile_buffer_packet control,
 		t_flag validControl,
 
-		t_dram_block dramBlock,
+		t_dram_block_ia_to_pe taggedDramBlock,
 		t_flag validDramBlock,
 
 		//Modified buffer and buffers
@@ -973,7 +971,7 @@ __kernel void kernelIABuffer ()
 		 */
 		t_flag writerReadyForBlock = FALSE;
 		t_flag writerBlockValid = FALSE;
-		t_dram_block writerNewBlock;
+		t_dram_block_ia_to_pe writerNewBlock;
 
 		/**
 		 * PE transfer block channel <===> reader interface
@@ -1079,10 +1077,10 @@ __kernel void kernelIABuffer ()
 					EMULATOR_PRINT(("[kernelIABuffer %d] RECEIVED dram block %d. TB[0-3]: %#04x %#04x %#04x %#04x \n\n",
 					colID,
 					iReceived
-					,(unsigned int) writerNewBlock.transferBlocks[0].values[0]
-					,(unsigned int) writerNewBlock.transferBlocks[0].values[1]
-					,(unsigned int) writerNewBlock.transferBlocks[0].values[2]
-					,(unsigned int) writerNewBlock.transferBlocks[0].values[3]
+					,(unsigned int) writerNewBlock.dramBlock.transferBlocks[0].values[0]
+					,(unsigned int) writerNewBlock.dramBlock.transferBlocks[0].values[1]
+					,(unsigned int) writerNewBlock.dramBlock.transferBlocks[0].values[2]
+					,(unsigned int) writerNewBlock.dramBlock.transferBlocks[0].values[3]
 					));
 					iReceived++;
 				#endif
@@ -1226,7 +1224,6 @@ void getIABufferWriterOutput (
 	//Driver for the dram block interface's READY signal
 	if 	(
 			(currentState == IA_BUFFER_WRITE_STATE_ACCESS) 
-			|| (currentState == IA_BUFFER_WRITE_STATE_COMP_NUM_ACCESS)
 		)
 	{
 		*pOutAcceptData = TRUE;
@@ -1238,7 +1235,7 @@ void updateIABufferWriter (
 		t_input_buffer_tile_buffer_packet control,
 		t_flag validControl,
 
-		t_dram_block dramBlock,
+		t_dram_block_ia_to_pe taggedDramBlock,
 		t_flag validDramBlock,
 
 		//Modified buffer and buffers
@@ -1290,7 +1287,7 @@ void updateIABufferWriter (
 				/**
 				 * Update state
 				 */
-				*pCurrentState = IA_BUFFER_WRITE_STATE_COMP_NUM_ACCESS;
+				*pCurrentState = IA_BUFFER_WRITE_STATE_ACCESS;
 				#if defined(SPARSE_SYSTEM)
 				EMULATOR_PRINT(("[kernelIABuffer Writer %d] START processing instruction. "
 					"iaDramBlockAddressBase=%#010x, "
@@ -1321,14 +1318,15 @@ void updateIABufferWriter (
 		}
 		break; //IA_BUFFER_WRITE_STATE_DECODE
 
-		case IA_BUFFER_WRITE_STATE_COMP_NUM_ACCESS: {
+		case IA_BUFFER_WRITE_STATE_ACCESS: {
+			/**
+			 * Write incoming dram block into the cache, and update the counters
+			 */
 			if (validDramBlock == TRUE)
 			{
-				t_streamblock_address numIATransferBlocks = getTBCount(dramBlock);
-
-				pCurrentRegisters->numIAAccess = 
-					((unsigned short) 1) + ((numIATransferBlocks-((unsigned short) 1)) >> WIDE_SIZE_OFFSET);
-				pCurrentRegisters->iterAccess = 0;
+				t_streamblock_address numIATransferBlocks = taggedDramBlock.numTB;
+				t_dram_block dramBlock = taggedDramBlock.dramBlock;
+				t_flag flagIsLastInStrip = (taggedDramBlock.route >> 7) & 0x01;
 
 				#if defined(SPARSE_SYSTEM)
 					// unsigned char depth = pCurrentRegisters->tbCountInfo.addressBase 
@@ -1354,34 +1352,23 @@ void updateIABufferWriter (
 					// 		+ pCurrentRegisters->tbCountInfo.colContribution 
 					// 		+ pCurrentRegisters->tbCountInfo.rowContribution] 
 					// 	= numIATransferBlocks;
-					// 	
-					EMULATOR_PRINT(("[kernelIABuffer Writer %d] Writing TB count to bank %d, "
-							"addrBase=%d, "
-							"TB=%d\n",
-							colID, (unsigned char) (pCurrentRegisters->accessBank),
-							(unsigned int)(pCurrentRegisters->tbCountInfo.addressBase),
-							(unsigned int) numIATransferBlocks
-							));
+					// 
+					#if defined(EMULATOR) && defined(EMULATOR_PRINT)	
+						if (flagIsLastInStrip == TRUE)
+						{
+							EMULATOR_PRINT(("[kernelIABuffer Writer %d] Writing TB count to bank %d, "
+								"addrBase=%d, "
+								"TB=%d\n",
+								colID, (unsigned char) (pCurrentRegisters->accessBank),
+								(unsigned int)(pCurrentRegisters->tbCountInfo.addressBase),
+								(unsigned int) numIATransferBlocks
+								));
+						}
+					#endif
 				#else
 					numTBPerStrip[(pCurrentRegisters->accessBank) & 0x01] = numIATransferBlocks;
 				#endif
 
-				*pCurrentState = IA_BUFFER_WRITE_STATE_ACCESS;
-
-				EMULATOR_PRINT(("[kernelIABuffer Writer %d] Read a strip header instruction. "
-							"numIATransferBlocks=%#010x\n",
-							colID,
-							(int) numIATransferBlocks));
-			}
-		}
-		break;
-
-		case IA_BUFFER_WRITE_STATE_ACCESS: {
-			/**
-			 * Write incoming dram block into the cache, and update the counters
-			 */
-			if (validDramBlock == TRUE)
-			{
 				cacheIABlocks[(pCurrentRegisters->accessBank) & 0x01]
 					[(pCurrentRegisters->iterAccess) 
 						+ (pCurrentRegisters->iaBlockInfo.addressBase)
@@ -1411,14 +1398,14 @@ void updateIABufferWriter (
 				// EMULATOR_PRINT(("[kernelIABuffer Writer %d] Read one dram block.\n",
 				// 			colID));
 
-				if ((pCurrentRegisters->iterAccess) == (pCurrentRegisters->numIAAccess))
+				if (flagIsLastInStrip == TRUE)
 				{
 					*pCurrentState = IA_BUFFER_WRITE_STATE_UPDATE_STRIP;
 				}
 			}
 			
 		}
-		break;
+		break; //IA_BUFFER_WRITE_STATE_ACCESS
 
 		case IA_BUFFER_WRITE_STATE_UPDATE_STRIP: {
 			/**
@@ -1431,7 +1418,7 @@ void updateIABufferWriter (
 				pCurrentRegisters->tbCountInfo.addressBase += 0x1;
 			#endif
 
-			*pCurrentState = IA_BUFFER_WRITE_STATE_COMP_NUM_ACCESS;
+			*pCurrentState = IA_BUFFER_WRITE_STATE_ACCESS;
 			EMULATOR_PRINT(("[kernelIABuffer WRITER %d] Strip update.\n", colID));
 
 			if (pCurrentRegisters->tileInfo.iCol == pCurrentRegisters->tileInfo.numStripsCol)
@@ -1440,7 +1427,7 @@ void updateIABufferWriter (
 				EMULATOR_PRINT(("[kernelIABuffer WRITER %d] FINISHED processing instruction.\n\n", colID));
 			}
 		}
-		break;
+		break; //IA_BUFFER_WRITE_STATE_UPDATE_STRIP
 
 		default: {
 			// Keep the status-quo
@@ -2135,8 +2122,6 @@ __kernel void kernelIAControlTee ()
 	}
 }
 
-#define IA_TEE_COMMAND_READ_STRIP_HEADER 0X0
-#define IA_TEE_COMMAND_TRANSFER 0x1
 __attribute__((max_global_work_dim(0)))
 __attribute__((autorun))
 __attribute__((num_compute_units(PE_COLS)))
@@ -2147,76 +2132,50 @@ __kernel void kernelIATee ()
 	 * transfer the remaining data blocks in the strip to the respective destination
 	 */
 	int colID = get_compute_id(0);
-	typedef uint1_t t_state;
-	t_state regState = IA_TEE_COMMAND_READ_STRIP_HEADER;
-	uint1_t regFlagRoute2Misc = FALSE;
-	uint1_t regFlagRoute2Conv = FALSE;
 
 	while (true)
 	{
-		uint1_t nextFlagRoute2Misc = regFlagRoute2Misc;
-		uint1_t nextFlagRoute2Conv = regFlagRoute2Conv;
-		t_state nextState = regState;
 
 		bool readSuccess = false;
 
 		t_dram_block_ia_tagged taggedBlock = read_channel_nb_intel(channel_ia_wide[colID], &readSuccess);
 		t_dram_block dramBlock = taggedBlock.dramBlock;
 
-		int destinationCol = (int) (taggedBlock.route & 0x3F);
-		uint1_t flag2Misc = (taggedBlock.route >> 0x6) & 0x01;
-		uint1_t flagIsLastInStrip = (taggedBlock.route >> 0x7) & 0x01;
-
 		if (readSuccess == true)
 		{
-			switch (regState) {
-				case (IA_TEE_COMMAND_READ_STRIP_HEADER) : 
-				{
-					signed char actualColIndex = getColSPIndex(dramBlock);
-					unsigned char colSPStride = getColSPStride(dramBlock);
-					unsigned char colSPWidth = getColSPWidth(dramBlock);
+			int destinationCol = (int) (taggedBlock.route & 0x3F);
+			//flag2Misc is TRUE doesn't mean that this block necessarily 
+			//goes to this column.
+			t_flag flag2Misc = (taggedBlock.route >> 0x6) & 0x01;
+			t_flag flagIsLastInStrip = (taggedBlock.route >> 0x7) & 0x01;
+			signed char actualColIndex = taggedBlock.iColInSPTile;
+			unsigned char colSPStride = taggedBlock.colSPStride;
+			unsigned char colSPWidth = taggedBlock.colSPWidth;
 
-					if ( (((signed char) colSPWidth) > actualColIndex)
+			t_flag flagRoute2MiscActual = FALSE;
+			t_flag flagRoute2ConvActual = FALSE;
+			if ( (((signed char) colSPWidth) > actualColIndex)
 							&& (actualColIndex >= 0)
 						)
-					{
-						nextFlagRoute2Misc = flag2Misc;
-						nextFlagRoute2Conv = (~flag2Misc) & 0x01;
-					}
-					else
-					{
-						nextFlagRoute2Misc = FALSE;
-						nextFlagRoute2Conv = FALSE;
-					}
+			{
+				flagRoute2MiscActual = flag2Misc;
+				flagRoute2ConvActual = (~flag2Misc) & 0x01;
+			}
 
-					//Adjust the col index seen by the next compute column
-					#if (WIDE_SIZE > 1)
-						taggedBlock.dramBlock.transferBlocks[1].values[0] = actualColIndex - ((signed char) colSPStride);
-					#else
-						taggedBlock.dramBlock.transferBlocks[0].values[4] = actualColIndex - ((signed char) colSPStride);
-					#endif
+			taggedBlock.iColInSPTile -= (signed char) colSPStride;
 
-					EMULATOR_PRINT(("[kernelIATee %d] Detected a strip head. "
-						"actualColIndex=%d, colSPStride=%d, colSPWidth=%d, nextFlagRoute2Misc=%#03x. nextFlagRoute2Conv=%#03x\n", 
-						colID, actualColIndex, colSPStride, colSPWidth, ((unsigned char) nextFlagRoute2Misc), ((unsigned char) nextFlagRoute2Conv)));
-
-					nextState = IA_TEE_COMMAND_TRANSFER;
-				} //IA_TEE_COMMAND_READ_STRIP_HEADER
-				break;
-				case (IA_TEE_COMMAND_TRANSFER) :
-				{
-					if (flagIsLastInStrip == TRUE)
-					{
-						nextState = IA_TEE_COMMAND_READ_STRIP_HEADER;
-
-						EMULATOR_PRINT(("[kernelIATee %d] Finished processing a strip\n", colID));
-					}
-
-				} //IA_TEE_COMMAND_TRANSFER
-				break;
-				default:
-				break;
-			} //switch
+			EMULATOR_PRINT(("[kernelIATee %d] Read a block. "
+						"actualColIndex=%d, "
+						"colSPStride=%d, "
+						"colSPWidth=%d, "
+						"flagRoute2Misc=%#03x. "
+						"flagRoute2Conv=%#03x\n", 
+						colID, 
+						actualColIndex, 
+						colSPStride, 
+						colSPWidth, 
+						((unsigned char) flagRoute2MiscActual), 
+						((unsigned char) flagRoute2ConvActual)));
 
 			//Forward to the next column
 			if (colID < (PE_COLS - 1))
@@ -2227,32 +2186,20 @@ __kernel void kernelIATee ()
 				}
 			}
 
-			//Logic for routing the dram block to the conv engine.
-			//Forward the header block, as well as the subsequent data block
-			bool write2Conv = false;;
-			if ( ((regState == IA_TEE_COMMAND_READ_STRIP_HEADER) && (nextFlagRoute2Conv == TRUE))
-					|| ((regState == IA_TEE_COMMAND_TRANSFER) && (regFlagRoute2Conv == TRUE))
-				)
+			if (flagRoute2ConvActual == TRUE)
 			{
-				write2Conv = true;
-			}
-
-			if (write2Conv == true)
-			{
-				write_channel_intel(channel_ia_wide_local[colID], dramBlock);
+				t_dram_block_ia_to_pe blockToPE;
+				blockToPE.dramBlock = dramBlock;
+				blockToPE.numTB = taggedBlock.numTB;
+				blockToPE.route = taggedBlock.route;
+				write_channel_intel(channel_ia_wide_local[colID], blockToPE);
 			}
 
 			//Logic for routing dram blocks to the MISC unit
 			//Only forward data blocks	
-			bool write2Misc = false;
 			if (colID < MISC_COLS)
 			{
-				if ( (regState == IA_TEE_COMMAND_TRANSFER) && (regFlagRoute2Misc == TRUE))
-				{
-					write2Misc = true;
-				}
-
-				if (write2Misc == true)
+				if (flagRoute2MiscActual == TRUE)
 				{
 					t_dram_block_ia_to_misc blockToMisc;
 					blockToMisc.dramBlock = taggedBlock.dramBlock;
@@ -2262,10 +2209,6 @@ __kernel void kernelIATee ()
 			}
 		
 		} // if read is successful
-
-		regState = nextState;
-		regFlagRoute2Misc = nextFlagRoute2Misc;
-		regFlagRoute2Conv = nextFlagRoute2Conv;
 	}
 }
 #endif //IA_MEMORY

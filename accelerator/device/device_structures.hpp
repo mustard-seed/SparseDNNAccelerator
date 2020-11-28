@@ -439,7 +439,13 @@ typedef struct __attribute__((packed)){
     //Bit[3:0] Left shift amount
     unsigned char miscLeftShiftAmount;
 
-    //bool toInputBuffer; 
+    //Number of TB in this strip
+    unsigned short numTB;
+
+    //Used for steering the block to respective column
+    unsigned char colSPWidth;
+    unsigned char colSPStride;
+    signed char iColInSPTile;
 } t_dram_block_ia_tagged;
 
 typedef struct __attribute__((packed)){
@@ -451,6 +457,19 @@ typedef struct __attribute__((packed)){
 
     //bool toInputBuffer; 
 } t_dram_block_ia_to_misc;
+
+typedef struct __attribute__((packed)){
+    t_dram_block dramBlock;
+
+    //Bit[7]: Is last in strip
+    //Bit[6]: Flag for going to misc engine
+    //Bit[5:0] Destination col 
+    unsigned char route;
+
+    //Number of TB in this strip
+    unsigned short numTB;
+
+} t_dram_block_ia_to_pe;
 
 
 
