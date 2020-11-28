@@ -969,6 +969,7 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
                unsigned int adjustedOutputLatency =
                         firstTileInputLatency + firstTileComputeLatency + outputLatency;
 
+               //Get the input/output activation bound
                 unsigned int actualTransferLatency = inputLatency;
                 if (actualTransferLatency < weightLatency)
                 {
@@ -979,14 +980,15 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
                     actualTransferLatency = adjustedOutputLatency;
                 }
 
+                //Pick from the compute bound, weight bound, and input/output activation transfer bound
                 unsigned int maxLatency = computeLatencyWithOverhead;
                 if (maxLatency < weightBoundedLatency)
                 {
                     maxLatency = weightBoundedLatency;
                 }
-                if (maxLatency < adjustedOutputLatency)
+                if (maxLatency < actualTransferLatency)
                 {
-                    maxLatency = adjustedOutputLatency;
+                    maxLatency = actualTransferLatency;
                 }
 
                 if (maxLatency < minLatency)
