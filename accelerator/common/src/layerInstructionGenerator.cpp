@@ -1124,7 +1124,7 @@ unsigned int deriveNumActivationDramBlockPerStrip(
  * Need to be verified against AOCL early estimation report
  */
 #define NUM_IDLE_CYCLES_PER_FILTER_TRANSFER_FROM_W_MOVER 2
-#define NUM_IDLE_CYCLES_PER_STRIP_TRANSFER_FROM_IA_MOVER 3
+#define NUM_IDLE_CYCLES_PER_STRIP_TRANSFER_FROM_IA_MOVER 0
 #define NUM_IDLE_CYCLES_PER_STRIP_TRANSFER_TO_OA_MOVER 0
 
 unsigned int deriveConvComputationLatency(
