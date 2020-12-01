@@ -2380,113 +2380,131 @@ __attribute__((num_compute_units(MISC_COLS)))
 __kernel void kernelMisc ()
 {
 	int colID = get_compute_id(0);
-	#pragma max_concurrency 1
 	while (true)
 	{
+		bool instructionReadSuccess = false;
 		t_misc_control_packet controlPacket = 
-			read_channel_intel(channel_misc_instruction_local[colID]);
+			read_channel_nb_intel(channel_misc_instruction_local[colID], 
+				&instructionReadSuccess);
 
-		//Decode
-		//OpCode. 00: Add; 01: Max Pooling; 10: Stream
-		uint2_t opcode = (controlPacket.controlBits >> 4) & 0x03;
-		unsigned short numDramBlocksToReduce = controlPacket.numDramBlocksToReduce;
-		unsigned short numOutputBlocks = controlPacket.numOutputBlocks;
-		unsigned char numEffectiveValuesPerOutputBlock = controlPacket.numEffectiveValuesPerOutputBlock;
 
-		EMULATOR_PRINT(("[kernelMisc %d] Received command "
-						"opcode=%#04x, "
-						"numOutputBlocks=%d, "
-						"numDramBlocksToReduce=%d, "
-						"numEffectiveValuesPerOutputBlock=%d \n",
-						colID, 
-						((unsigned char)opcode), 
-						numOutputBlocks, 
-						numDramBlocksToReduce, 
-						numEffectiveValuesPerOutputBlock));
-
-		//Limit the concurrency if BURST_SIZE_BYTE > 16
-		#if (BURST_SIZE_BYTE > 16)
-		#pragma max_concurrency 1
-		#endif
-		for (unsigned short iOutput=0; iOutput < numOutputBlocks; iOutput++)
+		if (instructionReadSuccess == true)
 		{
-			t_accumulator reductionBlock[BURST_SIZE_BYTE];
-			unsigned char numEffectiveValues = numEffectiveValuesPerOutputBlock;
-			//Initialize the reductionBlock
-			#pragma unroll
-			for (int iVal=0; iVal < BURST_SIZE_BYTE; iVal++)
-			{
-				//If max pooling, then intialize the values to the minimum, else zero
-				t_accumulator min = ACCUM_MIN;
-				reductionBlock[iVal] = (opcode == ((uint2_t) 0x01)) ? 
-					min : 0x0000;
-			}
+			//Decode
+			//OpCode. 00: Add; 01: Max Pooling; 10: Stream
+			uint2_t opcode = (controlPacket.controlBits >> 4) & 0x03;
+			unsigned short numDramBlocksToReduce = controlPacket.numDramBlocksToReduce;
+			unsigned short numOutputBlocks = controlPacket.numOutputBlocks;
+			unsigned char numEffectiveValuesPerOutputBlock = controlPacket.numEffectiveValuesPerOutputBlock;
 
-			//Perform reduction
-			#pragma ii 1
-			#pragma speculated_iterations 0
-			for (unsigned short iBlock=0; iBlock <numDramBlocksToReduce; iBlock++)
-			{
-				t_dram_block_ia_to_misc inputDramBlockTagged = 
-					read_channel_intel(channel_ia_wide_misc[colID]);
-				unsigned char numLeftShiftAmount = inputDramBlockTagged.miscLeftShiftAmount;
-				t_dram_block inputDramBlock = inputDramBlockTagged.dramBlock;
+			EMULATOR_PRINT(("[kernelMisc %d] Received command "
+							"opcode=%#04x, "
+							"numOutputBlocks=%d, "
+							"numDramBlocksToReduce=%d, "
+							"numEffectiveValuesPerOutputBlock=%d \n",
+							colID, 
+							((unsigned char)opcode), 
+							numOutputBlocks, 
+							numDramBlocksToReduce, 
+							numEffectiveValuesPerOutputBlock));
 
-				EMULATOR_PRINT(("[Kernel MISC (%d)] iInputBlock=%d, numBlocksToReduce=%d, iOutput=%d, numOutputBlocks=%d\n"
-					"Inputblock[0-3]: %#04x %#04x %#04x %#04x \n",
-					colID, iBlock, numDramBlocksToReduce, iOutput, numOutputBlocks,
-					inputDramBlock.transferBlocks[0].values[0] & 0xFF, 
-					inputDramBlock.transferBlocks[0].values[1] & 0xFF, 
-					inputDramBlock.transferBlocks[0].values[2] & 0xFF, 
-					inputDramBlock.transferBlocks[0].values[3] & 0xFF));
-				#pragma unroll MISC_UNROLL
+			//Limit the concurrency if BURST_SIZE_BYTE > 16
+			#if (BURST_SIZE_BYTE > 16)
+			#pragma max_concurrency 1
+			#endif
+			for (unsigned short iOutput=0; iOutput < numOutputBlocks; iOutput++)
+			{
+				t_accumulator reductionBlock[BURST_SIZE_BYTE];
+				unsigned char numEffectiveValues = numEffectiveValuesPerOutputBlock;
+				//Initialize the reductionBlock
+				#pragma unroll
+				for (int iVal=0; iVal < BURST_SIZE_BYTE; iVal++)
+				{
+					//If max pooling, then intialize the values to the minimum, else zero
+					t_accumulator min = ACCUM_MIN;
+					reductionBlock[iVal] = (opcode == ((uint2_t) 0x01)) ? 
+						min : 0x0000;
+				}
+
+				//Perform reduction
+				unsigned short iBlock = 0;
 				#pragma ii 1
 				#pragma speculated_iterations 0
-				for (int iValue=0; iValue < BURST_SIZE_BYTE; iValue++)
+				while (iBlock <numDramBlocksToReduce)
 				{
-					t_accumulator rawInputValue = (t_accumulator) (inputDramBlock
-						.transferBlocks[iValue >> (VALUE_TO_CLUSTER_SHIFT + CLUSTER_TO_TRANSFER_SIZE_SHIFT)]
-						.values[iValue & VALUE_DIVIDED_BY_SIMD_SIZE_REMAINDER_MASK]);
+					bool blockReadSuccess = false;
 
-					//Left-shift input
-					t_accumulator inputValue = rawInputValue << numLeftShiftAmount;
+					t_dram_block_ia_to_misc inputDramBlockTagged = 
+						read_channel_nb_intel(channel_ia_wide_misc[colID], &blockReadSuccess);
 
-					t_accumulator currentValue = reductionBlock[iValue];
-
-					t_accumulator newValue;
-					if (opcode == ((uint2_t) 0x00))
+					if (blockReadSuccess == true)
 					{
-						newValue = inputValue + currentValue;
-					}
-					else if (opcode == ((uint2_t) 0x01))
-					{
-						newValue = (inputValue >= currentValue) ? inputValue : currentValue;
-					}
-					else
-					{
-						newValue = inputValue;
-					}
+						unsigned char numLeftShiftAmount = inputDramBlockTagged.miscLeftShiftAmount;
+						t_dram_block inputDramBlock = inputDramBlockTagged.dramBlock;
 
-					reductionBlock[iValue]
-						= newValue;
+						EMULATOR_PRINT(("[Kernel MISC (%d)] iInputBlock=%d, numBlocksToReduce=%d, iOutput=%d, numOutputBlocks=%d\n"
+							"Inputblock[0-3]: %#04x %#04x %#04x %#04x \n",
+							colID, iBlock, numDramBlocksToReduce, iOutput, numOutputBlocks,
+							inputDramBlock.transferBlocks[0].values[0] & 0xFF, 
+							inputDramBlock.transferBlocks[0].values[1] & 0xFF, 
+							inputDramBlock.transferBlocks[0].values[2] & 0xFF, 
+							inputDramBlock.transferBlocks[0].values[3] & 0xFF));
+
+						#pragma unroll MISC_UNROLL
+						#pragma ii 1
+						#pragma speculated_iterations 0
+						for (int iValue=0; iValue < BURST_SIZE_BYTE; iValue++)
+						{
+							t_accumulator rawInputValue = (t_accumulator) (inputDramBlock
+								.transferBlocks[iValue >> (VALUE_TO_CLUSTER_SHIFT + CLUSTER_TO_TRANSFER_SIZE_SHIFT)]
+								.values[iValue & VALUE_DIVIDED_BY_SIMD_SIZE_REMAINDER_MASK]);
+
+							//Left-shift input
+							t_accumulator inputValue = rawInputValue << numLeftShiftAmount;
+
+							t_accumulator currentValue = reductionBlock[iValue];
+
+							t_accumulator newValue;
+							if (opcode == ((uint2_t) 0x00))
+							{
+								newValue = inputValue + currentValue;
+							}
+							else if (opcode == ((uint2_t) 0x01))
+							{
+								newValue = (inputValue >= currentValue) ? inputValue : currentValue;
+							}
+							else
+							{
+								newValue = inputValue;
+							}
+
+							reductionBlock[iValue]
+								= newValue;
+						}
+
+						iBlock++;
+					} //if (blockReadSuccess == true)
+				} //while (iBlock <numDramBlocksToReduce)
+
+				//Drain the output
+				unsigned char iOutputInBlock = 0;
+				#pragma ii 1
+				#pragma speculated_iterations 0
+				while (iOutputInBlock < numEffectiveValues)
+				{
+					bool success = 
+						write_channel_nb_intel(channel_drain_misc[colID], reductionBlock[iOutputInBlock]);
+					if (success == true)
+					{
+						iOutputInBlock++;
+					}
 				}
-			}
 
-			//Drain the output
-			unsigned char iOutputInBlock = 0;
-			#pragma ii 1
-			#pragma speculated_iterations 0
-			while (iOutputInBlock < numEffectiveValues)
-			{
-				write_channel_intel(channel_drain_misc[colID], reductionBlock[iOutputInBlock]);
-				iOutputInBlock++;
-			}
-
-			EMULATOR_PRINT(("[kernelMisc %d] Finished processing output block %d / %d of the command.\n", colID, iOutput, numOutputBlocks));
-		}  //iOutput
-		
-
-		EMULATOR_PRINT(("[kernelMisc %d] Finished processing a command\n", colID));
+				EMULATOR_PRINT(("[kernelMisc %d] Finished processing output block %d / %d of the command.\n", colID, iOutput, numOutputBlocks));
+			}  //iOutput
+			
+			EMULATOR_PRINT(("[kernelMisc %d] Finished processing a command\n", colID));
+		}
 	}
 }
 #endif
