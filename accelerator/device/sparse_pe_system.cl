@@ -2409,12 +2409,16 @@ __kernel void kernelMisc ()
 							numEffectiveValuesPerOutputBlock));
 
 			//Limit the concurrency if BURST_SIZE_BYTE > 16
-			#if (BURST_SIZE_BYTE > 16)
-			#pragma max_concurrency 1
-			#endif
+			// #if (BURST_SIZE_BYTE > 16)
+			// #pragma max_concurrency 2
+			// #endif
 			for (unsigned short iOutput=0; iOutput < numOutputBlocks; iOutput++)
 			{
-				t_accumulator reductionBlock[BURST_SIZE_BYTE];
+				#if (defined(ARRIA10) || defined(STRATIX10))
+					t_accumulator reductionBlock[BURST_SIZE_BYTE] __attribute__((__register__));
+				#else
+					t_accumulator reductionBlock[BURST_SIZE_BYTE];
+				#endif
 				unsigned char numEffectiveValues = numEffectiveValuesPerOutputBlock;
 				//Initialize the reductionBlock
 				#pragma unroll
