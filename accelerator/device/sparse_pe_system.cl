@@ -81,305 +81,319 @@ __kernel void kernelIAMover (
 		unsigned int offsetInstruction
 	)
 {
-	unsigned int iInst = 0;
-	while (iInst < numInstruction)
+	#pragma max_concurrency 1
+	for (unsigned int iInst=0; iInst < numInstruction; iInst += 8)
 	{
-		//Read the instruction
-		t_ia_mover_instruction inst = pInstruction[iInst+offsetInstruction];
-
-		/*! Unpackethe concatenated fields of the instruction */
-		//Number of compute columns that are active in this transfer
-		unsigned char numActiveCols = inst.flagSyncCatInputArrangementCatSparseFlagCatDestinationCatNumActiveCols & 0x0F;
-		//Flag for the transfer destignatiion. 1 for MISC channel, 0 for CONV PE array.
-		t_flag destinationMisc = (inst.flagSyncCatInputArrangementCatSparseFlagCatDestinationCatNumActiveCols >> 0x04) & 0x01;
-		//Flag for whether the input is sparse
-		t_flag sparseInput = (inst.flagSyncCatInputArrangementCatSparseFlagCatDestinationCatNumActiveCols >> 0x05) & 0x01;
-		
-		//Bit [6]: Input arrangment mode.
-	    //  1'b0: One input tensor (e.g convolution, strided convolution)
-    	//	1'b1: Two input tensors, and interleave the two tensors per dramblock (e.g. eltwise addition)
-		unsigned char inputArrangement = (inst.flagSyncCatInputArrangementCatSparseFlagCatDestinationCatNumActiveCols >> 0x06) & 0x01;
-		
-		t_flag flagWaitForSync = (inst.flagSyncCatInputArrangementCatSparseFlagCatDestinationCatNumActiveCols >> 0x07) & 0x01;
-
-		unsigned char input0LeftShiftAmount = inst.inputShiftAmounts & 0x0F;
-		unsigned char input1LeftShiftAmount = (inst.inputShiftAmounts >> 0x04) & 0x0F;
-		//Amount of input padding needed on the four sides
-		uint2_t tileLeftPadding = inst.concatPadding & 0x03;
-		uint2_t tileRightPadding = (inst.concatPadding >> 0x02) & 0x03;
-		uint2_t tileTopPadding = (inst.concatPadding >> 0x04) & 0x03;
-		uint2_t tileBottomPadding = (inst.concatPadding >> 0x06) & 0x03;
-		//Intial values for iterators that are created to handle strided convolution. SP: strided-padded
-		uint4_t hInitSPIndex = inst.concatInitSPIndices & 0x0F;
-		uint4_t vInitSPIndex = (inst.concatInitSPIndices >> 0x04) & 0x0F;
-
-		//Width and height in the strided-padded domain
-		uint4_t colSPSize = inst.concatSPSize & 0x0F;
-		uint4_t rowSPSize = (inst.concatSPSize >> 0x04) & 0x0F;
-
-		/*! Iterators for keeping track of current strip's position in the strided-padded unit.*/
-		//uint4_t iColSPUnitIndex = hInitSPIndex;
-		uint4_t iRowSPUnitIndex = vInitSPIndex;
-
-		//Iterators of the column and row positions of the strip inside the tile
-		//signed char iColInSPTile = 0;
-		//signed char iRowInSPTile = 0;
-
-		//Address offset contributions from row and column movements in the tile
-		signed int offsetIADramBlockRow = 0;
-		//signed int offsetIADramBlockCol = 0;
-		#if defined(SPARSE_SYSTEM)
-			signed int offsetTBCountRow = 0;
-			//signed int offsetTBCountCol = 0;
-		#endif
-
-		bool instructionProceed = true;
-		//Synchornization with the OA mover
-		if (flagWaitForSync == TRUE)
+		t_ia_mover_instruction cacheInstruction[8];
+		unsigned char numInstInTile = (iInst + 8) < numInstruction ? 
+			8 : numInstruction - iInst;
+		#pragma unroll 
+		for (unsigned char i=0; i<8; i++)
 		{
-			unsigned char token = read_channel_nb_intel(channel_activation_sync, &instructionProceed);
+			cacheInstruction[i] = pInstruction[i+iInst+offsetInstruction];
 		}
 
-		if (instructionProceed == true)
+		unsigned char iInstTile = 0;
+		while (iInstTile<numInstInTile)
 		{
-			//iterate over IA tile height
-			for (
-					signed char iRowInSPTile=0;
-					iRowInSPTile < ((unsigned char) inst.tileSPHeight);
-					iRowInSPTile++
-				)
-			{
-				uint4_t iColSPUnitIndex = hInitSPIndex;
-				signed int offsetIADramBlockCol = 0;
-				#if defined(SPARSE_SYSTEM)
-					signed int offsetTBCountCol = 0;
-				#endif
+			//Read the instruction
+			t_ia_mover_instruction inst = cacheInstruction[iInstTile];
 
-				#pragma ii 1
+			/*! Unpackethe concatenated fields of the instruction */
+			//Number of compute columns that are active in this transfer
+			unsigned char numActiveCols = inst.flagSyncCatInputArrangementCatSparseFlagCatDestinationCatNumActiveCols & 0x0F;
+			//Flag for the transfer destignatiion. 1 for MISC channel, 0 for CONV PE array.
+			t_flag destinationMisc = (inst.flagSyncCatInputArrangementCatSparseFlagCatDestinationCatNumActiveCols >> 0x04) & 0x01;
+			//Flag for whether the input is sparse
+			t_flag sparseInput = (inst.flagSyncCatInputArrangementCatSparseFlagCatDestinationCatNumActiveCols >> 0x05) & 0x01;
+			
+			//Bit [6]: Input arrangment mode.
+		    //  1'b0: One input tensor (e.g convolution, strided convolution)
+	    	//	1'b1: Two input tensors, and interleave the two tensors per dramblock (e.g. eltwise addition)
+			unsigned char inputArrangement = (inst.flagSyncCatInputArrangementCatSparseFlagCatDestinationCatNumActiveCols >> 0x06) & 0x01;
+			
+			t_flag flagWaitForSync = (inst.flagSyncCatInputArrangementCatSparseFlagCatDestinationCatNumActiveCols >> 0x07) & 0x01;
+
+			unsigned char input0LeftShiftAmount = inst.inputShiftAmounts & 0x0F;
+			unsigned char input1LeftShiftAmount = (inst.inputShiftAmounts >> 0x04) & 0x0F;
+			//Amount of input padding needed on the four sides
+			uint2_t tileLeftPadding = inst.concatPadding & 0x03;
+			uint2_t tileRightPadding = (inst.concatPadding >> 0x02) & 0x03;
+			uint2_t tileTopPadding = (inst.concatPadding >> 0x04) & 0x03;
+			uint2_t tileBottomPadding = (inst.concatPadding >> 0x06) & 0x03;
+			//Intial values for iterators that are created to handle strided convolution. SP: strided-padded
+			uint4_t hInitSPIndex = inst.concatInitSPIndices & 0x0F;
+			uint4_t vInitSPIndex = (inst.concatInitSPIndices >> 0x04) & 0x0F;
+
+			//Width and height in the strided-padded domain
+			uint4_t colSPSize = inst.concatSPSize & 0x0F;
+			uint4_t rowSPSize = (inst.concatSPSize >> 0x04) & 0x0F;
+
+			/*! Iterators for keeping track of current strip's position in the strided-padded unit.*/
+			//uint4_t iColSPUnitIndex = hInitSPIndex;
+			uint4_t iRowSPUnitIndex = vInitSPIndex;
+
+			//Iterators of the column and row positions of the strip inside the tile
+			//signed char iColInSPTile = 0;
+			//signed char iRowInSPTile = 0;
+
+			//Address offset contributions from row and column movements in the tile
+			signed int offsetIADramBlockRow = 0;
+			//signed int offsetIADramBlockCol = 0;
+			#if defined(SPARSE_SYSTEM)
+				signed int offsetTBCountRow = 0;
+				//signed int offsetTBCountCol = 0;
+			#endif
+
+			bool instructionProceed = true;
+			//Synchornization with the OA mover
+			if (flagWaitForSync == TRUE)
+			{
+				unsigned char token = read_channel_nb_intel(channel_activation_sync, &instructionProceed);
+			}
+
+			if (instructionProceed == true)
+			{
+				//iterate over IA tile height
 				for (
-						signed char iColInSPTile=0;
-						iColInSPTile < ((signed char) inst.tileSPWidth);
-						iColInSPTile++
+						signed char iRowInSPTile=0;
+						iRowInSPTile < ((unsigned char) inst.tileSPHeight);
+						iRowInSPTile++
 					)
 				{
-					/*!Setup the strip transfer parameters*/
-					//Determine whether the strip consists of padding, or actual values from memory
-					bool colIsDense = (iColInSPTile >= ((signed char) tileLeftPadding))
-						&& (iColInSPTile < (inst.tileSPWidth - ((unsigned char) tileRightPadding)) )
-						&& (iColSPUnitIndex == 0);
-					bool rowIsDense = (iRowInSPTile >= ((signed char) tileTopPadding))
-						&& (iRowInSPTile < (inst.tileSPHeight - ((unsigned char) tileBottomPadding)) )
-						&& (iRowSPUnitIndex == 0);
+					uint4_t iColSPUnitIndex = hInitSPIndex;
+					signed int offsetIADramBlockCol = 0;
+					#if defined(SPARSE_SYSTEM)
+						signed int offsetTBCountCol = 0;
+					#endif
 
-					bool realStrip = colIsDense && rowIsDense;
-
-					unsigned char numInputInterleavePerDramblock = (inputArrangement == 0x01) ? 0x02 : 0x01;
-
+					#pragma ii 1
+					#pragma speculated_iterations 0
+					for (
+							signed char iColInSPTile=0;
+							iColInSPTile < ((signed char) inst.tileSPWidth);
+							iColInSPTile++
+						)
 					{
-						int addressIADramBlockDDR0 = 
-							((t_int) inst.memBlockStart0) + offsetIADramBlockCol + offsetIADramBlockRow;
+						/*!Setup the strip transfer parameters*/
+						//Determine whether the strip consists of padding, or actual values from memory
+						bool colIsDense = (iColInSPTile >= ((signed char) tileLeftPadding))
+							&& (iColInSPTile < (inst.tileSPWidth - ((unsigned char) tileRightPadding)) )
+							&& (iColSPUnitIndex == 0);
+						bool rowIsDense = (iRowInSPTile >= ((signed char) tileTopPadding))
+							&& (iRowInSPTile < (inst.tileSPHeight - ((unsigned char) tileBottomPadding)) )
+							&& (iRowSPUnitIndex == 0);
 
-						//The second iter is special, used during elementwise addition only
-						//hence the mixing of indices from 1 and 0
-						int addressIADramBlockDDR1 = 
-							((t_int) inst.memBlockStart1) + offsetIADramBlockCol + offsetIADramBlockRow;
+						bool realStrip = colIsDense && rowIsDense;
 
-						#if defined(SPARSE_SYSTEM)
-							//For the sparse case, we need to consider whether the input is actually sparse,
-							//whether the input is padding
-							int addressTBCountDDR = ((t_int) inst.memTBCountStart) + offsetTBCountCol + offsetTBCountRow;
-							unsigned short numTBInStrip;
-							if (realStrip == true)
-							{
-								if (sparseInput == 0x1)
+						unsigned char numInputInterleavePerDramblock = (inputArrangement == 0x01) ? 0x02 : 0x01;
+
+						{
+							int addressIADramBlockDDR0 = 
+								((t_int) inst.memBlockStart0) + offsetIADramBlockCol + offsetIADramBlockRow;
+
+							//The second iter is special, used during elementwise addition only
+							//hence the mixing of indices from 1 and 0
+							int addressIADramBlockDDR1 = 
+								((t_int) inst.memBlockStart1) + offsetIADramBlockCol + offsetIADramBlockRow;
+
+							#if defined(SPARSE_SYSTEM)
+								//For the sparse case, we need to consider whether the input is actually sparse,
+								//whether the input is padding
+								int addressTBCountDDR = ((t_int) inst.memTBCountStart) + offsetTBCountCol + offsetTBCountRow;
+								unsigned short numTBInStrip;
+								if (realStrip == true)
 								{
-									// if (memRegion == 0x0)
-									// {
-									// 	numTBInStrip = pTBCount1[addressTBCountDDR];
-									// }
-									// else
-									// {
-									// 	numTBInStrip = pTBCount2[addressTBCountDDR];
-									// }
-									numTBInStrip = pTBCount[addressTBCountDDR];
+									if (sparseInput == 0x1)
+									{
+										// if (memRegion == 0x0)
+										// {
+										// 	numTBInStrip = pTBCount1[addressTBCountDDR];
+										// }
+										// else
+										// {
+										// 	numTBInStrip = pTBCount2[addressTBCountDDR];
+										// }
+										numTBInStrip = pTBCount[addressTBCountDDR];
+									}
+									else
+									{
+										numTBInStrip = (t_ushort) inst.numCWOrTBInGroup;
+									}
 								}
 								else
 								{
 									numTBInStrip = (t_ushort) inst.numCWOrTBInGroup;
 								}
-							}
-							else
+							#else
+								unsigned short numTBInStrip = (t_ushort) inst.numTBPerStrip;
+							#endif
+
+							//dramBlockCount = ceil(numTBInStrip / WIDE_SIZE)
+							//Compute the number of dram block transfers needed for the strip
+							unsigned short dramBlockCount = (numInputInterleavePerDramblock == 0x01) ?
+								 1 + ( (numTBInStrip-1) >> WIDE_SIZE_OFFSET )
+								: (1 + ( (numTBInStrip-1) >> WIDE_SIZE_OFFSET )) << 1;
+							//The actual number of transfer is one more than the number of DRAM block.
+							//The extra block is in the beginning, and it contains routing information
+							//as well as the number of TB count, which is required by the convolution PE array
+							unsigned short numTransferActions = dramBlockCount;
+
+							EMULATOR_PRINT(("[kernelIAMover] START strip transfer. "
+										"offsetInstruction=%d, "
+										"iInstTile+iInst=%d, "
+										"tileSPWidthxTileSPHeight=%d, "
+										"iRowInSPTile=%d, " 
+				                        "iColInSPTile=%d, "
+										"rowIsDense=%#03x, "
+										"colIsDense=%#03x, "
+										"inputArrangement=%#03x, "
+										"numInputInterleavePerDramblock=%#03x, "
+										"numTBInStrip=%d, "
+										"numActiveCols=%d, "
+										"addressIADramBlockDDR0=%#010x, "
+										"addressIADramBlockDDR1=%#010x, "
+										"leftShiftAmount=%#04x"
+										"destinationMisc=%#03x\n",
+										offsetInstruction,
+										iInstTile+iInst,
+										(unsigned int) inst.tileSPWidthxTileSPHeight, 
+										iRowInSPTile,
+										iColInSPTile,
+										rowIsDense,
+										colIsDense,
+										inputArrangement,
+										numInputInterleavePerDramblock,
+										numTBInStrip,
+										numActiveCols,
+										(unsigned int) addressIADramBlockDDR0,
+										(unsigned int) addressIADramBlockDDR1,
+										(unsigned int) inst.inputShiftAmounts,
+										(unsigned int) destinationMisc));
+
+							unsigned char iterInputDramblockInterleave = 0x0;
+							#pragma ii 1
+							#pragma speculated_iterations 0
+							for (unsigned short iterTransfer=0; iterTransfer<numTransferActions; iterTransfer++)
 							{
-								numTBInStrip = (t_ushort) inst.numCWOrTBInGroup;
-							}
-						#else
-							unsigned short numTBInStrip = (t_ushort) inst.numTBPerStrip;
-						#endif
+								t_dram_block_ia_tagged iaBlock;
 
-						//dramBlockCount = ceil(numTBInStrip / WIDE_SIZE)
-						//Compute the number of dram block transfers needed for the strip
-						unsigned short dramBlockCount = (numInputInterleavePerDramblock == 0x01) ?
-							 1 + ( (numTBInStrip-1) >> WIDE_SIZE_OFFSET )
-							: (1 + ( (numTBInStrip-1) >> WIDE_SIZE_OFFSET )) << 1;
-						//The actual number of transfer is one more than the number of DRAM block.
-						//The extra block is in the beginning, and it contains routing information
-						//as well as the number of TB count, which is required by the convolution PE array
-						unsigned short numTransferActions = dramBlockCount;
-
-						EMULATOR_PRINT(("[kernelIAMover] START strip transfer. "
-									"offsetInstruction=%d, "
-									"iInst=%d, "
-									"tileSPWidthxTileSPHeight=%d, "
-									"iRowInSPTile=%d, " 
-			                        "iColInSPTile=%d, "
-									"rowIsDense=%#03x, "
-									"colIsDense=%#03x, "
-									"inputArrangement=%#03x, "
-									"numInputInterleavePerDramblock=%#03x, "
-									"numTBInStrip=%d, "
-									"numActiveCols=%d, "
-									"addressIADramBlockDDR0=%#010x, "
-									"addressIADramBlockDDR1=%#010x, "
-									"leftShiftAmount=%#04x"
-									"destinationMisc=%#03x\n",
-									offsetInstruction,
-									iInst,
-									(unsigned int) inst.tileSPWidthxTileSPHeight, 
-									iRowInSPTile,
-									iColInSPTile,
-									rowIsDense,
-									colIsDense,
-									inputArrangement,
-									numInputInterleavePerDramblock,
-									numTBInStrip,
-									numActiveCols,
-									(unsigned int) addressIADramBlockDDR0,
-									(unsigned int) addressIADramBlockDDR1,
-									(unsigned int) inst.inputShiftAmounts,
-									(unsigned int) destinationMisc));
-
-						unsigned char iterInputDramblockInterleave = 0x0;
-						#pragma ii 1
-						for (unsigned short iterTransfer=0; iterTransfer<numTransferActions; iterTransfer++)
-						{
-							t_dram_block_ia_tagged iaBlock;
-
-							iaBlock.colSPWidth = inst.columnSPWidth;
-							iaBlock.colSPStride = inst.columnWidthStride;
-							iaBlock.iColInSPTile = iColInSPTile;
-							iaBlock.numTB = numTBInStrip;
-							if (realStrip == true)
-							{
-								// iaBlock.dramBlock = (memRegion == 0x0) ? 
-								// 	pIA1[addressIADramBlockDDR] : pIA2[addressIADramBlockDDR];
-								
-								int addressIADramBlockDDR = (iterInputDramblockInterleave == 0x0) ?
-									addressIADramBlockDDR0 : addressIADramBlockDDR1;
-								t_dram_block rawBlock = pIA[addressIADramBlockDDR];
-								#pragma unroll
-								for (unsigned char i=0; i<WIDE_SIZE; i++)
+								iaBlock.colSPWidth = inst.columnSPWidth;
+								iaBlock.colSPStride = inst.columnWidthStride;
+								iaBlock.iColInSPTile = iColInSPTile;
+								iaBlock.numTB = numTBInStrip;
+								if (realStrip == true)
 								{
+									// iaBlock.dramBlock = (memRegion == 0x0) ? 
+									// 	pIA1[addressIADramBlockDDR] : pIA2[addressIADramBlockDDR];
+									
+									int addressIADramBlockDDR = (iterInputDramblockInterleave == 0x0) ?
+										addressIADramBlockDDR0 : addressIADramBlockDDR1;
+									t_dram_block rawBlock = pIA[addressIADramBlockDDR];
 									#pragma unroll
-									for (unsigned char j=0; j<(TRANSFER_SIZE*CLUSTER_SIZE); j++)
+									for (unsigned char i=0; i<WIDE_SIZE; i++)
 									{
-										// iaBlock.dramBlock.transferBlocks[i].values[j]= modifyCharOutput(
-										// 		rawBlock.transferBlocks[i].values[j],
-										// 		flagLeftShiftCatShiftAmount
-										// 	);
-										iaBlock.dramBlock.transferBlocks[i].values[j]= 
-												rawBlock.transferBlocks[i].values[j];
+										#pragma unroll
+										for (unsigned char j=0; j<(TRANSFER_SIZE*CLUSTER_SIZE); j++)
+										{
+											// iaBlock.dramBlock.transferBlocks[i].values[j]= modifyCharOutput(
+											// 		rawBlock.transferBlocks[i].values[j],
+											// 		flagLeftShiftCatShiftAmount
+											// 	);
+											iaBlock.dramBlock.transferBlocks[i].values[j]= 
+													rawBlock.transferBlocks[i].values[j];
 
+										}
+									}
+
+									if (iterInputDramblockInterleave == 0x0)
+									{
+										addressIADramBlockDDR0++;
+									}
+									else
+									{
+										addressIADramBlockDDR1++;
+									}
+								}
+								else  //Strip is padding
+								{
+									//Prepare a DRAM block with 0
+									#pragma unroll
+									for (unsigned char i=0; i<WIDE_SIZE; i++)
+									{
+										#pragma unroll
+										for (unsigned char j=0; j<(TRANSFER_SIZE*CLUSTER_SIZE); j++)
+										{
+											iaBlock.dramBlock.transferBlocks[i].values[j]=0;
+										}
 									}
 								}
 
-								if (iterInputDramblockInterleave == 0x0)
+								unsigned char isLastField = ((iterTransfer+1) == numTransferActions) ?
+									0x80 : 0x00;
+								unsigned char isMiscField = (destinationMisc == 0x1) ?
+									0x40 : 0x00;
+								iaBlock.route = isLastField | isMiscField | ((numActiveCols-1) & 0x3F);
+								iaBlock.miscLeftShiftAmount = input0LeftShiftAmount;
+								if (inputArrangement == 0x01)
 								{
-									addressIADramBlockDDR0++;
-								}
-								else
-								{
-									addressIADramBlockDDR1++;
-								}
-							}
-							else  //Strip is padding
-							{
-								//Prepare a DRAM block with 0
-								#pragma unroll
-								for (unsigned char i=0; i<WIDE_SIZE; i++)
-								{
-									#pragma unroll
-									for (unsigned char j=0; j<(TRANSFER_SIZE*CLUSTER_SIZE); j++)
+									if (iterInputDramblockInterleave == 0x00)
 									{
-										iaBlock.dramBlock.transferBlocks[i].values[j]=0;
+										iaBlock.miscLeftShiftAmount = input0LeftShiftAmount;
 									}
+									else
+									{
+										iaBlock.miscLeftShiftAmount = input1LeftShiftAmount;
+									}
+									//Toggle between 0 and 1
+									iterInputDramblockInterleave = (iterInputDramblockInterleave + 0x01) & 0x01;
 								}
+
+								write_channel_intel(channel_ia_wide[0], iaBlock);
 							}
 
-							unsigned char isLastField = ((iterTransfer+1) == numTransferActions) ?
-								0x80 : 0x00;
-							unsigned char isMiscField = (destinationMisc == 0x1) ?
-								0x40 : 0x00;
-							iaBlock.route = isLastField | isMiscField | ((numActiveCols-1) & 0x3F);
-							iaBlock.miscLeftShiftAmount = input0LeftShiftAmount;
-							if (inputArrangement == 0x01)
-							{
-								if (iterInputDramblockInterleave == 0x00)
-								{
-									iaBlock.miscLeftShiftAmount = input0LeftShiftAmount;
-								}
-								else
-								{
-									iaBlock.miscLeftShiftAmount = input1LeftShiftAmount;
-								}
-								//Toggle between 0 and 1
-								iterInputDramblockInterleave = (iterInputDramblockInterleave + 0x01) & 0x01;
-							}
-
-							write_channel_intel(channel_ia_wide[0], iaBlock);
+							EMULATOR_PRINT(("[kernelIAMover] FINISHED strip transfer.\n\n"));
 						}
 
-						EMULATOR_PRINT(("[kernelIAMover] FINISHED strip transfer.\n\n"));
-					}
+						
 
-					
-
-					/*! Loop carried variable updates*/
-					//TODO: Double check the iColSPUnitIndex and iRowSPUnitIndex update conditions
-					if ( (iColInSPTile >= ((signed char) tileLeftPadding)) 
-						&& (iColInSPTile < (inst.tileSPWidth - ((unsigned char) tileRightPadding) - (unsigned char ) 1)) )
-					{
-						iColSPUnitIndex++;
-						if (iColSPUnitIndex >= ((unsigned char) colSPSize))
+						/*! Loop carried variable updates*/
+						//TODO: Double check the iColSPUnitIndex and iRowSPUnitIndex update conditions
+						if ( (iColInSPTile >= ((signed char) tileLeftPadding)) 
+							&& (iColInSPTile < (inst.tileSPWidth - ((unsigned char) tileRightPadding) - (unsigned char ) 1)) )
 						{
-							iColSPUnitIndex = 0;
-							offsetIADramBlockCol += ((t_int) inst.memBlockColStripStride);
+							iColSPUnitIndex++;
+							if (iColSPUnitIndex >= ((unsigned char) colSPSize))
+							{
+								iColSPUnitIndex = 0;
+								offsetIADramBlockCol += ((t_int) inst.memBlockColStripStride);
+								#if defined(SPARSE_SYSTEM)
+									offsetTBCountCol +=(t_int) inst.memTBCountColStride;
+								#endif
+							}
+						}
+
+					} //for over iColInSPTile
+
+					if ( (iRowInSPTile >= ((signed char) tileTopPadding)) 
+							&& (iRowInSPTile < (inst.tileSPHeight - ((unsigned char) tileBottomPadding)) - (unsigned char ) 1 ) )
+					{
+						iRowSPUnitIndex++;
+						if (iRowSPUnitIndex >= ((unsigned char) rowSPSize))
+						{
+							iRowSPUnitIndex = 0;
+							offsetIADramBlockRow += ((t_int) inst.memBlockRowStripStride);
 							#if defined(SPARSE_SYSTEM)
-								offsetTBCountCol +=(t_int) inst.memTBCountColStride;
+								offsetTBCountRow += (t_int) inst.memTBCountRowStride;
 							#endif
 						}
 					}
+				} // for over iRowInSPTile
 
-				} //for over iColInSPTile
-				
-				if ( (iRowInSPTile >= ((signed char) tileTopPadding)) 
-						&& (iRowInSPTile < (inst.tileSPHeight - ((unsigned char) tileBottomPadding)) - (unsigned char ) 1 ) )
-				{
-					iRowSPUnitIndex++;
-					if (iRowSPUnitIndex >= ((unsigned char) rowSPSize))
-					{
-						iRowSPUnitIndex = 0;
-						offsetIADramBlockRow += ((t_int) inst.memBlockRowStripStride);
-						#if defined(SPARSE_SYSTEM)
-							offsetTBCountRow += (t_int) inst.memTBCountRowStride;
-						#endif
-					}
-				}
-			} // for over iRowInSPTile
-
-			iInst++;
-		} // if proceed
-
-	} // while over iInst
+				iInstTile++;
+			} // if proceed
+		} //while over iInstTile
+	} // for over iInst
 }
 
 __attribute__((max_global_work_dim(0)))
@@ -957,6 +971,7 @@ __kernel void kernelIABuffer ()
 	t_ia_buffer_d_state regDispatcherState = IA_BUFFER_INSTRUCTION_STATE_DECODE;
 
 	#pragma ii 1
+	#pragma speculated_iterations 0
 	while (true)
 	{
 		/**
@@ -2261,6 +2276,7 @@ __kernel void kernelMiscControlTee ()
 	t_state regState = KERNEL_MISC_TEE_FETCH;
 
 	#pragma ii 1
+	#pragma speculated_iterations 0
 	while (1)
 	{
 		//Local signals
@@ -2364,10 +2380,9 @@ __attribute__((num_compute_units(MISC_COLS)))
 __kernel void kernelMisc ()
 {
 	int colID = get_compute_id(0);
+	#pragma max_concurrency 1
 	while (true)
 	{
-		t_accumulator reductionBlock[BURST_SIZE_BYTE];
-
 		t_misc_control_packet controlPacket = 
 			read_channel_intel(channel_misc_instruction_local[colID]);
 
@@ -2389,8 +2404,13 @@ __kernel void kernelMisc ()
 						numDramBlocksToReduce, 
 						numEffectiveValuesPerOutputBlock));
 
+		//Limit the concurrency if BURST_SIZE_BYTE > 16
+		#if (BURST_SIZE_BYTE > 16)
+		#pragma max_concurrency 1
+		#endif
 		for (unsigned short iOutput=0; iOutput < numOutputBlocks; iOutput++)
 		{
+			t_accumulator reductionBlock[BURST_SIZE_BYTE];
 			unsigned char numEffectiveValues = numEffectiveValuesPerOutputBlock;
 			//Initialize the reductionBlock
 			#pragma unroll
@@ -2404,6 +2424,7 @@ __kernel void kernelMisc ()
 
 			//Perform reduction
 			#pragma ii 1
+			#pragma speculated_iterations 0
 			for (unsigned short iBlock=0; iBlock <numDramBlocksToReduce; iBlock++)
 			{
 				t_dram_block_ia_to_misc inputDramBlockTagged = 
@@ -2418,7 +2439,9 @@ __kernel void kernelMisc ()
 					inputDramBlock.transferBlocks[0].values[1] & 0xFF, 
 					inputDramBlock.transferBlocks[0].values[2] & 0xFF, 
 					inputDramBlock.transferBlocks[0].values[3] & 0xFF));
-				#pragma unroll
+				#pragma unroll MISC_UNROLL
+				#pragma ii 1
+				#pragma speculated_iterations 0
 				for (int iValue=0; iValue < BURST_SIZE_BYTE; iValue++)
 				{
 					t_accumulator rawInputValue = (t_accumulator) (inputDramBlock
@@ -2452,6 +2475,7 @@ __kernel void kernelMisc ()
 			//Drain the output
 			unsigned char iOutputInBlock = 0;
 			#pragma ii 1
+			#pragma speculated_iterations 0
 			while (iOutputInBlock < numEffectiveValues)
 			{
 				write_channel_intel(channel_drain_misc[colID], reductionBlock[iOutputInBlock]);
@@ -2487,272 +2511,286 @@ __kernel void kernelOAMover (
 	#endif
 
 	//Use while loop instead of for-loop
-	unsigned int iInst = 0;
-	while (iInst < numInstruction)
+	#pragma max_concurrency 1
+	for (unsigned int iInst=0; iInst < numInstruction; iInst += 8)
 	{
-		/*! Read the instruction and decode the packed field*/
-		t_oa_mover_instruction inst = pInstruction[offsetInstruction+iInst];
-		t_flag enableSparsification = (inst.memSelectCatSparseFlagCatSyncFlagCatNumActiveCols >> 6) & 0x01;
-		t_flag enableSendSync = (inst.memSelectCatSparseFlagCatSyncFlagCatNumActiveCols >> 4) & 0x01;
-		unsigned char numActivePeCols = inst.memSelectCatSparseFlagCatSyncFlagCatNumActiveCols & 0x0F;
-		
-		unsigned char numOutputTileHeightPerCol = inst.tileHeight;
-		unsigned char numOutputTileWidthPerCol = inst.columnTileWidth;
-		unsigned short numNominalDramBlocksPerStrip = inst.numNominalDramBlocksPerStrip;
-		#if defined(SPARSE_SYSTEM)
-			//Plus 1 to numNominalDramBlocksPerStrip to account for count
-			// unsigned short numNominalDramBlocksPerStripPlusCount = numNominalDramBlocksPerStrip + 1;
-			unsigned short numNominalDramBlocksPerStripPlusCount = numNominalDramBlocksPerStrip;
-		#else
-			unsigned short numNominalDramBlocksPerStripPlusCount = numNominalDramBlocksPerStrip;
-		#endif
-		//numNominalDramBlocksPerStripPlusCount * numActivePeCols
-		unsigned short numNominalDramBlocksAcrossActivePeCols = 
-			((unsigned short) numActivePeCols)
-			* ((unsigned short) numNominalDramBlocksPerStripPlusCount);
-
-		unsigned char numOutputTileHeightxWidthPerCol = numOutputTileHeightPerCol * numOutputTileWidthPerCol;
-
-		//Control variables
-		unsigned char iOutputHeightInColTile = 0;
-		unsigned char iOutputWidthInColTile = 0;
-
-		//Memory pointer contribution
-		signed int addrOAColContribution = 0;
-		signed int addrOARowContribution = 0;
-		//signed int addrOAGroupContribution = 0;
-		#if defined(SPARSE_SYSTEM)
-			#if defined(OAMOVER_TB_STREAM_CACHE)
-				//Total output width covered by all the PE column tiles
-				unsigned short totalTileWidth = ((unsigned short) numActivePeCols) 
-					* ((unsigned short) inst.columnTileWidth);
-				unsigned short totalNumStrips = ((unsigned short) numActivePeCols) 
-					* ((unsigned short) inst.columnTileWidth) 
-					* ((unsigned short) numOutputTileHeightPerCol);
-				//signed int addrTBGroupContribution = 0;
-			#else //OAMOVER_TB_STREAM_CACHE
-				signed int addrTBColContribution = 0;
-				signed int addrTBRowContribution = 0;
-			#endif
-		#endif
-
-		bool instructionProceed = true;
-		if (enableSendSync == TRUE)
+		t_oa_mover_instruction cacheInstruction[8];
+		unsigned char numInstInTile = (iInst + 8) < numInstruction ? 
+			8 : numInstruction - iInst;
+		#pragma unroll 
+		for (unsigned char i=0; i<8; i++)
 		{
-			instructionProceed = write_channel_nb_intel(channel_activation_sync, (unsigned char ) 0x01);
+			cacheInstruction[i] = pInstruction[i+iInst+offsetInstruction];
 		}
 
-		mem_fence(CLK_GLOBAL_MEM_FENCE | CLK_CHANNEL_MEM_FENCE);
-
-		if (instructionProceed == true)
+		unsigned char iInstTile = 0;
+		while (iInstTile < numInstInTile)
 		{
-			EMULATOR_PRINT(("[kernelOAMover] START processing instruction. "
-							"offsetInstruction=%d, "
-							"iInst=%d, "
-							"memOAStart=%#08x, "
-							"memOAPEColStride=%#08x, "
-							"memOAColStride=%#08x, "
-							"memOARowStride=%#08x, "
-							"numActivePeCols=%d, " 
-	                        "numNominalDramBlocksPerStrip=%d, "
-	                        "numNominalDramBlocksAcrossActivePeCols=%d, "
-							"numOutputTileWidthPerCol=%#03x, "
-							"numOutputTileHeightPerCol=%#03x, "
-							"numActivePeCols=%d\n",
-							offsetInstruction,
-							iInst, 
-							(unsigned int) inst.memOAStart,
-							(unsigned int) inst.memOAPEColStride,
-							(unsigned int) inst.memOAColStride,
-							(unsigned int) inst.memOARowStride,
-							(unsigned int) numActivePeCols,
-							(unsigned int) numNominalDramBlocksPerStrip,
-							(unsigned int) numNominalDramBlocksAcrossActivePeCols,
-							(unsigned int) numOutputTileWidthPerCol,
-							(unsigned int) numOutputTileHeightPerCol,
-							(unsigned int) numActivePeCols));
+			/*! Read the instruction and decode the packed field*/
+			t_oa_mover_instruction inst = cacheInstruction[iInstTile];
+			t_flag enableSparsification = (inst.memSelectCatSparseFlagCatSyncFlagCatNumActiveCols >> 6) & 0x01;
+			t_flag enableSendSync = (inst.memSelectCatSparseFlagCatSyncFlagCatNumActiveCols >> 4) & 0x01;
+			unsigned char numActivePeCols = inst.memSelectCatSparseFlagCatSyncFlagCatNumActiveCols & 0x0F;
+			
+			unsigned char numOutputTileHeightPerCol = inst.tileHeight;
+			unsigned char numOutputTileWidthPerCol = inst.columnTileWidth;
+			unsigned short numNominalDramBlocksPerStrip = inst.numNominalDramBlocksPerStrip;
+			#if defined(SPARSE_SYSTEM)
+				//Plus 1 to numNominalDramBlocksPerStrip to account for count
+				// unsigned short numNominalDramBlocksPerStripPlusCount = numNominalDramBlocksPerStrip + 1;
+				unsigned short numNominalDramBlocksPerStripPlusCount = numNominalDramBlocksPerStrip;
+			#else
+				unsigned short numNominalDramBlocksPerStripPlusCount = numNominalDramBlocksPerStrip;
+			#endif
+			//numNominalDramBlocksPerStripPlusCount * numActivePeCols
+			unsigned short numNominalDramBlocksAcrossActivePeCols = 
+				((unsigned short) numActivePeCols)
+				* ((unsigned short) numNominalDramBlocksPerStripPlusCount);
 
-			for (
-					unsigned char iterOutputTileHeightxWidthPerCol=0;
-					iterOutputTileHeightxWidthPerCol < numOutputTileHeightxWidthPerCol;
-					iterOutputTileHeightxWidthPerCol++
-				)
-			{
-				unsigned short iterNominalDramBlocksAcrossActivePeCols = 0;
+			unsigned char numOutputTileHeightxWidthPerCol = numOutputTileHeightPerCol * numOutputTileWidthPerCol;
 
-				//iterator for the PE columns
-				unsigned char iPeCol = 0;
-				unsigned short iNominalDramBlockInStrip = 0;
-				signed int addrOAPeColContribution = 0;
-				signed int addrOABase = 
-					inst.memOAStart + addrOARowContribution + addrOAColContribution;
+			//Control variables
+			unsigned char iOutputHeightInColTile = 0;
+			unsigned char iOutputWidthInColTile = 0;
 
-				#if defined(SPARSE_SYSTEM)
-					signed int addrTBPeColContribution = 0;
-					#if defined(OAMOVER_TB_STREAM_CACHE)
-						unsigned short addrCacheTBBase =  
-							(unsigned short) iOutputHeightInColTile * (unsigned short) totalTileWidth
-							+ (unsigned short) iOutputWidthInColTile;
-					#else
-						signed int addrTBBase = inst.memTBStart + addrTBRowContribution + addrTBColContribution;
-					#endif
+			//Memory pointer contribution
+			signed int addrOAColContribution = 0;
+			signed int addrOARowContribution = 0;
+			//signed int addrOAGroupContribution = 0;
+			#if defined(SPARSE_SYSTEM)
+				#if defined(OAMOVER_TB_STREAM_CACHE)
+					//Total output width covered by all the PE column tiles
+					unsigned short totalTileWidth = ((unsigned short) numActivePeCols) 
+						* ((unsigned short) inst.columnTileWidth);
+					unsigned short totalNumStrips = ((unsigned short) numActivePeCols) 
+						* ((unsigned short) inst.columnTileWidth) 
+						* ((unsigned short) numOutputTileHeightPerCol);
+					//signed int addrTBGroupContribution = 0;
+				#else //OAMOVER_TB_STREAM_CACHE
+					signed int addrTBColContribution = 0;
+					signed int addrTBRowContribution = 0;
 				#endif
+			#endif
 
-				#pragma ii 1
-				while (iterNominalDramBlocksAcrossActivePeCols<numNominalDramBlocksAcrossActivePeCols)
-				{
-					int addrOA = 
-						addrOABase + addrOAPeColContribution + (int) iNominalDramBlockInStrip;
-					#if defined(SPARSE_SYSTEM)
-						#if defined(OAMOVER_TB_STREAM_CACHE)
-							unsigned short addrCacheTB = addrCacheTBBase + addrTBPeColContribution;
-						#else //OAMOVER_TB_STREAM_CACHE
-							int addrTB = addrTBBase + addrTBPeColContribution;
-						#endif
-					#endif
+			bool instructionProceed = true;
+			if (enableSendSync == TRUE)
+			{
+				instructionProceed = write_channel_nb_intel(channel_activation_sync, (unsigned char ) 0x01);
+			}
 
-					bool readSuccess = false;
-					t_output_dram_block_tagged receivedBlock 
-						= read_channel_nb_intel(channel_output_wide[0], &readSuccess);
+			mem_fence(CLK_GLOBAL_MEM_FENCE | CLK_CHANNEL_MEM_FENCE);
 
-					#if defined(SPARSE_SYSTEM)
-						//Predication: get the cluster count. Might not necessarily be needed
-						unsigned short clusterCount = receivedBlock.clusterCount;
-						t_streamblock_address tbBlockCount = 
-										((clusterCount-1) >> CLUSTER_TO_TRANSFER_BLOCK_SHIFT) + 1;
-						t_flag isLastBlockInStrip = (receivedBlock.flags & 0x04) >> 0x02;
-					#endif
-					if (readSuccess == true)
-					{
-						t_flag flagValid = (receivedBlock.flags >> 1) & 0x01;
-						EMULATOR_PRINT(("[kernelOAMover] Received a dram block.\n"
-								"flagValid=%d, "
-								"iPeCol=%#03x, "
-								"iNominalDramBlockInStrip=%d, "
-								"iterNominalDramBlocksAcrossActivePeCols=%d, "
-								"numNominalDramBlocksAcrossActivePeCols=%d, "
-								"iOutputWidthInColTile=%#04x, "
-								"iOutputHeightInColTile=%d\n",
-								(unsigned int) flagValid, 
-								(unsigned int) iPeCol,
-								(unsigned int) iNominalDramBlockInStrip,
-								(unsigned int) iterNominalDramBlocksAcrossActivePeCols,
+			if (instructionProceed == true)
+			{
+				EMULATOR_PRINT(("[kernelOAMover] START processing instruction. "
+								"offsetInstruction=%d, "
+								"iInst+iInstTile=%d, "
+								"memOAStart=%#08x, "
+								"memOAPEColStride=%#08x, "
+								"memOAColStride=%#08x, "
+								"memOARowStride=%#08x, "
+								"numActivePeCols=%d, " 
+		                        "numNominalDramBlocksPerStrip=%d, "
+		                        "numNominalDramBlocksAcrossActivePeCols=%d, "
+								"numOutputTileWidthPerCol=%#03x, "
+								"numOutputTileHeightPerCol=%#03x, "
+								"numActivePeCols=%d\n",
+								offsetInstruction,
+								iInst+iInstTile, 
+								(unsigned int) inst.memOAStart,
+								(unsigned int) inst.memOAPEColStride,
+								(unsigned int) inst.memOAColStride,
+								(unsigned int) inst.memOARowStride,
+								(unsigned int) numActivePeCols,
+								(unsigned int) numNominalDramBlocksPerStrip,
 								(unsigned int) numNominalDramBlocksAcrossActivePeCols,
-								(unsigned int) iOutputWidthInColTile,
-								(unsigned int) iOutputHeightInColTile
-								));
+								(unsigned int) numOutputTileWidthPerCol,
+								(unsigned int) numOutputTileHeightPerCol,
+								(unsigned int) numActivePeCols));
 
-						/**
-						 * Data access
-						 */
+				for (
+						unsigned char iterOutputTileHeightxWidthPerCol=0;
+						iterOutputTileHeightxWidthPerCol < numOutputTileHeightxWidthPerCol;
+						iterOutputTileHeightxWidthPerCol++
+					)
+				{
+					unsigned short iterNominalDramBlocksAcrossActivePeCols = 0;
+
+					//iterator for the PE columns
+					unsigned char iPeCol = 0;
+					unsigned short iNominalDramBlockInStrip = 0;
+					signed int addrOAPeColContribution = 0;
+					signed int addrOABase = 
+						inst.memOAStart + addrOARowContribution + addrOAColContribution;
+
+					#if defined(SPARSE_SYSTEM)
+						signed int addrTBPeColContribution = 0;
+						#if defined(OAMOVER_TB_STREAM_CACHE)
+							unsigned short addrCacheTBBase =  
+								(unsigned short) iOutputHeightInColTile * (unsigned short) totalTileWidth
+								+ (unsigned short) iOutputWidthInColTile;
+						#else
+							signed int addrTBBase = inst.memTBStart + addrTBRowContribution + addrTBColContribution;
+						#endif
+					#endif
+
+					#pragma ii 1
+					#pragma speculated_iterations 0
+					while (iterNominalDramBlocksAcrossActivePeCols<numNominalDramBlocksAcrossActivePeCols)
+					{
+						int addrOA = 
+							addrOABase + addrOAPeColContribution + (int) iNominalDramBlockInStrip;
 						#if defined(SPARSE_SYSTEM)
-							if (flagValid == TRUE)
-							{
-								pOA[addrOA] = receivedBlock.block;
-
-								if (isLastBlockInStrip == TRUE)
-								{
-									//Store the cluster count
-									#if defined(OAMOVER_TB_STREAM_CACHE)
-										cacheTBCount[addrCacheTB] = tbBlockCount;
-									#else
-										pTBCount[addrTB] = tbBlockCount;
-									#endif
-
-									EMULATOR_PRINT(("[kernelOAMover] Received sparse dram block contains a count. "
-										"Equivalent TB count %d.\n",
-										(unsigned int) tbBlockCount
-										));
-								}
-							}
-						#else //DENSE SYSTEM
-							pOA[addrOA] = receivedBlock.block;
+							#if defined(OAMOVER_TB_STREAM_CACHE)
+								unsigned short addrCacheTB = addrCacheTBBase + addrTBPeColContribution;
+							#else //OAMOVER_TB_STREAM_CACHE
+								int addrTB = addrTBBase + addrTBPeColContribution;
+							#endif
 						#endif
 
-						/*State update*/
-						iterNominalDramBlocksAcrossActivePeCols++;
+						bool readSuccess = false;
+						t_output_dram_block_tagged receivedBlock 
+							= read_channel_nb_intel(channel_output_wide[0], &readSuccess);
 
-						iPeCol++;
-						addrOAPeColContribution += (signed int) inst.memOAPEColStride;
 						#if defined(SPARSE_SYSTEM)
-							addrTBPeColContribution += (signed int) inst.memTBPEColStride;
+							//Predication: get the cluster count. Might not necessarily be needed
+							unsigned short clusterCount = receivedBlock.clusterCount;
+							t_streamblock_address tbBlockCount = 
+											((clusterCount-1) >> CLUSTER_TO_TRANSFER_BLOCK_SHIFT) + 1;
+							t_flag isLastBlockInStrip = (receivedBlock.flags & 0x04) >> 0x02;
 						#endif
-
-						if (iPeCol == numActivePeCols)
+						if (readSuccess == true)
 						{
-							iPeCol = 0x0;
-							addrOAPeColContribution = 0;
+							t_flag flagValid = (receivedBlock.flags >> 1) & 0x01;
+							EMULATOR_PRINT(("[kernelOAMover] Received a dram block.\n"
+									"flagValid=%d, "
+									"iPeCol=%#03x, "
+									"iNominalDramBlockInStrip=%d, "
+									"iterNominalDramBlocksAcrossActivePeCols=%d, "
+									"numNominalDramBlocksAcrossActivePeCols=%d, "
+									"iOutputWidthInColTile=%#04x, "
+									"iOutputHeightInColTile=%d\n",
+									(unsigned int) flagValid, 
+									(unsigned int) iPeCol,
+									(unsigned int) iNominalDramBlockInStrip,
+									(unsigned int) iterNominalDramBlocksAcrossActivePeCols,
+									(unsigned int) numNominalDramBlocksAcrossActivePeCols,
+									(unsigned int) iOutputWidthInColTile,
+									(unsigned int) iOutputHeightInColTile
+									));
 
+							/**
+							 * Data access
+							 */
 							#if defined(SPARSE_SYSTEM)
-								addrTBPeColContribution = 0;
+								if (flagValid == TRUE)
+								{
+									pOA[addrOA] = receivedBlock.block;
+
+									if (isLastBlockInStrip == TRUE)
+									{
+										//Store the cluster count
+										#if defined(OAMOVER_TB_STREAM_CACHE)
+											cacheTBCount[addrCacheTB] = tbBlockCount;
+										#else
+											pTBCount[addrTB] = tbBlockCount;
+										#endif
+
+										EMULATOR_PRINT(("[kernelOAMover] Received sparse dram block contains a count. "
+											"Equivalent TB count %d.\n",
+											(unsigned int) tbBlockCount
+											));
+									}
+								}
+							#else //DENSE SYSTEM
+								pOA[addrOA] = receivedBlock.block;
 							#endif
 
-							iNominalDramBlockInStrip++;
-						}
-					} //(readSuccess == true)
-				} //while iterNominalDramBlocksAcrossActivePeCols
+							/*State update*/
+							iterNominalDramBlocksAcrossActivePeCols++;
+
+							iPeCol++;
+							addrOAPeColContribution += (signed int) inst.memOAPEColStride;
+							#if defined(SPARSE_SYSTEM)
+								addrTBPeColContribution += (signed int) inst.memTBPEColStride;
+							#endif
+
+							if (iPeCol == numActivePeCols)
+							{
+								iPeCol = 0x0;
+								addrOAPeColContribution = 0;
+
+								#if defined(SPARSE_SYSTEM)
+									addrTBPeColContribution = 0;
+								#endif
+
+								iNominalDramBlockInStrip++;
+							}
+						} //(readSuccess == true)
+					} //while iterNominalDramBlocksAcrossActivePeCols
 
 
-				iOutputWidthInColTile++;
-				addrOAColContribution += (signed int) inst.memOAColStride;
-				#if defined(SPARSE_SYSTEM)
-					#if defined(OAMOVER_TB_STREAM_CACHE)
-
-					#else
-						addrTBColContribution += (signed int) inst.memTBColStride;
-					#endif
-				#endif
-				if (iOutputWidthInColTile == numOutputTileWidthPerCol)
-				{
-					iOutputWidthInColTile = 0;
-					addrOAColContribution = 0;
-					addrOARowContribution += (signed int) inst.memOARowStride;
+					iOutputWidthInColTile++;
+					addrOAColContribution += (signed int) inst.memOAColStride;
 					#if defined(SPARSE_SYSTEM)
 						#if defined(OAMOVER_TB_STREAM_CACHE)
+
 						#else
-							addrTBColContribution = 0;
-							addrTBRowContribution += (signed int) inst.memTBRowStride;
+							addrTBColContribution += (signed int) inst.memTBColStride;
 						#endif
 					#endif
-
-					iOutputHeightInColTile++;
-				} //if (iOutputWidthInColTile == numOutputTileWidthPerCol)
-			} //iterOutputTileHeightxWidthPerCol 
-			
-
-			//Write the TB count from the cache to the off-chip memory
-			#if (defined(SPARSE_SYSTEM) && defined(OAMOVER_TB_STREAM_CACHE))
-				signed int addrTBColContribution = 0;
-				signed int addrTBRowContribution = 0;
-				unsigned short iColTB = 0;
-				unsigned char iRowTB = 0;
-
-				unsigned short numTBCountToTransfer = (enableSparsification == TRUE) ?
-					totalNumStrips : 0x0;
-
-				for (unsigned short iter=0; iter<numTBCountToTransfer; iter++)
-				{	
-					int addrTB = inst.memTBStart + addrTBRowContribution + addrTBColContribution;
-
-					pTBCount[addrTB] = cacheTBCount[iter];
-
-					iColTB++;
-					addrTBColContribution += (signed int) inst.memTBColStride;
-					if (iColTB == totalTileWidth)
+					if (iOutputWidthInColTile == numOutputTileWidthPerCol)
 					{
-						iColTB = 0;
-						addrTBColContribution = 0x0;
+						iOutputWidthInColTile = 0;
+						addrOAColContribution = 0;
+						addrOARowContribution += (signed int) inst.memOARowStride;
+						#if defined(SPARSE_SYSTEM)
+							#if defined(OAMOVER_TB_STREAM_CACHE)
+							#else
+								addrTBColContribution = 0;
+								addrTBRowContribution += (signed int) inst.memTBRowStride;
+							#endif
+						#endif
 
-						iRowTB++;
-						addrTBRowContribution += (signed int) inst.memTBRowStride;
+						iOutputHeightInColTile++;
+					} //if (iOutputWidthInColTile == numOutputTileWidthPerCol)
+				} //iterOutputTileHeightxWidthPerCol 
+				
+
+				//Write the TB count from the cache to the off-chip memory
+				#if (defined(SPARSE_SYSTEM) && defined(OAMOVER_TB_STREAM_CACHE))
+					signed int addrTBColContribution = 0;
+					signed int addrTBRowContribution = 0;
+					unsigned short iColTB = 0;
+					unsigned char iRowTB = 0;
+
+					unsigned short numTBCountToTransfer = (enableSparsification == TRUE) ?
+						totalNumStrips : 0x0;
+
+					for (unsigned short iter=0; iter<numTBCountToTransfer; iter++)
+					{	
+						int addrTB = inst.memTBStart + addrTBRowContribution + addrTBColContribution;
+
+						pTBCount[addrTB] = cacheTBCount[iter];
+
+						iColTB++;
+						addrTBColContribution += (signed int) inst.memTBColStride;
+						if (iColTB == totalTileWidth)
+						{
+							iColTB = 0;
+							addrTBColContribution = 0x0;
+
+							iRowTB++;
+							addrTBRowContribution += (signed int) inst.memTBRowStride;
+						}
 					}
-				}
-			#endif // (defined(SPARSE_SYSTEM) && defined(OAMOVER_TB_STREAM_CACHE))
+				#endif // (defined(SPARSE_SYSTEM) && defined(OAMOVER_TB_STREAM_CACHE))
 
-			//Increment the instruction count.
-			iInst++;
-		} // if proceed
-	} //while. over instruction
+				//Increment the instruction count.
+				iInstTile++;
+			} // if proceed
+		} //while. over instruction
+	}
 } //kernelOAMover
 #endif //MEMORY_WRITER 
 
@@ -3061,6 +3099,7 @@ __kernel void kernelOABuffer ()
 	//#pragma ivdep array(cacheOutputActivations0)
 	//#pragma ivdep array(cacheOutputActivations1)
 	#pragma ii 1
+	#pragma speculated_iterations 0
 	while (true) {
 		/**
 		 * oa buffer instruction channel <===> dispatcher
@@ -4529,6 +4568,7 @@ __kernel void kernelCompressorOranizer()
 	t_flag regWriterAccessSide = FALSE;
 
 	#pragma ii 1
+	#pragma speculated_iterations 0
 	while (true)
 	{
 		/**
@@ -5068,6 +5108,7 @@ __kernel void kernelOATee ()
 	#endif
 
 	#pragma ii 1
+	#pragma speculated_iterations 0
 	while (true)
 	{
 		/**
@@ -5523,6 +5564,7 @@ __kernel void kernelOACoalescer ()
 		regCoalesceBlock.numClustersInStrip = 0;
 	#endif
 	#pragma ii 1
+	#pragma speculated_iterations 0
 	while (true)
 	{
 		t_flag sigReadClusterSuccess = FALSE;
@@ -6841,6 +6883,7 @@ __kernel void kernelOperandFilter ()
 
 	//State logic
 	#pragma ii 1
+	#pragma speculated_iterations 0
 	while (1) {
 		//========Signal declaration and state actions=============
 		t_instruction nextWeightFilterInstruction = weightFilterInstruction;
@@ -7441,6 +7484,7 @@ __kernel void kernelDensePE ()
 	t_dense_pe_flag regActivationIsLast = FALSE;
 
 	#pragma ii 1
+	#pragma speculated_iterations 0
 	while (1) {
 		//Declare temp variables
 		t_dense_pe_instruction nextWeightInstruction = regWeightInstruction;
@@ -7696,6 +7740,7 @@ __kernel void kernelDrainTransport ()
 
 
 	#pragma ii 1
+	#pragma speculated_iterations 0
 	while (1)
 	{
 		/**

@@ -2,7 +2,7 @@
 #define PARAMS_DEFINED
 
 //#define HOST_DEBUG
-//#define SPARSE_SYSTEM
+#define SPARSE_SYSTEM
 #define OA_PING_PONG
 //#define WMOVER_STREAM_CACHE
 //#define OAMOVER_TB_STREAM_CACHE
@@ -88,6 +88,7 @@
 	#define PE_COLS 2
 	#define MISC_COLS 2
 #endif
+#define MISC_UNROLL 16
 
 #if (MISC_COLS > PE_COLS)
 #error Configuration MISC_COLS should be less or equal to PE_COLS
