@@ -7403,71 +7403,10 @@ __kernel void kernelOperandFilter ()
 
 #define DENSE_PE_INSTRUCTION_READ_BIAS 0X0
 #define DENSE_PE_INSTRUCTION_MAC 0X1
-#define DENSE_PE_INSTRUCTION_MAC_SYNC 0X2
-#define DENSE_PE_INSTRUCTION_COMMIT 0x3
 
 typedef uint2_t t_drain_instruction;
-typedef uint2_t t_dense_pe_instruction;
+typedef uint1_t t_dense_pe_instruction;
 typedef uint1_t t_dense_pe_flag;
-
-t_dense_pe_instruction densePEInstructionUpdate (
-		t_dense_pe_instruction currentInstruction,
-		t_dense_pe_flag thisTBAvailable,
-		t_dense_pe_flag otherTBAvailable,
-		t_dense_pe_flag thisIsLast,
-		t_dense_pe_flag otherIsLast,
-		t_dense_pe_flag swap
-	)
-{
-	t_dense_pe_instruction nextInstruction = currentInstruction;
-
-	switch (currentInstruction) {
-		case (DENSE_PE_INSTRUCTION_READ_BIAS): {
-			if ((thisTBAvailable == TRUE) && (otherTBAvailable == TRUE)) {
-					nextInstruction = DENSE_PE_INSTRUCTION_MAC;
-			}
-		}
-		break;
-
-		case (DENSE_PE_INSTRUCTION_MAC): {
-			if (thisTBAvailable == TRUE && (otherTBAvailable == FALSE))
-			{
-				nextInstruction = DENSE_PE_INSTRUCTION_MAC_SYNC;
-			}
-			else
-			{
-				if (thisTBAvailable == TRUE && (thisIsLast == TRUE)) {
-					nextInstruction = DENSE_PE_INSTRUCTION_COMMIT;
-				}
-			}
-		}
-		break;
-
-		case (DENSE_PE_INSTRUCTION_MAC_SYNC): {
-			if (otherTBAvailable == TRUE)
-			{
-				nextInstruction = DENSE_PE_INSTRUCTION_MAC;
-				if (thisIsLast == TRUE)
-				{
-					nextInstruction = DENSE_PE_INSTRUCTION_COMMIT;
-				}
-			}
-		}
-		break;
-
-		case (DENSE_PE_INSTRUCTION_COMMIT): {
-			if (swap == TRUE)
-			{
-				nextInstruction = DENSE_PE_INSTRUCTION_READ_BIAS;
-			}
-		}
-		break;
-
-		default:
-		break;
-	}
-	return nextInstruction;
-}
 
 
 __attribute__((task))
@@ -7488,236 +7427,109 @@ __kernel void kernelDensePE ()
 	#endif
 	//====================registers===============
 	//Psum and drain parameters
-	t_accumulator pSum;
+	t_accumulator pSum = 0x0 & ACCUM_MASK;
 	//unsigned char regMaxTransportID[2];
-	t_flag regIsMaxRow;
 
-	pSum = 0x0 & ACCUM_MASK;
-	regIsMaxRow = 0x0;
 
-	//=============Weight side instruction============
-	t_dense_pe_instruction regWeightInstruction= DENSE_PE_INSTRUCTION_READ_BIAS;
-	t_transfer_block regWeightTB;
-	t_dense_pe_flag regWeightIsLast = FALSE;
-
-	//============Activation side instruction================
-	t_dense_pe_instruction regActivationInstruction = DENSE_PE_INSTRUCTION_READ_BIAS;
-	t_transfer_block regActivationTB;
-	t_dense_pe_flag regActivationIsLast = FALSE;
+	//===============Control registers===================
+	t_dense_pe_instruction regInstruction = DENSE_PE_INSTRUCTION_READ_BIAS;
 
 	#pragma ii 1
 	#pragma speculated_iterations 0
 	while (1) {
-		//Declare temp variables
-		t_dense_pe_instruction nextWeightInstruction = regWeightInstruction;
-		t_transfer_block nextWeightTB = regWeightTB;
-		t_dense_pe_flag weightTBAvailable = FALSE;
-		t_dense_pe_flag nextWeightIsLast = regWeightIsLast;
-		t_dense_pe_flag validWeightMac = FALSE;
+		//t_accumulator sigDrainPSum = pSum;
+		t_flag sigIsMaxRow = FALSE;
 
-		t_dense_pe_instruction nextActivationInstruction = regActivationInstruction;
-		t_transfer_block nextActivationTB = regActivationTB;
-		t_dense_pe_flag activationTBAvailable = FALSE;
-		t_dense_pe_flag nextActivationIsLast = regActivationIsLast;
-		t_dense_pe_flag validActivationMac = FALSE;
+		t_dense_pe_instruction sigNextInstruction = regInstruction;
 
-		t_flag commit = FALSE;
-
-		t_flag nextIsMaxRow = regIsMaxRow;
-
-		t_accumulator nextDrainPSum = pSum;
-
-		//Handling reading from the W channel
-		if ( (regWeightInstruction == DENSE_PE_INSTRUCTION_READ_BIAS)
-			|| (regWeightInstruction == DENSE_PE_INSTRUCTION_MAC) )
+		//Access the activation block
+		
+		t_flag sigIsLastBlock = FALSE;
+		t_transfer_block sigActivationTB;
+		if (regInstruction == DENSE_PE_INSTRUCTION_MAC)
 		{
-			bool readSuccess = false;
 			t_transferblock_tagged taggedBlock;
 			#if defined (FULL_SYSTEM)
-				taggedBlock = read_channel_nb_intel(
-					channel_dpWeightInput[idy][idx],
-					&readSuccess);
+				taggedBlock = read_channel_intel(
+					channel_dpActivationInput[idy][idx]);
 			#else
-				taggedBlock = read_channel_nb_intel(
-					channel_dpWeightInput[0][0],
-					&readSuccess);
+				taggedBlock = read_channel_intel(
+					channel_dpActivationInput[0][0]);
 			#endif
-            
-            weightTBAvailable = (readSuccess == true) ? TRUE : FALSE;
-            nextWeightIsLast = FALSE;
 
-            if (readSuccess == true)
-            {
-            	nextWeightIsLast = getIsLast(taggedBlock);
+			sigIsLastBlock = getIsLast(taggedBlock);
+            sigIsMaxRow = (getMaxTransferID(taggedBlock) == idy) ? TRUE : FALSE;
 
-            	nextWeightTB = taggedBlock.values;
-
-            	EMULATOR_PRINT(("[DENSE PE WEIGHT (%d, %d)] Read new weight block. IsLast: %#04x. [0-3]: %#04x %#04x %#04x %#04x Current instruction: %#04x \n\n"
-						,idy, idx, (unsigned char) nextWeightIsLast, 
-						taggedBlock.values.values[0],
-						taggedBlock.values.values[1],
-						taggedBlock.values.values[2],
-						taggedBlock.values.values[3],
-						(unsigned char) regWeightInstruction));
-
-            }
+            sigActivationTB = taggedBlock.values;
+            EMULATOR_PRINT(("[DENSE PE ACTIVATION (%d, %d)] Read new activation block. IsLast: %#04x. [0-3]: %#04x %#04x %#04x %#04x Current instruction: %#04x \n\n"
+						,idy, idx, (unsigned char) sigIsLastBlock, 
+						sigActivationTB.values[0],
+						sigActivationTB.values[1],
+						sigActivationTB.values[2],
+						sigActivationTB.values[3],
+						(unsigned char) regInstruction));
 		}
 
-		//Handling reading from the A channel
-		if (regActivationInstruction == DENSE_PE_INSTRUCTION_MAC)
+		//Access the weight block
+		t_transfer_block sigWeightTB;
 		{
-			bool readSuccess = false;
 			t_transferblock_tagged taggedBlock;
 			#if defined (FULL_SYSTEM)
-				taggedBlock = read_channel_nb_intel(
-					channel_dpActivationInput[idy][idx],
-					&readSuccess);
+				taggedBlock = read_channel_intel(
+					channel_dpWeightInput[idy][idx]);
 			#else
-				taggedBlock = read_channel_nb_intel(
-					channel_dpActivationInput[0][0],
-					&readSuccess);
+				taggedBlock = read_channel_intel(
+					channel_dpWeightInput[0][0]);
 			#endif
-            
-            activationTBAvailable = (readSuccess == true) ? TRUE : FALSE;
-            nextActivationIsLast = FALSE;
 
-            if (readSuccess == true)
-            {
-            	nextActivationIsLast = getIsLast(taggedBlock);
-            	nextIsMaxRow= (getMaxTransferID(taggedBlock) == idy) ? TRUE : FALSE;
-
-            	nextActivationTB = taggedBlock.values;
-
-            	EMULATOR_PRINT(("[DENSE PE ACTIVATION (%d, %d)] Read new activation block. IsLast: %#04x. [0-3]: %#04x %#04x %#04x %#04x Current instruction: %#04x \n\n"
-						,idy, idx, (unsigned char) nextActivationIsLast, 
-						taggedBlock.values.values[0],
-						taggedBlock.values.values[1],
-						taggedBlock.values.values[2],
-						taggedBlock.values.values[3],
-						(unsigned char) regActivationInstruction));
-
-            }
+			sigWeightTB = taggedBlock.values;
+			EMULATOR_PRINT(("[DENSE PE WEIGHT (%d, %d)] Read new weight block.[0-3]: %#04x %#04x %#04x %#04x Current instruction: %#04x \n\n"
+						,idy, idx, 
+						sigWeightTB.values[0],
+						sigWeightTB.values[1],
+						sigWeightTB.values[2],
+						sigWeightTB.values[3],
+						(unsigned char) regInstruction));
 		}
 
-		if (regWeightInstruction == DENSE_PE_INSTRUCTION_MAC)
+		if (regInstruction == DENSE_PE_INSTRUCTION_READ_BIAS)
 		{
-			if (weightTBAvailable == TRUE)
-			{
-				validWeightMac = TRUE;
-			}
+			pSum = ACCUM_MASK & ((t_accumulator) transferBlock2Bias(sigWeightTB));
+			sigNextInstruction = DENSE_PE_INSTRUCTION_MAC;
 		}
-		else if (regWeightInstruction == DENSE_PE_INSTRUCTION_MAC_SYNC)
+		else //DENSE_PE_INSTRUCTION_MAC
 		{
-			weightTBAvailable = TRUE;
-			validWeightMac = TRUE;
-		}
-
-
-		if (regActivationInstruction == DENSE_PE_INSTRUCTION_READ_BIAS)
-		{
-			activationTBAvailable = TRUE;
-		}
-		else if (regActivationInstruction == DENSE_PE_INSTRUCTION_MAC)
-		{
-			if (activationTBAvailable == TRUE)
-			{
-				validActivationMac = TRUE;
-			}
-		}
-		else if (regActivationInstruction == DENSE_PE_INSTRUCTION_MAC_SYNC)
-		{
-			activationTBAvailable = TRUE;
-			validActivationMac = TRUE;
-		}
-
-		/**
-		 * PSum update
-		 */
-		if ( (regWeightInstruction == DENSE_PE_INSTRUCTION_READ_BIAS) 
-			 && (weightTBAvailable == TRUE))
-		{
-			//GOTTCHA: MUST APPLY THE AND MASK AFTER NEGATION !!!
-			pSum = ACCUM_MASK & ((t_accumulator) transferBlock2Bias(nextWeightTB));
-		}
-		else if ( (validActivationMac == TRUE) && (validWeightMac == TRUE))
-		{
-
-			EMULATOR_PRINT(("[DENSE PE (%d,%d)] MAC: weight [0-3]: %#04x %#04x %#04x %#04x. act [0-3]: %#04x %#04x %#04x %#04x \n",
-					idy, idx,
-					nextWeightTB.values[0] & 0xFF, 
-					nextWeightTB.values[1] & 0xFF,
-					nextWeightTB.values[2] & 0xFF,
-					nextWeightTB.values[3] & 0xFF,
-					nextActivationTB.values[0] & 0xFF, 
-					nextActivationTB.values[1] & 0xFF,
-					nextActivationTB.values[2] & 0xFF,
-					nextActivationTB.values[3] & 0xFF));
-
 			t_simd_operand simdActivation, simdWeight;
 
 			#pragma unroll
 			for (unsigned int i=0; i<NUM_SIMD_WORDS; i++)
 			{
-				simdActivation.values[i] = nextActivationTB.values[i];
-				simdWeight.values[i] = nextWeightTB.values[i];
+				simdActivation.values[i] = sigActivationTB.values[i];
+				simdWeight.values[i] = sigWeightTB.values[i];
 			}
 
 			t_accumulator tempPSum = madd(simdActivation, simdWeight);
 			//GOTTCHA: MUST APPLY THE AND MASK AFTER NEGATION !!!
 			pSum += (MULT_MASK & tempPSum);
-		}
 
-		/**
-		 * Perform drain transaction
-		 */
-		if ( (regWeightInstruction == DENSE_PE_INSTRUCTION_COMMIT) 
-			&& (regActivationInstruction == DENSE_PE_INSTRUCTION_COMMIT)
-			)
-		{
-			t_conv_drain_tagged drainTransportBlock;
-			drainTransportBlock.value = pSum & ACCUM_MASK;
-			drainTransportBlock.sourceRowIDCatIsLast = 
-				(unsigned char) ( ((((unsigned char) idy) & 0x7F) << 0x01) 
-									| (regIsMaxRow & 0x01));
-			bool success = write_channel_nb_intel(
-					channel_drain_conv_local[idy][idx],
-					drainTransportBlock
-					);
-			if (success == true)
+			if (sigIsLastBlock == TRUE)
 			{
+				sigNextInstruction = DENSE_PE_INSTRUCTION_READ_BIAS;
+
+				t_conv_drain_tagged drainTransportBlock;
+				drainTransportBlock.value = pSum & ACCUM_MASK;
+				drainTransportBlock.sourceRowIDCatIsLast = 
+					(unsigned char) ( ((((unsigned char) idy) & 0x7F) << 0x01) 
+										| (sigIsMaxRow & 0x01));
+				write_channel_intel(
+						channel_drain_conv_local[idy][idx],
+						drainTransportBlock
+						);
 				EMULATOR_PRINT(("[DENSE PE DRAIN (%d, %d)] Sent a value. %#06x \n", idy, idx, drainTransportBlock.value));
-				commit = TRUE;	
 			}
 		}
 
-		//Update registers
-		regIsMaxRow = nextIsMaxRow;
-
-		nextWeightInstruction = densePEInstructionUpdate (
-				regWeightInstruction, //current Instruction
-				weightTBAvailable, //thisTBAvailable,
-				activationTBAvailable, //otherTBAvailable,
-				nextWeightIsLast, //thisIsLast
-				nextActivationIsLast, //otherIsLast
-				commit
-			);
-
-		nextActivationInstruction = densePEInstructionUpdate (
-				regActivationInstruction, //current Instruction
-				activationTBAvailable, //thisTBAvailable,
-				weightTBAvailable, //otherTBAvailable,
-				nextActivationIsLast, //thisIsLast
-				nextWeightIsLast, //otherIsLast
-				commit
-			);
-
-		regWeightInstruction = nextWeightInstruction;
-		regWeightIsLast = nextWeightIsLast;
-		regWeightTB = nextWeightTB;
-
-		regActivationInstruction = nextActivationInstruction;
-		regActivationIsLast = nextActivationIsLast;
-		regActivationTB = nextActivationTB;
+		regInstruction = sigNextInstruction;
 
 	} // while-loop
 
@@ -7726,11 +7538,9 @@ __kernel void kernelDensePE ()
 
 //#define STATE_DRAIN_TRANSPORT_SYNC 0x0
 #define STATE_DRAIN_TRANSPORT_DRAIN_SELF 0X0
-#define STATE_DRAIN_TRANSPORT_SEND_SELF_RETRY 0X1
-#define STATE_DRAIN_TRANSPORT_DRAIN_OTHERS 0x2
-#define STATE_DRAIN_TRANSPORT_SEND_OTHERS_RETRY 0x3
+#define STATE_DRAIN_TRANSPORT_DRAIN_OTHERS 0x1
 
-typedef uint2_t t_drain_state;
+typedef uint1_t t_drain_state;
 
 __attribute__((task))
 __attribute__((max_global_work_dim(0)))
@@ -7768,54 +7578,34 @@ __kernel void kernelDrainTransport ()
 		/**
 		 * 	Local signals
 		 */
-		t_flag flagDrainLocalPeSuccess = FALSE;
-		t_flag flagDrainPreviousPeSuccess = FALSE;
-		t_flag flagSendToNextPeRequest = FALSE;
-		t_flag flagSendToNextPeSuccess = FALSE;
-
 		t_drain_state nextDrainState = regDrainState;
 
-		t_conv_drain_tagged nextDrainPacket = regDrainPacket;
+		t_conv_drain_tagged sigDrainPacket;
 
 		/**
 		 * Data path
 		 */
 		if (regDrainState == STATE_DRAIN_TRANSPORT_DRAIN_SELF)
 		{
-			bool success = false;
-			nextDrainPacket = read_channel_nb_intel(
-					channel_drain_conv_local[idy][idx],
-					&success
+			sigDrainPacket = read_channel_intel(
+					channel_drain_conv_local[idy][idx]
 				);
-			flagDrainLocalPeSuccess = success ? TRUE : FALSE;
 		} //if (drainState == STATE_DRAIN_TRANSPORT_DRAIN_SELF)
-		else if (regDrainState == STATE_DRAIN_TRANSPORT_DRAIN_OTHERS)
+		else //(regDrainState == STATE_DRAIN_TRANSPORT_DRAIN_OTHERS)
 		{
 			if (idy > 0)
 			{
-				bool success = false;
-				nextDrainPacket = read_channel_nb_intel(
-						channel_drain_conv[idy-1][idx],
-						&success
+				sigDrainPacket = read_channel_intel(
+						channel_drain_conv[idy-1][idx]
 					);
-				flagDrainPreviousPeSuccess = success ? TRUE : FALSE;
 			}
 		} //else if (drainState == STATE_DRAIN_TRANSPORT_DRAIN_OTHERS)
 
-		flagSendToNextPeRequest = 
-			((regDrainState == STATE_DRAIN_TRANSPORT_SEND_SELF_RETRY)
-			|| (regDrainState == STATE_DRAIN_TRANSPORT_SEND_OTHERS_RETRY)
-			|| (flagDrainLocalPeSuccess == TRUE)
-			|| (flagDrainPreviousPeSuccess == TRUE)) ? TRUE : FALSE;
 
-		if (flagSendToNextPeRequest == TRUE)
-		{
-			bool success = write_channel_nb_intel(
-					channel_drain_conv[idy][idx],
-					nextDrainPacket
-				);
-			flagSendToNextPeSuccess = success ? TRUE : FALSE;
-		}
+		write_channel_intel(
+				channel_drain_conv[idy][idx],
+				sigDrainPacket
+			);
 
 		/**
 		 * State update
@@ -7826,74 +7616,34 @@ __kernel void kernelDrainTransport ()
 		 */
 		switch (regDrainState) {
 			case STATE_DRAIN_TRANSPORT_DRAIN_SELF: {
-				if (flagDrainLocalPeSuccess == TRUE)
+				if (idy == 0)
 				{
-					nextDrainState = STATE_DRAIN_TRANSPORT_SEND_SELF_RETRY;
-					if (flagSendToNextPeSuccess == TRUE)
-					{
-						if (idy == 0)
-						{
-							nextDrainState = STATE_DRAIN_TRANSPORT_DRAIN_SELF;
-						}
-						else
-						{
-							nextDrainState = STATE_DRAIN_TRANSPORT_DRAIN_OTHERS;
-						}
-					}
+					nextDrainState = STATE_DRAIN_TRANSPORT_DRAIN_SELF;
 				}
-			}	
-			break; //STATE_DRAIN_TRANSPORT_DRAIN_SELF
-			case STATE_DRAIN_TRANSPORT_SEND_SELF_RETRY: {
-				if (flagSendToNextPeSuccess == TRUE)
+				else
 				{
-					if (idy == 0)
-					{
-						nextDrainState = STATE_DRAIN_TRANSPORT_DRAIN_SELF;
-					}
-					else
-					{
-						nextDrainState = STATE_DRAIN_TRANSPORT_DRAIN_OTHERS;
-					}
+					nextDrainState = STATE_DRAIN_TRANSPORT_DRAIN_OTHERS;
 				}
 			}	
 			break; //STATE_DRAIN_TRANSPORT_DRAIN_SELF
 			case STATE_DRAIN_TRANSPORT_DRAIN_OTHERS: {
-				if (flagDrainPreviousPeSuccess == TRUE)
+				nextDrainState = STATE_DRAIN_TRANSPORT_DRAIN_OTHERS;
+				unsigned char isLast = sigDrainPacket.sourceRowIDCatIsLast & 0x01;
+				unsigned char sourceRowID = (sigDrainPacket.sourceRowIDCatIsLast >> 0x01) & 0x07F;
+				if ((isLast == FALSE) && (sourceRowID == (idy-1)))
 				{
-					nextDrainState = STATE_DRAIN_TRANSPORT_SEND_OTHERS_RETRY;
-					if (flagSendToNextPeSuccess == TRUE)
-					{
-						nextDrainState = STATE_DRAIN_TRANSPORT_DRAIN_OTHERS;
-						unsigned char isLast = nextDrainPacket.sourceRowIDCatIsLast & 0x01;
-						unsigned char sourceRowID = (nextDrainPacket.sourceRowIDCatIsLast >> 0x01) & 0x07F;
-						if ((isLast == FALSE) && (sourceRowID == (idy-1)))
-						{
-							nextDrainState = STATE_DRAIN_TRANSPORT_DRAIN_SELF;
-						}
-					}
+					nextDrainState = STATE_DRAIN_TRANSPORT_DRAIN_SELF;
 				}
 			}	
 			break; //STATE_DRAIN_TRANSPORT_DRAIN_SELF
-			case STATE_DRAIN_TRANSPORT_SEND_OTHERS_RETRY: {
-				if (flagSendToNextPeSuccess == TRUE)
-				{
-					nextDrainState = STATE_DRAIN_TRANSPORT_DRAIN_OTHERS;
-					unsigned char isLast = nextDrainPacket.sourceRowIDCatIsLast & 0x01;
-					unsigned char sourceRowID = (nextDrainPacket.sourceRowIDCatIsLast >> 0x01) & 0x07F;
-					if ((isLast == FALSE) && (sourceRowID == (idy-1)))
-					{
-						nextDrainState = STATE_DRAIN_TRANSPORT_DRAIN_SELF;
-					}
-				}
-			}	
-			break; //STATE_DRAIN_TRANSPORT_DRAIN_SELF
+			default:
+			break;
 		} //switch (regDrainState)
 
 
 		/**
 		 * Register updates
 		 */
-		regDrainPacket = nextDrainPacket;
 		regDrainState = nextDrainState;
 	}
 } //kernelDrainTransport

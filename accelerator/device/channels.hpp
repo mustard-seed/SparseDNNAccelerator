@@ -17,8 +17,8 @@ channel t_transferblock_tagged channel_weight[PE_ROWS][PE_COLS]  __attribute__((
 //channel t_accumulator channel_drainInput __attribute__((depth(1)));
 //channel t_accumulator channel_drainOutput __attribute__((depth(1)));
 
-channel t_conv_drain_tagged channel_drain_conv[PE_ROWS][PE_COLS] __attribute__((depth(0)));
-channel t_conv_drain_tagged channel_drain_conv_local[PE_ROWS][PE_COLS] __attribute__((depth(0)));
+channel t_conv_drain_tagged channel_drain_conv[PE_ROWS][PE_COLS] __attribute__((depth(1)));
+channel t_conv_drain_tagged channel_drain_conv_local[PE_ROWS][PE_COLS] __attribute__((depth(1)));
 channel unsigned char channel_drain_token[PE_ROWS][PE_COLS] __attribute__((depth(1)));
 
 #if defined(MISC_ENGINE)
