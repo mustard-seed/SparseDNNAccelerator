@@ -94,8 +94,8 @@
 #error Configuration MISC_COLS should be less or equal to PE_COLS
 #endif
 
-#define CHANNEL_DEPTH 2
-#define OA_DRAIN_CHANNEL_DEPTH 2
+#define CHANNEL_DEPTH 1
+#define OA_DRAIN_CHANNEL_DEPTH 1
 
 //Encoding weight length
 #define ENCODING_LENGTH 64

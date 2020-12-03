@@ -2151,13 +2151,13 @@ __kernel void kernelIATee ()
 	while (true)
 	{
 
-		bool readSuccess = false;
+		//bool readSuccess = false;
 
-		t_dram_block_ia_tagged taggedBlock = read_channel_nb_intel(channel_ia_wide[colID], &readSuccess);
+		t_dram_block_ia_tagged taggedBlock = read_channel_intel(channel_ia_wide[colID]);
 		t_dram_block dramBlock = taggedBlock.dramBlock;
 
-		if (readSuccess == true)
-		{
+		// if (readSuccess == true)
+		// {
 			int destinationCol = (int) (taggedBlock.route & 0x3F);
 			//flag2Misc is TRUE doesn't mean that this block necessarily 
 			//goes to this column.
@@ -2223,7 +2223,7 @@ __kernel void kernelIATee ()
 				}
 			}
 		
-		} // if read is successful
+		// } // if read is successful
 	}
 }
 #endif //IA_MEMORY
