@@ -80,8 +80,8 @@
 #define PACKET_SIZE 1
 
 #if defined(FULL_SYSTEM)
-	#define PE_ROWS 2
-	#define PE_COLS 2
+	#define PE_ROWS 4
+	#define PE_COLS 4
 	#define MISC_COLS 1
 #else
 	#define PE_ROWS 2

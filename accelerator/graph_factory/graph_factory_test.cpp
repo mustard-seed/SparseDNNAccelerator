@@ -13,7 +13,7 @@
 //#define RESNET56
 #define RESNET50
 #ifndef C5SOC
-   // #define EMULATE
+ //#define EMULATE
 #endif
 #define INFERENCE_REPEAT 20
 #define CHECKOUTPUT
