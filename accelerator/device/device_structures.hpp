@@ -20,6 +20,11 @@ typedef unsigned short t_ushort;
 typedef short t_short;
 typedef unsigned int t_uint;
 typedef int t_int;
+    #if defined(C5SOC)
+        #define VOLATILE volatile
+    #else
+        #define VOLATILE
+    #endif
 #else
 typedef cl_uchar t_uchar;
 typedef cl_char t_char;
@@ -116,6 +121,46 @@ typedef struct {
 typedef struct {
         unsigned char bytes[NUM_BITMASK_BYTES];
 } t_bitmask;
+
+/**
+ * =========================================
+ * Data structures seen by the SpW PE
+ * =========================================
+ */
+#if defined(INTELFPGA_CL)
+    #if defined(SPW_SYSTEM)
+        #if (PRUNE_RANGE_IN_CLUSTER == 2)
+            typedef uint1_t t_spw_index;
+        #elif (PRUNE_RANGE_IN_CLUSTER == 4)
+            typedef uint2_t t_spw_index;
+        #elif (PRUNE_RANGE_IN_CLUSTER == 8)
+            typedef uint3_t t_spw_index;
+        #elif (PRUNE_RANGE_IN_CLUSTER == 16)
+            typedef uint4_t t_spw_index;
+        #else
+            #error Pruning range in terms of clusters must be 2, 4, 8, or 16
+        #endif
+    #endif
+    typedef struct __attribute__((packed)) {
+        char values[PE_SIMD_SIZE * CLUSTER_SIZE];
+        #if defined(SPW_SYSTEM)
+            t_spw_index indices[PE_SIMD_SIZE];
+            t_flag  isLastInPruneRange; 
+        #endif
+        uint5_t maxTransportID;
+        t_flag  isLastInFilter;
+    } t_pe_w_block;
+
+    typedef struct __attribute__((packed)) {
+        #if defined(SPW_SYSTEM)
+            char values[PE_SIMD_SIZE * PRUNE_RANGE_IN_CLUSTER * CLUSTER_SIZE];
+            t_spw_index indices[PE_SIMD_SIZE];
+        #else
+            char values[PE_SIMD_SIZE * CLUSTER_SIZE];
+        #endif
+        uint5_t maxTransportID;
+    } t_pe_a_block;
+#endif
 
 /*!
    ==================================================
@@ -421,6 +466,13 @@ typedef struct __attribute__((packed)){
     unsigned char sourceRowIDCatIsLast;
 } t_conv_drain_tagged;
 
+
+typedef struct __attribute__((packed)){
+    t_accumulator values[PE_ROWS_PER_GROUP];
+    //[7:1] row ID or the row that issued the packed
+    //[0] Whether this is the last.
+    unsigned char sourceRowIDCatIsLast;
+} t_conv_drain_multiple_tagged;
 /*
 ===================================================================
 Data structures that travel on the input activation bus system

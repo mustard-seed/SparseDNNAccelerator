@@ -80,13 +80,17 @@
 #define PACKET_SIZE 1
 
 #if defined(FULL_SYSTEM)
-	#define PE_ROWS 4
 	#define PE_COLS 4
+	#define PE_ROWS_PER_GROUP 4
+	#define PE_ROW_GROUPS 1
+	#define PE_ROWS (PE_ROWS_PER_GROUP * PE_ROW_GROUPS)
 	#define MISC_COLS 1
 #else
-	#define PE_ROWS 2
-	#define PE_COLS 2
-	#define MISC_COLS 2
+	#define PE_COLS 1
+	#define PE_ROWS_PER_GROUP 4
+	#define PE_ROW_GROUPS 1
+	#define PE_ROWS (PE_ROWS_PER_GROUP * PE_ROW_GROUPS)
+	#define MISC_COLS 1
 #endif
 #define MISC_UNROLL 16
 
@@ -127,6 +131,15 @@
 #define VALUE_DIVIDED_BY_CLUSTER_SIZE_REMAINDER_MASK 0x3
 #define VALUE_DIVIDED_BY_SIMD_SIZE_REMAINDER_MASK ((1 << (VALUE_TO_CLUSTER_SHIFT + CLUSTER_TO_TRANSFER_SIZE_SHIFT)) - 1)
 #define CLUSTER_TO_TRANSFER_BLOCK_SHIFT CLUSTER_TO_TRANSFER_SIZE_SHIFT //amount of right shift required to convert a cluster count into transfer block count
+
+/**
+ * Parameters relevant for balanced-block sparsity
+ */
+//Prune range of balanced-sparsity
+#define PRUNE_RANGE_IN_CLUSTER 4
+//Number of prune range processed in parallel.
+//Equal to SIMD size (in terms of cluster) in a SpW PE
+#define PE_SIMD_SIZE 4
 
 /**
  * Small buffer operand filterign related
@@ -215,23 +228,6 @@
 #define KERNEL_INDEX_CACHE_DEPTH 512
 #define KERNEL_INDEX_CACHE_DEPTH_MASK 0x1FF
 #define KERNEL_INDEX_CACHE_LANES KERNEL_CACHE_LANES
-
-//PE operaton modes
-#define PE_MODE_LOAD_BIAS 0X0
-#define PE_MODE_LOAD_ACTIVATION 0x01
-#define PE_MODE_ELTWISE_ADD 0x02
-#define PE_MODE_DOT_PRODUCT 0x03
-#define PE_MODE_MAX_POOL 0x04
-#define PE_MODE_DRAIN_PSUM 0x05
-
-//PE FIFO parameters
-#define PE_VEC_FIFO_SIZE (COMPRESSION_WINDOW_SIZE / TRANSFER_SIZE)  //Need to set this to avoid deadlock
-//#define PE_VEC_FIFO_SIZE 1
-//#define PE_NUM_MULT COMPRESSION_VEC_SIZE
-
-//PE datawidth parameters
-#define REG_FF_FRAC 16 //16 bit fraction width, make  sure it is wider than all possible frac_width used on the short data format
-#define REG_FF_WIDTH 32 //32 bit FF, int
 
 
 

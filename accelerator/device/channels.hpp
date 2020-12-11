@@ -36,12 +36,6 @@ channel t_transferblock_tagged channel_dpWeightInput[PE_ROWS][PE_COLS] __attribu
 channel t_transferblock_tagged channel_dpActivationInput[PE_ROWS][PE_COLS] __attribute__((depth(CHANNEL_DEPTH)));
 
 channel t_accumulator channel_peDrainOutput[PE_ROWS][PE_COLS] __attribute__((depth(0)));
-
-#if defined(SPARSE_SYSTEM)
-channel t_transferblock_tagged channel_filterWeight[PE_ROWS][PE_COLS] __attribute__((depth(PE_VEC_FIFO_SIZE)));
-channel t_transferblock_tagged channel_filterActivation[PE_ROWS][PE_COLS] __attribute__((depth(PE_VEC_FIFO_SIZE)));
-#endif //SPARSE_SYSTEM
-
 #endif //PE_SYSTEM
 
 #ifdef WEIGHT_MEMORY_INTERCONNECT
