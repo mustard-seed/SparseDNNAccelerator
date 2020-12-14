@@ -19,22 +19,24 @@
 #                            "_aoc_fast_compile_hw"
 #              SIMULATION -- The aoc compiler will generate a cycle accurate simulation library for the kernels
 #                            Use this only on AOCL 19.1 or above.
-#                            The target's name and the output aocx name end with
-#                            "_aoc_simulation"
-# HEADER_DIR:  Single valued, optional. Custom header include path for the compiler to see. There is no need to pass <INTELFPGAOCLSDKROOT>/include/kernel_headers via this argument
+#                            The target's name and the output aocx name end wi
 # RTL_DIR:     Single valued, optional. Directory of the custom RTL library path. Must be supplied if RTL_LIB is specified
 # BOARD_NAME     Single valued. Optional. Need to set if DE10Standard
 # RTL_LIB_LIST:    List, optional. -l flags of rtl libraries. Must be supplied if RTL_DIR is specified. e.g. {-l mylib1.aoclib -l mylib2.aoclib}
+# # HEADER_DIR_LIST:  List, optional. Custom header include path for the compiler to see. There is no need to pass <INTELFPGAOCLSDKROOT>/include/kernel_headers via this argument
 # SOURCES_LIST: List, required. List of OpenCL kernel files (*.cl) to be compiled.
 # PREPROCESSOR_DEFS_LIST: List, optional. List of preprocessor definition flags. e.g. {-DMY_MACRO1=xxxx -DMY_MACRO2=yyy}             
 function (add_aoc_target)
     set (options )
-    set (oneValueArgs TARGET_NAME TARGET_TYPE HEADER_DIR RTL_DIR BOARD_NAME)
-    set (multiValueArgs  SOURCES_LIST PREPROCESSOR_DEFS_LIST RTL_LIB)
+    set (oneValueArgs TARGET_NAME TARGET_TYPE RTL_DIR BOARD_NAME)
+    set (multiValueArgs  SOURCES_LIST HEADER_DIR_LIST PREPROCESSOR_DEFS_LIST RTL_LIB)
 
     cmake_parse_arguments(add_aoc_target "${options}" "${oneValueArgs}" "${multiValueArgs}" "${ARGN}" )
 
-    list (APPEND occflags ${add_aoc_target_SOURCES_LIST})
+    list(REMOVE_DUPLICATES add_aoc_target_SOURCES_LIST)
+    list(SORT add_aoc_target_SOURCES_LIST)
+
+    list (APPEND occflags -O3 ${add_aoc_target_SOURCES_LIST})
 
     #Initialize the aoc compilation flags with the common elements for all compilation targets
     list (APPEND occflags -v -report -fp-relaxed
@@ -42,10 +44,11 @@ function (add_aoc_target)
             -I $ENV{INTELFPGAOCLSDKROOT}/include/kernel_headers)   
 
     # Add the custom header if needed to
-    if ("${add_aoc_target_HEADER_DIR}" STREQUAL "")
-    else()
-        list (APPEND occflags -I ${add_aoc_target_HEADER_DIR} )
-    endif()   
+    #if (${add_aoc_target_HEADER_DIR_LIST})
+    foreach (header_dir ${add_aoc_target_HEADER_DIR_LIST})
+      list (APPEND occflags -I ${header_dir} )
+    endforeach()
+    #endif()
 
     if ("${add_aoc_target_BOARD_NAME}" MATCHES "DE10Standard")
         set (FMAX -fmax=160)
@@ -135,9 +138,6 @@ function (add_aoc_target)
                   )
       message (STATUS "Disabling global memory burst-interleaving for HW compilation on PACs")
     endif ()
-
-    list(REMOVE_DUPLICATES add_aoc_target_SOURCES_LIST)
-    list(SORT add_aoc_target_SOURCES_LIST)
 
     #Add the library for custom RTL if needed
     if ("${add_aoc_target_RTL_DIR}" STREQUAL "")

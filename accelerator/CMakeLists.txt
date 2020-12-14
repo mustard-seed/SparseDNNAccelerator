@@ -26,4 +26,4 @@ add_subdirectory(graph_factory)
 add_subdirectory(prototype_pe_test)
 add_subdirectory(flexible_bitmask_compression_test)
 add_subdirectory(full_system)
-
+add_subdirectory(spw_pe_test)

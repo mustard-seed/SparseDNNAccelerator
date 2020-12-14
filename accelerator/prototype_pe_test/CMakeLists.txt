@@ -87,22 +87,26 @@ list (APPEND kernel_files
     ${CMAKE_CURRENT_SOURCE_DIR}/prototypePETest.cl
     ${PROJECT_SOURCE_DIR}/device/device_utils.cl)
 
+list (APPEND header_dirs
+        ${PROJECT_SOURCE_DIR}/device
+        )
+
 add_aoc_target (
     TARGET_NAME ${TEST_NAME}
     TARGET_TYPE EMULATION
     SOURCES_LIST ${kernel_files} 
-    HEADER_DIR ${PROJECT_SOURCE_DIR}/device
+    HEADER_DIR_LIST ${header_dirs}
     RTL_DIR ${rtl_directory}
     PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}
     RTL_LIB ${rtl_lib}
-    BOARD_NAME $BOARD_NAME}
+    BOARD_NAME ${BOARD_NAME}
     )
 
 add_aoc_target (
     TARGET_NAME ${TEST_NAME}
     TARGET_TYPE RTL_ONLY
     SOURCES_LIST ${kernel_files} 
-    HEADER_DIR ${PROJECT_SOURCE_DIR}/device
+    HEADER_DIR_LIST ${header_dirs}
     RTL_DIR ${rtl_directory} 
     PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}
     RTL_LIB ${rtl_lib}
@@ -113,7 +117,7 @@ add_aoc_target (
     TARGET_NAME ${TEST_NAME}
     TARGET_TYPE NORMAL_HW
     SOURCES_LIST ${kernel_files} 
-    HEADER_DIR ${PROJECT_SOURCE_DIR}/device
+    HEADER_DIR_LIST ${header_dirs}
     RTL_DIR ${rtl_directory} 
     PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}
     RTL_LIB ${rtl_lib}
@@ -124,7 +128,7 @@ add_aoc_target (
     TARGET_NAME ${TEST_NAME}
     TARGET_TYPE RELEASE_HW
     SOURCES_LIST ${kernel_files}
-    HEADER_DIR ${PROJECT_SOURCE_DIR}/device
+    HEADER_DIR_LIST ${header_dirs}
     RTL_DIR ${rtl_directory}
     PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}
     RTL_LIB ${rtl_lib}
@@ -135,18 +139,17 @@ add_aoc_target (
     TARGET_NAME ${TEST_NAME}
     TARGET_TYPE PROFILE_HW
     SOURCES_LIST ${kernel_files} 
-    HEADER_DIR ${PROJECT_SOURCE_DIR}/device
+    HEADER_DIR_LIST ${header_dirs}
     RTL_DIR ${rtl_directory} 
     PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}
     RTL_LIB ${rtl_lib}
-    BOARD_NAME ${BOARD_NAME}
     )
 
 add_aoc_target (
     TARGET_NAME ${TEST_NAME}
     TARGET_TYPE FAST_COMPILE_HW
     SOURCES_LIST ${kernel_files}
-    HEADER_DIR ${PROJECT_SOURCE_DIR}/device
+    HEADER_DIR_LIST ${header_dirs}
     RTL_DIR ${rtl_directory}
     PREPROCESSOR_DEFS_LIST ${PREPROCESSOR_DEFS}
     RTL_LIB ${rtl_lib}

@@ -6,6 +6,7 @@
 #include "device_structures.hpp"
 #include "channels.hpp"
 #endif
+#include "prints.hpp"
 
 #include "ihc_apint.h"
 #include "rtl_lib.hpp"
@@ -66,6 +67,10 @@ __kernel void kernelSpWPE ()
 {
 	int idx = get_compute_id(1);
 	int idy = get_compute_id(0);
+	#if defined(EMULATOR)
+		int weightBlockCount = 0;
+		int activationBlockCount = 0;
+	#endif
 
 	/**
 	 * Data registers
@@ -93,34 +98,77 @@ __kernel void kernelSpWPE ()
 		t_flag sigIsLastWBlockInPruneRange = FALSE;
 		t_pe_w_block sigWBlocks[PE_ROWS_PER_GROUP];
 		{
-			#pragma unroll
-			for (int i=0; i<PE_ROWS_PER_GROUP; i++)
-			{
-				sigWBlocks[i] = read_channel_intel(
-						channel_weight[idy*PE_ROWS_PER_GROUP+i][idx]
+			// The compiler refuses to unroll the loop 
+				// when it is given the unroll pragma
+				// so we have to unroll manually
+			sigWBlocks[0] = read_channel_intel(
+						channel_weight[idy*PE_ROWS_PER_GROUP+0][idx]
 					);
-			}
+			#if (PE_ROWS_PER_GROUP>1)
+			sigWBlocks[1] = read_channel_intel(
+						channel_weight[idy*PE_ROWS_PER_GROUP+1][idx]
+					);
+			#endif
+			#if (PE_ROWS_PER_GROUP>2)
+			sigWBlocks[2] = read_channel_intel(
+						channel_weight[idy*PE_ROWS_PER_GROUP+2][idx]
+					);
+			#endif
+			#if (PE_ROWS_PER_GROUP>3)
+			sigWBlocks[3] = read_channel_intel(
+						channel_weight[idy*PE_ROWS_PER_GROUP+3][idx]
+					);
+			#endif
+			#if (PE_ROWS_PER_GROUP>4)
+				#error "PE_ROWS_PER_GROUP should be between 1 and 4"
+			#endif
 
 			sigIsLastWBlockInFilter = sigWBlocks[0].isLastInFilter;
 			sigIsLastWBlockInPruneRange = sigWBlocks[0].isLastInPruneRange;
-			maxTransportID = sigWBlocks[0].maxTransportID;
+			uint5_t maxTransportID = sigWBlocks[0].maxTransportID;
 			#if defined(FULL_SYSTEM)
 			if (idx < (PE_COLS - 1))
 			#endif
 			{
 				if ( idx < maxTransportID ) {
-					//EMULATOR_PRINT ( ("[kernelWeightTransport]: Waiting to pass a weight block to the output\n") );
-					#pragma unroll
-					for (int i=0; i<PE_ROWS_PER_GROUP; i++)
-					{
-						write_channel_intel(
-								channel_weight[idy*PE_ROWS_PER_GROUP+i][idx+1],
-								sigWBlocks[i]
-							)
-					}
-
+					// The compiler refuses to unroll the loop 
+					// when it is given the unroll pragma
+					// so we have to unroll manually
+					write_channel_intel(
+								channel_weight[idy*PE_ROWS_PER_GROUP+0][idx+1], 
+								sigWBlocks[0]
+							);
+					#if (PE_ROWS_PER_GROUP>1)
+					write_channel_intel(
+								channel_weight[idy*PE_ROWS_PER_GROUP+1][idx+1], 
+								sigWBlocks[1]
+							);
+					#endif
+					#if (PE_ROWS_PER_GROUP>2)
+					write_channel_intel(
+								channel_weight[idy*PE_ROWS_PER_GROUP+2][idx+1], 
+								sigWBlocks[2]
+							);
+					#endif
+					#if (PE_ROWS_PER_GROUP>3)
+					write_channel_intel(
+								channel_weight[idy*PE_ROWS_PER_GROUP+3][idx+1], 
+								sigWBlocks[3]
+							);
+					#endif
+					#if (PE_ROWS_PER_GROUP>4)
+						#error "PE_ROWS_PER_GROUP should be between 1 and 4"
+					#endif
 				}
 			} //end (optional) if
+			#if defined(EMULATOR)
+				weightBlockCount++;
+				EMULATOR_PRINT((
+						"[SpW PE (%d, %d)]: "
+						"Read and passed on %d weight blocks.\n",
+						idy, idx, weightBlockCount
+					));
+			#endif
 		} //weight channel read and transfer
 
 		/**
@@ -160,10 +208,18 @@ __kernel void kernelSpWPE ()
 				if ( sigIsLastRowGroup == FALSE ) {
 					write_channel_intel(
 							channel_activation[idy+1][idx],
-							sigWBlocks[i]
-						)
+							sigABlocks
+						);
 				}
 			} //end (optional) if
+			#if defined(EMULATOR)
+				activationBlockCount++;
+				EMULATOR_PRINT((
+						"[SpW PE (%d, %d)]: "
+						"Read and passed on %d activation blocks.\n",
+						idy, idx, activationBlockCount
+					));
+			#endif
 		} //if (regState == SPW_PE_INSTRUCTION_LOAD_ACTIVATION)
 
 		/**
@@ -189,7 +245,7 @@ __kernel void kernelSpWPE ()
 				#pragma unroll
 				for (int v=0; v < PE_SIMD_SIZE * CLUSTER_SIZE; v++)
 				{
-					weights.values[v] = sigWBlocks.values[v];
+					weights.values[v] = sigWBlocks[row].values[v];
 				} //unroll-for PE_SIMD_SIZE * CLUSTER_SIZE
 
 				//Select the activations
@@ -197,7 +253,7 @@ __kernel void kernelSpWPE ()
 				#pragma unroll
 				for (int simd=0; simd < PE_SIMD_SIZE; simd++)
 				{
-					t_spw_index index = sigWBlocks.indices[simd];
+					t_spw_index index = sigWBlocks[row].indices[simd];
 					#pragma unroll
 					for (int v=0; v < CLUSTER_SIZE; v++)
 					{
@@ -221,7 +277,7 @@ __kernel void kernelSpWPE ()
 			#pragma unroll
 			for (int row = 0; row < PE_ROWS_PER_GROUP; row++)
 			{
-				drainBlock.values[row] = regPSums[row]
+				drainBlock.values[row] = regPSums[row];
 			}
 			write_channel_intel(channel_drain_conv_local[idy][idx], drainBlock);
 		}
@@ -229,13 +285,18 @@ __kernel void kernelSpWPE ()
 		//State update
 		switch (regState) {
 			case SPW_PE_INSTRUCTION_READ_BIAS: {
-				sigState = SPW_PE_INSTRUCTION_LOAD_ACTIVATION
+				sigState = SPW_PE_INSTRUCTION_LOAD_ACTIVATION;
 			} //case SPW_PE_INSTRUCTION_READ_BIAS
 			break;
 			case SPW_PE_INSTRUCTION_LOAD_ACTIVATION: {
 				sigState = SPW_PE_INSTRUCTION_HOLD_ACTIVATION;
 				if (sigIsLastWBlockInPruneRange == TRUE)
 				{
+					EMULATOR_PRINT((
+						"[SpW PE (%d, %d)]: "
+						"Detected the last SpW block in prune ranges.\n",
+						idy, idx, weightBlockCount
+					));
 					sigState = SPW_PE_INSTRUCTION_LOAD_ACTIVATION;
 					if (sigIsLastWBlockInFilter == TRUE)
 					{
@@ -249,6 +310,11 @@ __kernel void kernelSpWPE ()
 				if (sigIsLastWBlockInPruneRange == TRUE)
 				{
 					sigState = SPW_PE_INSTRUCTION_LOAD_ACTIVATION;
+					EMULATOR_PRINT((
+						"[SpW PE (%d, %d)]: "
+						"Detected the last SpW block in prune ranges.\n",
+						idy, idx, weightBlockCount
+					));
 					if (sigIsLastWBlockInFilter == TRUE)
 					{
 						sigState = SPW_PE_INSTRUCTION_READ_BIAS;

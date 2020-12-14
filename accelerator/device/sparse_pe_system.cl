@@ -4,6 +4,7 @@
 #include "device_utils.hpp"
 #include "ihc_apint.h"
 #include "rtl_lib.hpp"
+#include "prints.hpp"
 
 #if defined(C5SOC)
 #define VOLATILE volatile

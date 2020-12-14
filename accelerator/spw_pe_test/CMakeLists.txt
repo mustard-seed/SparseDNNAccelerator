@@ -1,34 +1,16 @@
-set (TEST_NAME "fullSystem")
+set (TEST_NAME "SpWPETest")
 
 set (PREPROCESSOR_DEFS
 #        -DWEIGHT_MEMORY_TEST
 #        -DHW_DEBUG
-        -DFLEXIBLE_BITMASK_COMPRESSION
-        -DWEIGHT_MEMORY
-        -DMEMORY_READER
-        -DMEMORY_WRITER
-        -DWEIGHT_MEMORY_INTERCONNECT
-        -DACTIVATION_MEMORY_INTERCONNECT
-        -DPE_SYSTEM
-        -DIA_MEMORY
-        -DOA_MEMORY
-        -DFULL_SYSTEM
-        -DMISC_ENGINE
+        -DSPW_TEST
+        -DSPW_SYSTEM
         )
 
 add_definitions(
 #   -DDIRECT_COMPRESSION_SIMD
-    -DFLEXIBLE_BITMASK_COMPRESSION
-    -DWEIGHT_MEMORY
-    -DMEMORY_READER
-    -DMEMORY_WRITER
-    -DWEIGHT_MEMORY_INTERCONNECT
-    -DACTIVATION_MEMORY_INTERCONNECT
-    -DPE_SYSTEM
-    -DIA_MEMORY
-    -DOA_MEMORY
-    -DFULL_SYSTEM
-    -DMISC_ENGINE
+    -DSPW_TEST
+    -DSPW_SYSTEM
     )
 
 ############################################
@@ -109,7 +91,7 @@ INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIRS})
 #####################################
 add_definitions(-DFPGA_DEVICE)
 add_executable (${TEST_NAME}_host ${HOST_SRC})
-target_link_libraries(${TEST_NAME}_host ${Boost_LIBRARIES} gtest_main aocl_utils data_instruction_gen accelerator_wrapper)
+target_link_libraries(${TEST_NAME}_host ${Boost_LIBRARIES} gtest_main aocl_utils)
 target_include_directories(${TEST_NAME}_host
     PUBLIC
     ${PROJECT_SOURCE_DIR}/device
@@ -137,12 +119,12 @@ include (${PROJECT_SOURCE_DIR}/aoc.cmake)
 #     ${PROJECT_SOURCE_DIR}/device/device_utils.cl
 #)
 list (APPEND kernel_files
-    ${PROJECT_SOURCE_DIR}/device/sparse_pe_system.cl
-    ${PROJECT_SOURCE_DIR}/device/device_utils.cl)
+    ${CMAKE_CURRENT_SOURCE_DIR}/spw_pe_test_harness.cl
+    ${PROJECT_SOURCE_DIR}/device/pe.cl)
 
 list (APPEND header_dirs
-        ${PROJECT_SOURCE_DIR}/device
-        )
+    ${PROJECT_SOURCE_DIR}/device
+    ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_aoc_target (
     TARGET_NAME ${TEST_NAME}

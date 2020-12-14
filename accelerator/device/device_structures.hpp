@@ -25,6 +25,7 @@ typedef int t_int;
     #else
         #define VOLATILE
     #endif
+typedef uint1_t t_flag;
 #else
 typedef cl_uchar t_uchar;
 typedef cl_char t_char;
@@ -127,6 +128,19 @@ typedef struct {
  * Data structures seen by the SpW PE
  * =========================================
  */
+#if defined(SPW_SYSTEM)
+    #if (PRUNE_RANGE_IN_CLUSTER == 2)
+        #define CHAR_TO_SPW_INDEX_MASK 0x01
+    #elif (PRUNE_RANGE_IN_CLUSTER == 4)
+        #define CHAR_TO_SPW_INDEX_MASK 0x03
+    #elif (PRUNE_RANGE_IN_CLUSTER == 8)
+        #define CHAR_TO_SPW_INDEX_MASK 0x07
+    #elif (PRUNE_RANGE_IN_CLUSTER == 16)
+        #define CHAR_TO_SPW_INDEX_MASK 0x0F
+    #else
+        #error Pruning range in terms of clusters must be 2, 4, 8, or 16
+    #endif
+#endif
 #if defined(INTELFPGA_CL)
     #if defined(SPW_SYSTEM)
         #if (PRUNE_RANGE_IN_CLUSTER == 2)
@@ -154,7 +168,6 @@ typedef struct {
     typedef struct __attribute__((packed)) {
         #if defined(SPW_SYSTEM)
             char values[PE_SIMD_SIZE * PRUNE_RANGE_IN_CLUSTER * CLUSTER_SIZE];
-            t_spw_index indices[PE_SIMD_SIZE];
         #else
             char values[PE_SIMD_SIZE * CLUSTER_SIZE];
         #endif
@@ -432,7 +445,6 @@ typedef struct __attribute__((aligned(16)))
 } t_misc_instruction;
 
 #ifdef INTELFPGA_CL
-typedef uint1_t t_flag;
 /*
 =======================================================================
 Datatypes relevant to the filter transportation system
