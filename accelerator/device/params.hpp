@@ -83,16 +83,28 @@
 	#define PE_COLS 4
 	#define PE_ROWS_PER_GROUP 4
 	#define PE_ROW_GROUPS 1
-	#define PE_ROWS (PE_ROWS_PER_GROUP * PE_ROW_GROUPS)
 	#define MISC_COLS 1
 #else
 	#define PE_COLS 1
 	#define PE_ROWS_PER_GROUP 4
 	#define PE_ROW_GROUPS 1
-	#define PE_ROWS (PE_ROWS_PER_GROUP * PE_ROW_GROUPS)
 	#define MISC_COLS 1
 #endif
 #define MISC_UNROLL 16
+
+#define PE_ROWS (PE_ROWS_PER_GROUP * PE_ROW_GROUPS)
+//Derived parameter
+#if (PE_ROWS_PER_GROUP == 1)
+#define DIVIDE_BY_PE_ROWS_PER_GROUP_SHIFT 0
+#elif (PE_ROWS_PER_GROUP == 2)
+#define DIVIDE_BY_PE_ROWS_PER_GROUP_SHIFT 1
+#elif (PE_ROWS_PER_GROUP == 4)
+#define DIVIDE_BY_PE_ROWS_PER_GROUP_SHIFT 2
+#elif (PE_ROWS_PER_GROUP == 8)
+#define DIVIDE_BY_PE_ROWS_PER_GROUP_SHIFT 3
+#else
+#error DIVIDE_BY_PE_ROWS_PER_GROUP_SHIFT should be chosen from {1, 2, 4, 8}
+#endif
 
 #if (MISC_COLS > PE_COLS)
 #error Configuration MISC_COLS should be less or equal to PE_COLS
@@ -141,6 +153,26 @@
 //Equal to SIMD size (in terms of cluster) in a SpW PE
 #define PE_SIMD_SIZE 4
 
+//Size of the char array in the host weight blocks
+//used to contain the indices of the NZ clusters
+//Each char is split into two 4-bit halfs.
+//Each half corresponds to an index
+#if defined(PE_SIMD_SIZE) && defined(SPW_SYSTEM)
+#if (PE_SIMD_SIZE <= 2)
+#define INDEX_CHAR_ARRAY_SIZE 1
+#elif (PE_SIMD_SIZE <= 4)
+#define INDEX_CHAR_ARRAY_SIZE 2
+#elif (PE_SIMD_SIZE <= 8)
+#define INDEX_CHAR_ARRAY_SIZE 4
+#elif (PE_SIMD_SIZE <= 16)
+#define INDEX_CHAR_ARRAY_SIZE 8
+#else
+#error "PE_SIMD_SIZE needs to be between 1 and 16"
+#endif
+#else
+#error "Parameter PE_SIMD_SIZE is not been defined."
+#endif
+
 /**
  * Small buffer operand filterign related
  */
@@ -150,7 +182,11 @@
 #define BITMASK_INDEX_BITWIDTH 3 //$rtoi($ceil($clog2(COMPRESSION_WINDOW_SIZE)))
 #define NUM_BITMASK_BYTES 1
 #define NUM_ACCUM_BITMASK_BYTES 2
-#define NUM_SIMD_WORDS (CLUSTER_SIZE*TRANSFER_SIZE)
+#if defined(SPW_SYSTEM)
+	#define NUM_SIMD_WORDS (CLUSTER_SIZE*SIMD_SIZE)
+#else
+	#define NUM_SIMD_WORDS (CLUSTER_SIZE*TRANSFER_SIZE)
+#endif
 
 //=========================================
 
@@ -165,10 +201,24 @@
 
 #define NUM_CLUSTER_IN_DRAM_SIZE BURST_SIZE_BYTE/CLUSTER_SIZE
 
-#define WEIGHT_BURST_SIZE_BYTE 32
-#define WEIGHT_WIDE_SIZE (WEIGHT_BURST_SIZE_BYTE/CLUSTER_SIZE/TRANSFER_SIZE)  //Each transfer block takes 4 bytes, so need 8 transfer blocks to populate 256 bits
+#define ACTIVATION_WIDE_SIZE 4
+#define ACTIVATION_WIDE_SIZE_OFFSET 0x2 //Numnber of bits to shift the transfer block index to the right in order to recover the wide offset
+#define ACTIVATION_WIDE_SIZE_REMAINDER_MASK 0x3
+#if !defined(SPW_SYSTEM)
+#define ACTIVATION_BURST_SIZE_BYTE (ACTIVATION_WIDE_SIZE * PE_SIMD_SIZE * CLUSTER_SIZE)
+#else
+#define ACTIVATION_BURST_SIZE_BYTE (ACTIVATION_WIDE_SIZE * PE_SIMD_SIZE * PRUNE_RANGE_IN_CLUSTER * CLUSTER_SIZE)
+#endif
+
+#define WEIGHT_WIDE_SIZE 4
 #define WEIGHT_WIDE_SIZE_OFFSET 0x2 //Numnber of bits to shift the transfer block index to the right in order to recover the wide offset
 #define WEIGHT_WIDE_SIZE_REMAINDER_MASK 0x3
+#if !defined(SPW_SYSTEM)
+#define WEIGHT_BURST_SIZE_BYTE (WEIGHT_WIDE_SIZE * PE_SIMD_SIZE * CLUSTER_SIZE)
+#else
+#define WEIGHT_BURST_SIZE_BYTE (WEIGHT_WIDE_SIZE * PE_SIMD_SIZE * CLUSTER_SIZE + WEIGHT_WIDE_SIZE*INDEX_CHAR_ARRAY_SIZE)
+#endif
+
 
 #define WMOVER_FILTER_DRAM_BLOCK_ACCESS_UNROLL_FACTOR 4
 #define KERNEL_CACHE_LANES PE_ROWS

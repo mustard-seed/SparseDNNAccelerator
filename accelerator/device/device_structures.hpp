@@ -99,7 +99,7 @@ typedef short t_bias;
 // #endif
 
 typedef struct {
-    cl_char cluster_values [CLUSTER_SIZE];
+    t_char cluster_values [CLUSTER_SIZE];
 } t_cluster;
 
 typedef cl_ushort t_streamblock_address;
@@ -107,21 +107,6 @@ typedef cl_ushort t_streamblock_address;
 typedef signed short t_bias;
 #endif
 
-typedef struct {
-    char values [TRANSFER_SIZE*CLUSTER_SIZE];
-} t_transfer_block;
-
-typedef struct {
-    t_transfer_block transferBlocks[WIDE_SIZE];
-} t_dram_block;
-
-typedef struct {
-    t_transfer_block transferBlocks[WEIGHT_WIDE_SIZE];
-} t_weight_dram_block;
-
-typedef struct {
-        unsigned char bytes[NUM_BITMASK_BYTES];
-} t_bitmask;
 
 /**
  * =========================================
@@ -174,6 +159,42 @@ typedef struct {
         uint5_t maxTransportID;
     } t_pe_a_block;
 #endif
+
+typedef struct {
+    t_char values [TRANSFER_SIZE*CLUSTER_SIZE];
+} t_transfer_block;
+
+typedef struct {
+    t_transfer_block transferBlocks[WIDE_SIZE];
+} t_dram_block;
+
+typedef struct {
+        unsigned char bytes[NUM_BITMASK_BYTES];
+} t_bitmask;
+
+typedef struct {
+    #if defined(SPW_SYSTEM)
+        t_char values[PE_SIMD_SIZE * PRUNE_RANGE_IN_CLUSTER * CLUSTER_SIZE];
+    #else
+        t_char values[PE_SIMD_SIZE * CLUSTER_SIZE];
+    #endif
+} t_activation_transfer_block;
+
+typedef struct {
+    t_activation_transfer_block transferBlocks[ACTIVATION_WIDE_SIZE];
+} t_activation_dram_block;
+
+typedef struct {
+    t_char values[PE_SIMD_SIZE * CLUSTER_SIZE];
+    #if defined(SPW_SYSTEM)
+        t_uchar indices[INDEX_CHAR_ARRAY_SIZE];
+    #endif
+} t_weight_transfer_block;
+
+typedef struct {
+    t_weight_transfer_block transferBlocks[WEIGHT_WIDE_SIZE];
+} t_weight_dram_block;
+
 
 /*!
    ==================================================
@@ -329,12 +350,11 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
     //Arch. parameter: filter stride in the weight dram block region.
     t_int memWeightFilterStride;
 
-#if defined(SPARSE_SYSTEM)
-    //Arch. parameter: Start of the transfer in the weight TB count region
-    t_int memTBCountStart;
-#else
     t_uint numTBPerFilter;
-#endif
+
+    #if defined(SPW_SYSTEM)
+    t_uchar numNZClustersPerPruneRange;
+    #endif
 } t_weight_mover_instruction;
 
 //====================================================================
@@ -462,6 +482,10 @@ typedef struct __attribute__((packed)) {
     unsigned short numTransferBlocks;
     t_bias bias; //short
     unsigned char maxPeCols; //Number of PE COLS that is activated
+    unsigned char flagIsReal; //Whether this filter row should stream zero padding
+    #if defined(SPW_SYSTEM)
+    unsigned char numNZClustersPerPruneRange;
+    #endif
 
 } t_filter_streamer_control;
 
@@ -483,7 +507,9 @@ typedef struct __attribute__((packed)){
     t_accumulator values[PE_ROWS_PER_GROUP];
     //[7:1] row ID or the row that issued the packed
     //[0] Whether this is the last.
-    unsigned char sourceRowIDCatIsLast;
+    //unsigned char sourceRowIDCatIsLast;
+    uint5_t sourceRowGroupID;
+    t_flag  flagIsLast;
 } t_conv_drain_multiple_tagged;
 /*
 ===================================================================

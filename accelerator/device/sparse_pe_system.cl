@@ -403,17 +403,10 @@ __kernel void kernelWMover (
 		__global const t_weight_mover_instruction* restrict pInst,
 		__global const t_weight_dram_block* restrict pW,
 		__global const t_bias* restrict pBias,
-		#if defined(SPARSE_SYSTEM)
-		 //Pointer to filter transfer block count
-		 __global const t_streamblock_address* restrict pFilterTBCount,
-		#endif //SPARSE_SYSTEM
 		unsigned int numInstruction
 	)
 {
 	#if defined(WMOVER_STREAM_CACHE)
-		#if defined(SPARSE_SYSTEM)
-			t_streamblock_address cacheTBCount[WEIGHT_MOVER_TBCOUNT_CACHE_SIZE];
-		#endif
 			t_bias cacheBias[WEIGHT_MOVER_BIAS_CACHE_SIZE];
 	#endif //WMOVER_STREAM_CACHE
 
@@ -425,91 +418,102 @@ __kernel void kernelWMover (
 	{
 		t_weight_mover_instruction inst = pInst[iInst];
 
-		//Iterator of filter fold count
-		unsigned short iFilterFold = 0;
-		//Iterator of the number of filters that have been transferred within this fold
-		unsigned char iFilterInFold = 0;
-
 		signed int addrWeightFilterBase = inst.memWeightStart;
 
 		#if defined(WMOVER_STREAM_CACHE)
 			/*
-			 * Preload the bias and the TB count
+			 * pre-fetch the bias
 			*/
 			{
-				#if defined(SPARSE_SYSTEM)
-					signed int addrWeightTB = inst.memTBCountStart;
-				#endif
 				signed int addrBias = inst.memBiasStart;
 				for (unsigned short iFilterInGroup=0; iFilterInGroup<inst.numFiltersInGroup; iFilterInGroup++)
 				{
-					#if defined(SPARSE_SYSTEM)
-						cacheTBCount[iFilterInGroup] = pFilterTBCount[addrWeightTB];
-						addrWeightTB++;
-					#endif
-
 					cacheBias[iFilterInGroup] = pBias[addrBias];
 					addrBias++;
 				}
 			}
 		#else //WMOVER_STREAM_CACHE
 			signed int addrBias = inst.memBiasStart;
-			#if defined(SPARSE_SYSTEM)
-				signed int addrWeightTB = inst.memTBCountStart;
-			#endif
 		#endif
 
-		for (unsigned short iFilterInGroup=0; iFilterInGroup<inst.numFiltersInGroup; iFilterInGroup++)
+		//Number of filters in the group
+		unsigned short numActualFiltersInGroup = inst.numFiltersInGroup;
+
+		//Number of filters to be sent to the array
+		//Include padding
+		unsigned short numFiltersSentToArray =
+			(1 + ((numActualFiltersInGroup - 1) >> DIVIDE_BY_PE_ROWS_PER_GROUP_SHIFT)) << DIVIDE_BY_PE_ROWS_PER_GROUP_SHIFT;
+
+
+		//Number of weight blocks seen by the PEs
+		//in each filter
+		//For SpW weight block, this is proporational
+		//to the number NZ clusters per pruning range.
+		unsigned short numTransferBlockInFilter = inst.numTBPerFilter;
+
+		unsigned short numDramBlockInActualFilter = 
+			((numTransferBlockInFilter-1) >> WEIGHT_WIDE_SIZE_OFFSET) + 1;
+
+		unsigned char iFilterRowDestination = 0;
+		for (
+				unsigned short iFiltersSentToArray=0;
+				iFiltersSentToArray < numFiltersSentToArray;
+				iFiltersSentToArray++
+			)
 		{
+			//Test if this is a real filter
+			t_flag isRealFilter = (iFiltersSentToArray < numActualFiltersInGroup) ?
+				TRUE : FALSE;
 
-			unsigned char numFiltersInFold = (iFilterFold < inst.numFullFilterFold) ?
-				PE_ROWS : inst.numFiltersInPartialFold;
-
-			#if defined(SPARSE_SYSTEM)
-				#if defined(WMOVER_STREAM_CACHE)
-					unsigned short numTransferBlockInFilter = cacheTBCount[iFilterInGroup];
-				#else
-					unsigned short numTransferBlockInFilter = pFilterTBCount[addrWeightTB];
-				#endif
-			#else
-				unsigned short numTransferBlockInFilter = inst.numTBPerFilter;
-			#endif
-			
+			//Load the bias
 			#if defined(WMOVER_STREAM_CACHE)
-				t_bias bias = cacheBias[iFilterInGroup];
+				t_bias bias = (isRealFilter == TRUE) ?
+					cacheBias[iFiltersSentToArray] : 0x0;
 			#else
-				t_bias bias = pBias[addrBias];
+				t_bias bias = (isRealFilter == TRUE) ?
+					pBias[addrBias] : 0x0;
 			#endif
 
-			unsigned short numDramBlockInFilter = ((numTransferBlockInFilter-1) >> WEIGHT_WIDE_SIZE_OFFSET) + 1;
-			
+
+			//Setup the control bias
 			t_filter_streamer_control control;
 			control.numOutputs = inst.filterReuse;
 			control.bias = bias;
 			control.numTransferBlocks = numTransferBlockInFilter;
+			control.flagIsReal = (isRealFilter == TRUE) ? FALSE : ;
 			control.maxPeCols = (inst.numActivePeCols - 1);
+			#if defined(SPW_SYSTEM)
+			control.numNZClustersPerPruneRange = inst.numNZClustersPerPruneRange;
+			#endif
 
 			t_weight_dram_block dramControl = filterStreamerControl2dramBlock(control);
 
-			int iDramBlock = addrWeightFilterBase;
+
+			//Transfer to the PE array
+			signed int addrDramBlock = addrWeightFilterBase;
+
+			unsigned short numDramBlockInFilter = (isRealFilter == TRUE) ?
+				numDramBlockInActualFilter : 0x0;
+
 
 			EMULATOR_PRINT(("[kernelWMover] START filter transfer. "
 						"iInst=%d, "
-						"iFilterInGroup=%d, " 
-                        "iFilterInFold=%d, "
-						"iFilterFold=%d, "
+						"iFiltersSentToArray=%d, " 
+                        "numFiltersSentToArray=%d, "
+						"numActualFiltersInGroup=%d, "
 						"num. active PE cols=%d, "
 						"num. filter reuse=%d, "
 						"bias=%#04x, "
 						"numTransferBlocks=%d\n\n",
 						iInst, 
-						iFilterInGroup,
-						iFilterInFold,
-						iFilterFold,
+						(unsigned int) iFiltersSentToArray,
+						(unsigned int) numFiltersSentToArray,
+						(unsigned int) numActualFiltersInGroup,
 						inst.numActivePeCols,
 						inst.filterReuse,
 						bias,
-						numTransferBlockInFilter));
+						(unsigned int) numTransferBlockInFilter));
+
 
 			#if defined(WMOVER_WEIGHT_COALESCE_CACHE)
 				/**
@@ -520,15 +524,17 @@ __kernel void kernelWMover (
 					#pragma unroll
 					for (unsigned int i=0; i<WMOVER_FILTER_DRAM_BLOCK_ACCESS_UNROLL_FACTOR; i++)
 					{
-						cacheFilter[iDramAccessCount+i] = pW[iDramBlock + i];
+						cacheFilter[iDramAccessCount+i] = pW[addrDramBlock + i];
 					}
-					iDramBlock += WMOVER_FILTER_DRAM_BLOCK_ACCESS_UNROLL_FACTOR;
+					addrDramBlock += WMOVER_FILTER_DRAM_BLOCK_ACCESS_UNROLL_FACTOR;
 				}
 
 				unsigned short iFilterCacheCount = 0;
 			#endif //WMOVER_WEIGHT_COALESCE_CACHE
 
 			//one extra for filter stream control
+			#pragma ii 1
+			#pragma speculated_iterations 0
 			for (unsigned short iTransmitCount=0; iTransmitCount<=numDramBlockInFilter; iTransmitCount++)
 			{
 				t_weight_dram_block block;
@@ -539,8 +545,8 @@ __kernel void kernelWMover (
 				else
 				{
 					#if !defined(WMOVER_WEIGHT_COALESCE_CACHE)
-						block = pW[iDramBlock];
-						iDramBlock++;
+						block = pW[addrDramBlock];
+						addrDramBlock++;
 					#else
 						block = cacheFilter[iFilterCacheCount];
 						iFilterCacheCount++;
@@ -549,35 +555,31 @@ __kernel void kernelWMover (
 
 				t_dram_block_w_tagged taggedBlock;
 				taggedBlock.dramBlock = block;
-				taggedBlock.destinationRow = iFilterInFold;
+				taggedBlock.destinationRow = iFilterRowDestination;
 
 				write_channel_intel(channel_weight_wide[0], taggedBlock);
-			} // iTransmitCount
+			} // for over iTransmitCount
 
+
+			
 			EMULATOR_PRINT(("[kernelWMover] FINISHED filter transfer.\n"));
 
-			addrWeightFilterBase += inst.memWeightFilterStride;
-
-			/*
-			Parameter updates
-			*/
-			if ((iFilterInFold+1) == numFiltersInFold)
+			if (isRealFilter == TRUE)
 			{
-				iFilterInFold = 0;
-				iFilterFold++;
-			}
-			else
-			{
-				iFilterInFold++;
-			}
-
-			#if !defined(WMOVER_STREAM_CACHE)
-				addrBias++;
-				#if defined(SPARSE_SYSTEM)
-					addrWeightTB++;
+				addrWeightFilterBase += inst.memWeightFilterStride;
+				#if !defined(WMOVER_STREAM_CACHE)
+					addrBias++;
 				#endif
-			#endif
-		} //for loop over the filters in one group
+			}
+
+			//Update the filter row destination tracker
+			iFilterRowDestination++;
+			if (iFilterRowDestination == PE_ROWS)
+			{
+				iFilterRowDestination = 0X0;
+			}
+
+		} //for over iFiltersSentToArray
 	}  //for loop over instructions
 }
 
@@ -5742,6 +5744,10 @@ __kernel void kernelFilterBuffer ()
 	unsigned short maxTransferBlockInFilter[2]; //maxCg
 	unsigned char maxPeCols[2];
 	t_bias cacheBias[2];
+	t_flag regIsRealFilter[2];
+	#if defined(SPW_SYSTEM)
+	unsigned char regNumNZClustersInPruneRange[2];
+	#endif
 
 	//=================Write into cache variables=================
 	t_state stateWriteCache = STATE_FILTER_STREAMER_WRITE_CACHE_SETUP_CONTROL;
@@ -5753,12 +5759,16 @@ __kernel void kernelFilterBuffer ()
 	//unsigned char iWidthInOutputTileRead; //pq*A
 	//unsigned char iHeightInOutputTileRead; //p
 	unsigned short iOutputRead = 0;
+	#if defined(SPW_SYSTEM)
+	unsigned char iNZClusterInPruneRange = 0;
+	#endif
 
 
 
 	//#pragma ivdep array(cacheNzBlocks)
 	#pragma ivdep
 	#pragma ii 1
+	#pragma speculated_iterations 0
 	while (true)
 	{
 		//===============Write side====================
@@ -5785,13 +5795,23 @@ __kernel void kernelFilterBuffer ()
 					maxPeCols[regWriteSide] = control.maxPeCols;
 					maxTransferBlockInFilter[regWriteSide] = control.numTransferBlocks;
 					cacheBias[regWriteSide] = control.bias;
+					t_flag flagIsReal = (t_flag) control.flagIsReal;
+					regIsRealFilter[regWriteSide] = flagIsReal;
+					#if defined(SPW_SYSTEM)
+					regNumNZClustersInPruneRange[regWriteSide] = control.numNZClustersPerPruneRange;
+					#endif
 					
 					iTransferBlockInFilterWrite = 0;
 
 
 					EMULATOR_PRINT(("[kernelFilterBuffer %d] Received setup packet for a new filter. Number of transfer blocks to follow: %d\n\n", rowID, control.numTransferBlocks));
 
-					nextStateWriteCache = STATE_FILTER_STREAMER_WRITE_CACHE_WRITE;
+					//If this filter feeder is to provide padding,
+					//then the filter mover won't provide anymore blocks
+					//so the writer should transition to the wait state
+					nextStateWriteCache = (flagIsReal == TRUE) ?
+						flagIsReSTATE_FILTER_STREAMER_WRITE_CACHE_WRITE:
+						STATE_FILTER_STREAMER_WRITE_CACHE_WAIT
 				}
 			} // STATE_FILTER_STREAMER_WRITE_CACHE_SETUP_CONTROL
 			else if (stateWriteCache == STATE_FILTER_STREAMER_WRITE_CACHE_WRITE)
@@ -5830,50 +5850,126 @@ __kernel void kernelFilterBuffer ()
 		// Send bias, then followed by the clusters
 		else if ( stateReadCache == STATE_FILTER_STREAMER_READ_CACHE_READ)
 		{
-			t_transferblock_tagged weightBlockTagged;
+			t_pe_w_block peWeightBlock;
 
-			unsigned char tempIsLast = FALSE;
+			t_flag tempIsLastBlockInFilter = FALSE;
+			#if defined(SPW_SYSTEM)
+				t_flag tempIsLastBlockInPruneRange = FALSE; 
+			#endif
 
 			if (iTransferBlockInFilterRead > 0)
 			{
 				unsigned short dramIndex = (iTransferBlockInFilterRead - 1) >> WEIGHT_WIDE_SIZE_OFFSET;
 				unsigned short indexInDramBlock = (iTransferBlockInFilterRead - 1) & WEIGHT_WIDE_SIZE_REMAINDER_MASK;
 				t_weight_dram_block dramBlock = cacheNzBlocks[(~regWriteSide) & 0x1][dramIndex];
-				t_transfer_block tblock = dramBlock.transferBlocks[indexInDramBlock];
-				weightBlockTagged.values = tblock;
-				tempIsLast = ((iTransferBlockInFilterRead) >= maxTransferBlockInFilter[(~regWriteSide) & 0x1]) ?
+				t_weight_transfer_block tblock = dramBlock.transferBlocks[indexInDramBlock];
+				//Bridge the weight values
+				#pragma unroll 
+				for (int v=0; v<PE_SIMD_SIZE*CLUSTER_SIZE; v++)
+				{
+					//Handle zero-padded filter
+					if (regIsRealFilter[(~regWriteSide) & 0x1] == TRUE)
+					{
+						peWeightBlock.values[v] = tblock.values[v];
+					}
+					else
+					{
+						peWeightBlock.values[v] = 0x0;
+					}
+				}
+
+				#if defined(SPW_SYSTEM)
+				#pragma unroll
+				for (unsigned char iChar=0; iChar<INDEX_CHAR_ARRAY_SIZE; iChar++)
+				{
+					unsigned char index0 = iChar << 1; //*2
+					unsigned char index1 = (iChar << 1) + 1; //*2, +1
+					t_spw_index val0 = tblock.indices[iChar] & CHAR_TO_SPW_INDEX_MASK;
+					t_spw_index val1 = (tblock.indices[iChar] >> 0x04) & CHAR_TO_SPW_INDEX_MASK;
+					if (index0 < PE_SIMD_SIZE)
+					{
+						peWeightBlock.indices[index0] = val0;
+					}
+					if (index1 < PE_SIMD_SIZE)
+					{
+						peWeightBlock.indices[index1] = val1;
+					}
+				}
+				#endif
+
+				//The comparsion is greater or equal to 
+				//since iTransferBlockInFilterRead is also incremented to transmitting the bias
+				tempIsLastBlockInFilter = 
+					((iTransferBlockInFilterRead) >= maxTransferBlockInFilter[(~regWriteSide) & 0x1]) ?
 					TRUE : FALSE;
+				#if defined(SPW_SYSTEM)
+					tempIsLastBlockInPruneRange = 
+						((iNZClusterInPruneRange+1) == regNumNZClustersInPruneRange[(~regWriteSide) & 0x1]) ?
+						TRUE : FALSE
+				#endif
 			}
-			else
+			else //Bias
 			{
-				t_bias bias = cacheBias[(~regWriteSide) & 0x1];
-				t_transfer_block tblock = bias2TransferBlock(bias);
-				weightBlockTagged.values = tblock;
+				t_bias bias = (regIsRealFilter[(~regWriteSide) & 0x1] == TRUE) ?
+					cacheBias[(~regWriteSide) & 0x1] : 0x0;
+				peWeightBlock.values[0] = bias & 0x0FF;
+				peWeightBlock.values[1] = (bias >> 0x08) & 0x0FF;
 				//weightBlockTagged.isLast = false;
 			}
 			
-			//weightBlockTagged.maxTransportID = maxPeCols[(~regWriteSide) & 0x1];
-
-			setIsLast(&weightBlockTagged, tempIsLast);
-			setMaxTransferID(&weightBlockTagged, maxPeCols[(~regWriteSide) & 0x1]);
-			//weightBlockTagged.isLastConcatMaxTransportID = ((rowID+1) << 0x6) | (iterCount & 0x3F);
+			//Set the control signals for the block
+			peWeightBlock.isLastInFilter = tempIsLastBlockInFilter;
+			peWeightBlock.maxTransportID = maxPeCols[(~regWriteSide) & 0x1];
+			#if defined(SPW_SYSTEM)
+				peWeightBlock.isLastInPruneRange = tempIsLastBlockInPruneRange;
+			#endif
+			
 			// EMULATOR_PRINT(("[kernelFilterBuffer %d] Attempt to send transfer block %d / %d, in the %d / %d time.\n\n", 
 			// 		rowID, iTransferBlockInFilterRead, maxTransferBlockInFilter[(~regWriteSide) & 0x1], iOutputRead, maxOutputCount[(~regWriteSide) & 0x1]));
 			bool success = false;
-			success = write_channel_nb_intel(channel_weight[rowID][0], weightBlockTagged);
+			success = write_channel_nb_intel(channel_weight[rowID][0], peWeightBlock);
 			if (success)
 			{
-				EMULATOR_PRINT(("[kernelFilterBuffer %d] Sent transfer block %d / %d with tag %d in the %d / %d time.\n\n", 
-					rowID, iTransferBlockInFilterRead, maxTransferBlockInFilter[(~regWriteSide) & 0x1], weightBlockTagged.isLastConcatMaxTransportID, iOutputRead, maxOutputCount[(~regWriteSide) & 0x1]));
+				#if !defined(SPW_SYSTEM)
+					EMULATOR_PRINT((
+						"[kernelFilterBuffer %d]"
+						"Sent transfer block %d / %d the %d / %d time.\n"
+						"TB[0-3]: %#04x %#04x %#04x %#04x. \n"
+						"isLastInFilter: %#03x, maxTransportID: %#04x.\n",
+						rowID, 
+						iTransferBlockInFilterRead, 
+						maxTransferBlockInFilter[(~regWriteSide) & 0x1], 
+						iOutputRead, 
+						maxOutputCount[(~regWriteSide) & 0x1],
+						peWeightBlock.values[0],
+	                    peWeightBlock.values[1],
+	                    peWeightBlock.values[2],
+	                    peWeightBlock.values[3],
+	                    (unsigned int) peWeightBlock.isLastInFilter,
+	                    (unsigned int) peWeightBlock.maxTransportID
+						));
+				#else
+					EMULATOR_PRINT((
+						"[kernelFilterBuffer %d]"
+						"Sent transfer block %d / %d the %d / %d time.\n"
+						"TB[0-3]: %#04x %#04x %#04x %#04x. \n"
+						"isLastInFilter: %#03x, isLastInPruneRange: %#03x, maxTransportID: %#04x.\n",
+						rowID, 
+						iTransferBlockInFilterRead, 
+						maxTransferBlockInFilter[(~regWriteSide) & 0x1], 
+						iOutputRead, 
+						maxOutputCount[(~regWriteSide) & 0x1],
+						peWeightBlock.values[0],
+	                    peWeightBlock.values[1],
+	                    peWeightBlock.values[2],
+	                    peWeightBlock.values[3],
+	                    (unsigned int) peWeightBlock.isLastInFilter,
+	                    (unsigned int) peWeightBlock.isLastInPruneRange,
+	                    (unsigned int) peWeightBlock.maxTransportID
+						));
+				#endif
 
-                EMULATOR_PRINT(("[kernelFilterStreamer %d] Sent tb %d: %#04x %#04x %#04x %#04x\n",
-					rowID, 
-					iTransferBlockInFilterRead,
-                    weightBlockTagged.values.values[0],
-                    weightBlockTagged.values.values[1],
-                    weightBlockTagged.values.values[2],
-                    weightBlockTagged.values.values[3]));
-
+				//Update the counters
 				//Omit plus 1 to send the bias
 				if ((iTransferBlockInFilterRead) >= maxTransferBlockInFilter[(~regWriteSide) & 0x1])
 				{
@@ -5884,6 +5980,13 @@ __kernel void kernelFilterBuffer ()
 				{
 					iTransferBlockInFilterRead++;
 				}
+
+				#if defined(SPW_SYSTEM)
+					if ((iNZClusterInPruneRange+1) == regNumNZClustersInPruneRange[(~regWriteSide) & 0x1])
+					{
+						iNZClusterInPruneRange = 0x0;
+					}
+				#endif
 
 			}
 		} // STATE_FILTER_STREAMER_READ_CACHE_READ
@@ -5905,1748 +6008,5 @@ __kernel void kernelFilterBuffer ()
 }
 #endif //WEIGHT_MEMORY
 
-#ifdef PE_SYSTEM
 
-
-//__attribute__((task))
-__attribute__((max_global_work_dim(0)))
-#ifdef FULL_SYSTEM
-__attribute__((num_compute_units(PE_ROWS, PE_COLS)))
-#endif
-__attribute__ ((autorun))
-__kernel void kernelWeightTransport (
-	)
-{
-	
-#ifdef FULL_SYSTEM
-	int idx = get_compute_id(1);
-	int idy = get_compute_id(0);
-#else
-	int idx = 0;
-	int idy = 0;
-#endif
-
-	while (true)
-	{
-
-			EMULATOR_PRINT(("[WEIGHT TRANSPORT (%d, %d)] Waiting weight/bias transfer block.\n", idy, idx));
-
-			t_transferblock_tagged block;
-			block = read_channel_intel(channel_weight[idy][idx]);
-
-			EMULATOR_PRINT(("[WEIGHT TRANSPORT (%d, %d)] Read weight/bias transfer block. Tag is %#04x\n", idy, idx, block.isLastConcatMaxTransportID));
-
-			unsigned char maxTransportID = getMaxTransferID(block);
-
-			if (idx < (PE_COLS - 1)){
-				if ( idx < maxTransportID ) {
-					//EMULATOR_PRINT ( ("[kernelWeightTransport]: Waiting to pass a weight block to the output\n") );
-					write_channel_intel(channel_weight[idy][idx+1], block);
-
-					EMULATOR_PRINT(("[WEIGHT TRANSPORT (%d, %d)] Passed on weight/bias transfer block.\n", idy, idx));
-				}
-			}
-			write_channel_intel(channel_dpWeightInput[idy][idx], block); 
-	}
-}
-
-__attribute__((max_global_work_dim(0)))
-#ifdef FULL_SYSTEM
-__attribute__((num_compute_units(PE_ROWS, PE_COLS)))
-#endif
-__attribute__ ((autorun))
-__kernel void kernelActivationTransport ()
-{
-	#ifdef FULL_SYSTEM
-		int idx = get_compute_id(1);
-		int idy = get_compute_id(0);
-	#else
-		int idx = 0;
-		int idy = 0;
-	#endif
-
-	while (true)
-	{
-		t_transferblock_tagged block;
-
-		//Read incoming activaiton transfer blocks
-		#ifdef FULL_SYSTEM
-			block = read_channel_intel(channel_activation[idy][idx]);
-		#else
-			block = read_channel_intel(channel_activation[0][0]);
-		#endif
-
-
-		//Determine whether the block should be passed to the next PE on the column
-		unsigned char maxTransportID = getMaxTransferID(block);
-
-		if (idy < (PE_ROWS - 1)){
-			if ( idy < maxTransportID ) {
-				//EMULATOR_PRINT ( ("[kernelWeightTransport]: Waiting to pass an activation block to the output\n") );
-				write_channel_intel(channel_activation[idy+1][idx], block);
-
-			}
-		}
-
-		write_channel_intel(channel_dpActivationInput[idy][idx], block);
-
-
-		unsigned char isLastTemp = getIsLast(block);
-
-		if (isLastTemp == TRUE)
-		{
-
-			EMULATOR_PRINT(("[ACTIVATION TRANSPORT (%d, %d)] End of activation compression window detected.\n\n", idy, idx));
-#if defined(FULL_SYSTEM)
-			unsigned char isLastDrain = (maxTransportID == idy) ? TRUE : FALSE;
-#else
-			unsigned char isLastDrain = TRUE;
-#endif
-
-			//write_channel_intel(channel_drain_token[idy][idx], isLastDrain);
-		}
-	} //while
-}
-
-// //MAC Operands
-typedef struct __attribute__((packed)) {
-	char values [NUM_SIMD_WORDS];
-} t_simd_operand;
-
-t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
-	t_accumulator output = 0x00 & MULT_MASK;
-
-	//#ifdef DIRECT_COMPRESSION_SIMD
-		#pragma unroll
-		for(int i=0; i<TRANSFER_SIZE*CLUSTER_SIZE/4; i++){
-			//output += input.data[i]*weights.data[i];
-			// use packed DSP blocks to improve efficiency
-			#if defined (ARRIA10)
-				output += MULT_MASK & ((t_accumulator) a10_mac_8bitx4_input_registered(
-					activations.values[i*4],
-					weights.values[i*4],
-					activations.values[i*4+1],
-					weights.values[i*4+1],
-					activations.values[i*4+2],
-					weights.values[i*4+2],
-					activations.values[i*4+3],
-					weights.values[i*4+3]
-					));
-			#elif defined (C5SOC)
-				output += MULT_MASK & ((t_accumulator) c5_mac_8bitx4_input_registered(
-						activations.values[i*4],
-						weights.values[i*4],
-						activations.values[i*4+1],
-						weights.values[i*4+1],
-						activations.values[i*4+2],
-						weights.values[i*4+2],
-						activations.values[i*4+3],
-						weights.values[i*4+3]
-						));
-			#else
-			#error Unsupported FPGA type!
-			#endif
-		}
-
-	return output;
-}
-
-#if defined (SPARSE_SYSTEM)
-
-
-#define OPERAND_FILTER_READ_BIAS 0x0
-#define OPERAND_FILTER_ACCEPT_MASK 0x1
-#define OPERAND_FILTER_MASK_SYNC 0x2
-#define OPERAND_FILTER_FILTER 0x3
-#define OPERAND_FILTER_MAC_SYNC 0x4
-#define OPERAND_FILTER_FILTER_SYNC 0x5
-#define OPERAND_FILTER_COMMIT 0x6
-
-#ifndef SPARSE_UTILITY
-#define SPARSE_UTILITY
-	//TODO: Change these if the compression configuration changes
-	//Define the instruction type
-	typedef uint3_t t_instruction;
-	//typedef unsigned char t_bitmask;
-	typedef uint6_t t_start;
-	typedef uint2_t t_buffer_size;
-	typedef int7_t t_num_tb;
-
-	typedef struct {
-		unsigned char bytes[NUM_ACCUM_BITMASK_BYTES];
-	} t_accum_bitmask;
-
-	typedef struct {
-		char values [NUM_SIMD_WORDS];
-	} t_pe_buffer;
-	
-
-	/**
-	 * @brief      Extract a bitmask from an input transfer block, and store the bitmask's bytes into the array that is passed in
-	 * 			   TODO: The number of bytes in the bitmask array and the indexing of the tagged block  need to be adjusted if TRANSFER_SIZE or COMPRESSION_WINDOW_SIZE change
-	 *
-	 * @param      bitmaskBytes  Array for storing the bitmask bytes
-	 * @param      taggedBlock   The input transfer block. Type: t_transferblock_tagged
-	 */
-	void convertTransferBlock2PEBitmask(t_bitmask* bitmaskBytes, t_transferblock_tagged* taggedBlock)
-	{
-		(*bitmaskBytes).bytes[0] = (*taggedBlock).values.values[0];
-		#if (NUM_BITMASK_BYTES > 1)
-			(*bitmaskBytes).bytes[1] = (*taggedBlock).values.values[1];
-		#endif
-		#if (NUM_BITMASK_BYTES > 2)
-			(*bitmaskBytes).bytes[2] = (*taggedBlock).values.values[2];
-		#endif
-		#if (NUM_BITMASK_BYTES > 3)
-			(*bitmaskBytes).bytes[3] = (*taggedBlock).values.values[3];
-		#endif
-		#if (NUM_BITMASK_BYTES > 4)
-			(*bitmaskBytes).bytes[4] = (*taggedBlock).values.values[4];
-		#endif
-		#if (NUM_BITMASK_BYTES > 5)
-			(*bitmaskBytes).bytes[5] = (*taggedBlock).values.values[5];
-		#endif
-		#if (NUM_BITMASK_BYTES > 6)
-			(*bitmaskBytes).bytes[6] = (*taggedBlock).values.values[6];
-		#endif
-		#if (NUM_BITMASK_BYTES > 7)
-			(*bitmaskBytes).bytes[7] = (*taggedBlock).values.values[7];
-		#endif
-	}
-
-	/**
-	 * @brief      Wrapper to the call to the bitmask accumulation HDL function smallBufferMaskAccumulator
-	 * 			   TODO: The number of bytes in both arrays need to be adjusted if TRANSFER_SIZE or COMPRESSION_WINDOW_SIZE change
-	 *
-	 * @param      accumulatedBitmaskBytes  Array that stores the the accumulated bitmask bytes
-	 * @param      bitmaskBytes             Array that stores the plain bitmask bytes
-	 */
-	void peAccumulateBitmask(t_accum_bitmask* accumulatedBitmaskBytes, t_bitmask* bitmaskBytes)
-	{
-		ulong4 accumulatedBitmask = smallBufferMaskAccumulator (
-				(*bitmaskBytes).bytes[0],//unsigned char bitmask0,
-
-				#if (NUM_BITMASK_BYTES > 1)
-					(*bitmaskBytes).bytes[1],
-				#else
-					0,
-				#endif
-
-				#if (NUM_BITMASK_BYTES > 2)
-					(*bitmaskBytes).bytes[2],
-				#else
-					0,
-				#endif
-
-				#if (NUM_BITMASK_BYTES > 3)
-					(*bitmaskBytes).bytes[3],
-				#else
-					0,
-				#endif
-
-				#if (NUM_BITMASK_BYTES > 4)
-					(*bitmaskBytes).bytes[4],
-				#else
-					0,
-				#endif
-
-				#if (NUM_BITMASK_BYTES > 5)
-					(*bitmaskBytes).bytes[5],
-				#else
-					0,
-				#endif
-
-				#if (NUM_BITMASK_BYTES > 6)
-					(*bitmaskBytes).bytes[6],
-				#else
-					0,
-				#endif
-
-				#if (NUM_BITMASK_BYTES > 7)
-					(*bitmaskBytes).bytes[7]
-				#else
-					0
-				#endif
-			);
-
-		{
-			(*accumulatedBitmaskBytes).bytes[0] = (unsigned char) (accumulatedBitmask.s0);
-			#if (NUM_ACCUM_BITMASK_BYTES > 1)
-				(*accumulatedBitmaskBytes).bytes[1] = (unsigned char) (accumulatedBitmask.s0 >> 8);
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 2)
-				(*accumulatedBitmaskBytes).bytes[2] = (unsigned char) (accumulatedBitmask.s0 >> 16);
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 3)
-				(*accumulatedBitmaskBytes).bytes[3] = (unsigned char) (accumulatedBitmask.s0 >> 24);
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 4)
-				(*accumulatedBitmaskBytes).bytes[4] = (unsigned char) (accumulatedBitmask.s0 >> 32);
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 5)
-				(*accumulatedBitmaskBytes).bytes[5] = (unsigned char) (accumulatedBitmask.s0 >> 40);
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 6)
-				(*accumulatedBitmaskBytes).bytes[6] = (unsigned char) (accumulatedBitmask.s0 >> 48);
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 7)
-				(*accumulatedBitmaskBytes).bytes[7] = (unsigned char) (accumulatedBitmask.s0 >> 56);
-			#endif
-
-			#if (NUM_ACCUM_BITMASK_BYTES > 8)
-				(*accumulatedBitmaskBytes).bytes[8] = (unsigned char) (accumulatedBitmask.s1 >> 0);
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 9)
-				(*accumulatedBitmaskBytes).bytes[9] = (unsigned char) (accumulatedBitmask.s1 >> 8);
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 10)
-				(*accumulatedBitmaskBytes).bytes[10] = (unsigned char) (accumulatedBitmask.s1 >> 16);
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 11)
-				(*accumulatedBitmaskBytes).bytes[11] = (unsigned char) (accumulatedBitmask.s1 >> 24);
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 12)
-				(*accumulatedBitmaskBytes).bytes[12] = (unsigned char) (accumulatedBitmask.s1 >> 32);
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 13)
-				(*accumulatedBitmaskBytes).bytes[13] = (unsigned char) (accumulatedBitmask.s1 >> 40);
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 14)
-				(*accumulatedBitmaskBytes).bytes[14] = (unsigned char) (accumulatedBitmask.s1 >> 48);
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 15)
-				(*accumulatedBitmaskBytes).bytes[15] = (unsigned char) (accumulatedBitmask.s1 >> 56);
-			#endif
-
-			#if (NUM_ACCUM_BITMASK_BYTES > 16)
-				(*accumulatedBitmaskBytes).bytes[16] = (unsigned char) (accumulatedBitmask.s2 >> 0);
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 17)
-				(*accumulatedBitmaskBytes).bytes[17] = (unsigned char) (accumulatedBitmask.s2 >> 8);
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 18)
-				(*accumulatedBitmaskBytes).bytes[18] = (unsigned char) (accumulatedBitmask.s2 >> 16);
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 19)
-				(*accumulatedBitmaskBytes).bytes[19] = (unsigned char) (accumulatedBitmask.s2 >> 24);
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 20)
-				(*accumulatedBitmaskBytes).bytes[20] = (unsigned char) (accumulatedBitmask.s2 >> 32);
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 21)
-				(*accumulatedBitmaskBytes).bytes[21] = (unsigned char) (accumulatedBitmask.s2 >> 40);
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 22)
-				(*accumulatedBitmaskBytes).bytes[22] = (unsigned char) (accumulatedBitmask.s2 >> 48);
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 23)
-				(*accumulatedBitmaskBytes).bytes[23] = (unsigned char) (accumulatedBitmask.s2 >> 56);
-			#endif
-
-			#if (NUM_ACCUM_BITMASK_BYTES > 24)
-				(*accumulatedBitmaskBytes).bytes[24] = (unsigned char) (accumulatedBitmask.s3 >> 0);
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 25)
-				(*accumulatedBitmaskBytes).bytes[25] = (unsigned char) (accumulatedBitmask.s3 >> 8);
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 26)
-				(*accumulatedBitmaskBytes).bytes[26] = (unsigned char) (accumulatedBitmask.s3 >> 16);
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 27)
-				(*accumulatedBitmaskBytes).bytes[27] = (unsigned char) (accumulatedBitmask.s3 >> 24);
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 28)
-				(*accumulatedBitmaskBytes).bytes[28] = (unsigned char) (accumulatedBitmask.s3 >> 32);
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 29)
-				(*accumulatedBitmaskBytes).bytes[29] = (unsigned char) (accumulatedBitmask.s3 >> 40);
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 30)
-				(*accumulatedBitmaskBytes).bytes[30] = (unsigned char) (accumulatedBitmask.s3 >> 48);
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 31)
-				(*accumulatedBitmaskBytes).bytes[31] = (unsigned char) (accumulatedBitmask.s3 >> 56);
-			#endif
-		}
-	}
-
-	/**
-	 * @brief      Wrapper to the call to the bitmask 1s counting HDL function smallBufferPopCounter
-	 *
-	 * @param      bitmaskBytes  Array that stores the bitmask bytes
-	 *
-	 * @return     Number of ones in the bitmask
-	 */
-	unsigned char pePopCounter (t_bitmask* bitmaskBytes)
-	{
-		unsigned char result = 0;
-
-		result = smallBufferPopCounter (
-			(*bitmaskBytes).bytes[0],//unsigned char bitmask0,
-
-			#if (NUM_BITMASK_BYTES > 1)
-				(*bitmaskBytes).bytes[1],
-			#else
-				0,
-			#endif
-
-			#if (NUM_BITMASK_BYTES > 2)
-				(*bitmaskBytes).bytes[2],
-			#else
-				0,
-			#endif
-
-			#if (NUM_BITMASK_BYTES > 3)
-				(*bitmaskBytes).bytes[3],
-			#else
-				0,
-			#endif
-
-			#if (NUM_BITMASK_BYTES > 4)
-				(*bitmaskBytes).bytes[4],
-			#else
-				0,
-			#endif
-
-			#if (NUM_BITMASK_BYTES > 5)
-				(*bitmaskBytes).bytes[5],
-			#else
-				0,
-			#endif
-
-			#if (NUM_BITMASK_BYTES > 6)
-				(*bitmaskBytes).bytes[6],
-			#else
-				0,
-			#endif
-
-			#if (NUM_BITMASK_BYTES > 7)
-				(*bitmaskBytes).bytes[7]
-			#else
-				0
-			#endif
-		);
-
-		return result;
-	}
-	
-
-	/**
-	 * @brief      Helpfer function for update the instruction/state of the operand filter
-	 *
-	 * @param[in]  currentInstruction  The current instruction
-	 * @param[in]  thisTBAvailable     Flag for this filter's new TB availability
-	 * @param[in]  otherTBVailable     Flag for the other filter's new TB availability 
-	 * @param[in]  thisNumTBLeft       Number of TB left in the compression window for this filter to process
-	 * @param[in]  otherWindowDone     Flag that indicates that the other filter has finished processing one compression window
-	 * @param[in]  thisLastTB          Flag for indicating whether the filter has encountered the last TB in the kernel
-	 *
-	 * @return     The t instruction.
-	 */
-
-	t_instruction sparseOperandFilterStateUpdate (
-			t_instruction currentInstruction,
-			t_flag thisTBAvailable,
-			t_flag otherTBAvailable,
-			t_flag thisMaskAvailable,
-			t_flag otherMaskAvailable,
-			t_flag thisWindowDone,
-			t_flag otherWindowDone,
-			t_flag thisLastTB,
-			t_flag otherIsLast,
-			t_flag thisMacAvailable,
-			t_flag otherMacAvailable,
-			t_flag swap
-		)
-	{
-		t_instruction nextInstruction = currentInstruction;
-
-		switch (currentInstruction) {
-			case (OPERAND_FILTER_READ_BIAS) :{
-				if ((thisTBAvailable == TRUE) && (otherTBAvailable == TRUE)) {
-					nextInstruction = OPERAND_FILTER_ACCEPT_MASK;
-				}
-			}
-			break; //OPERAND_FILTER_READ_BIAS
-
-			case (OPERAND_FILTER_ACCEPT_MASK) :{
-
-				if (thisMaskAvailable == TRUE) {
-					nextInstruction = OPERAND_FILTER_MASK_SYNC;
-
-					if (otherMaskAvailable == TRUE) {
-						nextInstruction = OPERAND_FILTER_FILTER;
-
-						if (thisWindowDone == TRUE)
-						{
-							nextInstruction = OPERAND_FILTER_ACCEPT_MASK;
-
-							if (thisLastTB == TRUE)
-							{
-								nextInstruction = OPERAND_FILTER_FILTER_SYNC;
-							}
-						}
-					}
-				}
-			}
-			break; //OPERAND_FILTER_ACCEPT_MASK
-
-			case (OPERAND_FILTER_MASK_SYNC) :{
-
-				if (otherMaskAvailable == TRUE)
-				{
-					nextInstruction = OPERAND_FILTER_FILTER;
-
-					if (thisWindowDone == TRUE)
-					{
-						nextInstruction = OPERAND_FILTER_ACCEPT_MASK;
-
-						if (thisLastTB == TRUE)
-						{
-							nextInstruction = OPERAND_FILTER_FILTER_SYNC;
-						}
-					}
-				}
-			}
-			break; //OPERAND_FILTER_MASK_SYNC
-
-			case (OPERAND_FILTER_FILTER) :{
-				if (thisMacAvailable == TRUE && (otherMacAvailable == FALSE))
-				{
-					nextInstruction = OPERAND_FILTER_MAC_SYNC;
-				}
-				else
-				{
-					if (thisTBAvailable == TRUE && (thisWindowDone == TRUE)) {
-						nextInstruction = OPERAND_FILTER_ACCEPT_MASK;
-						if (thisLastTB == TRUE)
-						{
-							nextInstruction = OPERAND_FILTER_FILTER_SYNC;
-						}
-					}
-				}
-
-			}
-			break; //OPERAND_FILTER_FILTER
-
-			case (OPERAND_FILTER_MAC_SYNC) : {
-				if (otherMacAvailable == TRUE)
-				{
-					nextInstruction = OPERAND_FILTER_FILTER;
-					if (thisWindowDone == TRUE)
-					{
-						nextInstruction = OPERAND_FILTER_ACCEPT_MASK;
-						if (thisLastTB == TRUE)
-						{
-							nextInstruction = OPERAND_FILTER_FILTER_SYNC;
-						}
-					}
-				}
-			} 
-			break;//OPERAND_FILTER_MAC_SYNC
-			case (OPERAND_FILTER_FILTER_SYNC) :{
-				if (otherIsLast == TRUE)
-				{
-					nextInstruction = OPERAND_FILTER_COMMIT;
-				}
-			}
-			break; //OPERAND_FILTER_FILTER_SYNC
-			case (OPERAND_FILTER_COMMIT) :{
-				if (swap == TRUE)
-				{
-					nextInstruction = OPERAND_FILTER_READ_BIAS;
-				}
-			}
-			break; //OPERAND_FILTER_COMMIT
-
-			default:
-			break;
-		} //end of switch. weight FilterInstruction
-
-		return nextInstruction;
-	}
-
-	/**
-	 * @brief      Helper function for matching sparse oeprands
-	 *
-	 * @param[in]  accumulatedBitmaskBytes           Bytes of the accumulated sparse bitgmask of this filter.
-	 * @param[in]  mutualBitmaskBytes      Bytes of the mutual bitmask
-	 * @param[in]  currentStartIndex  The current start index for scanning this filter's bitmask
-	 * @param[in]  currentBufferSize  The current buffer size
-	 * @param      pCurrentBuffer     Pointer to the current buffer
-	 * @param[out]      pNewBlock          Pointer to the content of the new TB block
-	 * @param[out]      pNextBuffer        Pointer to the current next buffer
-	 * @param[out]     pMacOutput         Pointer to the content of MacOutput block
-	 * @param[out]      pMacValid          Pointer to flag that indicates whether the flag is valid
-	 * @param[out]      pNextStartIndex    Pointer to the scan start index for the bitmask
-	 * @param[out]      pNextBufferSize    Pointer to the new buffer size
-	 */
-	void filterSparseOperand (
-			t_accum_bitmask *accumulatedBitmaskBytes,
-			t_bitmask *mutualBitmaskBytes,
-			t_start currentStartIndex,
-			t_buffer_size currentBufferSize,
-			t_pe_buffer* pCurrentBuffer,
-			t_transfer_block* pNewBlock,
-
-			t_pe_buffer* pNextBuffer,
-			t_simd_operand* pMacOutput,
-			t_flag* pMacValid,
-			t_start* pNextStartIndex,
-			t_buffer_size* pNextBufferSize
-		)
-	{
-		unsigned short maskFilterOutput = smallBufferMaskFilter (
-			//Bytes of the mutual mask
-			(*mutualBitmaskBytes).bytes[0],
-			#if (NUM_BITMASK_BYTES > 1)
-				(*mutualBitmaskBytes).bytes[1],
-			#else
-				0,
-			#endif
-			#if (NUM_BITMASK_BYTES > 2)
-				(*mutualBitmaskBytes).bytes[2],
-			#else
-				0,
-			#endif
-			#if (NUM_BITMASK_BYTES > 3)
-				(*mutualBitmaskBytes).bytes[3],
-			#else
-				0,
-			#endif
-			#if (NUM_BITMASK_BYTES > 4)
-				(*mutualBitmaskBytes).bytes[4],
-			#else
-				0,
-			#endif
-			#if (NUM_BITMASK_BYTES > 5)
-				(*mutualBitmaskBytes).bytes[5],
-			#else
-				0,
-			#endif
-			#if (NUM_BITMASK_BYTES > 6)
-				(*mutualBitmaskBytes).bytes[6],
-			#else
-				0,
-			#endif
-			#if (NUM_BITMASK_BYTES > 7)
-				(*mutualBitmaskBytes).bytes[7],
-			#else
-				0,
-			#endif
-
-			//Bytes of the accumulated bitmask
-			//Might not need all of them
-			(*accumulatedBitmaskBytes).bytes[0],
-			#if (NUM_ACCUM_BITMASK_BYTES > 1)
-				(*accumulatedBitmaskBytes).bytes[1],
-			#else
-				0,
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 2)
-				(*accumulatedBitmaskBytes).bytes[2],
-			#else
-				0,
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 3)
-				(*accumulatedBitmaskBytes).bytes[3],
-			#else
-				0,
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 4)
-				(*accumulatedBitmaskBytes).bytes[4],
-			#else
-				0,
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 5)
-				(*accumulatedBitmaskBytes).bytes[5],
-			#else
-				0,
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 6)
-				(*accumulatedBitmaskBytes).bytes[6],
-			#else
-				0,
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 7)
-				(*accumulatedBitmaskBytes).bytes[7],
-			#else
-				0,
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 8)
-				(*accumulatedBitmaskBytes).bytes[8],
-			#else
-				0,
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 9)
-				(*accumulatedBitmaskBytes).bytes[9],
-			#else
-				0,
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 10)
-				(*accumulatedBitmaskBytes).bytes[10],
-			#else
-				0,
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 11)
-				(*accumulatedBitmaskBytes).bytes[11],
-			#else
-				0,
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 12)
-				(*accumulatedBitmaskBytes).bytes[12],
-			#else
-				0,
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 13)
-				(*accumulatedBitmaskBytes).bytes[13],
-			#else
-				0,
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 14)
-				(*accumulatedBitmaskBytes).bytes[14],
-			#else
-				0,
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 15)
-				(*accumulatedBitmaskBytes).bytes[15],
-			#else
-				0,
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 16)
-				(*accumulatedBitmaskBytes).bytes[16],
-			#else
-				0,
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 17)
-				(*accumulatedBitmaskBytes).bytes[17],
-			#else
-				0,
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 18)
-				(*accumulatedBitmaskBytes).bytes[18],
-			#else
-				0,
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 19)
-				(*accumulatedBitmaskBytes).bytes[19],
-			#else
-				0,
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 20)
-				(*accumulatedBitmaskBytes).bytes[20],
-			#else
-				0,
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 21)
-				(*accumulatedBitmaskBytes).bytes[21],
-			#else
-				0,
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 22)
-				(*accumulatedBitmaskBytes).bytes[22],
-			#else
-				0,
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 23)
-				(*accumulatedBitmaskBytes).bytes[23],
-			#else
-				0,
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 24)
-				(*accumulatedBitmaskBytes).bytes[24],
-			#else
-				0,
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 25)
-				(*accumulatedBitmaskBytes).bytes[25],
-			#else
-				0,
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 26)
-				(*accumulatedBitmaskBytes).bytes[26],
-			#else
-				0,
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 27)
-				(*accumulatedBitmaskBytes).bytes[27],
-			#else
-				0,
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 28)
-				(*accumulatedBitmaskBytes).bytes[28],
-			#else
-				0,
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 29)
-				(*accumulatedBitmaskBytes).bytes[29],
-			#else
-				0,
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 30)
-				(*accumulatedBitmaskBytes).bytes[30],
-			#else
-				0,
-			#endif
-			#if (NUM_ACCUM_BITMASK_BYTES > 31)
-				(*accumulatedBitmaskBytes).bytes[31],
-			#else
-				0,
-			#endif
-
-			currentStartIndex//unsigned char startIndex
-			);
-	
-		#if defined(ARRIA10) || defined(STRATIX10)
-			unsigned short tempRegMaskFilterOutput = __fpga_reg(maskFilterOutput);
-		#else
-			unsigned short tempRegMaskFilterOutput = maskFilterOutput;
-		#endif
-
-		//TODO: Change this if the smallBufferMask implementation changes
-		unsigned char operandSelectMask = tempRegMaskFilterOutput & 0x0FF;
-		*pNextStartIndex = ((tempRegMaskFilterOutput >> 8) & 0x0FF);
-
-		ulong4 bufferUpdateBus = smallBufferMacBufferUpdate(
-				operandSelectMask, //inputSelectBitmask
-
-				//Bytes of the input buffer
-				//unsigned char inputTransferBlock0,
-				(*pNewBlock).values[0],
-				//unsigned char inputTransferBlock1,
-				#if (NUM_SIMD_WORDS > 1)
-					(*pNewBlock).values[1],
-				#else
-					0,
-				#endif
-				//unsigned char inputTransferBlock2,
-				#if (NUM_SIMD_WORDS > 2)
-					(*pNewBlock).values[2],
-				#else
-					0,
-				#endif
-				//unsigned char inputTransferBlock3,
-				#if (NUM_SIMD_WORDS > 3)
-					(*pNewBlock).values[3],
-				#else
-					0,
-				#endif
-				//unsigned char inputTransferBlock4,
-				#if (NUM_SIMD_WORDS > 4)
-					(*pNewBlock).values[4],
-				#else
-					0,
-				#endif
-				//unsigned char inputTransferBlock3,
-				#if (NUM_SIMD_WORDS > 5)
-					(*pNewBlock).values[5],
-				#else
-					0,
-				#endif
-				//unsigned char inputTransferBlock3,
-				#if (NUM_SIMD_WORDS > 6)
-					(*pNewBlock).values[6],
-				#else
-					0,
-				#endif
-				//unsigned char inputTransferBlock7,
-				#if (NUM_SIMD_WORDS > 7)
-					(*pNewBlock).values[7],
-				#else
-					0,
-				#endif
-
-				//Bytes of the buffer
-				//unsigned char currentBuffer0,
-				(*pCurrentBuffer).values[0],
-				//unsigned char currentBuffer1,
-				#if (NUM_SIMD_WORDS > 1)
-					(*pCurrentBuffer).values[1],
-				#else
-					0,
-				#endif
-				//unsigned char currentBuffer2,
-				#if (NUM_SIMD_WORDS > 2)
-					(*pCurrentBuffer).values[2],
-				#else
-					0,
-				#endif
-				//unsigned char currentBuffer3,
-				#if (NUM_SIMD_WORDS > 3)
-					(*pCurrentBuffer).values[3],
-				#else
-					0,
-				#endif
-				//unsigned char currentBuffer4,
-				#if (NUM_SIMD_WORDS > 4)
-					(*pCurrentBuffer).values[4],
-				#else
-					0,
-				#endif
-				//unsigned char currentBuffer5,
-				#if (NUM_SIMD_WORDS > 5)
-					(*pCurrentBuffer).values[5],
-				#else
-					0,
-				#endif
-				//unsigned char currentBuffer6,
-				#if (NUM_SIMD_WORDS > 6)
-					(*pCurrentBuffer).values[6],
-				#else
-					0,
-				#endif
-				//unsigned char currentBuffer7,
-				#if (NUM_SIMD_WORDS > 7)
-					(*pCurrentBuffer).values[7],
-				#else
-					0,
-				#endif
-
-				(unsigned char) currentBufferSize
-			);
-
-		//TODO: Change the loop boundaries below if the TRANSFER_SIZE of CLUSTER_SIZE changes
-		#pragma unroll
-		for (unsigned char j=0; j<(TRANSFER_SIZE*CLUSTER_SIZE); j++)
-		{
-			(*pMacOutput).values[j] = (bufferUpdateBus.s0 >> (j*8)) & 0x0FF;
-			(*pNextBuffer).values[j] = (bufferUpdateBus.s1 >> (j*8)) & 0x0FF;
-		}
-
-		//Define the following as MASkS!!!!
-		*pMacValid = ((unsigned char) (bufferUpdateBus.s2 >> 8) ) & 0x01;
-		*pNextBufferSize = (unsigned char) bufferUpdateBus.s2;
-
-	}
-#endif //SPARSE_UTILITY
-
-__attribute__((task))
-__attribute__((max_global_work_dim(0)))
-#ifdef FULL_SYSTEM
-__attribute__((num_compute_units(PE_ROWS, PE_COLS)))
-#endif
-__attribute__((autorun))
-__kernel void kernelOperandFilter ()
-{
-	//Obtain kernel location
-	#ifdef FULL_SYSTEM
-		int idx = get_compute_id(1);
-		int idy = get_compute_id(0);
-	#else
-		int idx = 0;
-		int idy = 0;
-	#endif	
-
-	#if defined(EMULATOR) && defined(EMUPRINT)
-		unsigned short countPrint = 0x0;
-	#endif
-
-	//Psum and drain parameters
-	t_accumulator pSum;
-	//unsigned char regMaxTransportID[2];
-	t_flag regIsMaxRow;
-
-	pSum = 0x0 & ACCUM_MASK;
-	regIsMaxRow = 0x0;
-
-	//========Weight filter states=========
-	t_instruction weightFilterInstruction = OPERAND_FILTER_READ_BIAS;
-	//TODO: make the weight buffer size parametrizable
-	t_pe_buffer weightBuffer;
-	t_simd_operand macWeightBuffer;
-	t_accum_bitmask regWeightAccumulatedBitMaskBytes;
-	#pragma unroll
-	for (int i=0; i<NUM_ACCUM_BITMASK_BYTES; i++)
-	{
-		regWeightAccumulatedBitMaskBytes.bytes[i] = 0x0;
-	}
-	t_bitmask regWeightBitmaskBytes;
-	#pragma unroll
-	for (int i=0; i<NUM_BITMASK_BYTES; i++)
-	{
-		regWeightBitmaskBytes.bytes[i] = 0x0;
-	}
-	t_start regWeightWindowStartIndex = 0;
-	t_buffer_size regWeightBufferSize = 0;
-	t_num_tb regNumWeightClusterLeft = 0;
-	t_flag regWeightIsLast = FALSE;
-
-	//=====================================
-	
-
-	//=========Activation filter states===
-	t_instruction activationFilterInstruction = OPERAND_FILTER_READ_BIAS;
-	t_pe_buffer activationBuffer;
-	t_simd_operand macActivationBuffer;
-	t_accum_bitmask regActivationAccumulatedBitMaskBytes;
-	#pragma unroll
-	for (int i=0; i<NUM_ACCUM_BITMASK_BYTES; i++)
-	{
-		regActivationAccumulatedBitMaskBytes.bytes[i] = 0x0;
-	}
-	t_start regActivationWindowStartIndex = 0;
-	t_buffer_size regActivationBufferSize = 0;
-	t_num_tb regNumActivationClusterLeft = 0;
-	t_flag regActivationIsLast = FALSE;
-	//====================================
-	
-	//Mutual bitmask
-	t_bitmask regMutualBitmaskBytes;
-	#pragma unroll
-	for (int i=0; i<NUM_BITMASK_BYTES; i++)
-	{
-		regMutualBitmaskBytes.bytes[i] = 0x0;
-	}
-	t_bitmask regActivationBitmaskBytes;
-	#pragma unroll
-	for (int i=0; i<NUM_BITMASK_BYTES; i++)
-	{
-		regActivationBitmaskBytes.bytes[i] = 0x0;
-	}
-
-	//State logic
-	#pragma ii 1
-	#pragma speculated_iterations 0
-	while (1) {
-		//========Signal declaration and state actions=============
-		t_instruction nextWeightFilterInstruction = weightFilterInstruction;
-		t_transferblock_tagged weightBlock;
-		t_flag validWeightMac = FALSE;
-		t_flag weightTBAvailable = FALSE;
-		t_flag weightWindowDone = FALSE;
-		t_flag weightFilterDone = FALSE; 
-		t_flag weightMaskNew = FALSE;
-
-		t_pe_buffer nextWeightBuffer;
-		t_simd_operand nextMacWeightBuffer;
-		//GOTCHAA!!!!!!
-		#pragma unroll
-		for (unsigned char i=0; i<NUM_SIMD_WORDS; i++)
-		{
-			nextWeightBuffer.values[i] = weightBuffer.values[i];
-			nextMacWeightBuffer.values[i] = macWeightBuffer.values[i];
-		}
-
-
-		t_flag nextWeightIsLast = regWeightIsLast;
-		t_num_tb nextNumWeightClusterLeft = regNumWeightClusterLeft;
-	    t_bitmask nextWeightBitmaskBytes;
-	    #pragma unroll
-		for (int i=0; i<NUM_BITMASK_BYTES; i++)
-		{
-			nextWeightBitmaskBytes.bytes[i] = regWeightBitmaskBytes.bytes[i];
-		}
-		t_start nextWeightWindowIndex = regWeightWindowStartIndex;
-		t_buffer_size nextWeightBufferSize = regWeightBufferSize;
-
-		t_instruction nextActivationFilterInstruction = activationFilterInstruction;
-		t_transferblock_tagged activationBlock;
-		t_flag validActivationMac = FALSE;
-		t_flag activationTBAvailable = FALSE;
-		t_flag activationWindowDone = FALSE;
-		t_flag activationFilterDone = FALSE;
-		t_flag activationMaskNew = FALSE;
-
-		t_pe_buffer nextActivationBuffer;
-		t_simd_operand nextMacActivationBuffer;
-		//GOTCHAA!!!!!!
-		#pragma unroll
-		for (unsigned char i=0; i<NUM_SIMD_WORDS; i++)
-		{
-			nextActivationBuffer.values[i] = activationBuffer.values[i];
-			nextMacActivationBuffer.values[i] = macActivationBuffer.values[i];
-		}
-
-		t_flag nextActivationIsLast = regActivationIsLast;
-		t_num_tb nextNumActivationClusterLeft = regNumActivationClusterLeft;
-		t_bitmask nextActivationBitmaskBytes;
-		#pragma unroll
-		for (int i=0; i<NUM_BITMASK_BYTES; i++)
-		{
-			nextActivationBitmaskBytes.bytes[i] = regActivationBitmaskBytes.bytes[i];
-		}
-		t_start nextActivationWindowIndex = regActivationWindowStartIndex;
-		t_buffer_size nextActivationBufferSize = regActivationBufferSize;
-
-		t_flag commit = FALSE;
-		//GOTTCHA: MUST APPLY THE AND MASK AFTER NEGATION !!!
-		t_flag nextIsMaxRow = regIsMaxRow;
-
-
-		//t_bitmask nextMutualBitmask = regMutualBitmask;
-
-		// #ifdef FULL_SYSTEM
-		// 	EMULATOR_PRINT(("[Op Filter WEIGHT (%d, %d)] LIVE. Current instruction: %#04x \n", idy, idx, (unsigned char) weightFilterInstruction));
-		// #else
-		// 	EMULATOR_PRINT(("[Op Filter WEIGHT] LIVE. Current instruction: %#04x \n", (unsigned char) weightFilterInstruction));
-		// #endif
-
-		//Weight: Read the input channel
-		if ((weightFilterInstruction == OPERAND_FILTER_ACCEPT_MASK) 
-			|| (weightFilterInstruction == OPERAND_FILTER_READ_BIAS) 
-			|| (weightFilterInstruction == OPERAND_FILTER_FILTER))
-		{
-			bool readSuccess = false;
-			#if defined (FULL_SYSTEM)
-				weightBlock = read_channel_nb_intel(
-					channel_dpWeightInput[idy][idx],
-					&readSuccess);
-			#else
-				weightBlock = read_channel_nb_intel(
-					channel_dpWeightInput[0][0],
-					&readSuccess);
-			#endif
-			weightTBAvailable = (readSuccess == true) ? TRUE : FALSE;
-			nextWeightIsLast = FALSE;  //TODO: remove this?
-
-			if (readSuccess == true)
-			{
-				nextWeightIsLast = getIsLast(weightBlock);
-				// if (nextWeightIsLast == TRUE)
-				// {
-				// 	weightFilterDone = TRUE;
-				// }
-
-					EMULATOR_PRINT(("[Op Filter WEIGHT (%d, %d)] Read new weight block. IsLast: %#04x. [0-3]: %#04x %#04x %#04x %#04x Current instruction: %#04x \n\n"
-						,idy, idx, (unsigned char) nextWeightIsLast, 
-						weightBlock.values.values[0],
-						weightBlock.values.values[1],
-						weightBlock.values.values[2],
-						weightBlock.values.values[3],
-						(unsigned char) weightFilterInstruction));
-			}
-		}
-
-		//Activation: read the input channel
-		if ((activationFilterInstruction == OPERAND_FILTER_ACCEPT_MASK)  
-			|| (activationFilterInstruction == OPERAND_FILTER_FILTER))
-		{
-			bool readSuccess = false;
-			#if defined (FULL_SYSTEM)
-				activationBlock = read_channel_nb_intel(
-					channel_dpActivationInput[idy][idx],
-					&readSuccess);
-			#else
-				activationBlock = read_channel_nb_intel(
-					channel_dpActivationInput[0][0],
-					&readSuccess);
-			#endif
-			activationTBAvailable = (readSuccess == true) ? TRUE : FALSE;
-			nextActivationIsLast = FALSE;
-
-			if (readSuccess == true)
-			{
-				nextActivationIsLast = getIsLast(activationBlock);
-				nextIsMaxRow = (getMaxTransferID(activationBlock) == idy) ? TRUE : FALSE;
-				// if (nextActivationIsLast == TRUE)
-				// {
-				// 	activationFilterDone = TRUE;
-				// }
-
-					EMULATOR_PRINT(("[Op Filter ACTIVATION (%d, %d)] Read new activation block. IsLast: %#04x. [0-3]: %#04x %#04x %#04x %#04x Current instruction: %#04x \n\n"
-						,idy, idx, (unsigned char) nextActivationIsLast, 
-						activationBlock.values.values[0],
-						activationBlock.values.values[1],
-						activationBlock.values.values[2],
-						activationBlock.values.values[3],
-						(unsigned char) activationFilterInstruction));
-			}
-
-		}
-
-		/*
-			Weight: new signal update
-		*/
-		if (weightFilterInstruction == OPERAND_FILTER_READ_BIAS)
-		{
-			nextWeightBufferSize = 0x0;
-		}
-		else if (weightFilterInstruction == OPERAND_FILTER_ACCEPT_MASK)
-		{
-			convertTransferBlock2PEBitmask(&nextWeightBitmaskBytes, &weightBlock);
-			//TODO: Try registering the output of pePopCounter
-			unsigned char tempNumClusterLeft = pePopCounter(&nextWeightBitmaskBytes);
-			#if defined(ARRIA10) || defined(STRATIX10)
-				nextNumWeightClusterLeft = __fpga_reg(tempNumClusterLeft);
-			#else
-				nextNumWeightClusterLeft = tempNumClusterLeft;
-			#endif
-			peAccumulateBitmask(&regWeightAccumulatedBitMaskBytes, &nextWeightBitmaskBytes);
-
-			nextWeightWindowIndex = 0x0;
-
-			if (weightTBAvailable == TRUE)
-			{
-				if (nextNumWeightClusterLeft <= 0x0)
-				{
-					weightWindowDone = TRUE;
-				}
-				weightMaskNew = TRUE;
-			}
-		}
-		else if (weightFilterInstruction == OPERAND_FILTER_MASK_SYNC)
-		{
-			weightMaskNew = TRUE;
-			weightTBAvailable = TRUE;
-			if (nextNumWeightClusterLeft <= 0x0)
-			{
-				weightWindowDone = TRUE;
-			}
-		}
-		else if (weightFilterInstruction == OPERAND_FILTER_FILTER)
-		{
-			if (weightTBAvailable == TRUE)
-			{
-				filterSparseOperand (
-						&regWeightAccumulatedBitMaskBytes, //bitmask
-						&regMutualBitmaskBytes, //regMutualBitmask
-						regWeightWindowStartIndex,
-						regWeightBufferSize,
-						&weightBuffer,
-						&(weightBlock.values),
-
-						&nextWeightBuffer,
-						&nextMacWeightBuffer,
-						&validWeightMac,
-						&nextWeightWindowIndex,
-						&nextWeightBufferSize
-					);
-
-				nextNumWeightClusterLeft -= TRANSFER_SIZE;
-
-				if (nextNumWeightClusterLeft <= 0x0)
-				{
-					weightWindowDone = TRUE;
-				}
-
-			}
-		}
-		else if (weightFilterInstruction == OPERAND_FILTER_MAC_SYNC)
-		{
-			if (nextNumWeightClusterLeft <= 0x0)
-			{
-				weightWindowDone = TRUE;
-			}
-
-			validWeightMac = TRUE;
-		}
-		else if (weightFilterInstruction == OPERAND_FILTER_FILTER_SYNC)
-		{
-			weightFilterDone = TRUE;
-
-			//TODO: Check the following line
-			validWeightMac = (regWeightBufferSize > 0) ? TRUE : FALSE;;
-		}
-
-		/*
-			Activation: new signal update
-		*/
-		if (activationFilterInstruction == OPERAND_FILTER_READ_BIAS)
-		{
-			//hack
-			activationTBAvailable = TRUE;
-			nextActivationBufferSize = 0x0;
-		}
-		else if (activationFilterInstruction == OPERAND_FILTER_ACCEPT_MASK)
-		{
-
-			convertTransferBlock2PEBitmask(&nextActivationBitmaskBytes, &activationBlock);
-			//TODO: Try registering the output of pePopCounter
-			unsigned char tempNumClusterLeft = pePopCounter(&nextActivationBitmaskBytes);
-			#if defined(ARRIA10) || defined(STRATIX10)
-				nextNumActivationClusterLeft = __fpga_reg(tempNumClusterLeft);
-			#else
-				nextNumActivationClusterLeft = tempNumClusterLeft;
-			#endif
-
-			peAccumulateBitmask(&regActivationAccumulatedBitMaskBytes, &nextActivationBitmaskBytes);
-
-			nextActivationWindowIndex = 0x0;
-
-			if (activationTBAvailable == TRUE)
-			{
-				if (nextNumActivationClusterLeft <= 0x0)
-				{
-					activationWindowDone = TRUE;
-				}
-				activationMaskNew = TRUE;
-			}
-		}
-		else if (activationFilterInstruction == OPERAND_FILTER_MASK_SYNC)
-		{
-			activationMaskNew = TRUE;
-			activationTBAvailable = TRUE;
-
-			if (nextNumActivationClusterLeft <= 0x0)
-			{
-				activationWindowDone = TRUE;
-			}
-		}
-		else if (activationFilterInstruction == OPERAND_FILTER_FILTER)
-		{
-			if (activationTBAvailable == TRUE)
-			{
-				filterSparseOperand (
-						&regActivationAccumulatedBitMaskBytes, //bitmask
-						&regMutualBitmaskBytes, //regMutualBitmask
-						regActivationWindowStartIndex,
-						regActivationBufferSize,
-						&activationBuffer,
-						&(activationBlock.values),
-
-						&nextActivationBuffer,
-						&nextMacActivationBuffer,
-						&validActivationMac,
-						&nextActivationWindowIndex,
-						&nextActivationBufferSize
-					);
-
-				nextNumActivationClusterLeft -= TRANSFER_SIZE;
-
-				if (nextNumActivationClusterLeft <= 0x0)
-				{
-					activationWindowDone = TRUE;
-				}
-			}
-		}
-		else if (activationFilterInstruction == OPERAND_FILTER_MAC_SYNC)
-		{
-			if (nextNumActivationClusterLeft <= 0x0)
-			{
-				activationWindowDone = TRUE;
-			}
-
-			validActivationMac = TRUE;
-		}
-		else if (activationFilterInstruction == OPERAND_FILTER_FILTER_SYNC)
-		{
-			activationFilterDone = TRUE;
-			//TODO: Check the following line: 
-			validActivationMac =  (regActivationBufferSize > 0) ? TRUE : FALSE;
-		}
-
-		/*
-		 * Mutual bitmask update
-		*/
-		if ((activationMaskNew == TRUE) && (weightMaskNew == TRUE))
-		{
-			#pragma unroll
-			for (int i=0; i<NUM_BITMASK_BYTES; i++)
-			{
-				regMutualBitmaskBytes.bytes[i] = nextActivationBitmaskBytes.bytes[i] & nextWeightBitmaskBytes.bytes[i];
-				EMULATOR_PRINT(("[Op Filter BITMASK(%d, %d)] Byte %d. Activation bitmask byte: %#04x; Weight Bitmask byte: %#04x; Mutual bitmask byte: %#04x, Current ACTIVAION instruction: %#04x \n"
-				,idy, idx, i, (unsigned char) nextActivationBitmaskBytes.bytes[i], (unsigned char) nextWeightBitmaskBytes.bytes[i], (unsigned char) regMutualBitmaskBytes.bytes[i], (unsigned char) activationFilterInstruction));
-			}
-
-		}
-
-		/*
-		 * Performas MAC
-		*/
-		if ( (weightFilterInstruction == OPERAND_FILTER_READ_BIAS) && (weightTBAvailable == TRUE) )
-		{
-			//GOTTCHA: MUST APPLY THE AND MASK AFTER NEGATION !!!
-			pSum = ACCUM_MASK & ((t_accumulator) transferBlock2Bias(weightBlock.values));
-		}
-		else if ( (validActivationMac == TRUE) && (validWeightMac == TRUE))
-		{
-
-			EMULATOR_PRINT(("[Op Filter (%d,%d)] MAC: weight [0-3]: %#04x %#04x %#04x %#04x. act [0-3]: %#04x %#04x %#04x %#04x \n",
-					idy, idx,
-					nextMacWeightBuffer.values[0] & 0xFF, 
-					nextMacWeightBuffer.values[1] & 0xFF,
-					nextMacWeightBuffer.values[2] & 0xFF,
-					nextMacWeightBuffer.values[3] & 0xFF,
-					nextMacActivationBuffer.values[0] & 0xFF, 
-					nextMacActivationBuffer.values[1] & 0xFF,
-					nextMacActivationBuffer.values[2] & 0xFF,
-					nextMacActivationBuffer.values[3] & 0xFF));
-
-			t_accumulator tempPSum = madd(nextMacActivationBuffer, nextMacWeightBuffer);
-			//GOTTCHA: MUST APPLY THE AND MASK AFTER NEGATION !!!
-			pSum += (MULT_MASK & tempPSum);
-		}
-
-		//=====================================
-		
-		/**
-		 * Perform drain transaction
-		 */
-		if ( (weightFilterInstruction == OPERAND_FILTER_COMMIT) 
-			&& (activationFilterInstruction == OPERAND_FILTER_COMMIT)
-			)
-		{
-			t_conv_drain_tagged drainTransportBlock;
-			drainTransportBlock.value = pSum & ACCUM_MASK;
-			drainTransportBlock.sourceRowIDCatIsLast = 
-				(unsigned char) ( ((((unsigned char) idy) & 0x7F) << 0x01) 
-									| (regIsMaxRow & 0x01));
-			bool success = write_channel_nb_intel(
-					channel_drain_conv_local[idy][idx],
-					drainTransportBlock
-					);
-			if (success == true)
-			{
-				EMULATOR_PRINT(("[Op Filter DRAIN (%d, %d)] Sent a value: %#06x\n", idy, idx, (int) drainTransportBlock.value));
-				commit = TRUE;
-			}
-		}
-
-		regIsMaxRow = nextIsMaxRow;
-
-		nextWeightFilterInstruction = sparseOperandFilterStateUpdate (
-				weightFilterInstruction, //current instruction
-				weightTBAvailable, //thisTBAvailable,
-				activationTBAvailable, //otherTBAvailable,
-				weightMaskNew, //thisMaskAvailable
-				activationMaskNew, //otherMaskAvailabe,
-				weightWindowDone, //this window done
-				activationWindowDone, //other window done
-				nextWeightIsLast, //thisLastTB
-				activationFilterDone,
-				validWeightMac,
-				validActivationMac,
-				commit
-			);
-
-		nextActivationFilterInstruction = sparseOperandFilterStateUpdate (
-				activationFilterInstruction, //current instruction
-				activationTBAvailable, //thisTBAvailable,
-				weightTBAvailable, //otherTBAvailable,
-				activationMaskNew, //thisMaskAvaialble
-				weightMaskNew, //otherMaskAvailable
-				activationWindowDone, //thisWindowDone
-				weightWindowDone, //otherWindowDone,
-				nextActivationIsLast, //thisLastTB
-				weightFilterDone,
-				validActivationMac,
-				validWeightMac,
-				commit
-			);
-
-		// #if defined(EMUPRINT)
-		// 	if (countPrint == 0xFFFF)
-		// 	{
-		// 		EMULATOR_PRINT(("[Op Filter WEIGHT (%d, %d)] Current state %#04x.\n", 
-		// 			idy, idx, (unsigned int) weightFilterInstruction));
-		// 		EMULATOR_PRINT(("[Op Filter ACTIVATION (%d, %d)] Current state %#04x.\n", 
-		// 			idy, idx, (unsigned int) activationFilterInstruction));
-		// 		countPrint = 0x0;
-		// 	}
-		// 	else
-		// 	{
-		// 		countPrint++;
-		// 	}
-
-		// 	if (nextActivationFilterInstruction != activationFilterInstruction)
-		// 	{
-		// 		EMULATOR_PRINT(("[Op Filter ACTIVATION State change(%d, %d)] "
-		// 			"Current state %#04x, Next state %#04x.\n", 
-		// 			idy, idx, (unsigned int) activationFilterInstruction, (unsigned int)nextActivationFilterInstruction));
-		// 	}
-
-		// 	if (nextWeightFilterInstruction != weightFilterInstruction)
-		// 	{
-		// 		EMULATOR_PRINT(("[Op Filter WEIGHT State change(%d, %d)] "
-		// 			"Current state %#04x, Next state %#04x.\n", 
-		// 			idy, idx, (unsigned int) weightFilterInstruction, (unsigned int)nextWeightFilterInstruction));
-		// 	}
-		// #endif
-		//========================================
-		
-
-		//==============Update the loop dependent variables====
-		//Weight filter update
-        //EMULATOR_PRINT(("[Op Filter WEIGHT (%d, %d)] Current instruction: %#04x. Next instruction: %#04x\n", idy, idx, (unsigned char) weightFilterInstruction, (unsigned char) nextWeightFilterInstruction));
-		//regWeightBitmask = nextWeightBitmask;
-		regWeightWindowStartIndex = nextWeightWindowIndex;
-		regWeightBufferSize = nextWeightBufferSize;
-		regWeightIsLast = nextWeightIsLast;
-		regNumWeightClusterLeft = nextNumWeightClusterLeft;
-
-		weightFilterInstruction = nextWeightFilterInstruction;
-		#pragma unroll
-		for (unsigned char i=0; i<NUM_SIMD_WORDS; i++)
-		{
-			weightBuffer.values[i] = nextWeightBuffer.values[i];
-			macWeightBuffer.values[i] = nextMacWeightBuffer.values[i];
-		}
-
-		//Activation filter update
-        //EMULATOR_PRINT(("[Op Filter ACTIVATION (%d, %d)] Current instruction: %#04x. Next instruction: %#04x\n", idy, idx, (unsigned char) activationFilterInstruction, (unsigned char) nextActivationFilterInstruction));
-		//regActivationBitmask = nextActivationBitmask;
-		regActivationWindowStartIndex = nextActivationWindowIndex;
-		regActivationBufferSize = nextActivationBufferSize;
-		regActivationIsLast = nextActivationIsLast;
-		regNumActivationClusterLeft = nextNumActivationClusterLeft;
-
-		activationFilterInstruction = nextActivationFilterInstruction;
-		#pragma unroll
-		for (unsigned char i=0; i<NUM_SIMD_WORDS; i++)
-		{
-			activationBuffer.values[i] = nextActivationBuffer.values[i];
-			macActivationBuffer.values[i] = nextMacActivationBuffer.values[i];
-		}
-
-		#pragma unroll
-		for (int i=0; i<NUM_BITMASK_BYTES; i++)
-		{
-			regWeightBitmaskBytes.bytes[i] = nextWeightBitmaskBytes.bytes[i];
-			regActivationBitmaskBytes.bytes[i] = nextActivationBitmaskBytes.bytes[i];
-		}
-
-		
-		//=====================================================
-	} //while
-
-}
-#else //SPARSE_SYSTEM
-
-#define DENSE_PE_INSTRUCTION_READ_BIAS 0X0
-#define DENSE_PE_INSTRUCTION_MAC 0X1
-
-typedef uint2_t t_drain_instruction;
-typedef uint1_t t_dense_pe_instruction;
-typedef uint1_t t_dense_pe_flag;
-
-
-__attribute__((task))
-__attribute__((max_global_work_dim(0)))
-#ifdef FULL_SYSTEM
-__attribute__((num_compute_units(PE_ROWS, PE_COLS)))
-#endif
-__attribute__((autorun))
-__kernel void kernelDensePE ()
-{
-	
-	#ifdef FULL_SYSTEM
-		int idx = get_compute_id(1);
-		int idy = get_compute_id(0);
-	#else
-		int idx = 0;
-		int idy = 0;
-	#endif
-	//====================registers===============
-	//Psum and drain parameters
-	t_accumulator pSum = 0x0 & ACCUM_MASK;
-	//unsigned char regMaxTransportID[2];
-
-
-	//===============Control registers===================
-	t_dense_pe_instruction regInstruction = DENSE_PE_INSTRUCTION_READ_BIAS;
-
-	#pragma ii 1
-	#pragma speculated_iterations 0
-	while (1) {
-		//t_accumulator sigDrainPSum = pSum;
-		t_flag sigIsMaxRow = FALSE;
-
-		t_dense_pe_instruction sigNextInstruction = regInstruction;
-
-		//Access the activation block
-		
-		t_flag sigIsLastBlock = FALSE;
-		t_transfer_block sigActivationTB;
-		if (regInstruction == DENSE_PE_INSTRUCTION_MAC)
-		{
-			t_transferblock_tagged taggedBlock;
-			#if defined (FULL_SYSTEM)
-				taggedBlock = read_channel_intel(
-					channel_dpActivationInput[idy][idx]);
-			#else
-				taggedBlock = read_channel_intel(
-					channel_dpActivationInput[0][0]);
-			#endif
-
-			sigIsLastBlock = getIsLast(taggedBlock);
-            sigIsMaxRow = (getMaxTransferID(taggedBlock) == idy) ? TRUE : FALSE;
-
-            sigActivationTB = taggedBlock.values;
-            EMULATOR_PRINT(("[DENSE PE ACTIVATION (%d, %d)] Read new activation block. IsLast: %#04x. [0-3]: %#04x %#04x %#04x %#04x Current instruction: %#04x \n\n"
-						,idy, idx, (unsigned char) sigIsLastBlock, 
-						sigActivationTB.values[0],
-						sigActivationTB.values[1],
-						sigActivationTB.values[2],
-						sigActivationTB.values[3],
-						(unsigned char) regInstruction));
-		}
-
-		//Access the weight block
-		t_transfer_block sigWeightTB;
-		{
-			t_transferblock_tagged taggedBlock;
-			#if defined (FULL_SYSTEM)
-				taggedBlock = read_channel_intel(
-					channel_dpWeightInput[idy][idx]);
-			#else
-				taggedBlock = read_channel_intel(
-					channel_dpWeightInput[0][0]);
-			#endif
-
-			sigWeightTB = taggedBlock.values;
-			EMULATOR_PRINT(("[DENSE PE WEIGHT (%d, %d)] Read new weight block.[0-3]: %#04x %#04x %#04x %#04x Current instruction: %#04x \n\n"
-						,idy, idx, 
-						sigWeightTB.values[0],
-						sigWeightTB.values[1],
-						sigWeightTB.values[2],
-						sigWeightTB.values[3],
-						(unsigned char) regInstruction));
-		}
-
-		if (regInstruction == DENSE_PE_INSTRUCTION_READ_BIAS)
-		{
-			pSum = ACCUM_MASK & ((t_accumulator) transferBlock2Bias(sigWeightTB));
-			sigNextInstruction = DENSE_PE_INSTRUCTION_MAC;
-		}
-		else //DENSE_PE_INSTRUCTION_MAC
-		{
-			t_simd_operand simdActivation, simdWeight;
-
-			#pragma unroll
-			for (unsigned int i=0; i<NUM_SIMD_WORDS; i++)
-			{
-				simdActivation.values[i] = sigActivationTB.values[i];
-				simdWeight.values[i] = sigWeightTB.values[i];
-			}
-
-			t_accumulator tempPSum = madd(simdActivation, simdWeight);
-			//GOTTCHA: MUST APPLY THE AND MASK AFTER NEGATION !!!
-			pSum += (MULT_MASK & tempPSum);
-
-			if (sigIsLastBlock == TRUE)
-			{
-				sigNextInstruction = DENSE_PE_INSTRUCTION_READ_BIAS;
-
-				t_conv_drain_tagged drainTransportBlock;
-				drainTransportBlock.value = pSum & ACCUM_MASK;
-				drainTransportBlock.sourceRowIDCatIsLast = 
-					(unsigned char) ( ((((unsigned char) idy) & 0x7F) << 0x01) 
-										| (sigIsMaxRow & 0x01));
-				write_channel_intel(
-						channel_drain_conv_local[idy][idx],
-						drainTransportBlock
-						);
-				EMULATOR_PRINT(("[DENSE PE DRAIN (%d, %d)] Sent a value. %#06x \n", idy, idx, drainTransportBlock.value));
-			}
-		}
-
-		regInstruction = sigNextInstruction;
-
-	} // while-loop
-
-}
-#endif //SPARSE SYSTEM
-
-//#define STATE_DRAIN_TRANSPORT_SYNC 0x0
-#define STATE_DRAIN_TRANSPORT_DRAIN_SELF 0X0
-#define STATE_DRAIN_TRANSPORT_DRAIN_OTHERS 0x1
-
-typedef uint1_t t_drain_state;
-
-__attribute__((task))
-__attribute__((max_global_work_dim(0)))
-#ifdef FULL_SYSTEM
-__attribute__((num_compute_units(PE_ROWS, PE_COLS)))
-#endif
-__attribute__((autorun))
-__kernel void kernelDrainTransport ()
-{
-	//Obtain kernel location
-	#ifdef FULL_SYSTEM
-		int idx = get_compute_id(1);
-		int idy = get_compute_id(0);
-	#else
-		int idx = 0;
-		int idy = 0;
-	#endif	
-
-	#if defined(EMULATOR) && defined(EMUPRINT)
-		unsigned short countPrint = 0x0;
-	#endif
-
-	/**
-	 * Registers
-	 */
-	t_drain_state regDrainState = (idy==0) ? 
-		STATE_DRAIN_TRANSPORT_DRAIN_SELF : STATE_DRAIN_TRANSPORT_DRAIN_OTHERS;
-	t_conv_drain_tagged regDrainPacket;
-
-
-	#pragma ii 1
-	#pragma speculated_iterations 0
-	while (1)
-	{
-		/**
-		 * 	Local signals
-		 */
-		t_drain_state nextDrainState = regDrainState;
-
-		t_conv_drain_tagged sigDrainPacket;
-
-		/**
-		 * Data path
-		 */
-		if (regDrainState == STATE_DRAIN_TRANSPORT_DRAIN_SELF)
-		{
-			sigDrainPacket = read_channel_intel(
-					channel_drain_conv_local[idy][idx]
-				);
-		} //if (drainState == STATE_DRAIN_TRANSPORT_DRAIN_SELF)
-		else //(regDrainState == STATE_DRAIN_TRANSPORT_DRAIN_OTHERS)
-		{
-			if (idy > 0)
-			{
-				sigDrainPacket = read_channel_intel(
-						channel_drain_conv[idy-1][idx]
-					);
-			}
-		} //else if (drainState == STATE_DRAIN_TRANSPORT_DRAIN_OTHERS)
-
-
-		write_channel_intel(
-				channel_drain_conv[idy][idx],
-				sigDrainPacket
-			);
-
-		/**
-		 * State update
-		 *  #define STATE_DRAIN_TRANSPORT_DRAIN_SELF 0X0
-			#define STATE_DRAIN_TRANSPORT_SEND_SELF_RETRY 0X1
-			#define STATE_DRAIN_TRANSPORT_DRAIN_OTHERS 0x2
-			#define STATE_DRAIN_TRANSPORT_SEND_OTHERS_RETRY 0x3
-		 */
-		switch (regDrainState) {
-			case STATE_DRAIN_TRANSPORT_DRAIN_SELF: {
-				if (idy == 0)
-				{
-					nextDrainState = STATE_DRAIN_TRANSPORT_DRAIN_SELF;
-				}
-				else
-				{
-					nextDrainState = STATE_DRAIN_TRANSPORT_DRAIN_OTHERS;
-				}
-			}	
-			break; //STATE_DRAIN_TRANSPORT_DRAIN_SELF
-			case STATE_DRAIN_TRANSPORT_DRAIN_OTHERS: {
-				nextDrainState = STATE_DRAIN_TRANSPORT_DRAIN_OTHERS;
-				unsigned char isLast = sigDrainPacket.sourceRowIDCatIsLast & 0x01;
-				unsigned char sourceRowID = (sigDrainPacket.sourceRowIDCatIsLast >> 0x01) & 0x07F;
-				if ((isLast == FALSE) && (sourceRowID == (idy-1)))
-				{
-					nextDrainState = STATE_DRAIN_TRANSPORT_DRAIN_SELF;
-				}
-			}	
-			break; //STATE_DRAIN_TRANSPORT_DRAIN_SELF
-			default:
-			break;
-		} //switch (regDrainState)
-
-
-		/**
-		 * Register updates
-		 */
-		regDrainState = nextDrainState;
-	}
-} //kernelDrainTransport
-#endif //PE_SYSTEM
 

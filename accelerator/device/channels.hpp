@@ -11,14 +11,14 @@
 //channel t_transferblock_tagged channel_weightInput __attribute__((depth(1)));
 //channel t_transferblock_tagged channel_weightOutput __attribute__((depth(1)));
 
-channel t_transferblock_tagged channel_activation[PE_ROWS][PE_COLS]  __attribute__((depth(0)));
-channel t_transferblock_tagged channel_weight[PE_ROWS][PE_COLS]  __attribute__((depth(0)));
+channel t_transferblock_tagged channel_activation[PE_ROWS][PE_COLS]  __attribute__((depth(1)));
+channel t_pe_w_block channel_weight[PE_ROWS][PE_COLS]  __attribute__((depth(1)));
 
 //channel t_accumulator channel_drainInput __attribute__((depth(1)));
 //channel t_accumulator channel_drainOutput __attribute__((depth(1)));
 
-channel t_conv_drain_tagged channel_drain_conv[PE_ROWS][PE_COLS] __attribute__((depth(1)));
-channel t_conv_drain_tagged channel_drain_conv_local[PE_ROWS][PE_COLS] __attribute__((depth(1)));
+channel t_conv_drain_multiple_tagged channel_drain_conv[PE_ROW_GROUPS][PE_COLS] __attribute__((depth(1)));
+channel t_conv_drain_multiple_tagged channel_drain_conv_local[PE_ROW_GROUPS][PE_COLS] __attribute__((depth(1)));
 channel unsigned char channel_drain_token[PE_ROWS][PE_COLS] __attribute__((depth(1)));
 
 #if defined(MISC_ENGINE)
@@ -32,7 +32,7 @@ channel t_misc_control_packet channel_misc_instruction_local[MISC_COLS] __attrib
 #ifdef PE_SYSTEM
 
 
-channel t_transferblock_tagged channel_dpWeightInput[PE_ROWS][PE_COLS] __attribute__((depth(CHANNEL_DEPTH)));
+//channel t_transferblock_tagged channel_dpWeightInput[PE_ROWS][PE_COLS] __attribute__((depth(CHANNEL_DEPTH)));
 channel t_transferblock_tagged channel_dpActivationInput[PE_ROWS][PE_COLS] __attribute__((depth(CHANNEL_DEPTH)));
 
 channel t_accumulator channel_peDrainOutput[PE_ROWS][PE_COLS] __attribute__((depth(0)));

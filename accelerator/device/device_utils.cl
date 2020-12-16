@@ -180,6 +180,9 @@ t_bias transferBlock2Bias (t_transfer_block block)
 t_filter_streamer_control dramBlock2FilterStreamerControl (t_weight_dram_block block)
 {
     t_filter_streamer_control control;
+    #if defined(SPW_SYSTEM)
+        control.numNZClustersPerPruneRange = block.transferBlocks[0].indices[0];
+    #endif
     control.numOutputs =
         ( ( ( (unsigned short) (block.transferBlocks[0].values[0]) ) & 0xFF )
             | ( (((unsigned short) (block.transferBlocks[0].values[1])) & 0xFF) << 8));
@@ -197,12 +200,14 @@ t_filter_streamer_control dramBlock2FilterStreamerControl (t_weight_dram_block b
                 | ( (((t_bias) (block.transferBlocks[1].values[1])) & 0xFF) << 8));
 
         control.maxPeCols = (unsigned char) block.transferBlocks[1].values[2];
+        contro.flagIsReal = (unsigned char) block.transferBlocks[1].values[3];
     #else
         control.bias
             = ( ( ( (t_bias) (block.transferBlocks[0].values[4]) ) & 0xFF )
                 | ( (((t_bias) (block.transferBlocks[0].values[5])) & 0xFF) << 8));
 
         control.maxPeCols = (unsigned char) block.transferBlocks[0].values[6];
+        control.flagIsReal = (unsigned char) block.transferBlocks[0].values[7]; 
     #endif
     
     return control;
@@ -211,6 +216,9 @@ t_filter_streamer_control dramBlock2FilterStreamerControl (t_weight_dram_block b
 t_weight_dram_block filterStreamerControl2dramBlock (t_filter_streamer_control control)
 {
     t_weight_dram_block block;
+    #if defined(SPW_SYSTEM)
+        block.transferBlocks[0].indices[0] = control.numNZClustersPerPruneRange;
+    #endif
     block.transferBlocks[0].values[0] = control.numOutputs & 0xFF;
     block.transferBlocks[0].values[1] = ((control.numOutputs >> 8) & 0xFF);
 
@@ -222,11 +230,13 @@ t_weight_dram_block filterStreamerControl2dramBlock (t_filter_streamer_control c
         block.transferBlocks[1].values[1] = ((control.bias >> 8) & 0xFF);
         //block.transferBlocks[2].values[0].cluster_values[0] = control.destinationRow;
         block.transferBlocks[1].values[2] = (char) control.maxPeCols;
+        block.transferBlocks[1].values[3] = (char) control.flagIsReal;
     #else
         block.transferBlocks[0].values[4] = control.bias & 0xFF;
         block.transferBlocks[0].values[5] = ((control.bias >> 8) & 0xFF);
         //block.transferBlocks[2].values[0].cluster_values[0] = control.destinationRow;
         block.transferBlocks[0].values[6] = (char) control.maxPeCols;
+        block.transferBlocks[0].values[7] = (char) control.flagIsReal;
     #endif
 
     return block;
