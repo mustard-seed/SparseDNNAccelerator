@@ -151,13 +151,22 @@ typedef signed short t_bias;
     } t_pe_w_block;
 
     typedef struct __attribute__((packed)) {
-        #if defined(SPW_SYSTEM)
-            char values[PE_SIMD_SIZE * PRUNE_RANGE_IN_CLUSTER * CLUSTER_SIZE];
-        #else
-            char values[PE_SIMD_SIZE * CLUSTER_SIZE];
-        #endif
+        char values[PE_ACTIVATION_BLOCK_SIZE_IN_WORD];
         uint5_t maxTransportID;
     } t_pe_a_block;
+
+
+    // typedef struct {
+    // #if defined(SPW_SYSTEM)
+    //     t_char values[PE_SIMD_SIZE * PRUNE_RANGE_IN_CLUSTER * CLUSTER_SIZE];
+    // #else
+    //     t_char values[PE_SIMD_SIZE * CLUSTER_SIZE];
+    // #endif
+    // } t_activation_transfer_block;
+
+    typedef struct {
+        t_char values [ACTIVATION_BURST_SIZE_BYTE];
+    } t_activation_dram_block;
 #endif
 
 typedef struct {
@@ -168,28 +177,14 @@ typedef struct {
     t_transfer_block transferBlocks[WIDE_SIZE];
 } t_dram_block;
 
-typedef struct {
-        unsigned char bytes[NUM_BITMASK_BYTES];
-} t_bitmask;
 
 typedef struct {
-    #if defined(SPW_SYSTEM)
-        t_char values[PE_SIMD_SIZE * PRUNE_RANGE_IN_CLUSTER * CLUSTER_SIZE];
-    #else
-        t_char values[PE_SIMD_SIZE * CLUSTER_SIZE];
-    #endif
-} t_activation_transfer_block;
-
-typedef struct {
-    t_activation_transfer_block transferBlocks[ACTIVATION_WIDE_SIZE];
-} t_activation_dram_block;
-
-typedef struct {
-    t_char values[PE_SIMD_SIZE * CLUSTER_SIZE];
+   t_char values[PE_SIMD_SIZE * CLUSTER_SIZE];
     #if defined(SPW_SYSTEM)
         t_uchar indices[INDEX_CHAR_ARRAY_SIZE];
     #endif
 } t_weight_transfer_block;
+
 
 typedef struct {
     t_weight_transfer_block transferBlocks[WEIGHT_WIDE_SIZE];
@@ -218,39 +213,23 @@ typedef struct __attribute__((packed)) __attribute__((aligned(64)))
     //Bit [7:4] Input 1 left shift amount
     t_uchar inputShiftAmounts;
 
-    //Arch parameter: Starting index of the input dram block in input 0's memory region
+    //Arch parameter: Starting index of the input activation tensor in input 0's memory region
+    //Address is counted in activation word (i.e.. signed char)
     t_int memBlockStart0;
     //Arch parameter: Starting index of the input dram block in input 1's memory region
+    //Address is counted in activation word (i.e.. signed char)
     t_int memBlockStart1;
 
     //Important: we assume the two input tensors (if there are two) have the exact same input dimensions
     //Arch parameter: Column stride of input activation strips in dram block in both input memory regions
-    t_ushort memBlockColStripStride;
+    //Address is counted in activation word (i.e.. signed char)
+    t_int memBlockColStripStride;
     //Arch parameter: Row stride of input activation strips in dram block in both input memory regions
-    t_ushort memBlockRowStripStride;
+    t_int memBlockRowStripStride;
 
-#if defined(SPARSE_SYSTEM)
-    /*!
-     * If TB memory is needed, then there is only one input
-    */
-    //Arch parameter: Starting index of the strip TB count in the memory
-    t_int memTBCountStart;
-    //Arch parameter: Column stride of input activation strip TB count in the memory
-    t_ushort memTBCountColStride;
-    //Arch parameter: Row stride of input activation strip TB count in the memory
-    t_ushort memTBCountRowStride;
-    //Problem parameter: 
-    //When sending sparse data, These are the number of compression windows in an input group. Used for sending padding
-    //When sending dense data, These are the number of valid TB in a strip
-    //Important: we assume the two input tensors (if there are two) have the exact same input dimensions
-    //Arch parameter: Column stride of input activation strips in dram block in both input memory regions
-    t_ushort numCWOrTBInGroup;
-#else
-    //Important: we assume the two input tensors (if there are two) have the exact same input dimensions
-    //Arch parameter: Column stride of input activation strips in dram block in both input memory regions
+
+    //Problem parameter: Number of PE activation block along the strip
     t_ushort numTBPerStrip;
-#endif
-
 
     //Problem parameter: memory input tile stretched padded height. Includes padding.
     t_uchar tileSPHeight;
@@ -294,32 +273,20 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
     t_uchar memSelectCatSparseFlagCatSyncFlagCatNumActiveCols;
 
     //Arch. parameter: Index of the first dram block of this transfer in memory
+    //Address is counted in terms of the activation word (e.g. signed char)
     t_int memOAStart;
     //Arch. parameter: Group stride in terms of dram block in the output memory region
     //t_uint memOAGroupStride;
-    //Arch. parameter: PE column stride in terms of dram block in the output memory region
+    //Arch. parameter: PE column stride in terms of activation word in the output memory region
     t_uint memOAPEColStride;
-    //Arch. parameter: column stride in terms of dram block in the output memory region
-    t_ushort memOAColStride;
-    //Arch. parameter: row stride in terms of dram block in the output memory region
-    t_ushort memOARowStride;
+    //Arch. parameter: column stride in terms of activation word in the output memory region
+    t_uint memOAColStride;
+    //Arch. parameter: row stride in terms of activation word in the output memory region
+    t_uint memOARowStride;
 
     //Problem parameter: Number of dram blocks per strip 
     //(not including the block used to transfer TB count when processing sparse data)
     t_ushort numNominalDramBlocksPerStrip;
-
-#if defined(SPARSE_SYSTEM)
-    //Arch. parameter: Index of the first TB count element of this transfer in memory
-    t_int memTBStart;
-    //Arch. parameter: group stride in terms of TB count in the TB memory
-    //t_ushort memTBGroupStride;
-    //Arch. parameter: tile stride in terms of TB count in the TB memory.
-    t_ushort memTBPEColStride;
-    //Arch. parameter: column stride in terms of TB count in the TB memory.
-    t_ushort memTBColStride;
-    //Arch. parameter: row stride in terms of TB count in the TB moveremory.
-    t_ushort memTBRowStride;
-#endif
 
     //Problem parameter: Output tile group to drain from   
     //t_uchar numOAGroup; 
@@ -346,8 +313,10 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
     //Arch. parameter: Start of the transfer in the bias memory region
     t_int memBiasStart;
     //Arch. parameter: Start of the transfer in the weight dram_block region
+    //Address is counted in weight dram block
     t_int memWeightStart;
     //Arch. parameter: filter stride in the weight dram block region.
+    //Address is counted in weight dram block
     t_int memWeightFilterStride;
 
     t_uint numTBPerFilter;
@@ -371,7 +340,7 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
     t_uchar kernelSize;
     //Number of streaming instruction for this tile
     t_uint numOutputInstructions;
-    //Column stride of IA strip in IA cache in terms of dram block
+    //Column stride of IA strip in IA cache in terms of DRAM BLOCK
     t_ushort cacheIAStripColStride;
     //Number of output channels in the output group
     t_ushort numOutputChannelsInGroup;
@@ -379,11 +348,6 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
     //Bit[7] For sparse engine use only. Whether the input activation tensor is dense and hence need bitmask padding.
     t_uchar flagPadBitmaskCatNumActiveCols;
 
-    #if defined(SPARSE_SYSTEM)
-        //Partial bitmask for the last compression window in a strip
-        //Only useful when the sparse accelerator is processing dense activation
-        t_uchar partialBitmask[COMPRESSION_WINDOW_SIZE / 8];
-    #endif
 } t_ia_tile_controller_instruction;
 
 //Instructions for the output tile controller
@@ -391,33 +355,37 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
 {
     //Number of planar indices in the output tile
     t_uchar numLocalTilePerColHxW;
-    //Number of channels in the tile, rounded up to a multiple of cluster size
-    t_ushort numRoundedLocalChannels;
-    //Number of compute drain instructions
-    t_ushort numDrainInstructions;
-    //Number of memory transfer instructions
-    t_uchar numGroupsNextLayer;
 
-    //TODO: Change data type to t_ushort
+    //Number of ROUNDED channels per group
+    //rounded to a multiple of ACTIVATION_BURST_SIZE
+    t_ushort numBurstAlignedChannelsPerCurrentGroup;
+
+    //Number of compute drain instructions for one a tile with
+    //TileH x TileW x TileOCPerGroupCurrentLayer elements
+    //Do NOT span over multiple layer!
+    t_ushort numDrainInstructions;
+
     //Number of folds required per group to drain the current tile
+    //One fold refers to a tile of the output tensor with number of channels 
+    //equal or less to the number of PE rows
     t_ushort numFoldsInGroupCurrentLayer;
     //Number of full folds required to drian the current tile
+    //Assertion: no smaller than numFoldsInGroupCurrentLayer - 1
     t_ushort numFullFoldsInCurrentLayer;
     //Number of elements per planar index to drain in the full fold
+    //Assertion: it is divisible by PE_ROWS_IN_GROUP
     t_ushort numActiveElementsInFullFold;
     //Number of elements per planar index to drain in the partial fold
     t_ushort numActiveElementsInPartialFold;
 
-    //Number of channels per group in the next layer
-    t_ushort numLocalChannelsPerCurrentGroup;
-
-    //Number of channels per group in the next layer
-    t_ushort numLocalChannelsPerNextGroup;
+    // //Number of channels per group in the next layer
+    // t_ushort numLocalChannelsPerNextGroup;
 
     //Number of active compute columns
     t_uchar numActiveCols;
 
     //Number of dram blocks that belong to the same group at the same planar index
+    //Only consider one group
     //This should be calculated assuming 100% density.
     t_ushort numNominalDramBlocksPerStrip;
 
@@ -455,12 +423,14 @@ typedef struct __attribute__((aligned(16)))
     //Seen by the misc controller ONLY
     t_ushort numOutputBlocksPerStrip;
 
-    //Bit [2:0] Shift amount
-    //Bit [3] Flag for left/right shift. 0 for right, 1 for left
-    //t_uchar flagLeftShiftCatShiftAmount;
-
-    ////Number of effective values in the final dram block in a group
-    t_uchar numEffectiveValuesInLastOutputBlockInGroup;
+    /*
+        Control bits
+        Relu flag, shift direciton and the number of bits to shift the accumulator value 
+        Bit 5: Enable relu
+        Bit 4: shift direction. 0 for right, 1 for left. 
+        Bit 3:0: from the convolution PE array. Only relevant for loading
+    */
+    t_uchar outputModifierControl;
 
 } t_misc_instruction;
 
@@ -482,7 +452,7 @@ typedef struct __attribute__((packed)) {
     unsigned short numTransferBlocks;
     t_bias bias; //short
     unsigned char maxPeCols; //Number of PE COLS that is activated
-    unsigned char flagIsReal; //Whether this filter row should stream zero padding
+    t_flag flagIsReal; //Whether this filter row should stream zero padding
     #if defined(SPW_SYSTEM)
     unsigned char numNZClustersPerPruneRange;
     #endif
@@ -518,7 +488,7 @@ Data structures that travel on the input activation bus system
 */
 //Raw data packet travelling on the input activation buffer bus
 typedef struct __attribute__((packed)){
-    t_dram_block dramBlock;
+    t_activation_dram_block dramBlock;
 
     //Bit[7]: Is last in strip
     //Bit[6]: Flag for going to misc engine
@@ -539,7 +509,7 @@ typedef struct __attribute__((packed)){
 } t_dram_block_ia_tagged;
 
 typedef struct __attribute__((packed)){
-    t_dram_block dramBlock;
+    t_activation_dram_block dramBlock;
 
     //Only read by the misc engine
     //Bit[3:0] Left shift amount
@@ -549,7 +519,7 @@ typedef struct __attribute__((packed)){
 } t_dram_block_ia_to_misc;
 
 typedef struct __attribute__((packed)){
-    t_dram_block dramBlock;
+    t_activation_dram_block dramBlock;
 
     //Bit[7]: Is last in strip
     //Bit[6]: Flag for going to misc engine
@@ -565,12 +535,15 @@ typedef struct __attribute__((packed)){
 
 typedef struct __attribute__((packed))
 {
+    /**
+     * Address information of the IA cache
+     * counted in units of activation dram block
+     * i.e. char [ACTIVATION_BURST_SIZE_BYTE]
+     */
     unsigned short iaDramBlockAddressBase;
     unsigned short iaDramBlockColStride;
-    #if defined(SPARSE_SYSTEM)
-        unsigned char tbAddressBase;
-    #endif
-    unsigned char maxPeRowID; //Only relevant for sending
+
+    unsigned char maxPeRowGroupID; //Only relevant for sending
 
 
     //Bit 0: Whether to access IA buffer 0 or 1
@@ -586,10 +559,6 @@ typedef struct __attribute__((packed))
     //Number of columns in the transfer command
     unsigned char numStripsCol;
     
-    #if defined(SPARSE_SYSTEM)
-        //Bit mask for the last compression window, which might be incomplete
-        unsigned char partialBitmask[COMPRESSION_WINDOW_SIZE / 8];
-    #endif
 } t_input_buffer_tile_buffer_packet;
 
 
@@ -611,22 +580,16 @@ typedef struct __attribute__((packed))
     //Stride between successive strip
     unsigned short iaStridePerCol;
 
-    //Number of memory transfer instructions, used for draining the cache only
-    unsigned char numGroupsNextLayer;
+    // //Number of memory transfer instructions, used for draining the cache only
+    // unsigned char numGroupsCurrentLayer;
 
-    //Number of channels per group in the next layer, used for draining the cahce only
-    unsigned short numLocalChannelsPerNextGroup;
+    // //Number of channels per group in the next layer, used for draining the cahce only
+    // unsigned short numLocalChannelsPerNextGroup;
 
     //Number of dram blocks to send to the OA mover 
     //over tile W * tile H * num_groups_next_layer
     //Seen by the OA Tee only
     unsigned short numNominalDramBlocksPerOATee;
-
-    #if defined(SPARSE_SYSTEM)
-    //Seen  by the OA Tee only
-    unsigned short numNominalDramBlocksPerStrip;
-    #endif
-
 
     //TODO: Add bit for output access bank
     /*
@@ -657,12 +620,10 @@ typedef struct __attribute__((packed))
     //over tile W * tile H * num_groups_next_layer
     unsigned short numNominalDramBlocksPerOATee;
 
-    #if defined(SPARSE_SYSTEM)
-    unsigned short numNominalDramBlocksPerStrip;
-    #endif
 
     //Bit [3:0] Maximum column ID
     //Bit [5] Flag for sparse draining sparse input (1 for true)
+    //Bit [6] Drainage source. 1: from the MISC units. 0: from the convolution PE array
     unsigned char flagSourceCatFlagSparseFlagMaxColID;
 } t_output_tile_tee_packet;
 
@@ -678,8 +639,14 @@ typedef struct __attribute__((packed))
     //Number of output dram blocks to produce by a MISC engine in a tile plane
     unsigned short numOutputBlocks;
 
-    ////Number of effective values per output block in the tile;
-    t_uchar numEffectiveValuesPerOutputBlock;
+    /*
+        Control bits
+        Relu flag, shift direciton and the number of bits to shift the accumulator value 
+        Bit 5: Enable relu
+        Bit 4: shift direction. 0 for right, 1 for left. 
+        Bit 3:0: from the convolution PE array. Only relevant for loading
+    */
+    t_uchar outputModifierControl;
 
 } t_misc_control_packet;
 
@@ -688,49 +655,54 @@ typedef struct __attribute__((packed))
 Data structures that travel on the output activation bus system
 ===================================================================
 */
-typedef struct __attribute__((packed)) {
-    //TODO: HANDLE MULTI-BYTE MASK
-    t_cluster cluster;
-    //unsigned char numSurvivingClusters;  //Number of surviving data cluster (not including the bitmask) in the window
-    //bool isLastWindowInStrip; //Whether this is the last window in a strip
-
-    //Status bits
-    //Bit 0: Enable sparsification
-    //Bit 1: Is last cluster in the strip
-    //Bit 2: Is last cluster in window
-    unsigned char statusBits;
-} t_cluster_to_compressor;
-//Used to send data to the tee
-typedef struct __attribute__((packed)) {
-    t_cluster cluster;
-    bool isLastInStrip;
-
-} t_output_cluster_tagged;
-
-//Output of the OA coalescer
-typedef struct {
-    t_cluster clusters[NUM_CLUSTER_IN_DRAM_SIZE];
-} t_output_dram_block;
 
 typedef struct __attribute__((packed)) {
-    t_output_dram_block block;
+    t_activation_dram_block dramBlock;
+    t_flag isFromLastColumn;
+} t_output_activation_dram_block_tagged;
+// typedef struct __attribute__((packed)) {
+//     //TODO: HANDLE MULTI-BYTE MASK
+//     t_cluster cluster;
+//     //unsigned char numSurvivingClusters;  //Number of surviving data cluster (not including the bitmask) in the window
+//     //bool isLastWindowInStrip; //Whether this is the last window in a strip
 
-    //Bit 0: Is issued by the last column
-    //Bit 1: Is valid block
-    //Bit 2: Read by sparse only. Is last valid dram block in strip.
-    unsigned char flags;
-    #if defined(SPARSE_SYSTEM)
-    unsigned short clusterCount;
-    #endif 
-} t_output_dram_block_tagged;
+//     //Status bits
+//     //Bit 0: Enable sparsification
+//     //Bit 1: Is last cluster in the strip
+//     //Bit 2: Is last cluster in window
+//     unsigned char statusBits;
+// } t_cluster_to_compressor;
+// //Used to send data to the tee
+// typedef struct __attribute__((packed)) {
+//     t_cluster cluster;
+//     bool isLastInStrip;
 
-typedef struct __attribute__((packed)) {
-    t_output_dram_block outputDramBlock;
-    #if defined(SPARSE_SYSTEM)
-    unsigned short numClustersInStrip;
-    #endif
-    bool isLastInStrip;
-} t_output_coalescer_packet;
+// } t_output_cluster_tagged;
+
+// //Output of the OA coalescer
+// typedef struct {
+//     t_cluster clusters[NUM_CLUSTER_IN_DRAM_SIZE];
+// } t_output_dram_block;
+
+// typedef struct __attribute__((packed)) {
+//     t_output_dram_block block;
+
+//     //Bit 0: Is issued by the last column
+//     //Bit 1: Is valid block
+//     //Bit 2: Read by sparse only. Is last valid dram block in strip.
+//     unsigned char flags;
+//     #if defined(SPARSE_SYSTEM)
+//     unsigned short clusterCount;
+//     #endif 
+// } t_output_dram_block_tagged;
+
+// typedef struct __attribute__((packed)) {
+//     t_output_dram_block outputDramBlock;
+//     #if defined(SPARSE_SYSTEM)
+//     unsigned short numClustersInStrip;
+//     #endif
+//     bool isLastInStrip;
+// } t_output_coalescer_packet;
 #endif
 //#endif
 

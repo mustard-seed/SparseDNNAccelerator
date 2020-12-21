@@ -3,8 +3,8 @@
 //TODO: review this
 t_operand modifyOutput (
 		t_accumulator accumulator,
-        //Bit [2:0] Shift amount
-        //Bit [3] Flag for left/right shift. 0 for right, 1 for left
+        //Bit [3:0] Shift amount
+        //Bit [4] Flag for left/right shift. 0 for right, 1 for left
         unsigned char shiftDirectionCatShiftAmount,
 		uint1_t enableRelu
 		)
@@ -194,7 +194,7 @@ t_filter_streamer_control dramBlock2FilterStreamerControl (t_weight_dram_block b
             | ( (((short) (block.transferBlocks[0].values[3])) & 0xFF) << 8));
 
     //Recover bias
-    #if (NUM_SIMD_WORDS <= 4)
+    #if ((PE_SIMD_SIZE * CLUSTER_SIZE) <= 4)
         control.bias
             = ( ( ( (t_bias) (block.transferBlocks[1].values[0]) ) & 0xFF )
                 | ( (((t_bias) (block.transferBlocks[1].values[1])) & 0xFF) << 8));
@@ -225,7 +225,7 @@ t_weight_dram_block filterStreamerControl2dramBlock (t_filter_streamer_control c
     block.transferBlocks[0].values[2] = control.numTransferBlocks & 0xFF;
     block.transferBlocks[0].values[3] = ((control.numTransferBlocks >> 8) & 0xFF);
 
-    #if (NUM_SIMD_WORDS <= 4)
+    #if ( (PE_SIMD_SIZE * CLUSTER_SIZE) <= 4)
         block.transferBlocks[1].values[0] = control.bias & 0xFF;
         block.transferBlocks[1].values[1] = ((control.bias >> 8) & 0xFF);
         //block.transferBlocks[2].values[0].cluster_values[0] = control.destinationRow;
@@ -337,33 +337,33 @@ signed char getColSPIndex(t_dram_block block)
     
 }
 
-t_output_dram_block clusterCount2OutputDramBlock (unsigned short clusterCount)
-{
-    t_output_dram_block outputDramBlock;
-    outputDramBlock.clusters[0].cluster_values[0] = (char) (clusterCount & 0xFF);
-    #if (CLUSTER_SIZE > 1)
-        outputDramBlock.clusters[0].cluster_values[1] = (char) ((clusterCount >> 8) & 0xFF);
-    #else
-        outputDramBlock.clusters[1].cluster_values[0] = (char) ((clusterCount >> 8) & 0xFF);
-    #endif
-    return outputDramBlock;
-}
+// t_output_dram_block clusterCount2OutputDramBlock (unsigned short clusterCount)
+// {
+//     t_output_dram_block outputDramBlock;
+//     outputDramBlock.clusters[0].cluster_values[0] = (char) (clusterCount & 0xFF);
+//     #if (CLUSTER_SIZE > 1)
+//         outputDramBlock.clusters[0].cluster_values[1] = (char) ((clusterCount >> 8) & 0xFF);
+//     #else
+//         outputDramBlock.clusters[1].cluster_values[0] = (char) ((clusterCount >> 8) & 0xFF);
+//     #endif
+//     return outputDramBlock;
+// }
 
-unsigned short outputDramBlock2ClusterCount (t_output_dram_block outputDramBlock)
-{
-    char countLow = outputDramBlock.clusters[0].cluster_values[0];
-    #if (CLUSTER_SIZE > 1)
-        char countHigh = outputDramBlock.clusters[0].cluster_values[1];
-    #else
-        char countHigh = outputDramBlock.clusters[1].cluster_values[0];
-    #endif
+// unsigned short outputDramBlock2ClusterCount (t_output_dram_block outputDramBlock)
+// {
+//     char countLow = outputDramBlock.clusters[0].cluster_values[0];
+//     #if (CLUSTER_SIZE > 1)
+//         char countHigh = outputDramBlock.clusters[0].cluster_values[1];
+//     #else
+//         char countHigh = outputDramBlock.clusters[1].cluster_values[0];
+//     #endif
 
-    unsigned short count = 
-        ((((t_streamblock_address) countHigh) & 0xFF) << 8)
-        | ((((t_streamblock_address) countLow) & 0xFF));
+//     unsigned short count = 
+//         ((((t_streamblock_address) countHigh) & 0xFF) << 8)
+//         | ((((t_streamblock_address) countLow) & 0xFF));
 
-    return count;
-}
+//     return count;
+// }
 
 unsigned char getIsLast(t_transferblock_tagged blockTagged)
 {

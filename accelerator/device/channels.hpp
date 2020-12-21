@@ -11,8 +11,8 @@
 //channel t_transferblock_tagged channel_weightInput __attribute__((depth(1)));
 //channel t_transferblock_tagged channel_weightOutput __attribute__((depth(1)));
 
-channel t_transferblock_tagged channel_activation[PE_ROWS][PE_COLS]  __attribute__((depth(1)));
-channel t_pe_w_block channel_weight[PE_ROWS][PE_COLS]  __attribute__((depth(1)));
+channel t_pe_a_block channel_activation[PE_ROW_GROUPS][PE_COLS]  __attribute__((depth(CHANNEL_DEPTH)));
+channel t_pe_w_block channel_weight[PE_ROWS][PE_COLS]  __attribute__((depth(CHANNEL_DEPTH)));
 
 //channel t_accumulator channel_drainInput __attribute__((depth(1)));
 //channel t_accumulator channel_drainOutput __attribute__((depth(1)));
@@ -22,7 +22,7 @@ channel t_conv_drain_multiple_tagged channel_drain_conv_local[PE_ROW_GROUPS][PE_
 channel unsigned char channel_drain_token[PE_ROWS][PE_COLS] __attribute__((depth(1)));
 
 #if defined(MISC_ENGINE)
-channel t_accumulator channel_drain_misc[MISC_COLS] __attribute__((depth(0)));
+channel t_output_activation_dram_block_tagged channel_misc_to_oa_tee[MISC_COLS] __attribute__((depth(0)));
 channel t_dram_block_ia_to_misc channel_ia_wide_misc[MISC_COLS] __attribute__((depth(0))); 
 channel t_misc_control_packet channel_misc_instruction[MISC_COLS]  __attribute__((depth(0)));
 channel t_misc_control_packet channel_misc_instruction_local[MISC_COLS] __attribute__((depth(0)));
@@ -33,7 +33,7 @@ channel t_misc_control_packet channel_misc_instruction_local[MISC_COLS] __attrib
 
 
 //channel t_transferblock_tagged channel_dpWeightInput[PE_ROWS][PE_COLS] __attribute__((depth(CHANNEL_DEPTH)));
-channel t_transferblock_tagged channel_dpActivationInput[PE_ROWS][PE_COLS] __attribute__((depth(CHANNEL_DEPTH)));
+//channel t_transferblock_tagged channel_dpActivationInput[PE_ROWS][PE_COLS] __attribute__((depth(CHANNEL_DEPTH)));
 
 channel t_accumulator channel_peDrainOutput[PE_ROWS][PE_COLS] __attribute__((depth(0)));
 #endif //PE_SYSTEM
@@ -86,15 +86,15 @@ Output activation channels coming out of the output buffers
 //channel t_cluster channel_output_buffer_to_compressor[PE_COLS] __attribute__((depth(0)));
 //channel t_output_cluster_tagged channel_output_buffer_to_tee[PE_COLS] __attribute__((depth(0)));
 //channel t_output_cluster_tagged channel_output_buffer_to_tee[PE_COLS] __attribute__((depth(0)));
-#if defined(SPARSE_SYSTEM)
-channel t_cluster_to_compressor channel_output_buffer_to_compressor_data[PE_COLS] __attribute__((depth(0)));
-channel t_output_cluster_tagged channel_compressor_to_coalescer[PE_COLS] __attribute__((depth(0)));
-#else
-channel t_output_cluster_tagged channel_oa_buffer_to_coalescer[PE_COLS] __attribute__((depth(0)));
-#endif
-channel t_output_coalescer_packet channel_coalescer_to_oa_tee[PE_COLS] __attribute__((depth(1)));
-
-channel t_output_dram_block_tagged channel_output_wide[PE_COLS] __attribute__((depth(OA_DRAIN_CHANNEL_DEPTH)));
+// #if defined(SPARSE_SYSTEM)
+// channel t_cluster_to_compressor channel_output_buffer_to_compressor_data[PE_COLS] __attribute__((depth(0)));
+// channel t_output_cluster_tagged channel_compressor_to_coalescer[PE_COLS] __attribute__((depth(0)));
+// #else
+// channel t_output_cluster_tagged channel_oa_buffer_to_coalescer[PE_COLS] __attribute__((depth(0)));
+// #endif
+// channel t_output_coalescer_packet channel_coalescer_to_oa_tee[PE_COLS] __attribute__((depth(1)));
+channel t_output_activation_dram_block_tagged channel_oa_buffer_to_oa_tee[PE_COLS] __attribute__((depth(1)));
+channel t_output_activation_dram_block_tagged channel_output_wide[PE_COLS] __attribute__((depth(OA_DRAIN_CHANNEL_DEPTH)));
 
 /*
  *=========================================================

@@ -70,9 +70,9 @@ unsigned short getTBCount(t_dram_block block);
 
 signed char getColSPIndex(t_dram_block block);
 
-t_output_dram_block clusterCount2OutputDramBlock (unsigned short clusterCount);
+// t_output_dram_block clusterCount2OutputDramBlock (unsigned short clusterCount);
 
-unsigned short outputDramBlock2ClusterCount (t_output_dram_block outputDramBlock);
+// unsigned short outputDramBlock2ClusterCount (t_output_dram_block outputDramBlock);
 
 unsigned char getIsLast(t_transferblock_tagged blockTagged);
 

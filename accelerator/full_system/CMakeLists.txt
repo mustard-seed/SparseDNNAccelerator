@@ -138,6 +138,7 @@ include (${PROJECT_SOURCE_DIR}/aoc.cmake)
 #)
 list (APPEND kernel_files
     ${PROJECT_SOURCE_DIR}/device/sparse_pe_system.cl
+    ${PROJECT_SOURCE_DIR}/device/pe.cl
     ${PROJECT_SOURCE_DIR}/device/device_utils.cl)
 
 list (APPEND header_dirs

@@ -20,10 +20,14 @@
 #include "spw_pe_test_types.hpp"
 #include "device_structures.hpp"
 
-#define EMULATE
+//#define EMULATE
 #define MAX_BUFFER_SIZE_BYTES 65536
 #define SEED 27
+#if defined(EMULATE)
 #define AOCX_FILE_NAME "smallBuffer.aocx"
+#else
+#define AOCX_FILE_NAME "spw_pe_test_harness.aocx"
+#endif
 
 typedef
 std::vector<t_test_weight_host_block, boost::alignment::aligned_allocator<t_test_weight_host_block, aocl_utils_cpp::AOCL_ALIGNMENT>>
@@ -142,7 +146,7 @@ TEST_F(spwTestFixture, test0)
     int numCompressionWindows = 4;
     int numNZClustersInRange = 1;
     t_bias bias = 0x02;
-    int numRepeat = 1;
+    int numRepeat = 10;
 //    int numCompressionWindows = 1;
 //    int numNZClustersInRange = 1;
 //    t_bias bias = 0x02;
