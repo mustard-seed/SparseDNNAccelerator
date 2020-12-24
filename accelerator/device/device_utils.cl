@@ -152,63 +152,70 @@ signed char modifyCharOutput (
     return output;
 }
 
-#ifdef INTELFPGA_CL
-t_transfer_block bias2TransferBlock (t_bias bias)
-{
-    t_transfer_block transferBlock;
-    transferBlock.values[0] = bias & 0x0FF;
-    transferBlock.values[1] = (bias >> 8) & 0x0FF;
-    //transferBlock.values[1].cluster_values[0] = (bias >> 16) & 0xFF;
-    //transferBlock.values[1].cluster_values[1] = (bias >> 24) & 0xFF;
-    return transferBlock;
+// #ifdef INTELFPGA_CL
+// t_transfer_block bias2TransferBlock (t_bias bias)
+// {
+//     t_transfer_block transferBlock;
+//     transferBlock.values[0] = bias & 0x0FF;
+//     transferBlock.values[1] = (bias >> 8) & 0x0FF;
+//     //transferBlock.values[1].cluster_values[0] = (bias >> 16) & 0xFF;
+//     //transferBlock.values[1].cluster_values[1] = (bias >> 24) & 0xFF;
+//     return transferBlock;
 
-}
+// }
 
-t_bias transferBlock2Bias (t_transfer_block block)
-{
-    t_bias bias =
-        ( ((t_bias) block.values[0]) & 0xFF )
-        | (( ((t_bias) block.values[1]) & 0xFF ) << 8);
-        //| (( ((t_accumulator) block.values[1].cluster_values[0]) & 0xFF ) << 16)
-        //| (( ((t_accumulator) block.values[1].cluster_values[1]) & 0xFF ) << 24);
+// t_bias transferBlock2Bias (t_transfer_block block)
+// {
+//     t_bias bias =
+//         ( ((t_bias) block.values[0]) & 0xFF )
+//         | (( ((t_bias) block.values[1]) & 0xFF ) << 8);
+//         //| (( ((t_accumulator) block.values[1].cluster_values[0]) & 0xFF ) << 16)
+//         //| (( ((t_accumulator) block.values[1].cluster_values[1]) & 0xFF ) << 24);
 
-    return (bias & 0xFFFF);
-}
-#endif
+//     return (bias & 0xFFFF);
+// }
+// #endif
 
 #ifdef INTELFPGA_CL
 t_filter_streamer_control dramBlock2FilterStreamerControl (t_weight_dram_block block)
 {
     t_filter_streamer_control control;
     #if defined(SPW_SYSTEM)
-        control.numNZClustersPerPruneRange = block.transferBlocks[0].indices[0];
+        control.numNZClustersPerPruneRange = block.indices[0];
     #endif
     control.numOutputs =
-        ( ( ( (unsigned short) (block.transferBlocks[0].values[0]) ) & 0xFF )
-            | ( (((unsigned short) (block.transferBlocks[0].values[1])) & 0xFF) << 8));
+        ( ( ( (unsigned short) (block.values[0]) ) & 0xFF )
+            | ( (((unsigned short) (block.values[1])) & 0xFF) << 8));
 
     //control.destinationRow 
     //    = block.transferBlocks[2].values[0].cluster_values[0];
     control.numTransferBlocks
-        = ( ( ( (short) (block.transferBlocks[0].values[2]) ) & 0xFF )
-            | ( (((short) (block.transferBlocks[0].values[3])) & 0xFF) << 8));
+        = ( ( ( (short) (block.values[2]) ) & 0xFF )
+            | ( (((short) (block.values[3])) & 0xFF) << 8));
+
+    control.bias
+            = ( ( ( (t_bias) (block.values[4]) ) & 0xFF )
+                | ( (((t_bias) (block.values[5])) & 0xFF) << 8));
+
+    control.maxPeCols = (unsigned char) block.values[6];
+    control.flagIsReal = (unsigned char) block.values[7]; 
 
     //Recover bias
-    #if ((PE_SIMD_SIZE * CLUSTER_SIZE) <= 4)
-        control.bias
-            = ( ( ( (t_bias) (block.transferBlocks[1].values[0]) ) & 0xFF )
-                | ( (((t_bias) (block.transferBlocks[1].values[1])) & 0xFF) << 8));
+    // #if ((PE_SIMD_SIZE * CLUSTER_SIZE) <= 4)
+    //     control.bias
+    //         = ( ( ( (t_bias) (block.transferBlocks[1].values[0]) ) & 0xFF )
+    //             | ( (((t_bias) (block.transferBlocks[1].values[1])) & 0xFF) << 8));
 
-        control.maxPeCols = (unsigned char) block.transferBlocks[1].values[2];
-        contro.flagIsReal = (unsigned char) block.transferBlocks[1].values[3];
-    #else
-        control.bias
-            = ( ( ( (t_bias) (block.transferBlocks[0].values[4]) ) & 0xFF )
-                | ( (((t_bias) (block.transferBlocks[0].values[5])) & 0xFF) << 8));
+    //     control.maxPeCols = (unsigned char) block.transferBlocks[1].values[2];
+    //     contro.flagIsReal = (unsigned char) block.transferBlocks[1].values[3];
+    // #else
+    //     control.bias
+    //         = ( ( ( (t_bias) (block.transferBlocks[0].values[4]) ) & 0xFF )
+    //             | ( (((t_bias) (block.transferBlocks[0].values[5])) & 0xFF) << 8));
 
-        control.maxPeCols = (unsigned char) block.transferBlocks[0].values[6];
-        control.flagIsReal = (unsigned char) block.transferBlocks[0].values[7]; 
-    #endif
+    //     control.maxPeCols = (unsigned char) block.transferBlocks[0].values[6];
+    //     control.flagIsReal = (unsigned char) block.transferBlocks[0].values[7]; 
+    // #endif
     
     return control;
 }
@@ -217,27 +224,33 @@ t_weight_dram_block filterStreamerControl2dramBlock (t_filter_streamer_control c
 {
     t_weight_dram_block block;
     #if defined(SPW_SYSTEM)
-        block.transferBlocks[0].indices[0] = control.numNZClustersPerPruneRange;
+        block.indices[0] = control.numNZClustersPerPruneRange;
     #endif
-    block.transferBlocks[0].values[0] = control.numOutputs & 0xFF;
-    block.transferBlocks[0].values[1] = ((control.numOutputs >> 8) & 0xFF);
+    block.values[0] = control.numOutputs & 0xFF;
+    block.values[1] = ((control.numOutputs >> 8) & 0xFF);
 
-    block.transferBlocks[0].values[2] = control.numTransferBlocks & 0xFF;
-    block.transferBlocks[0].values[3] = ((control.numTransferBlocks >> 8) & 0xFF);
+    block.values[2] = control.numTransferBlocks & 0xFF;
+    block.values[3] = ((control.numTransferBlocks >> 8) & 0xFF);
 
-    #if ( (PE_SIMD_SIZE * CLUSTER_SIZE) <= 4)
-        block.transferBlocks[1].values[0] = control.bias & 0xFF;
-        block.transferBlocks[1].values[1] = ((control.bias >> 8) & 0xFF);
-        //block.transferBlocks[2].values[0].cluster_values[0] = control.destinationRow;
-        block.transferBlocks[1].values[2] = (char) control.maxPeCols;
-        block.transferBlocks[1].values[3] = (char) control.flagIsReal;
-    #else
-        block.transferBlocks[0].values[4] = control.bias & 0xFF;
-        block.transferBlocks[0].values[5] = ((control.bias >> 8) & 0xFF);
-        //block.transferBlocks[2].values[0].cluster_values[0] = control.destinationRow;
-        block.transferBlocks[0].values[6] = (char) control.maxPeCols;
-        block.transferBlocks[0].values[7] = (char) control.flagIsReal;
-    #endif
+    block.values[4] = control.bias & 0xFF;
+    block.values[5] = ((control.bias >> 8) & 0xFF);
+    //block.transferBlocks[2].values[0].cluster_values[0] = control.destinationRow;
+    block.values[6] = (char) control.maxPeCols;
+    block.values[7] = (char) control.flagIsReal;
+
+    // #if ( (PE_SIMD_SIZE * CLUSTER_SIZE) <= 4)
+    //     block.transferBlocks[1].values[0] = control.bias & 0xFF;
+    //     block.transferBlocks[1].values[1] = ((control.bias >> 8) & 0xFF);
+    //     //block.transferBlocks[2].values[0].cluster_values[0] = control.destinationRow;
+    //     block.transferBlocks[1].values[2] = (char) control.maxPeCols;
+    //     block.transferBlocks[1].values[3] = (char) control.flagIsReal;
+    // #else
+    //     block.transferBlocks[0].values[4] = control.bias & 0xFF;
+    //     block.transferBlocks[0].values[5] = ((control.bias >> 8) & 0xFF);
+    //     //block.transferBlocks[2].values[0].cluster_values[0] = control.destinationRow;
+    //     block.transferBlocks[0].values[6] = (char) control.maxPeCols;
+    //     block.transferBlocks[0].values[7] = (char) control.flagIsReal;
+    // #endif
 
     return block;
 }
@@ -268,74 +281,74 @@ unsigned char generateOutputModifier (unsigned char numBitsToRightShift, unsigne
 }
 
 
-t_dram_block transferBlockCount2DramBlock (t_streamblock_address transferBlockCount)
-{
-    t_dram_block dramBlock;
-    dramBlock.transferBlocks[0].values[0] = (char) (transferBlockCount & 0xFF);
-    dramBlock.transferBlocks[0].values[1] = (char) ((transferBlockCount >> 8) & 0xFF);
+// t_dram_block transferBlockCount2DramBlock (t_streamblock_address transferBlockCount)
+// {
+//     t_dram_block dramBlock;
+//     dramBlock.transferBlocks[0].values[0] = (char) (transferBlockCount & 0xFF);
+//     dramBlock.transferBlocks[0].values[1] = (char) ((transferBlockCount >> 8) & 0xFF);
 
-    return dramBlock;
-}
+//     return dramBlock;
+// }
 
-t_streamblock_address dramBlock2TransferBlockCount (t_dram_block dramBlock)
-{
-    char countLow = dramBlock.transferBlocks[0].values[0];
-    char countHigh = dramBlock.transferBlocks[0].values[1];
+// t_streamblock_address dramBlock2TransferBlockCount (t_dram_block dramBlock)
+// {
+//     char countLow = dramBlock.transferBlocks[0].values[0];
+//     char countHigh = dramBlock.transferBlocks[0].values[1];
 
-    t_streamblock_address count = 
-        ((((t_streamblock_address) countHigh) & 0xFF) << 8)
-        | ((((t_streamblock_address) countLow) & 0xFF));
+//     t_streamblock_address count = 
+//         ((((t_streamblock_address) countHigh) & 0xFF) << 8)
+//         | ((((t_streamblock_address) countLow) & 0xFF));
 
-    return count;
-}
+//     return count;
+// }
 
-t_dram_block iaMetadata2DramBlock (unsigned short tbCount, unsigned char colSPWidth, unsigned char colSPStride, signed char iColInSPTile)
-{
-    t_dram_block dramBlock;
-    dramBlock.transferBlocks[0].values[0] = (signed char) (tbCount & 0xFF);
-    dramBlock.transferBlocks[0].values[1] = (signed char) ((tbCount >> 8) & 0x0FF);
-    dramBlock.transferBlocks[0].values[2] = (signed char) colSPWidth;
-    dramBlock.transferBlocks[0].values[3] = (signed char) colSPStride;
-#if (WIDE_SIZE >= 2)
-    dramBlock.transferBlocks[1].values[0] = (signed char) iColInSPTile;
-#else
-    dramBlock.transferBlocks[0].values[4] = (signed char) iColInSPTile;
-#endif
+// t_dram_block iaMetadata2DramBlock (unsigned short tbCount, unsigned char colSPWidth, unsigned char colSPStride, signed char iColInSPTile)
+// {
+//     t_dram_block dramBlock;
+//     dramBlock.transferBlocks[0].values[0] = (signed char) (tbCount & 0xFF);
+//     dramBlock.transferBlocks[0].values[1] = (signed char) ((tbCount >> 8) & 0x0FF);
+//     dramBlock.transferBlocks[0].values[2] = (signed char) colSPWidth;
+//     dramBlock.transferBlocks[0].values[3] = (signed char) colSPStride;
+// #if (WIDE_SIZE >= 2)
+//     dramBlock.transferBlocks[1].values[0] = (signed char) iColInSPTile;
+// #else
+//     dramBlock.transferBlocks[0].values[4] = (signed char) iColInSPTile;
+// #endif
 
-    return dramBlock;
-}
+//     return dramBlock;
+// }
 
-unsigned char getColSPWidth(t_dram_block block)
-{
-    return block.transferBlocks[0].values[2];
-}
+// unsigned char getColSPWidth(t_dram_block block)
+// {
+//     return block.transferBlocks[0].values[2];
+// }
 
-unsigned char getColSPStride(t_dram_block block)
-{
-    return block.transferBlocks[0].values[3];
-}
+// unsigned char getColSPStride(t_dram_block block)
+// {
+//     return block.transferBlocks[0].values[3];
+// }
 
-unsigned short getTBCount(t_dram_block block)
-{
-    char countLow = block.transferBlocks[0].values[0];
-    char countHigh = block.transferBlocks[0].values[1];
+// unsigned short getTBCount(t_dram_block block)
+// {
+//     char countLow = block.transferBlocks[0].values[0];
+//     char countHigh = block.transferBlocks[0].values[1];
 
-    t_streamblock_address count = 
-        ((((unsigned short) countHigh) & 0xFF) << 8)
-        | ((((unsigned short) countLow) & 0xFF));
+//     t_streamblock_address count = 
+//         ((((unsigned short) countHigh) & 0xFF) << 8)
+//         | ((((unsigned short) countLow) & 0xFF));
 
-    return count;
-}
+//     return count;
+// }
 
-signed char getColSPIndex(t_dram_block block)
-{
-#if (WIDE_SIZE >= 2)
-    return block.transferBlocks[1].values[0];
-#else
-    return block.transferBlocks[0].values[4];
-#endif
+// signed char getColSPIndex(t_dram_block block)
+// {
+// #if (WIDE_SIZE >= 2)
+//     return block.transferBlocks[1].values[0];
+// #else
+//     return block.transferBlocks[0].values[4];
+// #endif
     
-}
+// }
 
 // t_output_dram_block clusterCount2OutputDramBlock (unsigned short clusterCount)
 // {
@@ -365,39 +378,39 @@ signed char getColSPIndex(t_dram_block block)
 //     return count;
 // }
 
-unsigned char getIsLast(t_transferblock_tagged blockTagged)
-{
-    return (((blockTagged.isLastConcatMaxTransportID) >> 7) & 0x01);
-}
+// unsigned char getIsLast(t_transferblock_tagged blockTagged)
+// {
+//     return (((blockTagged.isLastConcatMaxTransportID) >> 7) & 0x01);
+// }
 
-unsigned char getMaxTransferID(t_transferblock_tagged blockTagged)
-{
-    return (blockTagged.isLastConcatMaxTransportID & 0x07F);
-}
+// unsigned char getMaxTransferID(t_transferblock_tagged blockTagged)
+// {
+//     return (blockTagged.isLastConcatMaxTransportID & 0x07F);
+// }
 
-void setIsLast (t_transferblock_tagged* pBlockTagged, unsigned char isLast)
-{
-    pBlockTagged->isLastConcatMaxTransportID &= 0x07F;
-    pBlockTagged->isLastConcatMaxTransportID |= ((unsigned char)((isLast << 7) & 0x080));
-}
+// void setIsLast (t_transferblock_tagged* pBlockTagged, unsigned char isLast)
+// {
+//     pBlockTagged->isLastConcatMaxTransportID &= 0x07F;
+//     pBlockTagged->isLastConcatMaxTransportID |= ((unsigned char)((isLast << 7) & 0x080));
+// }
 
-void setMaxTransferID (t_transferblock_tagged* pBlockTagged, unsigned char maxTransferID)
-{
-    pBlockTagged->isLastConcatMaxTransportID &= 0x080;
-    pBlockTagged->isLastConcatMaxTransportID |= ((unsigned char)(maxTransferID & 0x07F));
-}
+// void setMaxTransferID (t_transferblock_tagged* pBlockTagged, unsigned char maxTransferID)
+// {
+//     pBlockTagged->isLastConcatMaxTransportID &= 0x080;
+//     pBlockTagged->isLastConcatMaxTransportID |= ((unsigned char)(maxTransferID & 0x07F));
+// }
 
-void initialize_dramblock(t_dram_block* pDramBlock)
-{
-    #pragma unroll
-    for (int itb=0; itb<WIDE_SIZE; itb++)
-    {
-        #pragma unroll
-        for (int iVal=0; iVal<(TRANSFER_SIZE*CLUSTER_SIZE); iVal++)
-        {
-            pDramBlock->transferBlocks[itb].values[iVal] = 0x0;
-        }
-    }
-}
+// void initialize_dramblock(t_dram_block* pDramBlock)
+// {
+//     #pragma unroll
+//     for (int itb=0; itb<WIDE_SIZE; itb++)
+//     {
+//         #pragma unroll
+//         for (int iVal=0; iVal<(TRANSFER_SIZE*CLUSTER_SIZE); iVal++)
+//         {
+//             pDramBlock->transferBlocks[itb].values[iVal] = 0x0;
+//         }
+//     }
+// }
 
 #endif

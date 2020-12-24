@@ -5,17 +5,26 @@
 #include <vector>
 #include "AOCLUtilsCpp/aocl_utils_cpp.hpp"
 
-typedef
-std::vector<t_streamblock_address, boost::alignment::aligned_allocator<t_streamblock_address, aocl_utils_cpp::AOCL_ALIGNMENT>>
-t_aligned_streamblock_address_vector;
+//typedef
+//std::vector<t_streamblock_address, boost::alignment::aligned_allocator<t_streamblock_address, aocl_utils_cpp::AOCL_ALIGNMENT>>
+//t_aligned_streamblock_address_vector;
+
+//typedef
+//std::vector<t_transfer_block, boost::alignment::aligned_allocator<t_transfer_block, aocl_utils_cpp::AOCL_ALIGNMENT>>
+//t_aligned_transfer_block_vector;
+
+//typedef
+//std::vector<t_dram_block, boost::alignment::aligned_allocator<t_dram_block, aocl_utils_cpp::AOCL_ALIGNMENT>>
+//t_aligned_dram_block_vector;
 
 typedef
-std::vector<t_transfer_block, boost::alignment::aligned_allocator<t_transfer_block, aocl_utils_cpp::AOCL_ALIGNMENT>>
-t_aligned_transfer_block_vector;
+std::vector<t_char, boost::alignment::aligned_allocator<t_char, aocl_utils_cpp::AOCL_ALIGNMENT>>
+t_aligned_activation_vector;
 
 typedef
-std::vector<t_dram_block, boost::alignment::aligned_allocator<t_dram_block, aocl_utils_cpp::AOCL_ALIGNMENT>>
-t_aligned_dram_block_vector;
+std::vector<t_weight_dram_block, boost::alignment::aligned_allocator<t_weight_dram_block, aocl_utils_cpp::AOCL_ALIGNMENT>>
+t_aligned_weight_vector;
+
 
 typedef
 std::vector<t_ia_mover_instruction, boost::alignment::aligned_allocator<t_ia_mover_instruction, aocl_utils_cpp::AOCL_ALIGNMENT>>

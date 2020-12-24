@@ -39,9 +39,9 @@ signed char modifyCharOutput (
 		);
 
 #ifdef INTELFPGA_CL
-t_transfer_block bias2TransferBlock (t_bias bias);
+// t_transfer_block bias2TransferBlock (t_bias bias);
 
-t_bias transferBlock2Bias (t_transfer_block block);
+// t_bias transferBlock2Bias (t_transfer_block block);
 
 t_filter_streamer_control dramBlock2FilterStreamerControl (t_weight_dram_block block);
 
@@ -56,33 +56,33 @@ unsigned char outputModifier2EnableSparsification (unsigned char outputModifier)
 unsigned char generateOutputModifier (unsigned char numBitsToRightShift, unsigned char enableRelu, unsigned char enableSparse);
 
 
-t_dram_block transferBlockCount2DramBlock (t_streamblock_address transferBlockCount);
+// t_dram_block transferBlockCount2DramBlock (t_streamblock_address transferBlockCount);
 
-t_streamblock_address dramBlock2TransferBlockCount (t_dram_block dramBlock);
+// t_streamblock_address dramBlock2TransferBlockCount (t_dram_block dramBlock);
 
-t_dram_block iaMetadata2DramBlock (unsigned short tbCount, unsigned char colSPWidth, unsigned char colSPStride, signed char iColInSPTile);
+// t_dram_block iaMetadata2DramBlock (unsigned short tbCount, unsigned char colSPWidth, unsigned char colSPStride, signed char iColInSPTile);
 
-unsigned char getColSPWidth(t_dram_block block);
+// unsigned char getColSPWidth(t_dram_block block);
 
-unsigned char getColSPStride(t_dram_block block);
+// unsigned char getColSPStride(t_dram_block block);
 
-unsigned short getTBCount(t_dram_block block);
+// unsigned short getTBCount(t_dram_block block);
 
-signed char getColSPIndex(t_dram_block block);
+// signed char getColSPIndex(t_dram_block block);
 
 // t_output_dram_block clusterCount2OutputDramBlock (unsigned short clusterCount);
 
 // unsigned short outputDramBlock2ClusterCount (t_output_dram_block outputDramBlock);
 
-unsigned char getIsLast(t_transferblock_tagged blockTagged);
+// unsigned char getIsLast(t_transferblock_tagged blockTagged);
 
-unsigned char getMaxTransferID(t_transferblock_tagged blockTagged);
+// unsigned char getMaxTransferID(t_transferblock_tagged blockTagged);
 
-void setIsLast (t_transferblock_tagged* pBlockTagged, unsigned char isLast);
+// void setIsLast (t_transferblock_tagged* pBlockTagged, unsigned char isLast);
 
-void setMaxTransferID (t_transferblock_tagged* pBlockTagged, unsigned char maxTransferID);
+// void setMaxTransferID (t_transferblock_tagged* pBlockTagged, unsigned char maxTransferID);
 
-void initialize_dramblock(t_dram_block* pDramBlock);
+// void initialize_dramblock(t_dram_block* pDramBlock);
 
 #endif
 

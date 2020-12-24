@@ -3915,33 +3915,26 @@ __kernel void kernelFilterBuffer ()
 					unsigned short dramBlockIndex = (iTransferBlockInFilterWrite >> WEIGHT_WIDE_SIZE_OFFSET);
 					
 					t_weight_dram_block_values values;
-					#if defined(SPW_SYSTEM)
-						t_weight_dram_block_indices indices;
-					#endif
-					#pragma unroll 
-					for (unsigned char iTransfer=0; iTransfer<WEIGHT_WIDE_SIZE; iTransfer++)
-					{
-						#pragma unroll
-						for (unsigned char i=0; i<PE_SIMD_SIZE * CLUSTER_SIZE; i++)
-						{
-							values.values[iTransfer*PE_SIMD_SIZE*CLUSTER_SIZE + i] = 
-								writeBlock.transferBlocks[iTransfer].values[i];
-						}
 
-						#if defined(SPW_SYSTEM)
-							#pragma unroll
-							for (unsigned char i=0; i<INDEX_CHAR_ARRAY_SIZE; i++)
-							{
-								indices.indices[iTransfer*INDEX_CHAR_ARRAY_SIZE + i] = 
-									writeBlock.transferBlocks[iTransfer].indices[i];
-							}
-						#endif
+					#pragma unroll
+					for (unsigned char i=0; i<WEIGHT_BURST_SIZE_VALUE_BYTE; i++)
+					{
+						values.values[i] = writeBlock.values[i];
 					}
 
+
 					cacheNzBlocks[regWriteSide][dramBlockIndex] = values;
+
 					#if defined(SPW_SYSTEM)
+						t_weight_dram_block_indices indices;
+						#pragma unroll
+						for (unsigned char i=0; i<WEIGHT_BURST_SIZE_INDEX_BYTE; i++)
+						{
+							indices.indices[i] = writeBlock.indices[i];
+						}
 						cacheIndices[regWriteSide][dramBlockIndex] = indices;
 					#endif
+						
 					iTransferBlockInFilterWrite += WEIGHT_WIDE_SIZE;
 					if (iTransferBlockInFilterWrite >= maxTransferBlockInFilter[regWriteSide])
 					{

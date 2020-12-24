@@ -169,25 +169,29 @@ typedef signed short t_bias;
     } t_activation_dram_block;
 #endif
 
-typedef struct {
-    t_char values [TRANSFER_SIZE*CLUSTER_SIZE];
-} t_transfer_block;
+// typedef struct {
+//     t_char values [TRANSFER_SIZE*CLUSTER_SIZE];
+// } t_transfer_block;
+
+// typedef struct {
+//     t_transfer_block transferBlocks[WIDE_SIZE];
+// } t_dram_block;
+
+
+// typedef struct {
+//    t_char values[PE_SIMD_SIZE * CLUSTER_SIZE];
+//     #if defined(SPW_SYSTEM)
+//         t_uchar indices[INDEX_CHAR_ARRAY_SIZE];
+//     #endif
+// } t_weight_transfer_block;
+
 
 typedef struct {
-    t_transfer_block transferBlocks[WIDE_SIZE];
-} t_dram_block;
-
-
-typedef struct {
-   t_char values[PE_SIMD_SIZE * CLUSTER_SIZE];
+    //t_weight_transfer_block transferBlocks[WEIGHT_WIDE_SIZE];
+    t_char values [WEIGHT_BURST_SIZE_VALUE_BYTE];
     #if defined(SPW_SYSTEM)
-        t_uchar indices[INDEX_CHAR_ARRAY_SIZE];
+    t_uchar indices[WEIGHT_BURST_SIZE_INDEX_BYTE];
     #endif
-} t_weight_transfer_block;
-
-
-typedef struct {
-    t_weight_transfer_block transferBlocks[WEIGHT_WIDE_SIZE];
 } t_weight_dram_block;
 
 
@@ -459,11 +463,11 @@ typedef struct __attribute__((packed)) {
 
 } t_filter_streamer_control;
 
-typedef struct __attribute__((packed)){
-    t_transfer_block values;
+// typedef struct __attribute__((packed)){
+//     t_transfer_block values;
 
-    unsigned char isLastConcatMaxTransportID;
-} t_transferblock_tagged;
+//     unsigned char isLastConcatMaxTransportID;
+// } t_transferblock_tagged;
 
 typedef struct __attribute__((packed)){
     t_accumulator value;

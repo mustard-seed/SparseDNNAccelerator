@@ -68,7 +68,7 @@ channel t_input_buffer_tile_buffer_packet channel_control_to_ia_buffer_local [PE
 Channels that connected the tees on the input activation bus to the input activation buffers
 =======================================================================================
 */
-channel t_dram_block channel_to_input_buffer_local[PE_COLS] __attribute__((depth(0)));
+// channel t_dram_block channel_to_input_buffer_local[PE_COLS] __attribute__((depth(0)));
 
 /*
 ===================================================================

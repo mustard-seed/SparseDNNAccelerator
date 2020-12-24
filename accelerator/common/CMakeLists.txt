@@ -121,7 +121,9 @@ target_compile_definitions(
 # Library for tensor compression, and instruction generation
 #################################################################
 file(GLOB UTIL_SOURCES
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/floatFixedPointConversion.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/layerInstrucitonGenerator.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/spwTensorCompression.cpp
 )
 
 add_library("data_instruction_gen" ${UTIL_SOURCES})
