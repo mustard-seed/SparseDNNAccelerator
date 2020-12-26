@@ -3423,8 +3423,13 @@ __kernel void kernelOAControlTee ()
 		t_output_tile_buffer_packet_tagged controlPacketTagged = read_channel_intel(channel_oa_noc_control[colID]);
 
 		unsigned char maxColID = controlPacketTagged.maxColID;
+		t_flag isFromMisc = controlPacketTagged.bufferPacket.controlBits & 0x040 >> 6;
 
-		write_channel_intel(channel_control_to_oa_buffer_local[colID], controlPacketTagged.bufferPacket);
+		//Only send command to the OA buffer is the results are drained from the convolution PE array
+		if (isFromMisc == FALSE)
+		{
+			write_channel_intel(channel_control_to_oa_buffer_local[colID], controlPacketTagged.bufferPacket);
+		}
 
 		//Send instruction to the OA tee, if this is a drain command
 		t_output_tile_tee_packet teePacket;
@@ -3934,7 +3939,7 @@ __kernel void kernelFilterBuffer ()
 						}
 						cacheIndices[regWriteSide][dramBlockIndex] = indices;
 					#endif
-						
+
 					iTransferBlockInFilterWrite += WEIGHT_WIDE_SIZE;
 					if (iTransferBlockInFilterWrite >= maxTransferBlockInFilter[regWriteSide])
 					{

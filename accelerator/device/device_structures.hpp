@@ -186,7 +186,7 @@ typedef signed short t_bias;
 // } t_weight_transfer_block;
 
 
-typedef struct {
+typedef struct __attribute__((packed)) {
     //t_weight_transfer_block transferBlocks[WEIGHT_WIDE_SIZE];
     t_char values [WEIGHT_BURST_SIZE_VALUE_BYTE];
     #if defined(SPW_SYSTEM)
