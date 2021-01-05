@@ -5,7 +5,7 @@
 
 #include "spwTensorCompression.hpp"
 
-#define DIVIDE_CEIL(x, y) (1 + (x-1) / y)
+#define DIVIDE_CEIL(x, y) (1 + (x-1) / (y) )
 
 DeviceActivationTensor::DeviceActivationTensor (
         int _channel,

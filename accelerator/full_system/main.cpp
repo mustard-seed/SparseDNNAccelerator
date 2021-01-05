@@ -26,7 +26,7 @@
 #include "layerInstructionGenerator.hpp"
 #include "accelerator_wrapper.hpp"
 
-#define DIVIDE_CEIL(x, y) (1 + (x-1) / y)
+#define DIVIDE_CEIL(x, y) (1 + (x-1) / (y))
 #define SEED 27
 
 #define PLAY
@@ -144,12 +144,9 @@ TEST_F (testFixture, conv_dense_input_dense_output_plain)
 {
     unsigned char inputWidth = 4;
     unsigned char inputHeight = 4;
-    //DOESN'T WORK!?
     unsigned char numInputChannel = 13;
-    //unsigned char numInputChannel = 2;
     unsigned char numOutputChannel = numInputChannel;
     unsigned char numInputGroup = 1;
-    unsigned char numOutputGroup = 1;
     unsigned char inputHeightSPUnitSize = 1;
     unsigned char inputWidthSPUnitSize = 1;
     unsigned char sizeOutputTileWidthPerColFull = 2;

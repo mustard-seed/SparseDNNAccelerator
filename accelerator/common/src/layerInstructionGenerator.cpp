@@ -3,7 +3,7 @@
 #include <cassert>
 #include <iostream>
 
-#define DIVIDE_CEIL(x, y) (1 + (x-1) / y)
+#define DIVIDE_CEIL(x, y) (1 + (x-1) / (y))
 
 void instruction_generator(//Type of the operation
         OPERATION op,
@@ -743,6 +743,10 @@ void instruction_generator(//Type of the operation
                                         );
                         #endif
                         instructionWMover.numTBPerFilter = (t_uint) numTBPerInputStrip*kernelSize*kernelSize;
+
+                        #if defined(SPW_SYSTEM)
+                            instructionWMover.numNZClustersPerPruneRange = numNZClustersInPruningRange;
+                        #endif
                         vecWeightMoverInstruction.push_back(instructionWMover);
                     } //Generate the weight mover instruction
                 }   //Instruction that only matters for convolution
