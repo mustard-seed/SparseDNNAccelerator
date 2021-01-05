@@ -2721,7 +2721,7 @@ void testFixture::launch (unsigned short _inputWidth,
                                         .channel=numInputChannel0,
                                         .height=_inputHeight,
                                         .width=_inputWidth,
-                                        .stripStrideSeenBySource=numInputChannel0,
+                                        .stripStrideSeenBySource=memIAColStride,
                                         .numFracBits=FRAC_WIDTH,
                                         .blobName="input"
                                     });
