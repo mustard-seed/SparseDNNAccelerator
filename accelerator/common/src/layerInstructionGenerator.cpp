@@ -197,8 +197,7 @@ void instruction_generator(//Type of the operation
     unsigned int numOAChannelsPerGroup = 0;
     //Number of nominal dram blocks in an output strip,
     //override if necessary
-    unsigned int numNominalDramBlocksPerOutputStrip0 =
-           (t_ushort) DIVIDE_CEIL(numOAChannelsPerGroup, ACTIVATION_BURST_SIZE_BYTE);
+    unsigned int numNominalDramBlocksPerOutputStrip0 = 0;
     unsigned int numNominalDramBlocksPerOutputStrip1 = 0;
 
 
@@ -227,6 +226,8 @@ void instruction_generator(//Type of the operation
             numEffectiveGroups = numGroupsCurrentLayer;
             numOAGroupsCurrentLayer = numEffectiveGroups;
             numOAChannelsPerGroup = numOutputChannels / numEffectiveGroups;
+            numNominalDramBlocksPerOutputStrip0 =
+                   (t_ushort) DIVIDE_CEIL(numOAChannelsPerGroup, ACTIVATION_BURST_SIZE_BYTE);
             numIAMoverInputChannelsPerGroup0 = numInputChannels0 / numGroupsCurrentLayer;
             numIAMoverInputChannelsPerGroup1  = 0;
             numIAMoverGroup0 = numEffectiveGroups;
@@ -313,6 +314,7 @@ void instruction_generator(//Type of the operation
                 throw;
             }
             numOAChannelsPerGroup = ACTIVATION_BURST_SIZE_BYTE;
+            numNominalDramBlocksPerOutputStrip0 = 1;
             numEffectiveGroups = DIVIDE_CEIL(numOutputChannels, numOAChannelsPerGroup);
             numIAMoverInputChannelsPerGroup0 = ACTIVATION_BURST_SIZE_BYTE;
             numIAMoverInputChannelsPerGroup1 = 0;
@@ -350,6 +352,9 @@ void instruction_generator(//Type of the operation
             }
             numEffectiveGroups = numGroupsCurrentLayer;
             numOAGroupsCurrentLayer = numEffectiveGroups;
+            numOAChannelsPerGroup = numOutputChannels;
+            numNominalDramBlocksPerOutputStrip0 =
+                   (t_ushort) DIVIDE_CEIL(numOAChannelsPerGroup, ACTIVATION_BURST_SIZE_BYTE);
             numIAMoverInputChannelsPerGroup0 = numInputChannels0;
             numIAMoverInputChannelsPerGroup1 = numInputChannels1;
             numIAMoverGroup0 = 1;
@@ -377,6 +382,7 @@ void instruction_generator(//Type of the operation
                 throw;
             }
             numOAChannelsPerGroup = ACTIVATION_BURST_SIZE_BYTE;
+            numNominalDramBlocksPerOutputStrip0 = 1;
             numIAMoverInputChannelsPerGroup0 = ACTIVATION_BURST_SIZE_BYTE;
             numIAMoverInputChannelsPerGroup1 = 0;
             numEffectiveGroups = DIVIDE_CEIL(numOutputChannels, numOAChannelsPerGroup);
