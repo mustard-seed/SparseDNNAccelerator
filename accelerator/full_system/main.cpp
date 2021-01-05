@@ -21,22 +21,25 @@
 #include "boost/align/aligned_allocator.hpp"
 
 #include "floatFixedPointConversion.hpp"
-#include "tensorCompression.hpp"
+#include "spwTensorCompression.hpp"
 #include "vectorType.hpp"
 #include "layerInstructionGenerator.hpp"
 #include "accelerator_wrapper.hpp"
 
-//#define PLAY
+#define DIVIDE_CEIL(x, y) (1 + (x-1) / y)
+#define SEED 27
+
+#define PLAY
 //#define PERF_TEST
 //#define THROUGHPUT_DIAGNOSTIC
-#define VALIDATE
+//#define VALIDATE
 //#define TEST1_20201126
 //#define TEST2_20201126
 //#define ELTADD7_202021129
 //Some how if repeat is 100, bad things will happen on concat
 #define REPEAT 1
 #ifndef C5SOC
-//#define EMULATE
+#define EMULATE
 #endif
 //#define PERF_TEST
 //#NOOP
@@ -79,12 +82,15 @@ protected:
                 bool _alternateSign = true
             );
 
-    std::vector<float> generateSparseInput (unsigned short _inputWidth,
-                unsigned short _inputHeight,
-                unsigned int _numInputChannel,
-                unsigned char _numGroupCurrentLayer,
-                float denseProb = 1.0f
-                , int channelPruneScale = CLUSTER_SIZE);
+    //TODO: get rid of _numGroupCurrentLayer
+    //TODO: replace dense Prob and channel prune scale with something else
+    //TODO: remove this function
+//    std::vector<float> generateSparseInput (unsigned short _inputWidth,
+//                unsigned short _inputHeight,
+//                unsigned int _numInputChannel,
+//                unsigned char _numGroupCurrentLayer,
+//                float denseProb = 1.0f
+//                , int channelPruneScale = CLUSTER_SIZE);
 
     /*!
      * \brief generateWeights
@@ -102,83 +108,44 @@ protected:
                 unsigned char _numGroups
             );
 
-
-    std::vector<fixedPointNumber> generateSparseWeights (unsigned char _kernelSize,
+    std::vector<fixedPointNumber> generateSparseWeights (
+                    unsigned char _kernelSize,
                     unsigned int _numInputChannel,
                     unsigned int _numOutputChannel,
-                    unsigned char _numGroups,
-                    float denseProb = 1.0f
-                , int channelPruneScale = CLUSTER_SIZE);
+                    unsigned int _numGroups,
+                    unsigned int _numNZClustersInPruneRange);
 
+    //TODO:
+    //remove _numGroupNext
+    //remove _flagSparseInput
+    //remove _flagSparseOutput
+    //replace pruneScale with balanced block pruning parameters
     void launch (unsigned short _inputWidth,
             unsigned short _inputHeight,
             unsigned int _numInputChannel,
             unsigned int _numOutputChannel,
             unsigned char _numInputGroup, //The code will override this to 1 if the operation is not convolution
-            unsigned char _numGroupNext, //Number of groups for the next layer
             unsigned char _inputHeightSPUnitSize, //The code will override this to 1 if the operation is not convolution
             unsigned char _inputWidthSPUnitSize, //The code will overide this to 1 if the operation is not convolution
             unsigned short _sizeOutputTileWidthPerColFull, //The code will override this to 1 if the operation is not convolution
             unsigned short _sizeOutputTileHeight, //The code will overrid this to 1 if the operation is not convolution
             unsigned char _kernelSize, //convolution kernel size
             bool _flagEnableRelu,
-            bool _flagSparseInput, //The code will override this to FALSE if the operation is not convolution
-            bool _flagSparseOutput,
             OPERATION op,
             float _bias = 0.0f //Only matter for convolution
+            , float denseProb = 1
             , bool flagMultiLayerConv = false
             , bool _flagPerformanceTest = false
-            , float denseProb = 1
-            , int pruneScale = CLUSTER_SIZE
             );
 }; //testFixture
 
 #ifdef PLAY
-//TEST_F (testFixture, global_avg_pool_sparse_output_grouped)
-//{
-//    unsigned char inputWidth = 4;
-//    unsigned char inputHeight = 4;
-//    unsigned char numInputChannel = 120;
-//    unsigned char numOutputChannel = numInputChannel;
-//    unsigned char numInputGroup = 1;
-//    unsigned char numOutputGroup = 2;
-//    unsigned char inputHeightSPUnitSize = 1;
-//    unsigned char inputWidthSPUnitSize = 1;
-//    unsigned char sizeOutputTileWidthPerColFull = 2;
-//    unsigned char sizeOutputTileHeight = 4;
-//    unsigned char kernelSize = 3;
-//    bool flagEnableRelu = false;
-//    bool flagSparseInput = false;
-//    bool flagSparseOutput = true;
-//    OPERATION op = AVG_POOL;
-//    float bias = 0.0f;
-
-//    launch(
-//                inputWidth,
-//                inputHeight,
-//                numInputChannel,
-//                numOutputChannel,
-//                numInputGroup,
-//                numOutputGroup,
-//                inputHeightSPUnitSize,
-//                inputWidthSPUnitSize,
-//                sizeOutputTileWidthPerColFull,
-//                sizeOutputTileHeight,
-//                kernelSize,
-//                flagEnableRelu,
-//                flagSparseInput,
-//                flagSparseOutput,
-//                op,
-//                bias
-//          );
-//}
-
-TEST_F (testFixture, conv_dense_input_sparse_output_plain)
+TEST_F (testFixture, conv_dense_input_dense_output_plain)
 {
     unsigned char inputWidth = 4;
     unsigned char inputHeight = 4;
     //DOESN'T WORK!?
-    unsigned char numInputChannel = 18;
+    unsigned char numInputChannel = 13;
     //unsigned char numInputChannel = 2;
     unsigned char numOutputChannel = numInputChannel;
     unsigned char numInputGroup = 1;
@@ -189,8 +156,7 @@ TEST_F (testFixture, conv_dense_input_sparse_output_plain)
     unsigned char sizeOutputTileHeight = 4;
     unsigned char kernelSize = 3;
     bool flagEnableRelu = false;
-    bool flagSparseInput = true;
-    bool flagSparseOutput = true;
+    float denseProb = 1.0 / PRUNE_RANGE_IN_CLUSTER;
     OPERATION op = CONVOLUTION;
     float bias = 0.0f;
 
@@ -200,60 +166,17 @@ TEST_F (testFixture, conv_dense_input_sparse_output_plain)
                 numInputChannel,
                 numOutputChannel,
                 numInputGroup,
-                numOutputGroup,
                 inputHeightSPUnitSize,
                 inputWidthSPUnitSize,
                 sizeOutputTileWidthPerColFull,
                 sizeOutputTileHeight,
                 kernelSize,
                 flagEnableRelu,
-                flagSparseInput,
-                flagSparseOutput,
                 op,
-                bias
+                bias,
+                denseProb
           );
 }
-
-//TEST_F (testFixture, back_to_back_identity_conv)
-//{
-//    unsigned char inputWidth = 4;
-//    unsigned char inputHeight = 4;
-//    unsigned char numInputChannel =16;
-//    unsigned char numOutputChannel = numInputChannel;
-//    unsigned char numInputGroup = 1;
-//    unsigned char numOutputGroup = 1;
-//    unsigned char inputHeightSPUnitSize = 1;
-//    unsigned char inputWidthSPUnitSize = 1;
-//    unsigned char sizeOutputTileWidthPerColFull = 2;
-//    unsigned char sizeOutputTileHeight = 4;
-//    unsigned char kernelSize = 3;
-//    bool flagEnableRelu = false;
-//    bool flagSparseInput = false;
-//    bool flagSparseOutput = false;
-//    OPERATION op = CONVOLUTION;
-//    float bias = 0.0f;
-//    bool flag2Layer = true;
-
-//    launch(
-//                inputWidth,
-//                inputHeight,
-//                numInputChannel,
-//                numOutputChannel,
-//                numInputGroup,
-//                numOutputGroup,
-//                inputHeightSPUnitSize,
-//                inputWidthSPUnitSize,
-//                sizeOutputTileWidthPerColFull,
-//                sizeOutputTileHeight,
-//                kernelSize,
-//                flagEnableRelu,
-//                flagSparseInput,
-//                flagSparseOutput,
-//                op,
-//                bias,
-//                flag2Layer
-//          );
-//}
 
 #endif
 #if defined(THROUGHPUT_DIAGNOSTIC)
@@ -1957,52 +1880,52 @@ std::vector<float> testFixture::generateInputTensor(
     return inputVector;
 }
 
-std::vector<float> testFixture::generateSparseInput(
-            unsigned short _inputWidth,
-            unsigned short _inputHeight,
-            unsigned int _numInputChannel,
-            unsigned char _numGroupCurrentLayer,
-            float denseProb,
-            int channelPruneScale
-        )
-{
-     std::mt19937 generator(INPUT_SEED);
-     std::bernoulli_distribution bernDistribution(denseProb);
-     assert(_numInputChannel % _numGroupCurrentLayer == 0);
-     unsigned int numICPerGroup = _numInputChannel / _numGroupCurrentLayer;
-     std::vector<float> inputVector;
-     bool writePositive = true;
-     for (unsigned char g=0; g<_numGroupCurrentLayer;g++)
-     {
-         for (unsigned short h=0; h<_inputHeight; h++)
-         {
-             for (unsigned short w=0; w<_inputWidth; w++)
-             {
-                 bool flagNonZero = false;
-                 for (unsigned int c=0; c<numICPerGroup; c++)
-                 {
-                     if (((int) c) % channelPruneScale == 0)
-                     {
-                         flagNonZero = bernDistribution(generator);
-                     }
-                     signed char fpBits = (writePositive) ? 1 : -1;
-                     if (flagNonZero == false)
-                     {
-                         fpBits = 0;
-                     }
-                     else
-                     {
-                         writePositive = !writePositive;
-                     }
-                     fixedPointNumber fpNumber(fpBits, FRAC_WIDTH, INT_WIDTH);
-                     inputVector.push_back(fpNumber.convert2Float());
-                 }
-             }
-         }
-     }
+//std::vector<float> testFixture::generateSparseInput(
+//            unsigned short _inputWidth,
+//            unsigned short _inputHeight,
+//            unsigned int _numInputChannel,
+//            unsigned char _numGroupCurrentLayer,
+//            float denseProb,
+//            int channelPruneScale
+//        )
+//{
+//     std::mt19937 generator(INPUT_SEED);
+//     std::bernoulli_distribution bernDistribution(denseProb);
+//     assert(_numInputChannel % _numGroupCurrentLayer == 0);
+//     unsigned int numICPerGroup = _numInputChannel / _numGroupCurrentLayer;
+//     std::vector<float> inputVector;
+//     bool writePositive = true;
+//     for (unsigned char g=0; g<_numGroupCurrentLayer;g++)
+//     {
+//         for (unsigned short h=0; h<_inputHeight; h++)
+//         {
+//             for (unsigned short w=0; w<_inputWidth; w++)
+//             {
+//                 bool flagNonZero = false;
+//                 for (unsigned int c=0; c<numICPerGroup; c++)
+//                 {
+//                     if (((int) c) % channelPruneScale == 0)
+//                     {
+//                         flagNonZero = bernDistribution(generator);
+//                     }
+//                     signed char fpBits = (writePositive) ? 1 : -1;
+//                     if (flagNonZero == false)
+//                     {
+//                         fpBits = 0;
+//                     }
+//                     else
+//                     {
+//                         writePositive = !writePositive;
+//                     }
+//                     fixedPointNumber fpNumber(fpBits, FRAC_WIDTH, INT_WIDTH);
+//                     inputVector.push_back(fpNumber.convert2Float());
+//                 }
+//             }
+//         }
+//     }
 
-     return inputVector;
-}
+//     return inputVector;
+//}
 
 std::vector<fixedPointNumber> testFixture::generateWeights (
         unsigned char _kernelSize,
@@ -2045,21 +1968,28 @@ std::vector<fixedPointNumber> testFixture::generateSparseWeights (
         unsigned char _kernelSize,
         unsigned int _numInputChannel,
         unsigned int _numOutputChannel,
-        unsigned char _numGroups,
-        float denseProb,
-        int channelPruneScale
+        unsigned int _numGroups,
+        unsigned int _numNZClustersInPruneRange
         )
 {
     assert(_kernelSize % 2 == 1);
     assert(_numInputChannel % _numGroups == 0);
-    std::vector<fixedPointNumber> fpWeightTensor;
+    fixedPointNumber fpZero(0.0f, FRAC_WIDTH, INT_WIDTH);
     assert ((((unsigned int) _numOutputChannel) % _numGroups == 0) && "Number of output channels is not divisble by the number of groups.");
+
     unsigned int numOCPerGroup = _numOutputChannel / _numGroups;
     unsigned int numICPerGroup = _numInputChannel / _numGroups;
+    unsigned int numPruneRangePerStrip =
+            DIVIDE_CEIL(
+                numICPerGroup,
+                CLUSTER_SIZE * PRUNE_RANGE_IN_CLUSTER);
+
+    std::vector<fixedPointNumber> fpWeightTensor(
+                _numOutputChannel * _kernelSize * _kernelSize * numICPerGroup,
+                fpZero);
 
     std::mt19937 generator(WEIGHT_SEED);
-    std::bernoulli_distribution bernDistribution(denseProb);
-    bool writePositive = true;
+    std::uniform_real_distribution<float> distribution(-2.0, 2.0);
     for (unsigned char g=0; g<_numGroups; g++)
     {
         //Number of OC per group equals to the number of IC per group
@@ -2069,55 +1999,57 @@ std::vector<fixedPointNumber> testFixture::generateSparseWeights (
             {
                 for (unsigned char iW=0; iW<_kernelSize; iW++)
                 {
-                    bool flagNonZero = false;
-                    for (unsigned int iC=0; iC<numICPerGroup; iC++)
+                    for (int iPruneRange=0; iPruneRange<numPruneRangePerStrip; iPruneRange++)
                     {
-                        if (((int) iC) % channelPruneScale == 0)
+                        //Randomly select up to _numNZClustersPerPruneRange clusters to set to non-zero
+                        std::vector<int> idxClusters (PRUNE_RANGE_IN_CLUSTER, 0x0);
+                        std::iota(idxClusters.begin(), idxClusters.end(), 0);
+                        std::shuffle(idxClusters.begin(), idxClusters.end(), generator);
+                        for (int i=0; i<_numNZClustersInPruneRange; i++)
                         {
-                            flagNonZero = bernDistribution(generator);
-                        }
-                        signed char fpBits = (writePositive) ? 1 : -1;
-                        if (flagNonZero == false)
-                        {
-                            fpBits = 0;
-                        }
-                        else
-                        {
-                            writePositive = !writePositive;
-                        }
-                        fixedPointNumber fpNumber(fpBits, FRAC_WIDTH, INT_WIDTH);
-                        fpWeightTensor.push_back(fpNumber);
-                    }
-                }
-            }
-        }
-    }
+                            int idx = idxClusters.at(i);
+                            for (int c=0; c<CLUSTER_SIZE; c++)
+                            {
+                                int channelIdx =
+                                        iPruneRange*PRUNE_RANGE_IN_CLUSTER*CLUSTER_SIZE
+                                        + idx*CLUSTER_SIZE + c;
+                                if (channelIdx < numICPerGroup)
+                                {
+                                    int weightIdx =
+                                            iFilter * _kernelSize * _kernelSize * numICPerGroup
+                                            + (iH * _kernelSize + iW) * numICPerGroup
+                                            + channelIdx;
+                                    fpWeightTensor.at(weightIdx) =
+                                            fixedPointNumber(distribution(generator), FRAC_WIDTH, INT_WIDTH);
+                                }
+                            } //for over cluster size
+                        } // for over the nz clusters
+                    } //for over the prune ranges
+                } //for over kernel width
+            } //for over kernel height
+        } //for over filters
+    } //for over groups
 
     return fpWeightTensor;
 }
 
-void testFixture::launch (
-        unsigned short _inputWidth,
+void testFixture::launch (unsigned short _inputWidth,
         unsigned short _inputHeight,
         unsigned int _numInputChannel,
         unsigned int  _numOutputChannel,
         unsigned char _numInputGroup, //The code will override this to 1 if the operation is not convolution
-        unsigned char _numGroupNext, //Number of groups for the next layer
         unsigned char _inputHeightSPUnitSize, //The code will override this to 1 if the operation is not convolution
         unsigned char _inputWidthSPUnitSize, //The code will overide this to 1 if the operation is not convolution
         unsigned short _sizeOutputTileWidthPerColFull, //The code will override this to 1 if the operation is not convolution
         unsigned short _sizeOutputTileHeight, //The code will overrid this to 1 if the operation is not convolution
         unsigned char _kernelSize, //Size of the convolution kernel
         bool _flagEnableRelu,
-        bool _flagSparseInput, //The code will override this to FALSE if the operation is not convolution or if the accelerator only supports dense format
-        bool _flagSparseOutput, //The code will override this to FALSE if the accelerator only supports dense format.
         OPERATION op,
-        float _bias, //Only matter for convolution
-        bool flagMultiLayerConv,
-        bool _flagPerformanceTest,
+        float _bias,
         float denseProb,
-        int pruneScale
-        )
+       //Only matter for convolution
+        bool flagMultiLayerConv,
+        bool _flagPerformanceTest)
 {
     //Checking the parameters' consistency AND
     //Derive parameters
@@ -2139,8 +2071,6 @@ void testFixture::launch (
     unsigned short sizeOutputTileHeight;
     unsigned char verticalBorderPadding;
     unsigned char horizontalBorderPadding;
-    bool flagSparseInput;
-    bool flagSparseOutput;
 
     /*
      * Dervied the parameters required for generating instructions
@@ -2161,14 +2091,6 @@ void testFixture::launch (
 
             numOutputChannels = _flagPerformanceTest ? _numOutputChannel : _numInputChannel;
             assert(numOutputChannels % _numInputGroup == 0);
-
-#if defined(SPARSE_SYSTEM)
-            flagSparseInput = _flagSparseInput;
-            flagSparseOutput = _flagSparseOutput;
-#else
-            flagSparseInput = false;
-            flagSparseOutput = false;
-#endif
         }
         break;
         case MAX_POOL: {
@@ -2182,13 +2104,6 @@ void testFixture::launch (
             kernelSize = 2;
             stride = 2;
             numOutputChannels = numInputChannel0;
-
-            flagSparseInput = false;
-#if defined(SPARSE_SYSTEM)
-            flagSparseOutput = _flagSparseOutput;
-#else
-            flagSparseOutput = false;
-#endif
             assert(_inputHeight % 2 == 0);
             assert(_inputWidth % 2 == 0);
         }
@@ -2205,12 +2120,6 @@ void testFixture::launch (
             stride = 1;
             numOutputChannels = numInputChannel0;
 
-            flagSparseInput = false;
-#if defined(SPARSE_SYSTEM)
-            flagSparseOutput = _flagSparseOutput;
-#else
-            flagSparseOutput = false;
-#endif
 
         }
         break;
@@ -2226,12 +2135,6 @@ void testFixture::launch (
             stride = 1;
             numOutputChannels = (unsigned short) numInputChannel0 + (unsigned short) numInputChannel1;
 
-            flagSparseInput = false;
-#if defined(SPARSE_SYSTEM)
-            flagSparseOutput = _flagSparseOutput;
-#else
-            flagSparseOutput = false;
-#endif
             assert(_numInputChannel <= 127);
         }
         break;
@@ -2248,13 +2151,6 @@ void testFixture::launch (
             kernelSize = _inputWidth;
             stride = 1;
             numOutputChannels = numInputChannel0;
-
-            flagSparseInput = false;
-    #if defined(SPARSE_SYSTEM)
-            flagSparseOutput = _flagSparseOutput;
-    #else
-            flagSparseOutput = false;
-    #endif
         }
         break;
         default:
@@ -2268,8 +2164,7 @@ void testFixture::launch (
     verticalBorderPadding = (op==CONVOLUTION) ? ((stride-1) * inputWidthSPSize + kernelSize - stride)/2 : 0;
     horizontalBorderPadding  = (op==CONVOLUTION) ? ((stride-1) * inputHeightSPSize + kernelSize - stride)/2 : 0;
     unsigned char numActiveColsPartialOutputTile = 1;
-    assert(numOutputChannels % _numGroupNext == 0);
-    numOutputChannelPerGroup = numOutputChannels / _numGroupNext;
+    numOutputChannelPerGroup = numOutputChannels / numGroupCurrentLayer;
 
     /* Generate the dense, floating point tensors
      * */
@@ -2278,40 +2173,40 @@ void testFixture::launch (
     if (_flagPerformanceTest == true)
     {
         std::cout <<"This is a performance test"<<std::endl
-                  <<"Density, prune scale: "<<denseProb<<" "<<pruneScale<<std::endl;
+                  <<"dense prob: "<<denseProb<<std::endl;
     }
     std::cout <<"Input SP dimensions (H, W):  "<<(unsigned int) inputHeightSPSize<<" "<<(unsigned int) inputWidthSPSize<<std::endl
               <<"PE dimension (H, W): "<<PE_ROWS<<" "<<PE_COLS<<std::endl
               <<"CLUSTER_SIZE: "<<CLUSTER_SIZE<<std::endl
-              <<"TRANSFER_SIZE: "<<TRANSFER_SIZE<<std::endl
-              <<"WIDE_SIZE "<<WIDE_SIZE<<std::endl
+              <<"PE_SIMD_SIZE: "<<TRANSFER_SIZE<<std::endl
+              <<"PRUNE_RANGE_IN_CLUSTER "<<PRUNE_RANGE_IN_CLUSTER<<std::endl
+              <<"ACTIVATION_WIDE_SIZE "<<WIDE_SIZE<<std::endl
               <<"WEIGHT_WIDE_SIZE "<<WEIGHT_WIDE_SIZE<<std::endl
               <<"Output planar dimensions (H, W): "<<(unsigned int)numOutputHeight<<" "<<(unsigned int)numOutputWidth<<std::endl
               <<"Full output tile per col planar sizes (H, W): "<<(unsigned int)sizeOutputTileHeight<<" "<<(unsigned int)sizeOutputTileWidthPerCol<<std::endl
               <<"Input channels 0: "<<(unsigned int) numInputChannel0<<std::endl
               <<"Input channels 1: "<<(unsigned int) numInputChannel1<<std::endl
               <<"Output channels: "<<(unsigned int) numOutputChannels<<std::endl
-              <<"Number of output groups: "<<(unsigned int)_numGroupNext<<std::endl
               <<"Number of groups in current layer: "<<(unsigned int)numGroupCurrentLayer<<std::endl;
 
     std::vector<float> inputTensorDense;
-    if (_flagPerformanceTest == true)
-    {
-       inputTensorDense = generateSparseInput(_inputWidth, _inputHeight, _numInputChannel, numGroupCurrentLayer, denseProb, pruneScale);
-    }
-    else
-    {
-        bool alternateSign = (op == AVG_POOL) ? false : true;
-        inputTensorDense = generateInputTensor(_inputWidth, _inputHeight, _numInputChannel, numGroupCurrentLayer, alternateSign);
-    }
+    bool alternateSign = (op == AVG_POOL) ? false : true;
+    inputTensorDense = generateInputTensor(_inputWidth, _inputHeight, _numInputChannel, numGroupCurrentLayer, alternateSign);
 
     //Generate qunatized weight tensors
     std::vector<fixedPointNumber> inputWeightDense;
+    int numNZClustersPerPrungingRange = std::ceil((float) PRUNE_RANGE_IN_CLUSTER * denseProb);
     if (op == CONVOLUTION)
     {
         if (_flagPerformanceTest == true)
         {
-            inputWeightDense = generateSparseWeights((unsigned char) kernelSize, _numInputChannel, numOutputChannels, numGroupCurrentLayer, denseProb, pruneScale);
+            inputWeightDense = generateSparseWeights(
+                            _kernelSize,
+                            _numInputChannel,
+                            numOutputChannels,
+                            numGroupCurrentLayer,
+                            numNZClustersPerPrungingRange
+                        );
         }
         else
         {
@@ -2326,40 +2221,49 @@ void testFixture::launch (
      * */
     std::cout <<stepCount++<<". Allocate, align, and compress the test tensors."<<std::endl;
 
-    unsigned short maxScalarIndexInChannelGroup = _numInputChannel / numGroupCurrentLayer - 1;
+    unsigned short numICPerGroup = _numInputChannel / numGroupCurrentLayer;
     unsigned short maxClusterIndexInCompressionBlock = COMPRESSION_WINDOW_SIZE-1;
     unsigned short maxClusterIndexInTransferBlock = TRANSFER_SIZE-1;
     unsigned short maxScalarIndexInCluster = CLUSTER_SIZE-1;
 
-    std::shared_ptr<AlignedTensor> pWeight;
+    std::shared_ptr<DeviceWeightTensor> pWeight;
 
     //Prepare weights
     if (op==CONVOLUTION)
     {
-#if defined(SPARSE_SYSTEM)
-        pWeight.reset(new FlexibleDirectCompressedTensor (
+#if defined(SPW_SYSTEM)
+        pWeight.reset(new DeviceSpWTensor (
                     inputWeightDense,
-                    numOutputChannels, //_num3DTensors
-                    maxScalarIndexInChannelGroup+1, //channel
-                    (unsigned char) kernelSize, //width
-                    (unsigned char) kernelSize, //height
-                    maxScalarIndexInChannelGroup,
-                    maxClusterIndexInCompressionBlock,
-                    maxClusterIndexInTransferBlock,
-                    maxScalarIndexInCluster,
-                    true //isKernel
+                    //_outputChannel
+                    numOutputChannels,
+                    //_inputChannel
+                    numICPerGroup,
+                    //_width
+                    _kernelSize,
+                    //_height,
+                    _kernelSize,
+                    //_peSimdSize
+                    PE_SIMD_SIZE,
+                    //_clusterSize
+                    CLUSTER_SIZE,
+                    //_numClustersInPruningRange
+                    PRUNE_RANGE_IN_CLUSTER,
+                    //_numNZClustersPerPruningRange
+                    numNZClustersPerPrungingRange
                 ) );
 #else
-        pWeight.reset( new AlignedTensor (
-                    inputWeightDense,
-                    numOutputChannels, //_num3DTensors
-                    maxScalarIndexInChannelGroup+1, //channel
-                    (unsigned char) kernelSize, //width
-                    (unsigned char) kernelSize, //height
-                    maxScalarIndexInChannelGroup,
-                    maxClusterIndexInTransferBlock,
-                    maxScalarIndexInCluster,
-                    true //isKernel
+        pWeight.reset( new DeviceWeightTensor (
+                   numOutputChannels,
+                   //_inputChannel
+                   numICPerGroup,
+                   //_width
+                   _kernelSize,
+                   //_height,
+                   _kernelSize,
+                   //_peSimdSize
+                   PE_SIMD_SIZE,
+                   //_clusterSize
+                   CLUSTER_SIZE
                 ));
 #endif
     }
@@ -2375,46 +2279,26 @@ void testFixture::launch (
     //assign memDramBlockFilterStride conditionally, otherwise there might be seg fault.
     if (op == CONVOLUTION)
     {
-        memDramBlockFilterStride = (pWeight->getExternalMemoryAddressStride()) >> WEIGHT_WIDE_SIZE_OFFSET;
+        memDramBlockFilterStride = pWeight->getDramBlocksInFilter();
     }
     else
     {
         memDramBlockFilterStride = 0;
     }
 
-    signed int memDramBlockIAColStride = calculateExternalMemoryAddressStride(
-                    maxScalarIndexInChannelGroup+1, //channelsPerGroup
-                    _numInputChannel / (maxScalarIndexInChannelGroup+1), //group
-                    _inputHeight, //height
-                    _inputWidth, //width
-                    CLUSTER_SIZE, //clusterSize
-                    TRANSFER_SIZE, //transferBlockSize
-                    COMPRESSION_WINDOW_SIZE, //compressionWindowSize
-                    WIDE_SIZE, //numTransferBlockPerDramBlock
-                    false, //isKernel
-                    !flagSparseInput //isDense
-                ) >> WIDE_SIZE_OFFSET;
-    std::cout <<"memDramBlockIAColStride: "<<memDramBlockIAColStride<<std::endl;
+    //Stride across activation tensor strip in terms of activation words
+    signed int memIAColStride =
+            DIVIDE_CEIL(numInputChannel0, ACTIVATION_BURST_SIZE_BYTE) * ACTIVATION_BURST_SIZE_BYTE;
+    std::cout <<"memIA0ColStride: "<<memIAColStride<<std::endl;
 
-    signed int memDramBlockOAColStride = calculateExternalMemoryAddressStride(
-                numOutputChannelPerGroup, //channelsPerGroup
-                _numGroupNext, //group
-                numOutputHeight, //height
-                numOutputWidth, //width
-                CLUSTER_SIZE, //clusterSize
-                TRANSFER_SIZE, //transferBlockSize
-                COMPRESSION_WINDOW_SIZE, //compressionWindowSize
-                WIDE_SIZE, //numTransferBlockPerDramBlock
-                false, //isKernel
-                !flagSparseOutput //isDense
-            ) >> WIDE_SIZE_OFFSET;
-    std::cout <<"memDramBlockOAColStride: "<<memDramBlockOAColStride<<std::endl;
+    signed int memOAColStride =
+            (numGroupCurrentLayer - 1) * numOutputChannelPerGroup
+            + DIVIDE_CEIL(numOutputChannelPerGroup, ACTIVATION_BURST_SIZE_BYTE) * ACTIVATION_BURST_SIZE_BYTE;
+    std::cout <<"memOAColStride: "<<memOAColStride<<std::endl;
 
 
-    signed int memDramBlockIARowStride = memDramBlockIAColStride*_inputWidth;
-    signed int memDramBlockIAGroupStride = memDramBlockIARowStride * _inputHeight;
-    unsigned char instFlagSparseOutput = flagSparseOutput ? 0x01:0x00;
-    unsigned char instFlagSparseInput = flagSparseInput ? 0x01: 0x00;
+    signed int memIARowStride = memIAColStride*_inputWidth;
+    signed int memIAGroupStride = memIARowStride * _inputHeight;
     unsigned char instFlagRelu = _flagEnableRelu ? 0x01 : 0x00;
     unsigned char instOutputShiftBits;
     unsigned char instOutputShiftLeft;
@@ -2476,9 +2360,6 @@ void testFixture::launch (
     int offsetOAMoverInstruction = 0;
     int offsetWeightsDramBlock = 0;
     int offsetBiasesDramBlock = 0;
-#if defined(SPARSE_SYSTEM)
-    int offsetWeightTBCount = 0;
-#endif
     if (op==CONVOLUTION && flagMultiLayerConv == true)
     {
         /*
@@ -2489,12 +2370,13 @@ void testFixture::launch (
          *
         */
         //Number of compression block per intermediate channel group
-        int numCBPerIMOAChannelGroup =
-                1 + (numInputChannel0 / numGroupCurrentLayer - 1) / (CLUSTER_SIZE * COMPRESSION_WINDOW_SIZE);
-        int numTBPerCB = COMPRESSION_WINDOW_SIZE / TRANSFER_SIZE + 1;
-        int intermediateAColStride = numCBPerIMOAChannelGroup * numTBPerCB;
+//        int numCBPerIMOAChannelGroup =
+//                1 + (numInputChannel0 / numGroupCurrentLayer - 1) / (CLUSTER_SIZE * COMPRESSION_WINDOW_SIZE);
+//        int numTBPerCB = COMPRESSION_WINDOW_SIZE / TRANSFER_SIZE + 1;
+        int intermediateAColStride =
+                (numGroupCurrentLayer-1) * numOutputChannelPerGroup
+                + DIVIDE_CEIL(numOutputChannelPerGroup, ACTIVATION_BURST_SIZE_BYTE) * ACTIVATION_BURST_SIZE_BYTE;
         int intermediateARowStride = intermediateAColStride * _inputWidth;
-        int intermediateAGroupStride = intermediateARowStride * _inputHeight;
         //First set of instructions
         instruction_generator(
                     op,
@@ -2526,37 +2408,18 @@ void testFixture::launch (
                     offsetBiasesDramBlock,
 
                     //input 0 strides
-                    memDramBlockIAColStride,
-                    memDramBlockIARowStride,
-                    memDramBlockIAGroupStride,
+                    memIAColStride,
+                    memIARowStride,
 
                     //input 1 strides
-                    memDramBlockIAColStride,
-                    memDramBlockIARowStride,
-                    memDramBlockIAGroupStride,
+                    memIAColStride,
+                    memIARowStride,
 
                     //output stride
                     intermediateAColStride,
 
                     //weight stride
                     memDramBlockFilterStride,
-
-                #if defined(SPARSE_SYSTEM)
-                    //memIATB0CountStart
-                    0 * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE,
-                    //memIATB0CountColStride,
-                    1,
-                    //memOATBCountStart
-                    1 * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE,
-                    //memOATBCountColStride
-                    1,
-                    //memWeightTBCountStart
-                    offsetWeightTBCount,
-                #endif
-
-                    //flagSparseOutput,
-                    TRUE,
-                    instFlagSparseInput,
 
                     //unsigned char flagTensorSync,
                     FALSE,
@@ -2577,6 +2440,10 @@ void testFixture::launch (
                     kernelSize,
                     stride,
 
+            #if defined(SPW_SYSTEM)
+                    numNZClustersPerPrungingRange,
+            #endif
+
                     sizeOutputTileHeight,
                     sizeOutputTileWidthPerCol,
                     numActiveColsPartialOutputTile,
@@ -2584,9 +2451,7 @@ void testFixture::launch (
                     numInputChannel0,
                     numInputChannel1,
                     numGroupCurrentLayer,
-                    numOutputChannels,
-                    //numGroupsNextLayer
-                    numGroupCurrentLayer
+                    numOutputChannels
                     );
         //Filling the rest of the information for the first layer
         {
@@ -2613,23 +2478,13 @@ void testFixture::launch (
             offsetIAMoverInstruction += numIAMoverInstructions;
             offsetOAMoverInstruction += numOAMoverInstructions;
 
-            if (op == CONVOLUTION)
-            {
-                graph.vecWeightDramBlockStart.push_back(offsetWeightsDramBlock);
-                graph.vecBiasStart.push_back(offsetBiasesDramBlock);
-                #if defined(SPARSE_SYSTEM)
-                    graph.vecWeightTBCountStart.push_back(offsetWeightTBCount);
-                #endif
-                graph.pWeights.push_back(pWeight);
-                graph.pBiasVector.push_back(pBiasVector);
-                offsetWeightsDramBlock +=
-                        (pWeight->getExternalMemoryAddressStride() >> WEIGHT_WIDE_SIZE_OFFSET)
-                        * numOutputChannels ;
-                offsetBiasesDramBlock += numOutputChannels;
-                #if defined(SPARSE_SYSTEM)
-                    offsetWeightTBCount += numOutputChannels;
-                #endif
-             }
+            graph.vecWeightDramBlockStart.push_back(offsetWeightsDramBlock);
+            graph.vecBiasStart.push_back(offsetBiasesDramBlock);
+            graph.pWeights.push_back(pWeight);
+            graph.pBiasVector.push_back(pBiasVector);
+            offsetWeightsDramBlock +=
+                    pWeight->getDramBlocksInFilter() * numOutputChannels ;
+            offsetBiasesDramBlock += numOutputChannels;
         }
 
         vecIAMoverInstruction.clear();
@@ -2669,35 +2524,16 @@ void testFixture::launch (
                     //input 0 strides
                     intermediateAColStride,
                     intermediateARowStride,
-                    intermediateAGroupStride,
 
                     //input 1 strides
                     intermediateAColStride,
                     intermediateARowStride,
-                    intermediateAGroupStride,
 
                     //output stride
-                    memDramBlockOAColStride,
+                    memOAColStride,
 
                     //weight stride
                     memDramBlockFilterStride,
-
-                #if defined(SPARSE_SYSTEM)
-                    //memIATB0CountStart
-                    1 * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE,
-                    //memIATB0CountColStride,
-                    1,
-                    //memOATBCountStart
-                    0 * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE,
-                    //memOATBCountColStride
-                    1,
-                    //memWeightTBCountStart
-                    offsetWeightTBCount,
-                #endif
-
-                    instFlagSparseOutput,
-                    //instFlagSparseInput,
-                    TRUE,
 
                     //unsigned char flagTensorSync,
                     TRUE,
@@ -2716,6 +2552,10 @@ void testFixture::launch (
 
                     kernelSize,
                     stride,
+
+            #if defined(SPW_SYSTEM)
+                    numNZClustersPerPrungingRange,
+            #endif
                     sizeOutputTileHeight,
                     sizeOutputTileWidthPerCol,
                     numActiveColsPartialOutputTile,
@@ -2723,9 +2563,7 @@ void testFixture::launch (
                     numInputChannel0,
                     numInputChannel1,
                     numGroupCurrentLayer,
-                    numOutputChannels,
-                    //numGroupsNextLayer
-                    _numGroupNext
+                    numOutputChannels
                     );
         //Filling the rest of the information for the SECOND layer
         {
@@ -2752,23 +2590,13 @@ void testFixture::launch (
             offsetIAMoverInstruction += numIAMoverInstructions;
             offsetOAMoverInstruction += numOAMoverInstructions;
 
-            if (op == CONVOLUTION)
-            {
-                graph.vecWeightDramBlockStart.push_back(offsetWeightsDramBlock);
-                graph.vecBiasStart.push_back(offsetBiasesDramBlock);
-                #if defined(SPARSE_SYSTEM)
-                    graph.vecWeightTBCountStart.push_back(offsetWeightTBCount);
-                #endif
-                graph.pWeights.push_back(pWeight);
-                graph.pBiasVector.push_back(pBiasVector);
-                offsetWeightsDramBlock +=
-                        (pWeight->getExternalMemoryAddressStride() >> WEIGHT_WIDE_SIZE_OFFSET)
-                        * numOutputChannels ;
-                offsetBiasesDramBlock += numOutputChannels;
-                #if defined(SPARSE_SYSTEM)
-                    offsetWeightTBCount += numOutputChannels;
-                #endif
-             }
+            graph.vecWeightDramBlockStart.push_back(offsetWeightsDramBlock);
+            graph.vecBiasStart.push_back(offsetBiasesDramBlock);
+            graph.pWeights.push_back(pWeight);
+            graph.pBiasVector.push_back(pBiasVector);
+            offsetWeightsDramBlock +=
+                    pWeight->getDramBlocksInFilter() * numOutputChannels;
+            offsetBiasesDramBlock += numOutputChannels;
         }
     } //multilayer-convolution
     else
@@ -2803,36 +2631,18 @@ void testFixture::launch (
                     offsetBiasesDramBlock,
 
                     //input 0 strides
-                    memDramBlockIAColStride,
-                    memDramBlockIARowStride,
-                    memDramBlockIAGroupStride,
+                    memIAColStride,
+                    memIARowStride,
 
                     //input 1 strides
-                    memDramBlockIAColStride,
-                    memDramBlockIARowStride,
-                    memDramBlockIAGroupStride,
+                    memIAColStride,
+                    memIARowStride,
 
                     //output stride
-                    memDramBlockOAColStride,
+                    memOAColStride,
 
                     //weight stride
                     memDramBlockFilterStride,
-
-                #if defined(SPARSE_SYSTEM)
-                    //memIATB0CountStart
-                    0 * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE,
-                    //memIATB0CountColStride,
-                    1,
-                    //memOATBCountStart
-                    1 * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE,
-                    //memOATBCountColStride
-                    1,
-                    //memWeightTBCountStart
-                    offsetWeightTBCount,
-                #endif
-
-                    instFlagSparseOutput,
-                    instFlagSparseInput,
 
                     //unsigned char flagTensorSync,
                     FALSE,
@@ -2852,6 +2662,10 @@ void testFixture::launch (
                     kernelSize,
                     stride,
 
+            #if defined(SPW_SYSTEM)
+                    numNZClustersPerPrungingRange,
+            #endif
+
                     sizeOutputTileHeight,
                     sizeOutputTileWidthPerCol,
                     numActiveColsPartialOutputTile,
@@ -2859,9 +2673,7 @@ void testFixture::launch (
                     numInputChannel0,
                     numInputChannel1,
                     numGroupCurrentLayer,
-                    numOutputChannels,
-                    //numGroupsNextLayer
-                    _numGroupNext
+                    numOutputChannels
                     );
         //Filling the rest of the information for the single layer
         {
@@ -2876,7 +2688,7 @@ void testFixture::launch (
             int numIAMoverInstructions = vecIAMoverInstruction.size();
             int numOAMoverInstructions = vecOAMoverInstruction.size();
             graph.vecLayerInfo.emplace_back(
-                GraphRuntime::t_layer_info {.layerName="layer1",
+                GraphRuntime::t_layer_info {.layerName="layer0",
                  .offsetIAMoverInstruction=offsetIAMoverInstruction,
                  .numIAMoverInstruction=numIAMoverInstructions,
                  .offsetOAMoverInstruction=offsetOAMoverInstruction,
@@ -2892,18 +2704,11 @@ void testFixture::launch (
             {
                 graph.vecWeightDramBlockStart.push_back(offsetWeightsDramBlock);
                 graph.vecBiasStart.push_back(offsetBiasesDramBlock);
-                #if defined(SPARSE_SYSTEM)
-                    graph.vecWeightTBCountStart.push_back(offsetWeightTBCount);
-                #endif
                 graph.pWeights.push_back(pWeight);
                 graph.pBiasVector.push_back(pBiasVector);
                 offsetWeightsDramBlock +=
-                        (pWeight->getExternalMemoryAddressStride() >> WEIGHT_WIDE_SIZE_OFFSET)
-                        * numOutputChannels ;
+                        pWeight->getDramBlocksInFilter() * numOutputChannels ;
                 offsetBiasesDramBlock += numOutputChannels;
-                #if defined(SPARSE_SYSTEM)
-                    offsetWeightTBCount += numOutputChannels;
-                #endif
              }
         }
     } //Instruction generation
@@ -2916,24 +2721,25 @@ void testFixture::launch (
     */
     graph.vecInputInfo.emplace_back(GraphRuntime::t_blob_info{
                                         .memoryRegionID=0,
-                                        .channelPerGroup=numInputChannel0 / (unsigned int) numGroupCurrentLayer,
-                                        .group=numGroupCurrentLayer,
+                                        .channel=numInputChannel0,
                                         .height=_inputHeight,
                                         .width=_inputWidth,
+                                        .stripStrideSeenBySource=numInputChannel0,
                                         .numFracBits=FRAC_WIDTH,
-                                        .flagCanBeSparse=flagSparseInput,
                                         .blobName="input"
                                     });
     int oaRegion = ((op == CONVOLUTION) && (flagMultiLayerConv == true)) ? 0 : 1;
+    int oaStripStrideSeenBySource =
+            numOutputChannelPerGroup * (numGroupCurrentLayer - 1)
+            + DIVIDE_CEIL(numOutputChannelPerGroup, ACTIVATION_BURST_SIZE_BYTE) * ACTIVATION_BURST_SIZE_BYTE;
     graph.vecOutputInfo.emplace_back(
                 GraphRuntime::t_blob_info{
                     .memoryRegionID=oaRegion,
-                    .channelPerGroup=numOutputChannelPerGroup,
-                    .group= numOutputChannels / numOutputChannelPerGroup,
+                    .channel=numOutputChannels,
                     .height= numOutputHeight,
                     .width= numOutputWidth,
+                    .stripStrideSeenBySource = oaStripStrideSeenBySource,
                     .numFracBits=FRAC_WIDTH,
-                    .flagCanBeSparse=flagSparseOutput,
                     .blobName="output"
                 }
                 );
@@ -2980,7 +2786,7 @@ void testFixture::launch (
         {
             std::cout <<stepCount++<<". Check the output"<<std::endl;
 
-            for (unsigned int iGroup=0; iGroup<_numGroupNext; iGroup++)
+            for (unsigned int iGroup=0; iGroup<numGroupCurrentLayer; iGroup++)
             {
                 for (unsigned int iRow=0; iRow<numOutputHeight; iRow++)
                 {
@@ -2990,8 +2796,9 @@ void testFixture::launch (
                         {
                             //Obtain the actual output
                             unsigned int outputCoord =
-                                    iGroup*numOutputHeight*numOutputWidth*numOutputChannelPerGroup
-                                    +iRow*numOutputWidth*numOutputChannelPerGroup + iCol*numOutputChannelPerGroup + iCh;
+                                    (iRow*numOutputWidth + iCol) * numOutputChannels
+                                    + iGroup * numOutputChannelPerGroup
+                                    + iCh;
                             float actualFloat = outputFloatVector.at(outputCoord);
 
                             //Compute the expected output

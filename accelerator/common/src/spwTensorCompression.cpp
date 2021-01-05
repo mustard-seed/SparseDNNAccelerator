@@ -80,8 +80,7 @@ DeviceActivationTensor::decodeTensor(
     return fullVector;
 }
 
-t_aligned_activation_vector
-DeviceActivationTensor::getValueVector() const
+t_aligned_activation_vector &DeviceActivationTensor::getValueVector()
 {
     return valueVector;
 }
@@ -297,6 +296,11 @@ int
 DeviceWeightTensor::getFilterStride() const
 {
     return this->getNumWeightsInPaddedFilter();
+}
+
+t_aligned_weight_vector &DeviceWeightTensor::getValueVector()
+{
+    return valueVector;
 }
 
 #if defined(SPW_SYSTEM)

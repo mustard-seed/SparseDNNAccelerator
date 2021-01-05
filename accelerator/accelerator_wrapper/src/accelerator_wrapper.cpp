@@ -1,6 +1,7 @@
 #include "accelerator_wrapper.hpp"
 #include "params.hpp"
 #include "floatFixedPointConversion.hpp"
+#include "device_structures.hpp"
 #include "timer.hpp"
 
 #if !defined(C5SOC)
@@ -229,14 +230,14 @@ namespace GraphRuntime {
         cl_ulong mkInstructionSize = maxBufferSizeByte < MAX_DRAM_BYTE_MISC_CONTROLLER_INSTRUCTION ? maxBufferSizeByte : MAX_DRAM_BYTE_MISC_CONTROLLER_INSTRUCTION;
         vecBufferInfo.push_back({mkInstructionSize, bufferMKInstructions, CL_MEM_READ_ONLY | MEM_BANK_INSTRUCTIONS, "bufferMKInstructions"});
 
-    #if defined(SPARSE_SYSTEM)
-        //If the device is PAC, place the TB count on the same memory bank as the instructions
-        cl_ulong inputWeightSBSize = maxBufferSizeByte < MAX_DRAM_BYTE_INPUT_WEIGHT_SB_COUNT ? maxBufferSizeByte : MAX_DRAM_BYTE_INPUT_WEIGHT_SB_COUNT;
-        vecBufferInfo.push_back({inputWeightSBSize, bufferWMoverWTBCounts, CL_MEM_READ_ONLY | MEM_BANK_INSTRUCTIONS, "bufferWMoverWTBCounts"});
+//    #if defined(SPARSE_SYSTEM)
+//        //If the device is PAC, place the TB count on the same memory bank as the instructions
+//        cl_ulong inputWeightSBSize = maxBufferSizeByte < MAX_DRAM_BYTE_INPUT_WEIGHT_SB_COUNT ? maxBufferSizeByte : MAX_DRAM_BYTE_INPUT_WEIGHT_SB_COUNT;
+//        vecBufferInfo.push_back({inputWeightSBSize, bufferWMoverWTBCounts, CL_MEM_READ_ONLY | MEM_BANK_INSTRUCTIONS, "bufferWMoverWTBCounts"});
 
-        cl_ulong activationTBCountSize = maxBufferSizeByte < MAX_DRAM_BYTE_INPUT_ACTIVATION_SB_COUNT ? maxBufferSizeByte : MAX_DRAM_BYTE_INPUT_ACTIVATION_SB_COUNT;
-        vecBufferInfo.push_back({activationTBCountSize, bufferActivationTBCounts, CL_MEM_READ_WRITE | MEM_BANK_INSTRUCTIONS, "bufferActivationTBCounts"});
-    #endif
+//        cl_ulong activationTBCountSize = maxBufferSizeByte < MAX_DRAM_BYTE_INPUT_ACTIVATION_SB_COUNT ? maxBufferSizeByte : MAX_DRAM_BYTE_INPUT_ACTIVATION_SB_COUNT;
+//        vecBufferInfo.push_back({activationTBCountSize, bufferActivationTBCounts, CL_MEM_READ_WRITE | MEM_BANK_INSTRUCTIONS, "bufferActivationTBCounts"});
+//    #endif
 
         for (auto& info : vecBufferInfo)
         {
@@ -294,80 +295,103 @@ namespace GraphRuntime {
         std::cout <<"Allocate memory for the input and output blobs."<<std::endl;
         for (auto& inputInfo: _executionGraph.vecInputInfo)
         {
-            bool flagCanBeSparse = inputInfo.flagCanBeSparse;
-            if (flagCanBeSparse == true)
-            {
-                vecInputBlobsInternal.emplace_back(
-                            std::shared_ptr<AlignedTensor>(new FlexibleDirectCompressedTensor(
-                                                1, //_num3DTensors
-                                                inputInfo.group * inputInfo.channelPerGroup, //_channel
-                                                inputInfo.width, //_width
-                                                inputInfo.height, //_height
-                                                inputInfo.channelPerGroup-1, //_maxScalarIndexInChannelGroup
-                                                COMPRESSION_WINDOW_SIZE-1, //_maxClusterIndexInCompressionBlock
-                                                TRANSFER_SIZE-1, //_maxClusterIndexInTransferBlock
-                                                CLUSTER_SIZE-1, //_maxScalarIndexInCluster
-                                                false //isKernel
-                                                )
-                                            )
-                            );
-            }
-            else
-            {
-                vecInputBlobsInternal.emplace_back(
-                            std::shared_ptr<AlignedTensor>(new AlignedTensor(
-                                                1, //_num3DTensors
-                                                inputInfo.group * inputInfo.channelPerGroup, //_channel
-                                                inputInfo.width, //_width
-                                                inputInfo.height, //_height
-                                                inputInfo.channelPerGroup-1, //_maxScalarIndexInChannelGroup
-                                                TRANSFER_SIZE-1, //_maxClusterIndexInTransferBlock
-                                                CLUSTER_SIZE-1, //_maxScalarIndexInCluster
-                                                false //isKernel
-                                                )
-                                            )
-                            );
-            }
+//            bool flagCanBeSparse = inputInfo.flagCanBeSparse;
+//            if (flagCanBeSparse == true)
+//            {
+//                vecInputBlobsInternal.emplace_back(
+//                            std::shared_ptr<AlignedTensor>(new FlexibleDirectCompressedTensor(
+//                                                1, //_num3DTensors
+//                                                inputInfo.group * inputInfo.channelPerGroup, //_channel
+//                                                inputInfo.width, //_width
+//                                                inputInfo.height, //_height
+//                                                inputInfo.channelPerGroup-1, //_maxScalarIndexInChannelGroup
+//                                                COMPRESSION_WINDOW_SIZE-1, //_maxClusterIndexInCompressionBlock
+//                                                TRANSFER_SIZE-1, //_maxClusterIndexInTransferBlock
+//                                                CLUSTER_SIZE-1, //_maxScalarIndexInCluster
+//                                                false //isKernel
+//                                                )
+//                                            )
+//                            );
+//            }
+//            else
+//            {
+//                vecInputBlobsInternal.emplace_back(
+//                            std::shared_ptr<AlignedTensor>(new AlignedTensor(
+//                                                1, //_num3DTensors
+//                                                inputInfo.group * inputInfo.channelPerGroup, //_channel
+//                                                inputInfo.width, //_width
+//                                                inputInfo.height, //_height
+//                                                inputInfo.channelPerGroup-1, //_maxScalarIndexInChannelGroup
+//                                                TRANSFER_SIZE-1, //_maxClusterIndexInTransferBlock
+//                                                CLUSTER_SIZE-1, //_maxScalarIndexInCluster
+//                                                false //isKernel
+//                                                )
+//                                            )
+//                            );
+//            }
+
+            vecInputBlobsInternal.emplace_back(
+                            std::shared_ptr<DeviceActivationTensor>(
+                                new DeviceActivationTensor(
+                                    inputInfo.channel,
+                                    inputInfo.width,
+                                    inputInfo.height,
+                                    inputInfo.stripStrideSeenBySource
+                                )
+                            )
+                        );
         }
         vecInputBlobsInfo = _executionGraph.vecInputInfo;
         vecInputTransferTime = std::vector<cl_double>(vecInputBlobsInfo.size(), 0.0);
 
         for (auto& outputInfo: _executionGraph.vecOutputInfo)
         {
-            bool flagCanBeSparse = outputInfo.flagCanBeSparse;
-            if (flagCanBeSparse == true)
-            {
-                vecOutputBlobsInternal.emplace_back(
-                            std::shared_ptr<AlignedTensor>(new FlexibleDirectCompressedTensor(
-                                                1, //_num3DTensors
-                                                outputInfo.group * outputInfo.channelPerGroup, //_channel
-                                                outputInfo.width, //_width
-                                                outputInfo.height, //_height
-                                                outputInfo.channelPerGroup-1, //_maxScalarIndexInChannelGroup
-                                                COMPRESSION_WINDOW_SIZE-1, //_maxClusterIndexInCompressionBlock
-                                                TRANSFER_SIZE-1, //_maxClusterIndexInTransferBlock
-                                                CLUSTER_SIZE-1, //_maxScalarIndexInCluster
-                                                false //isKernel
-                                                )
-                                            )
-                            );
-            }
-            else
-            {
-                vecOutputBlobsInternal.emplace_back(
-                            std::shared_ptr<AlignedTensor>(new AlignedTensor(
-                                                1, //_num3DTensors
-                                                outputInfo.group * outputInfo.channelPerGroup, //_channel
-                                                outputInfo.width, //_width
-                                                outputInfo.height, //_height
-                                                outputInfo.channelPerGroup-1, //_maxScalarIndexInChannelGroup
-                                                TRANSFER_SIZE-1, //_maxClusterIndexInTransferBlock
-                                                CLUSTER_SIZE-1, //_maxScalarIndexInCluster
-                                                false //isKernel
-                                                )
-                                            )
-                            );
-            }
+            //TODO: Remove the check on flagCanBeSparse
+            //TODO: Change the type of the blob
+//            bool flagCanBeSparse = outputInfo.flagCanBeSparse;
+//            if (flagCanBeSparse == true)
+//            {
+//                vecOutputBlobsInternal.emplace_back(
+//                            std::shared_ptr<AlignedTensor>(new FlexibleDirectCompressedTensor(
+//                                                1, //_num3DTensors
+//                                                outputInfo.group * outputInfo.channelPerGroup, //_channel
+//                                                outputInfo.width, //_width
+//                                                outputInfo.height, //_height
+//                                                outputInfo.channelPerGroup-1, //_maxScalarIndexInChannelGroup
+//                                                COMPRESSION_WINDOW_SIZE-1, //_maxClusterIndexInCompressionBlock
+//                                                TRANSFER_SIZE-1, //_maxClusterIndexInTransferBlock
+//                                                CLUSTER_SIZE-1, //_maxScalarIndexInCluster
+//                                                false //isKernel
+//                                                )
+//                                            )
+//                            );
+//            }
+//            else
+//            {
+//                vecOutputBlobsInternal.emplace_back(
+//                            std::shared_ptr<AlignedTensor>(new AlignedTensor(
+//                                                1, //_num3DTensors
+//                                                outputInfo.group * outputInfo.channelPerGroup, //_channel
+//                                                outputInfo.width, //_width
+//                                                outputInfo.height, //_height
+//                                                outputInfo.channelPerGroup-1, //_maxScalarIndexInChannelGroup
+//                                                TRANSFER_SIZE-1, //_maxClusterIndexInTransferBlock
+//                                                CLUSTER_SIZE-1, //_maxScalarIndexInCluster
+//                                                false //isKernel
+//                                                )
+//                                            )
+//                            );
+//            }
+            vecOutputBlobsInternal.emplace_back(
+                            std::shared_ptr<DeviceActivationTensor>(
+                                new DeviceActivationTensor(
+                                    outputInfo.channel,
+                                    outputInfo.width,
+                                    outputInfo.height,
+                                    outputInfo.stripStrideSeenBySource
+                                )
+                            )
+                        );
         }
         vecOutputBlobsInfo = _executionGraph.vecOutputInfo;
         vecOutputTransferTime = std::vector<cl_double>(vecOutputBlobsInfo.size(), 0.0);
@@ -387,11 +411,11 @@ namespace GraphRuntime {
             //volatile __global t_dram_block* restrict pIA
             kernelIAMover.setArg(argIdx, bufferActivationDramBlocks);
             argIdx++;
-            #if defined(SPARSE_SYSTEM)
-                //volatile __global t_streamblock_address* restrict pTBCount,
-                kernelIAMover.setArg(argIdx, bufferActivationTBCounts);
-                argIdx++;
-            #endif
+//            #if defined(SPARSE_SYSTEM)
+//                //volatile __global t_streamblock_address* restrict pTBCount,
+//                kernelIAMover.setArg(argIdx, bufferActivationTBCounts);
+//                argIdx++;
+//            #endif
             //volatile __global t_ia_mover_instruction* restrict pInstruction,
             kernelIAMover.setArg(argIdx, bufferIAMoverInstructions);
             argIdx++;
@@ -429,10 +453,10 @@ namespace GraphRuntime {
             kernelWMover.setArg(argIdx++, bufferWMoverWDramBlocks);
             //vola<tile __global t_bias* restrict pBias,
             kernelWMover.setArg(argIdx++, bufferWMoverBias);
-            #if defined(SPARSE_SYSTEM)
-                //volatile __global t_streamblock_address* restrict pFilterTBCount,
-                kernelWMover.setArg(argIdx++, bufferWMoverWTBCounts);
-            #endif //SPARSE_SYSTEM
+//            #if defined(SPARSE_SYSTEM)
+//                //volatile __global t_streamblock_address* restrict pFilterTBCount,
+//                kernelWMover.setArg(argIdx++, bufferWMoverWTBCounts);
+//            #endif //SPARSE_SYSTEM
             //unsigned int numInstruction
             unsigned int numInustruction = _executionGraph.vecWMoverInstruction.size();
             kernelWMover.setArg(argIdx++, (cl_uint) (_executionGraph.vecWMoverInstruction.size()) );
@@ -455,10 +479,10 @@ namespace GraphRuntime {
             cl_uint argIdx=0;
             //volatile __global t_output_dram_block* restrict pOA,
             kernelOAMover.setArg(argIdx++, bufferActivationDramBlocks);
-            #if defined(SPARSE_SYSTEM)
-                //volatile __global t_streamblock_address* restrict pTBCount,
-                kernelOAMover.setArg(argIdx++, bufferActivationTBCounts);
-            #endif
+//            #if defined(SPARSE_SYSTEM)
+//                //volatile __global t_streamblock_address* restrict pTBCount,
+//                kernelOAMover.setArg(argIdx++, bufferActivationTBCounts);
+//            #endif
             //volatile __global t_oa_mover_instruction* restrict pInstruction,
             kernelOAMover.setArg(argIdx++, bufferOAMoverInstructions);
         }
@@ -672,16 +696,15 @@ namespace GraphRuntime {
             cl_double weightTransferElapsedTimeUs = 0.0;
             int weightTransferBytes = 0;
             int idxTensor = 0;
-            for (std::shared_ptr<AlignedTensor>& ptr : _executionGraph.pWeights)
+            for (std::shared_ptr<DeviceWeightTensor>& ptr : _executionGraph.pWeights)
             {
                 cl::Event event;
-                auto pWeights = ptr.get();
-                auto numElements =  (pWeights->getTransferBlockVector()).size();
-                auto sizeElement = sizeof(typeof((pWeights->getTransferBlockVector()).at(0)));
+                auto vecWeights = ptr.get()->getValueVector();
+                auto numElements =  vecWeights.size();
+                auto sizeElement = sizeof(typeof((vecWeights.at(0))));
 
                 int byteOffset = _executionGraph.vecWeightDramBlockStart.at(idxTensor++)
-                        * (WEIGHT_BURST_SIZE_BYTE);
-
+                        * sizeof(t_weight_dram_block);
                 weightTransferBytes += numElements*sizeElement;
                 if (weightTransferBytes > MAX_DRAM_BYTE_INPUT_WEIGHT)
                 {
@@ -692,7 +715,7 @@ namespace GraphRuntime {
                                                      CL_TRUE, //blocking_write
                                                      byteOffset, //offset
                                                      numElements*sizeElement, //size
-                                                     (pWeights->getTransferBlockVector()).data(), //data pointer
+                                                     vecWeights.data(), //data pointer
                                                      NULL, //dependency list
                                                      &event //events generated
                                                     );
@@ -706,43 +729,43 @@ namespace GraphRuntime {
             std::cout <<"Transfer the filter weight tensors took "<<weightTransferElapsedTimeUs<<" us"<<std::endl;
         }
 
-    #if defined(SPARSE_SYSTEM)
-        std::cout <<stepCount++<<". Transfer the filter weight TB counts"<<std::endl;
-        {
-            cl_double transferElapsedTimeUs = 0.0;
-            int transferBytes = 0;
-            int idxTensor = 0;
-            for (std::shared_ptr<AlignedTensor>& ptr : _executionGraph.pWeights)
-            {
-                cl::Event event;
-                auto pWeights = ptr.get();
-                auto numElements =  (pWeights->getTransferBlockCountVector()).size();
-                auto sizeElement = sizeof(typeof((pWeights->getTransferBlockCountVector()).at(0)));
-                transferBytes += sizeElement * numElements;
+//    #if defined(SPARSE_SYSTEM)
+//        std::cout <<stepCount++<<". Transfer the filter weight TB counts"<<std::endl;
+//        {
+//            cl_double transferElapsedTimeUs = 0.0;
+//            int transferBytes = 0;
+//            int idxTensor = 0;
+//            for (std::shared_ptr<AlignedTensor>& ptr : _executionGraph.pWeights)
+//            {
+//                cl::Event event;
+//                auto pWeights = ptr.get();
+//                auto numElements =  (pWeights->getTransferBlockCountVector()).size();
+//                auto sizeElement = sizeof(typeof((pWeights->getTransferBlockCountVector()).at(0)));
+//                transferBytes += sizeElement * numElements;
 
-                int byteOffset = _executionGraph.vecWeightTBCountStart.at(idxTensor++) * 2;
-                if (transferBytes > MAX_DRAM_BYTE_INPUT_WEIGHT_SB_COUNT)
-                {
-                    std::cout << "Too many weight TB counts to fit inside the global memory."<<std::endl;
-                    throw;
-                }
-                status = clCQWMover.enqueueWriteBuffer(bufferWMoverWTBCounts, //buffer
-                                                     CL_TRUE, //blocking_write
-                                                     byteOffset, //offset
-                                                     numElements*sizeElement, //size
-                                                     (pWeights->getTransferBlockCountVector()).data(), //data pointer
-                                                     NULL, //dependency list
-                                                     &event //events generated
-                                                    );
-                aocl_utils_cpp::checkError(status, "Failed to write the filter weight TB counts");
-                clCQWMover.finish();
-                cl_ulong startTime = event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-                cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-                transferElapsedTimeUs += (cl_double)((endTime - startTime)*(cl_double)(1e-3));
-            }
-            std::cout <<"Transfer the filter weight TB counts took "<<transferElapsedTimeUs<<" us"<<std::endl;
-        }
-    #endif
+//                int byteOffset = _executionGraph.vecWeightTBCountStart.at(idxTensor++) * 2;
+//                if (transferBytes > MAX_DRAM_BYTE_INPUT_WEIGHT_SB_COUNT)
+//                {
+//                    std::cout << "Too many weight TB counts to fit inside the global memory."<<std::endl;
+//                    throw;
+//                }
+//                status = clCQWMover.enqueueWriteBuffer(bufferWMoverWTBCounts, //buffer
+//                                                     CL_TRUE, //blocking_write
+//                                                     byteOffset, //offset
+//                                                     numElements*sizeElement, //size
+//                                                     (pWeights->getTransferBlockCountVector()).data(), //data pointer
+//                                                     NULL, //dependency list
+//                                                     &event //events generated
+//                                                    );
+//                aocl_utils_cpp::checkError(status, "Failed to write the filter weight TB counts");
+//                clCQWMover.finish();
+//                cl_ulong startTime = event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+//                cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
+//                transferElapsedTimeUs += (cl_double)((endTime - startTime)*(cl_double)(1e-3));
+//            }
+//            std::cout <<"Transfer the filter weight TB counts took "<<transferElapsedTimeUs<<" us"<<std::endl;
+//        }
+//    #endif
         std::cout <<stepCount++<<". Transfer the MK controller instructions"<<std::endl;
         {
             cl::Event event;
@@ -782,7 +805,7 @@ namespace GraphRuntime {
         //1. inputBlobID should be in range
         //2. Number of elements inside floatBlob should be consistent with the inputBlobID info.
         auto blobInfo = vecInputBlobsInfo.at(inputBlobID);
-        if(blobInfo.group*blobInfo.channelPerGroup*blobInfo.height*blobInfo.width
+        if(blobInfo.channel*blobInfo.height*blobInfo.width
                != floatBlob.size())
         {
             std::cout << "Number of elements in the provided vector of float mismatch that"
@@ -791,48 +814,59 @@ namespace GraphRuntime {
 
         //Quantize the input
         std::vector<fixedPointNumber> inputBlobQuantized = quantize(floatBlob, blobInfo.numFracBits);
-        if (vecInputBlobsInfo.at(inputBlobID).flagCanBeSparse == true)
-        {
-            vecInputBlobsInternal.at(inputBlobID).reset(
-                        new FlexibleDirectCompressedTensor(
+//        if (vecInputBlobsInfo.at(inputBlobID).flagCanBeSparse == true)
+//        {
+//            //TODO: change the data types
+//            vecInputBlobsInternal.at(inputBlobID).reset(
+//                        new FlexibleDirectCompressedTensor(
+//                            inputBlobQuantized,
+//                            1, //_num3DTensors
+//                            blobInfo.group * blobInfo.channelPerGroup, //_channel
+//                            blobInfo.width, //_width
+//                            blobInfo.height, //_height
+//                            blobInfo.channelPerGroup-1, //_maxScalarIndexInChannelGroup
+//                            COMPRESSION_WINDOW_SIZE-1, //_maxClusterIndexInCompressionBlock
+//                            TRANSFER_SIZE-1, //_maxClusterIndexInTransferBlock
+//                            CLUSTER_SIZE-1, //_maxScalarIndexInCluster
+//                            false //isKernel
+//                            )
+//                        );
+//        }
+//        else
+//        {
+//            vecInputBlobsInternal.at(inputBlobID).reset(
+//                        new AlignedTensor(
+//                            inputBlobQuantized,
+//                            1, //_num3DTensors
+//                            blobInfo.group * blobInfo.channelPerGroup, //_channel
+//                            blobInfo.width, //_width
+//                            blobInfo.height, //_height
+//                            blobInfo.channelPerGroup-1, //_maxScalarIndexInChannelGroup
+//                            TRANSFER_SIZE-1, //_maxClusterIndexInTransferBlock
+//                            CLUSTER_SIZE-1, //_maxScalarIndexInCluster
+//                            false //isKernel
+//                            )
+//                        );
+//        }
+        vecInputBlobsInternal.at(inputBlobID).reset(
+                    new DeviceActivationTensor(
                             inputBlobQuantized,
-                            1, //_num3DTensors
-                            blobInfo.group * blobInfo.channelPerGroup, //_channel
-                            blobInfo.width, //_width
-                            blobInfo.height, //_height
-                            blobInfo.channelPerGroup-1, //_maxScalarIndexInChannelGroup
-                            COMPRESSION_WINDOW_SIZE-1, //_maxClusterIndexInCompressionBlock
-                            TRANSFER_SIZE-1, //_maxClusterIndexInTransferBlock
-                            CLUSTER_SIZE-1, //_maxScalarIndexInCluster
-                            false //isKernel
-                            )
-                        );
-        }
-        else
-        {
-            vecInputBlobsInternal.at(inputBlobID).reset(
-                        new AlignedTensor(
-                            inputBlobQuantized,
-                            1, //_num3DTensors
-                            blobInfo.group * blobInfo.channelPerGroup, //_channel
-                            blobInfo.width, //_width
-                            blobInfo.height, //_height
-                            blobInfo.channelPerGroup-1, //_maxScalarIndexInChannelGroup
-                            TRANSFER_SIZE-1, //_maxClusterIndexInTransferBlock
-                            CLUSTER_SIZE-1, //_maxScalarIndexInCluster
-                            false //isKernel
-                            )
-                        );
-        }
+                            blobInfo.channel,
+                            blobInfo.width,
+                            blobInfo.height,
+                            blobInfo.stripStrideSeenBySource
+                        )
+                    );
     } //prepareInputBlob
 
     std::vector<float> AcceleratorWrapper::extractOutputBlob (int outputBlobID)
     {
         t_blob_info blobInfo = vecOutputBlobsInfo.at(outputBlobID);
-        std::vector<fixedPointNumber> quantizedResult;
         signed char fracWidth = blobInfo.numFracBits;
         signed char intWidth = 7-fracWidth;
-        vecOutputBlobsInternal.at(outputBlobID)->decodeTensor(quantizedResult, fracWidth, intWidth);
+        //TODO: Change the data type and the decode call.
+        std::vector<fixedPointNumber> quantizedResult =
+                vecOutputBlobsInternal.at(outputBlobID)->decodeTensor(fracWidth, intWidth);
         std::vector<float> result = convert2Float(quantizedResult);
         return result;
     } //extractOutputBlob
@@ -884,14 +918,14 @@ namespace GraphRuntime {
             for (const auto& blobInfo : vecInputBlobsInfo)
             {
                 cl::Event event;
-                auto pInput = vecInputBlobsInternal.at(index).get();
+                auto vecInput = vecInputBlobsInternal.at(index).get()->getValueVector();
+                auto valueVectorSizeBytes = vecInput.size() * sizeof(typeof(vecInput.at(0)));
 
-                auto numTransferBlocks = (pInput->getTransferBlockVector()).size();
-                auto sizeTransferBlockElement = sizeof(typeof((pInput->getTransferBlockVector()).at(0)));
-                auto valueVectorSizeBytes = sizeTransferBlockElement * numTransferBlocks;
-
-                int activationOffsetByte = blobInfo.memoryRegionID * MEM_ACTIVATION_REGION_SIZE_PER_SLICE * BURST_SIZE_BYTE;
-                if (valueVectorSizeBytes > (BURST_SIZE_BYTE * MEM_ACTIVATION_REGION_SIZE_PER_SLICE))
+                int activationOffsetByte =
+                        blobInfo.memoryRegionID
+                        * MEM_ACTIVATION_REGION_SIZE_PER_SLICE
+                        * ACTIVATION_BURST_SIZE_BYTE;
+                if (valueVectorSizeBytes > (ACTIVATION_BURST_SIZE_BYTE * MEM_ACTIVATION_REGION_SIZE_PER_SLICE))
                 {
                     std::cout << "Too many input activation bytes to fit inside the global memory."<<std::endl;
                     throw;
@@ -900,7 +934,7 @@ namespace GraphRuntime {
                                                          CL_TRUE, //blocking_write
                                                          activationOffsetByte, //offset
                                                          valueVectorSizeBytes, //size
-                                                         (pInput->getTransferBlockVector()).data(), //data pointer
+                                                         vecInput.data(), //data pointer
                                                          NULL, //dependency list
                                                          &event //events generated
                                                             );
@@ -909,32 +943,32 @@ namespace GraphRuntime {
                 cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
                 vecInputTransferTime.at(index) += (cl_double)((endTime - startTime)*(cl_double)(1e-3));
 
-                #if defined(SPARSE_SYSTEM)
-                    if (blobInfo.flagCanBeSparse == true)
-                    {
-                        auto numElements = (pInput->getTransferBlockCountVector()).size();
-                        auto sizeElement = sizeof(typeof((pInput->getTransferBlockCountVector()).at(0)));
-                        auto transferBytes = sizeElement * numElements;
+//                #if defined(SPARSE_SYSTEM)
+//                    if (blobInfo.flagCanBeSparse == true)
+//                    {
+//                        auto numElements = (pInput->getTransferBlockCountVector()).size();
+//                        auto sizeElement = sizeof(typeof((pInput->getTransferBlockCountVector()).at(0)));
+//                        auto transferBytes = sizeElement * numElements;
 
-                        int tbCountOffsetByte = blobInfo.memoryRegionID * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE * sizeof(t_streamblock_address);
+//                        int tbCountOffsetByte = blobInfo.memoryRegionID * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE * sizeof(t_streamblock_address);
 
-                        //std::cout <<"Transfering "<<transferBytes<<" bytes into bufferActivationTBCounts"<<std::endl;
-                        if (transferBytes > (2 * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE))
-                        {
-                            std::cout << "Too many input activation TB count bytes to fit inside the global memory."<<std::endl;
-                            throw;
-                        }
-                        status = clCQIAMover.enqueueWriteBuffer(bufferActivationTBCounts, //buffer
-                                                             CL_TRUE, //blocking_write
-                                                             tbCountOffsetByte, //offset
-                                                             transferBytes, //size
-                                                             (pInput->getTransferBlockCountVector()).data(), //data pointer
-                                                             NULL, //dependency list
-                                                             NULL //events generated
-                                                            );
-                        aocl_utils_cpp::checkError(status, "Failed to write the input activation TB count");
-                    }
-                #endif
+//                        //std::cout <<"Transfering "<<transferBytes<<" bytes into bufferActivationTBCounts"<<std::endl;
+//                        if (transferBytes > (2 * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE))
+//                        {
+//                            std::cout << "Too many input activation TB count bytes to fit inside the global memory."<<std::endl;
+//                            throw;
+//                        }
+//                        status = clCQIAMover.enqueueWriteBuffer(bufferActivationTBCounts, //buffer
+//                                                             CL_TRUE, //blocking_write
+//                                                             tbCountOffsetByte, //offset
+//                                                             transferBytes, //size
+//                                                             (pInput->getTransferBlockCountVector()).data(), //data pointer
+//                                                             NULL, //dependency list
+//                                                             NULL //events generated
+//                                                            );
+//                        aocl_utils_cpp::checkError(status, "Failed to write the input activation TB count");
+//                    }
+//                #endif
                 index++;
             }
         }
@@ -1113,14 +1147,15 @@ namespace GraphRuntime {
             for (const auto& blobInfo : vecOutputBlobsInfo)
             {
                 cl::Event event;
-                auto pOutput = vecOutputBlobsInternal.at(index).get();
+                //Get a reference to the vector within the Blob
+                auto vecOutput = vecOutputBlobsInternal.at(index).get() -> getValueVector();
 
-                auto numTransferBlocks = (pOutput->getTransferBlockVector()).size();
-                auto sizeTransferBlockElement = sizeof(typeof((pOutput->getTransferBlockVector()).at(0)));
-                auto valueVectorSizeBytes = sizeTransferBlockElement * numTransferBlocks;
-
-                int activationOffsetByte = blobInfo.memoryRegionID * MEM_ACTIVATION_REGION_SIZE_PER_SLICE * BURST_SIZE_BYTE;
-                if (valueVectorSizeBytes > (BURST_SIZE_BYTE * MEM_ACTIVATION_REGION_SIZE_PER_SLICE))
+                auto valueVectorSizeBytes = vecOutput.size() * sizeof(vecOutput.at(0));
+                int activationOffsetByte =
+                        blobInfo.memoryRegionID
+                        * MEM_ACTIVATION_REGION_SIZE_PER_SLICE
+                        * ACTIVATION_BURST_SIZE_BYTE;
+                if (valueVectorSizeBytes > (ACTIVATION_BURST_SIZE_BYTE * MEM_ACTIVATION_REGION_SIZE_PER_SLICE))
                 {
                     std::cout << "Too many output activation bytes to read from global memory."<<std::endl;
                     throw;
@@ -1129,7 +1164,7 @@ namespace GraphRuntime {
                                                          CL_TRUE, //blocking_write
                                                          activationOffsetByte, //offset
                                                          valueVectorSizeBytes, //size
-                                                         (pOutput->getTransferBlockVector()).data(), //data pointer
+                                                         vecOutput.data(), //data pointer
                                                          NULL, //dependency list
                                                          &event //events generated
                                                             );
@@ -1140,33 +1175,34 @@ namespace GraphRuntime {
                 cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
                 vecOutputTransferTime.at(index) += (cl_double)((endTime - startTime)*(cl_double)(1e-3));
 
-                #if defined(SPARSE_SYSTEM)
-                    if (blobInfo.flagCanBeSparse == true)
-                    {
-                        auto numElements = (pOutput->getTransferBlockCountVector()).size();
-                        auto sizeElement = sizeof(typeof((pOutput->getTransferBlockCountVector()).at(0)));
-                        auto transferBytes = sizeElement * numElements;
+                //TODO: remove this
+//                #if defined(SPARSE_SYSTEM)
+//                    if (blobInfo.flagCanBeSparse == true)
+//                    {
+//                        auto numElements = (pOutput->getTransferBlockCountVector()).size();
+//                        auto sizeElement = sizeof(typeof((pOutput->getTransferBlockCountVector()).at(0)));
+//                        auto transferBytes = sizeElement * numElements;
 
-                        int tbCountOffsetByte = blobInfo.memoryRegionID * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE * sizeof(t_streamblock_address);
+//                        int tbCountOffsetByte = blobInfo.memoryRegionID * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE * sizeof(t_streamblock_address);
 
-                        if (transferBytes > (2 * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE))
-                        {
-                            std::cout << "Too many output activation TB count bytes to be read from global memory."<<std::endl;
-                            throw;
-                        }
-                        status = clCQOAMover.enqueueReadBuffer(bufferActivationTBCounts, //buffer
-                                                             CL_TRUE, //blocking_write
-                                                             tbCountOffsetByte, //offset
-                                                             transferBytes, //size
-                                                             (pOutput->getTransferBlockCountVector()).data(), //data pointer
-                                                             NULL, //dependency list
-                                                             NULL //events generated
-                                                               );
-                        #if defined(HOST_DEBUG)
-                        aocl_utils_cpp::checkError(status, "Failed to read the output activation TB count");
-                        #endif
-                    }
-                #endif
+//                        if (transferBytes > (2 * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE))
+//                        {
+//                            std::cout << "Too many output activation TB count bytes to be read from global memory."<<std::endl;
+//                            throw;
+//                        }
+//                        status = clCQOAMover.enqueueReadBuffer(bufferActivationTBCounts, //buffer
+//                                                             CL_TRUE, //blocking_write
+//                                                             tbCountOffsetByte, //offset
+//                                                             transferBytes, //size
+//                                                             (pOutput->getTransferBlockCountVector()).data(), //data pointer
+//                                                             NULL, //dependency list
+//                                                             NULL //events generated
+//                                                               );
+//                        #if defined(HOST_DEBUG)
+//                        aocl_utils_cpp::checkError(status, "Failed to read the output activation TB count");
+//                        #endif
+//                    }
+//                #endif
                 index++;
             }
         }

@@ -1864,15 +1864,15 @@ __kernel void kernelMiscControlMover (
 	{
 		t_misc_instruction instruction = pInstruction[i];
 		unsigned short numDramBlocksToReduce = instruction.numDramBlocksToReduce;
-		unsigned short numOutputBlocksPerCol = instruction.numOutputBlocksPerCol;
-		unsigned short numOutputBlocksPerStrip = instruction.numOutputBlocksPerStrip;
+		unsigned short numOutputBlocksPerUnit = instruction.numOutputBlocksPerUnit;
+		//unsigned short numOutputBlocksPerStrip = instruction.numOutputBlocksPerStrip;
 		unsigned char outputModifierControl = instruction.outputModifierControl;
-		for (unsigned short iChunk=0; iChunk<numOutputBlocksPerStrip; iChunk++)
-		{
+		//for (unsigned short iChunk=0; iChunk<numOutputBlocksPerStrip; iChunk++)
+		//{
 			t_misc_control_packet packet;
 			packet.controlBits = instruction.controlBits;
 			packet.numDramBlocksToReduce = numDramBlocksToReduce;
-			packet.numOutputBlocks	=	numOutputBlocksPerCol;
+			packet.numOutputBlocks	=	numOutputBlocksPerUnit;
 			packet.outputModifierControl = outputModifierControl;
 
 			write_channel_intel(channel_misc_instruction[0], packet);
@@ -1880,7 +1880,7 @@ __kernel void kernelMiscControlMover (
 			// 				i, iChunk));
 			EMULATOR_PRINT(("[kernelMiscControlMover] Sent instruction %d \n", i));
 
-		}
+		//}
 	}
 }
 

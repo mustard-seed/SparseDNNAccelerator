@@ -228,7 +228,7 @@ typedef struct __attribute__((packed)) __attribute__((aligned(64)))
     //Arch parameter: Column stride of input activation strips in dram block in both input memory regions
     //Address is counted in activation word (i.e.. signed char)
     t_int memBlockColStripStride;
-    //Arch parameter: Row stride of input activation strips in dram block in both input memory regions
+    //Arch parameter: Row stride of input activation strips in activation word in both input memory regions
     t_int memBlockRowStripStride;
 
 
@@ -272,8 +272,6 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
     //Arch. parameters.
     //[3:0]: Number of active compute columns
     //[4]: Sync Flag. 1 if there is a need to send sync. signal to the IA mover in the beginning
-    //[6]: Flag for whether the output is sparse. 1 for YES, 0 for NO
-    //[7]: Flag for selecting the memory region to write to
     t_uchar memSelectCatSparseFlagCatSyncFlagCatNumActiveCols;
 
     //Arch. parameter: Index of the first dram block of this transfer in memory
@@ -345,11 +343,13 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
     //Number of streaming instruction for this tile
     t_uint numOutputInstructions;
     //Column stride of IA strip in IA cache in terms of DRAM BLOCK
+    //Note: IA cache only sees ONE group. 
+    //In other words, when the accelerator processes multiple groups
+    //the strip seen by the IA buffer is shorter than the strip seen by the IA mover
     t_ushort cacheIAStripColStride;
     //Number of output channels in the output group
     t_ushort numOutputChannelsInGroup;
     //Bit[6:0] Number of active PE columns
-    //Bit[7] For sparse engine use only. Whether the input activation tensor is dense and hence need bitmask padding.
     t_uchar flagPadBitmaskCatNumActiveCols;
 
 } t_ia_tile_controller_instruction;
@@ -364,7 +364,7 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
     //rounded to a multiple of ACTIVATION_BURST_SIZE
     t_ushort numBurstAlignedChannelsPerCurrentGroup;
 
-    //Number of compute drain instructions for one a tile with
+    //Number of compute drain instructions for a tile with
     //TileH x TileW x TileOCPerGroupCurrentLayer elements
     //Do NOT span over multiple layer!
     t_ushort numDrainInstructions;
@@ -396,7 +396,6 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
     //Concatenated signal
     //[3:0] number of bits to shift the convolution output
     //[4] Shift direction. 1 for left shift, 0 for right shift
-    //[5] Enable sparsification. 1 for TRUE, 0 for otherwise
     //[6] Source of the output. 0 for convolution engine, 1 for misc.
     //[7] Enable Relu. 1 for TRUE, 0 for false
     t_uchar flagSparseCatFlagReluCatFlagSourceCatShift;
@@ -415,9 +414,9 @@ typedef struct __attribute__((aligned(16)))
     //Number of dram blocks to reduce per output dram block
     t_ushort numDramBlocksToReduce;
 
-    //Number of output dram blocks to be processed per col
+    //Number of output dram blocks to be processed per misc unit
     //Seen by the misc units ONLY
-    t_ushort numOutputBlocksPerCol;
+    t_ushort numOutputBlocksPerUnit;
 
     // //Number of output dram blocks per group.
     // //Seen by the misc controller ONLY
@@ -425,7 +424,7 @@ typedef struct __attribute__((aligned(16)))
 
     //Number of output dram blocks summmed along a strip across on groups
     //Seen by the misc controller ONLY
-    t_ushort numOutputBlocksPerStrip;
+    // t_ushort numOutputBlocksPerStrip;
 
     /*
         Control bits
@@ -582,7 +581,11 @@ typedef struct __attribute__((packed))
     unsigned short numStripsToAccess;
 
     //Stride between successive strip
-    unsigned short iaStridePerCol;
+    //In terms of OA values
+    //Assumption:
+    //All the output values from a PE row-group land in the same output activation dram block
+    //Specifically, indexOutput aligns with PE_ROW_GROUP blocks and ACTIVATION_BURST blocks
+unsigned short iaStridePerCol;
 
     // //Number of memory transfer instructions, used for draining the cache only
     // unsigned char numGroupsCurrentLayer;

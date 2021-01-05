@@ -8,9 +8,10 @@
 #include "aocl_utils_cpp.hpp"
 
 #include "floatFixedPointConversion.hpp"
-#include "tensorCompression.hpp"
+//#include "tensorCompression.hpp"
+#include "spwTensorCompression.hpp"
 #include "vectorType.hpp"
-#include "layerInstructionGenerator.hpp"
+//#include "layerInstructionGenerator.hpp"
 
 #include "params.hpp"
 
@@ -18,12 +19,15 @@ namespace GraphRuntime {
     typedef struct {
         //Which region in the accelerator's global memory does the blob start with?
         unsigned int memoryRegionID;
-        unsigned int channelPerGroup;
-        unsigned int group;
+        unsigned int channel;
+//        unsigned int channelPerGroup;
+//        unsigned int group;
         unsigned int height;
         unsigned int width;
+        //stride across strips in the external memory, counted in terms of the activation words
+        unsigned int stripStrideSeenBySource;
         signed int numFracBits;
-        bool flagCanBeSparse;
+//        bool flagCanBeSparse;
         std::string blobName;
     } t_blob_info;
 
@@ -80,16 +84,18 @@ namespace GraphRuntime {
         std::vector<t_blob_info> vecOutputInfo;
 
         //Pointer to each layer's aligned/compressed and quantized weights
-        std::vector<std::shared_ptr<AlignedTensor>> pWeights;
+//        std::vector<std::shared_ptr<AlignedTensor>> pWeights;
+        std::vector<std::shared_ptr<DeviceWeightTensor>> pWeights;
 
         //Starting dram block index and the number of dram block of each weight tensor in the
         //FPGA off-chip memory
         //Tensor is in the same order as the pointers appear in the pWeights vector
         std::vector<int> vecWeightDramBlockStart;
         std::vector<int> vecBiasStart;
-#if defined(SPARSE_SYSTEM)
-        std::vector<int> vecWeightTBCountStart;
-#endif
+
+//#if defined(SPARSE_SYSTEM)
+//        std::vector<int> vecWeightTBCountStart;
+//#endif
 
         //Pointers to each layer's quantized biases
         std::vector<std::shared_ptr<t_aligned_short_vector>> pBiasVector;
@@ -139,9 +145,9 @@ namespace GraphRuntime {
             //Buffer members associated with the IA Mover kernel
             cl::Buffer bufferIAMoverInstructions;
             cl::Buffer bufferActivationDramBlocks;
-        #if defined(SPARSE_SYSTEM)
-            cl::Buffer bufferActivationTBCounts;
-        #endif
+//        #if defined(SPARSE_SYSTEM)
+//            cl::Buffer bufferActivationTBCounts;
+//        #endif
 
             //Buffer members associated with the IA tile controller
             cl::Buffer bufferIATileControllerInstructions;
@@ -156,15 +162,17 @@ namespace GraphRuntime {
             cl::Buffer bufferWMoverInstructions;
             cl::Buffer bufferWMoverWDramBlocks;
             cl::Buffer bufferWMoverBias;
-        #if defined(SPARSE_SYSTEM)
-            cl::Buffer bufferWMoverWTBCounts;
-        #endif
+//        #if defined(SPARSE_SYSTEM)
+//            cl::Buffer bufferWMoverWTBCounts;
+//        #endif
 
             //Buffer members associated with the MK instruction kernel
             cl::Buffer bufferMKInstructions;
 
-            std::vector<std::shared_ptr<AlignedTensor>> vecInputBlobsInternal;
-            std::vector<std::shared_ptr<AlignedTensor>> vecOutputBlobsInternal;
+//            std::vector<std::shared_ptr<AlignedTensor>> vecInputBlobsInternal;
+//            std::vector<std::shared_ptr<AlignedTensor>> vecOutputBlobsInternal;
+            std::vector<std::shared_ptr<DeviceActivationTensor>> vecInputBlobsInternal;
+            std::vector<std::shared_ptr<DeviceActivationTensor>> vecOutputBlobsInternal;
 
             std::vector<t_blob_info> vecInputBlobsInfo;
             std::vector<t_blob_info> vecOutputBlobsInfo;

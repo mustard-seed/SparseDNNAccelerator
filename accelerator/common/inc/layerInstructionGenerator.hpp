@@ -14,6 +14,7 @@ void instruction_generator (//Type of the operation
         t_aligned_weight_mover_instruction_vector & vecWeightMoverInstruction,
         t_aligned_misc_instruction_vector & vecMiscInstruction,
 
+        //Pre-shift control to be seen by the IA Mover
         bool flagIA0ShiftLeft,
         unsigned int numIA0ShiftAmount,
         bool flagIA1ShiftLeft,
@@ -23,11 +24,13 @@ void instruction_generator (//Type of the operation
         //IA and OA occupies the same OpenCL buffer
 
         //Starting location of the input tensros.
+        //In terms of activation dram block
         //Support up to 2 input activation tensors
         signed int memIA0DramBlockStartIndex,
         signed int memIA1DramBlockStartIndex,
 
         //Starting location of the output tensor
+        //In terms of activation dram block
         //Supports only one output tensor
         signed int memOADramBlockStartIndex,
 
@@ -36,39 +39,42 @@ void instruction_generator (//Type of the operation
         //Starting location of bias
         signed int memBiasStartIndex,
 
-        //Input activation blob 0 strides in terms of DRAM block
+        //Input activation blob 0 strides in terms of activation words
         //Assuming GHWC layout
-        signed int memIA0DramBlockColStride,
-        signed int memIA0DramBlockRowStride,
-        //If the operation is not CONVOLUTION or CONCATENATION, then _memIA0DramBlockGroupStride can be overwritten
-        signed int _memIA0DramBlockGroupStride,
+        signed int memIA0ColStride,
+        signed int memIA0RowStride,
+        //If the operation is not CONVOLUTION or CONCATENATION,
+        //then _memIA0GroupStride can be overwritten
+//        signed int memIA0GroupStride,
 
-        //Input activation blob 1 strides in terms of DRAM block
+        //Input activation blob 1 strides in terms of activation words
         //Assuming GHWC layout
-        signed int memIA1DramBlockColStride,
-        signed int memIA1DramBlockRowStride,
-        //If the operation is not CONVOLUTION or CONCATENATION, then _memIA0DramBlockGroupStride can be overwritten
-        signed int _memIA1DramBlockGroupStride,
+        signed int memIA1ColStride,
+        signed int memIA1RowStride,
+        //If the operation is not CONVOLUTION or CONCATENATION,
+        //then memIAGroupStride can be overwritten
+//        signed int memIA1GroupStride,
 
-        //Output activation blob stride in terms of DRAM block
+        //Output activation blob stride in terms of activation words
         //Assuming GHWC layout
-        signed int memOADramBlockColStride,
+        signed int memOAColStride,
 
+        //Filter stride in terms of weight dram block
         signed int memWeightDramBlockFilterStride,
 
         //TB count memory information. Only one input blob is supported for sparse operation
-        #if defined(SPARSE_SYSTEM)
-            signed int memIATB0CountStart,
-            unsigned int memIATB0CountColStride,
+//        #if defined(SPARSE_SYSTEM)
+//            signed int memIATB0CountStart,
+//            unsigned int memIATB0CountColStride,
 
-            signed int memOATBCountStart,
-            unsigned int memOATBCountColStride,
+//            signed int memOATBCountStart,
+//            unsigned int memOATBCountColStride,
 
-            signed int memWeightTBCountStart,
-        #endif
+//            signed int memWeightTBCountStart,
+//        #endif
 
-        unsigned char flagSparseOutput,
-        unsigned char flagSparseInput,
+//        unsigned char flagSparseOutput,
+//        unsigned char flagSparseInput,
         //Whether the IA mover kernel should wait for the output from the previous tensor to commit before moving
         //on to the current tensor
         unsigned char flagTensorSync,
@@ -90,6 +96,11 @@ void instruction_generator (//Type of the operation
         unsigned char kernelSize,
         unsigned char kernelStride,
 
+        #if defined(SPW_SYSTEM)
+        //Number of NZ clusters in a pruning range. Only useful for convolution
+        unsigned int numNZClustersInPruningRange,
+        #endif
+
         //Only relevant for convolution
         unsigned char _sizeOutputTileFullHeight,
         //Only relevant for convolution
@@ -109,16 +120,16 @@ void instruction_generator (//Type of the operation
 
         //Number of output channels
         //Only relevant for convolution
-        unsigned short numOutputChannels,
+        unsigned short numOutputChannels
 
         //Number of groups in the next layer
-
-        unsigned short numGroupsNextLayer
+//        unsigned short numGroupsNextLayer
         );
 
 /*!
  * \brief ia_cache_boundary_check
- * \details Calculates the IA cache requirement in terms of dram block given the IA tile dimentions
+ * \details Calculates the IA cache requirement in terms of dram block/activation burst block
+ *  given the IA tile dimentions
  * \param heightTile Number of rows in a tile
  * \param widthTile Number of columns in a tile
  * \param numDramBlockPerDenseStrip Depth of the tile in terms of dram block
@@ -137,14 +148,14 @@ int ia_cache_boundary_check(
  * \param widthTile
  * \return The cache size in tb count
  */
-int ia_tbcount_cache_boundary_check(
-      int heightTile,
-      int widthTile
-        );
+//int ia_tbcount_cache_boundary_check(
+//      int heightTile,
+//      int widthTile
+//        );
 
 /*!
  * \brief oa_cache_boundary_check
- * \details Calculates the oa cache size requirements in terms of oa values
+ * \details Calculates the oa cache size requirements in terms of activation burst blocks
  * \param heightTile
  * \param widthTile
  * \param numChannels Number of channels in unsparsified output tensor group
@@ -161,11 +172,19 @@ int oa_cache_boundary_check(
  * \details Calculates the filter cache size requirements in term of dram blocks
  * \param kernelSize Kernel height/width
  * \param inputChannelSize Number of input channels
+ * \param peBlockSize Number of weight words seen by a PE at a time
+ * \param numClustersInPruningRange Number clusters in a pruning range.
+ *    If the accelerator does not leverage SpW, then set this value to 1
+ * \param numNZClustersInPruningRange
+ *    If the accelerator does not leverage SpW, then set this value to 1
  * \return dram blocks
  */
 int filter_cache_boundary_check(
       int kernelSize,
-      int inputChannelSize
+      int inputChannelSize,
+      int peBlockSize,
+      int numClustersInPruningRange,
+      int numNZClustersInPruningRange
         );
 
 typedef struct {

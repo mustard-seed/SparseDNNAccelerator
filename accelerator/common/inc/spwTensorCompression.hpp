@@ -60,7 +60,7 @@ public:
             );
 
     //Accessors
-    t_aligned_activation_vector getValueVector() const;
+    t_aligned_activation_vector & getValueVector();
     int getChannel() const;
     int getWidth() const;
     int getHeight() const;
@@ -132,7 +132,7 @@ public:
             );
 
 
-    t_aligned_weight_vector getValueVector() const;
+    t_aligned_weight_vector & getValueVector();
 
     virtual std::vector<fixedPointNumber> decodeTensor(
                 signed char _fracWidth,

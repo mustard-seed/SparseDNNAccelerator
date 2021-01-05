@@ -122,7 +122,7 @@ target_compile_definitions(
 #################################################################
 file(GLOB UTIL_SOURCES
         ${CMAKE_CURRENT_SOURCE_DIR}/src/floatFixedPointConversion.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/layerInstrucitonGenerator.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/layerInstructionGenerator.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/spwTensorCompression.cpp
 )
 

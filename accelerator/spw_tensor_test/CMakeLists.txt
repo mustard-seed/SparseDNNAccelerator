@@ -1,20 +1,13 @@
-set (PREPROCESSOR_DEFS
-#        -DWEIGHT_MEMORY_TEST
-#        -DHW_DEBUG
-        FLEXIBLE_BITMASK_COMPRESSION
-        WEIGHT_MEMORY
-        MEMORY_READER
-        MEMORY_WRITER
-        WEIGHT_MEMORY_INTERCONNECT
-        ACTIVATION_MEMORY_INTERCONNECT
-        PE_SYSTEM
-        IA_MEMORY
-        OA_MEMORY
-        FULL_SYSTEM
-        MISC_ENGINE
-        )
+set (TEST_NAME "spw_tensor_test")
 
-set (LIBRARY_NAME "accelerator_wrapper")
+############################################
+#First, we must be able to find Intel FPGA OpenCL SDK
+#############################################
+if(DEFINED ENV{INTELFPGAOCLSDKROOT})
+else()
+    message(FATAL_ERROR "The environment variable INTELFPGAOCLSDKROOT isn't set.")
+endif()
+
 ###########################################################
 #Intel FPGA OpenCL SDK Compile and linkage configurations
 ###########################################################
@@ -50,33 +43,30 @@ else()
     message (STATUS "The board is ${BOARD_NAME}")
     message (FATAL_ERROR "Unsupported board!")
 endif()
-file(GLOB SOURCES
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp
+
+#########################################################
+#SOURCE
+#########################################################
+set (SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp
     ${PROJECT_SOURCE_DIR}/common/src/floatFixedPointConversion.cpp
     ${PROJECT_SOURCE_DIR}/common/src/spwTensorCompression.cpp
     )
 
+########################################################
+# FIND THIRD PARTY LIBRARIES
+########################################################
 find_package (Boost 1.56 REQUIRED)
 
-add_definitions(-DFPGA_DEVICE)
-add_library (${LIBRARY_NAME} ${SOURCES})
-target_link_libraries(${LIBRARY_NAME} ${Boost_LIBRARIES} gtest_main aocl_utils)
-target_include_directories(${LIBRARY_NAME}
-        PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-        ${PROJECT_SOURCE_DIR}/common/inc
-        ${Boost_INCLUDE_DIRS}
-        ${PROJECT_SOURCE_DIR}/device
-    )
-target_compile_definitions(
-    ${LIBRARY_NAME}
+#################################
+# GENERATE THE EXECUTABLE TARGET
+#################################
+add_executable (${TEST_NAME} ${SOURCES})
+target_link_libraries(${TEST_NAME} ${Boost_LIBRARIES} gtest_main aocl_utils)
+target_include_directories(${TEST_NAME}
     PUBLIC
-    ${PREPROCESSOR_DEFS}
+    ${PROJECT_SOURCE_DIR}/device
+    ${PROJECT_SOURCE_DIR}/common/inc
     )
-
-set_target_properties (${LIBRARY_NAME} PROPERTIES "CMAKE_CXX_FLAGS" "${CMAKE_CXX_FLAGS}")
-
-#add_executable(accelerator_wrapper_test ${CMAKE_CURRENT_SOURCE_DIR}/accelerator_wrapper_test.cpp)
-#target_link_libraries(accelerator_wrapper_test ${LIBRARY_NAME})
-#set_target_properties (accelerator_wrapper_test PROPERTIES "CMAKE_CXX_FLAGS" "${CMAKE_CXX_FLAGS}")
-
+set_target_properties (${TEST_NAME}
+    PROPERTIES "CMAKE_CXX_FLAGS" "${CMAKE_CXX_FLAGS}")

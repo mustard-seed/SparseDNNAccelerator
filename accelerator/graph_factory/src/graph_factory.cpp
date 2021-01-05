@@ -855,6 +855,7 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
                             _convLayer.getKernelSize(),
                             _convLayer.getKernelStride()
                          );
+             //TODO: change the arguments passed to ia_cache_boundary_check
              int iaCachePerColRequirement =
                      ia_cache_boundary_check(
                          sizeInputTileFullHeight,
@@ -867,6 +868,7 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
                          sizeInputTilePartialWidthPerCol,
                          numTBPerInputGroupStrip / WIDE_SIZE
                          );
+             //TODO: Change the arguments to the OA cache requirement checker
              int oaCachePerColRequirement =
                      oa_cache_boundary_check(
                          candidateTileInfo.sizeOutputTileFullHeight,
@@ -1068,6 +1070,7 @@ t_tile_pair calculateTileSizePerUnit(EltAddLayer &_eltAddLayer)
                         false //isConv
                      );
 
+         //TODO: Remove the call to the OA cache requirement check
          int oaCachePerColRequirementInWords =
                  oa_cache_boundary_check(
                      candidateTileInfo.sizeOutputTileFullHeight,
