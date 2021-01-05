@@ -3991,7 +3991,7 @@ __kernel void kernelFilterBuffer ()
 					if (regIsRealFilter[(~regWriteSide) & 0x1] == TRUE)
 					{
 						peWeightBlock.values[v] = valueBlock.values[
-							(indexInDramBlock << PE_ACTIVATION_BLOCK_SIZE_IN_WORD_OFFSET) + v
+							(indexInDramBlock << WEIGHT_WIDE_SIZE_OFFSET) + v
 							];
 					}
 					else
