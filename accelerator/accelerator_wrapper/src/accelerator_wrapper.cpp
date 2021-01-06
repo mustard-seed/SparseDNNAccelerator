@@ -1148,7 +1148,8 @@ namespace GraphRuntime {
             {
                 cl::Event event;
                 //Get a reference to the vector within the Blob
-                auto vecOutput = vecOutputBlobsInternal.at(index).get() -> getValueVector();
+                //GOTTCHA: use auto &, NOT just auto!
+                auto & vecOutput = vecOutputBlobsInternal.at(index).get() -> getValueVector();
 
                 auto valueVectorSizeBytes = vecOutput.size() * sizeof(vecOutput.at(0));
                 int activationOffsetByte =
@@ -1168,9 +1169,9 @@ namespace GraphRuntime {
                                                          NULL, //dependency list
                                                          &event //events generated
                                                             );
-                #if defined(HOST_DEBUG)
+                //#if defined(HOST_DEBUG)
                     aocl_utils_cpp::checkError(status, "Failed to read an output activation vector");
-                #endif
+                //#endif
                 cl_ulong startTime = event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
                 cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
                 vecOutputTransferTime.at(index) += (cl_double)((endTime - startTime)*(cl_double)(1e-3));
