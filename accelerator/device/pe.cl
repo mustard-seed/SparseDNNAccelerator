@@ -563,8 +563,6 @@ __kernel void kernelDensePE ()
 		}
 		else //DENSE_PE_INSTRUCTION_MAC
 		{
-			t_simd_operand activations, weights;
-
 			#pragma unroll
 			for (int row = 0; row < PE_ROWS_PER_GROUP; row++)
 			{
