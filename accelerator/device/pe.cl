@@ -400,7 +400,6 @@ __kernel void kernelDensePE ()
 
 		//Access the activation block
 		
-		t_flag sigIsLastRowGroup = FALSE;
 		t_pe_a_block sigActivationTB;
 		if (regInstruction == DENSE_PE_INSTRUCTION_MAC)
 		{

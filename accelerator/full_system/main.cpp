@@ -1417,20 +1417,16 @@ TEST_F (testFixture, conv_dense_input_dense_output_plain)
 {
     unsigned char inputWidth = 4;
     unsigned char inputHeight = 4;
-    //DOESN'T WORK!?
     unsigned char numInputChannel = 13;
-    //unsigned char numInputChannel = 2;
     unsigned char numOutputChannel = numInputChannel;
     unsigned char numInputGroup = 1;
-    unsigned char numOutputGroup = 1;
     unsigned char inputHeightSPUnitSize = 1;
     unsigned char inputWidthSPUnitSize = 1;
     unsigned char sizeOutputTileWidthPerColFull = 2;
     unsigned char sizeOutputTileHeight = 4;
     unsigned char kernelSize = 3;
     bool flagEnableRelu = false;
-    bool flagSparseInput = false;
-    bool flagSparseOutput = false;
+    float denseProb = 1.0 / PRUNE_RANGE_IN_CLUSTER;
     OPERATION op = CONVOLUTION;
     float bias = 0.0f;
 
@@ -1440,21 +1436,19 @@ TEST_F (testFixture, conv_dense_input_dense_output_plain)
                 numInputChannel,
                 numOutputChannel,
                 numInputGroup,
-                numOutputGroup,
                 inputHeightSPUnitSize,
                 inputWidthSPUnitSize,
                 sizeOutputTileWidthPerColFull,
                 sizeOutputTileHeight,
                 kernelSize,
                 flagEnableRelu,
-                flagSparseInput,
-                flagSparseOutput,
                 op,
-                bias
+                bias,
+                denseProb
           );
 }
 
-TEST_F (testFixture, max_pool_sparse_output_grouped)
+TEST_F (testFixture, max_pool)
 {
     unsigned char inputWidth = 4;
     unsigned char inputHeight = 4;
@@ -2250,6 +2244,7 @@ void testFixture::launch (unsigned short _inputWidth,
                 ) );
 #else
         pWeight.reset( new DeviceWeightTensor (
+                   inputWeightDense,
                    numOutputChannels,
                    //_inputChannel
                    numICPerGroup,

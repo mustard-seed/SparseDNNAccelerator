@@ -2,7 +2,8 @@
 #define PARAMS_DEFINED
 
 //#define HOST_DEBUG
-#define SPW_SYSTEM
+//#define SPW_SYSTEM
+#define DENSE_SYSTEM
 #define OA_PING_PONG
 //#define WMOVER_STREAM_CACHE
 //#define OAMOVER_TB_STREAM_CACHE
@@ -166,8 +167,6 @@
 #else
 #error PE_SIMD_SIZE should be chosen from {1, 2, 4, 8, 16}
 #endif
-#else
-#error "Parameter PE_SIMD_SIZE is not been defined."
 #endif
 
 #if defined(SPW_SYSTEM)
