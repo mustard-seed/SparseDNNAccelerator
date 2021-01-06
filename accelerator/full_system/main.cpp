@@ -140,10 +140,51 @@ protected:
 }; //testFixture
 
 #ifdef PLAY
+//TEST_F (testFixture, back_to_back_identity_conv)
+//{
+////    unsigned char inputWidth = 4;
+////    unsigned char inputHeight = 4;
+////    unsigned char numInputChannel =16;
+//    unsigned char inputWidth = 1;
+//    unsigned char inputHeight = 1;
+//    unsigned char numInputChannel =3;
+//    unsigned char numOutputChannel = numInputChannel;
+//    unsigned char numInputGroup = 1;
+//    unsigned char numOutputGroup = 1;
+//    unsigned char inputHeightSPUnitSize = 1;
+//    unsigned char inputWidthSPUnitSize = 1;
+//    unsigned char sizeOutputTileWidthPerColFull = 2;
+//    unsigned char sizeOutputTileHeight = 4;
+//    unsigned char kernelSize = 3;
+//    bool flagEnableRelu = false;
+//    OPERATION op = CONVOLUTION;
+//    float denseProb = 1.0;
+//    float bias = 0.0f;
+//    bool flag2Layer = true;
+
+//    launch(
+//                inputWidth,
+//                inputHeight,
+//                numInputChannel,
+//                numOutputChannel,
+//                numInputGroup,
+//                inputHeightSPUnitSize,
+//                inputWidthSPUnitSize,
+//                sizeOutputTileWidthPerColFull,
+//                sizeOutputTileHeight,
+//                kernelSize,
+//                flagEnableRelu,
+//                op,
+//                bias,
+//                denseProb,
+//                flag2Layer
+//          );
+//}
+
 TEST_F (testFixture, conv_dense_input_dense_output_plain)
 {
-    unsigned char inputWidth = 4;
-    unsigned char inputHeight = 4;
+    unsigned char inputWidth = 1;
+    unsigned char inputHeight = 1;
     unsigned char numInputChannel = 13;
     unsigned char numOutputChannel = numInputChannel;
     unsigned char numInputGroup = 1;
@@ -153,7 +194,7 @@ TEST_F (testFixture, conv_dense_input_dense_output_plain)
     unsigned char sizeOutputTileHeight = 4;
     unsigned char kernelSize = 3;
     bool flagEnableRelu = false;
-    float denseProb = 1.0 / PRUNE_RANGE_IN_CLUSTER;
+    float denseProb = 1.0;
     OPERATION op = CONVOLUTION;
     float bias = 0.0f;
 

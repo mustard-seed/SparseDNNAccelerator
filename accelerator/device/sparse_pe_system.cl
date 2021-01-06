@@ -4098,6 +4098,18 @@ __kernel void kernelFilterBuffer ()
 				#endif
 
 				//Update the counters
+				#if defined(SPW_SYSTEM)
+					//Only update iNZClusterInPruneRange when sending weights, 
+					//NOT when sending biases
+					if (iTransferBlockInFilterRead > 0)
+					{
+						iNZClusterInPruneRange++;
+						if (iNZClusterInPruneRange == regNumNZClustersInPruneRange[(~regWriteSide) & 0x1])
+						{
+							iNZClusterInPruneRange = 0x0;
+						}
+					}
+				#endif
 				//Omit plus 1 to send the bias
 				if ((iTransferBlockInFilterRead) >= maxTransferBlockInFilter[(~regWriteSide) & 0x1])
 				{
@@ -4108,13 +4120,6 @@ __kernel void kernelFilterBuffer ()
 				{
 					iTransferBlockInFilterRead++;
 				}
-
-				#if defined(SPW_SYSTEM)
-					if ((iNZClusterInPruneRange+1) == regNumNZClustersInPruneRange[(~regWriteSide) & 0x1])
-					{
-						iNZClusterInPruneRange = 0x0;
-					}
-				#endif
 
 			}
 		} // STATE_FILTER_STREAMER_READ_CACHE_READ
