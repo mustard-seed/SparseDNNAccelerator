@@ -596,27 +596,31 @@ namespace GraphRuntime {
             auto sizeElement = sizeof(typeof(_executionGraph.vecOATileControllerInstruction.at(0)));
             auto transferBytes = sizeElement * numElements;
 
-            std::cout <<"Transfering "<<transferBytes<<" bytes into bufferOAMoverInstructions"<<std::endl;
-            if (transferBytes > MAX_DRAM_BYTE_OUTPUT_TILE_CONTROLLER_INSTRUCTION)
+            if (transferBytes > 0)
             {
-                std::cout << "Too many OA TILE instructions to fit inside the global memory."<<std::endl;
-                throw;
+                std::cout <<"Transfering "<<transferBytes<<" bytes into bufferOAMoverInstructions"<<std::endl;
+                if (transferBytes > MAX_DRAM_BYTE_OUTPUT_TILE_CONTROLLER_INSTRUCTION)
+                {
+                    std::cout << "Too many OA TILE instructions to fit inside the global memory."<<std::endl;
+                    throw;
+                }
+
+                status = clCQOATileController.enqueueWriteBuffer(bufferOATileControllerInstructions, //buffer
+                                                     CL_TRUE, //blocking_write
+                                                     0, //offset
+                                                     transferBytes, //size
+                                                     _executionGraph.vecOATileControllerInstruction.data(), //data pointer
+                                                     NULL, //dependency list
+                                                     &event //events generated
+                                                    );
+                aocl_utils_cpp::checkError(status, "Failed to write the OA tile controller instructions");
+                clCQOATileController.finish();
+                cl_ulong startTime = event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+                cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
+                cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*(cl_double)(1e-3));
+                std::cout <<"Transfer the OA tile controller instructions tensor took "<<elapsedTimeUs<<" us"<<std::endl;
             }
 
-            status = clCQOATileController.enqueueWriteBuffer(bufferOATileControllerInstructions, //buffer
-                                                 CL_TRUE, //blocking_write
-                                                 0, //offset
-                                                 transferBytes, //size
-                                                 _executionGraph.vecOATileControllerInstruction.data(), //data pointer
-                                                 NULL, //dependency list
-                                                 &event //events generated
-                                                );
-            aocl_utils_cpp::checkError(status, "Failed to write the IA tile controller instructions");
-            clCQOATileController.finish();
-            cl_ulong startTime = event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-            cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-            cl_double elapsedTimeUs = (cl_double)((endTime - startTime)*(cl_double)(1e-3));
-            std::cout <<"Transfer the OA tile controller instructions tensor took "<<elapsedTimeUs<<" us"<<std::endl;
         }
 
         std::cout <<stepCount++<<". Transfer the W Mover instructions"<<std::endl;
