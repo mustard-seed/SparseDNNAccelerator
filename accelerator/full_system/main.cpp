@@ -74,11 +74,9 @@ protected:
      *        _numInputChannel must be divisible by _numGroupCurrentLayer
      * \return The tensor generated
      */
-    std::vector<float> generateInputTensor (
-                unsigned short _inputWidth,
+    std::vector<float> generateInputTensor (unsigned short _inputWidth,
                 unsigned short _inputHeight,
                 unsigned int _numInputChannel,
-                unsigned char _numGroupCurrentLayer,
                 bool _alternateSign = true
             );
 
@@ -140,62 +138,21 @@ protected:
 }; //testFixture
 
 #ifdef PLAY
-//TEST_F (testFixture, back_to_back_identity_conv)
-//{
-////    unsigned char inputWidth = 4;
-////    unsigned char inputHeight = 4;
-////    unsigned char numInputChannel =16;
-//    unsigned char inputWidth = 1;
-//    unsigned char inputHeight = 1;
-//    unsigned char numInputChannel =3;
-//    unsigned char numOutputChannel = numInputChannel;
-//    unsigned char numInputGroup = 1;
-//    unsigned char numOutputGroup = 1;
-//    unsigned char inputHeightSPUnitSize = 1;
-//    unsigned char inputWidthSPUnitSize = 1;
-//    unsigned char sizeOutputTileWidthPerColFull = 2;
-//    unsigned char sizeOutputTileHeight = 4;
-//    unsigned char kernelSize = 3;
-//    bool flagEnableRelu = false;
-//    OPERATION op = CONVOLUTION;
-//    float denseProb = 1.0;
-//    float bias = 0.0f;
-//    bool flag2Layer = true;
-
-//    launch(
-//                inputWidth,
-//                inputHeight,
-//                numInputChannel,
-//                numOutputChannel,
-//                numInputGroup,
-//                inputHeightSPUnitSize,
-//                inputWidthSPUnitSize,
-//                sizeOutputTileWidthPerColFull,
-//                sizeOutputTileHeight,
-//                kernelSize,
-//                flagEnableRelu,
-//                op,
-//                bias,
-//                denseProb,
-//                flag2Layer
-//          );
-//}
-
-TEST_F (testFixture, conv_dense_input_dense_output_plain)
+TEST_F (testFixture, conv_sparse_weight_grouped)
 {
-    unsigned char inputWidth = 1;
+    unsigned char inputWidth = 2;
     unsigned char inputHeight = 1;
-    unsigned char numInputChannel = 13;
+    unsigned char numInputChannel = 16;
     unsigned char numOutputChannel = numInputChannel;
-    unsigned char numInputGroup = 1;
+    unsigned char numInputGroup = 2;
     unsigned char inputHeightSPUnitSize = 1;
     unsigned char inputWidthSPUnitSize = 1;
     unsigned char sizeOutputTileWidthPerColFull = 2;
     unsigned char sizeOutputTileHeight = 4;
     unsigned char kernelSize = 3;
     bool flagEnableRelu = false;
-    float denseProb = 1.0;
     OPERATION op = CONVOLUTION;
+    float denseProb = 1.0 / PRUNE_RANGE_IN_CLUSTER;
     float bias = 0.0f;
 
     launch(
@@ -215,6 +172,41 @@ TEST_F (testFixture, conv_dense_input_dense_output_plain)
                 denseProb
           );
 }
+
+//TEST_F (testFixture, conv_sparse_weight_strided)
+//{
+//    unsigned char inputWidth = 4;
+//    unsigned char inputHeight = 4;
+//    unsigned char numInputChannel = 16;
+//    unsigned char numOutputChannel = 16;
+//    unsigned char numInputGroup = 1;
+//    unsigned char inputHeightSPUnitSize = 2;
+//    unsigned char inputWidthSPUnitSize = 2;
+//    unsigned char sizeOutputTileWidthPerColFull = 2;
+//    unsigned char sizeOutputTileHeight = 4;
+//    unsigned char kernelSize = 3;
+//    bool flagEnableRelu = false;
+//    OPERATION op = CONVOLUTION;
+//    float bias = 0.0f;
+//    float denseProb = 1.0 / PRUNE_RANGE_IN_CLUSTER;
+
+//    launch(
+//                inputWidth,
+//                inputHeight,
+//                numInputChannel,
+//                numOutputChannel,
+//                numInputGroup,
+//                inputHeightSPUnitSize,
+//                inputWidthSPUnitSize,
+//                sizeOutputTileWidthPerColFull,
+//                sizeOutputTileHeight,
+//                kernelSize,
+//                flagEnableRelu,
+//                op,
+//                bias,
+//                denseProb
+//          );
+//}
 
 #endif
 #if defined(THROUGHPUT_DIAGNOSTIC)
@@ -1454,7 +1446,42 @@ TEST_F (testFixture, perf_test_concat_sparse_64x32x32)
 }
 #endif //PERF_TEST
 #if defined(VALIDATE)
-TEST_F (testFixture, conv_dense_input_dense_output_plain)
+TEST_F (testFixture, conv_dense_weight)
+{
+    unsigned char inputWidth = 4;
+    unsigned char inputHeight = 4;
+    unsigned char numInputChannel = 13;
+    unsigned char numOutputChannel = numInputChannel;
+    unsigned char numInputGroup = 1;
+    unsigned char inputHeightSPUnitSize = 1;
+    unsigned char inputWidthSPUnitSize = 1;
+    unsigned char sizeOutputTileWidthPerColFull = 2;
+    unsigned char sizeOutputTileHeight = 4;
+    unsigned char kernelSize = 3;
+    bool flagEnableRelu = false;
+    float denseProb = 1.0;
+    OPERATION op = CONVOLUTION;
+    float bias = 0.0f;
+
+    launch(
+                inputWidth,
+                inputHeight,
+                numInputChannel,
+                numOutputChannel,
+                numInputGroup,
+                inputHeightSPUnitSize,
+                inputWidthSPUnitSize,
+                sizeOutputTileWidthPerColFull,
+                sizeOutputTileHeight,
+                kernelSize,
+                flagEnableRelu,
+                op,
+                bias,
+                denseProb
+          );
+}
+
+TEST_F (testFixture, conv_sparse_weight)
 {
     unsigned char inputWidth = 4;
     unsigned char inputHeight = 4;
@@ -1818,9 +1845,8 @@ TEST_F (testFixture, back_to_back_identity_conv)
     unsigned char sizeOutputTileHeight = 4;
     unsigned char kernelSize = 3;
     bool flagEnableRelu = false;
-    bool flagSparseInput = false;
-    bool flagSparseOutput = false;
     OPERATION op = CONVOLUTION;
+    float denseProb = 1.0;
     float bias = 0.0f;
     bool flag2Layer = true;
 
@@ -1830,17 +1856,15 @@ TEST_F (testFixture, back_to_back_identity_conv)
                 numInputChannel,
                 numOutputChannel,
                 numInputGroup,
-                numOutputGroup,
                 inputHeightSPUnitSize,
                 inputWidthSPUnitSize,
                 sizeOutputTileWidthPerColFull,
                 sizeOutputTileHeight,
                 kernelSize,
                 flagEnableRelu,
-                flagSparseInput,
-                flagSparseOutput,
                 op,
                 bias,
+                denseProb,
                 flag2Layer
           );
 }
@@ -1883,28 +1907,21 @@ std::vector<float> testFixture::generateInputTensor(
             unsigned short _inputWidth,
             unsigned short _inputHeight,
             unsigned int _numInputChannel,
-            unsigned char _numGroupCurrentLayer,
             bool _alternateSign
         )
 {
-    assert(_numInputChannel % _numGroupCurrentLayer == 0);
     assert (((signed int) _numInputChannel < 128) && "Too many input channels!");
-    unsigned char numICPerGroup = _numInputChannel / _numGroupCurrentLayer;
     std::vector<float> inputVector;
-    for (unsigned char g=0; g<_numGroupCurrentLayer;g++)
+    for (unsigned short h=0; h<_inputHeight; h++)
     {
-        for (unsigned short h=0; h<_inputHeight; h++)
+        for (unsigned short w=0; w<_inputWidth; w++)
         {
-            for (unsigned short w=0; w<_inputWidth; w++)
+            for (unsigned int c=0; c<_numInputChannel; c++)
             {
-                for (unsigned int c=0; c<numICPerGroup; c++)
-                {
-                    unsigned int globalChannel = g*numICPerGroup+c;
-                    signed char fpBits = ((w % 2 == 1) && _alternateSign)
-                            ? -1*((signed char) globalChannel) : globalChannel;
-                    fixedPointNumber fpNumber(fpBits, FRAC_WIDTH, INT_WIDTH);
-                    inputVector.push_back(fpNumber.convert2Float());
-                }
+                signed char fpBits = ((w % 2 == 1) && _alternateSign)
+                        ? -1*((signed char) c) : c;
+                fixedPointNumber fpNumber(fpBits, FRAC_WIDTH, INT_WIDTH);
+                inputVector.push_back(fpNumber.convert2Float());
             }
         }
     }
@@ -2223,7 +2240,7 @@ void testFixture::launch (unsigned short _inputWidth,
 
     std::vector<float> inputTensorDense;
     bool alternateSign = (op == AVG_POOL) ? false : true;
-    inputTensorDense = generateInputTensor(_inputWidth, _inputHeight, _numInputChannel, numGroupCurrentLayer, alternateSign);
+    inputTensorDense = generateInputTensor(_inputWidth, _inputHeight, _numInputChannel, alternateSign);
 
     //Generate qunatized weight tensors
     std::vector<fixedPointNumber> inputWeightDense;
