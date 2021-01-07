@@ -513,6 +513,7 @@ void instruction_generator(//Type of the operation
                         //Fix-up the memOAStart field when we are dealing with conatentation
                         if (iInst == 1)
                         {
+                            instructionOA.numNominalDramBlocksPerStrip = (t_ushort) numNominalDramBlocksPerOutputStrip1;
                             instructionOA.memOAStart = (t_int)
                                     (memOADramBlockStartIndex * ACTIVATION_BURST_SIZE_BYTE
                                       + (   (unsigned int) iterPGlobal*outputWidth +
@@ -525,6 +526,58 @@ void instruction_generator(//Type of the operation
                         vecOAMoverInstruction.push_back(instructionOA);
                     }
                 } //OA mover instructions for the current planar tile
+
+                /*! Generate the output tile controller instruction.  */
+                {
+                    unsigned char leftShift = flagOutputShiftLeft;
+                    unsigned char scaleShift = outputShiftBits;
+
+                    if (!(((flagOutputShiftLeft == 0x00) && (outputShiftBits > 0))
+                         || ((flagOutputShiftLeft == 0x01) && (outputShiftBits >= 0))))
+                    {
+                        std::cout << "If output shift direction is RIGHT, then the number of shift must be greater than 0."
+                                  << std::endl
+                                  << "shift left flag, shift amount: "
+                                  <<(unsigned int) flagOutputShiftLeft<<" "
+                                  <<(unsigned int) outputShiftBits<<std::endl;
+                        throw;
+                    }
+                    unsigned char sourceIsMisc = (op != CONVOLUTION) ? 0x01 : 0x00;
+
+                    int numOAInstructionPerTile = (op == CONCATENATION) ? 2 : 1;
+                    for (int iInst=0; iInst < numOAInstructionPerTile; iInst++)
+                    {
+                        t_oa_tile_controller_instruction instructionOAControl;
+
+                        instructionOAControl.numLocalTilePerColHxW = (t_uchar)(maxTQPerCol*maxTP);
+                        instructionOAControl.numBurstAlignedChannelsPerCurrentGroup =
+                                (t_ushort) (
+                                    DIVIDE_CEIL(numOAChannelsPerGroup, ACTIVATION_BURST_SIZE_BYTE)
+                                    * ACTIVATION_BURST_SIZE_BYTE);
+                        instructionOAControl.numDrainInstructions = (t_ushort) numComputeFoldPerGroup;
+                        instructionOAControl.numFoldsInGroupCurrentLayer = (t_ushort) numComputeFoldPerGroup;
+                        instructionOAControl.numFullFoldsInCurrentLayer = (t_ushort) numFullComputeFoldPerGroup;
+                        instructionOAControl.numActiveElementsInFullFold = (t_ushort) numActiveElementsInFullComputeFold;
+                        instructionOAControl.numActiveElementsInPartialFold = (t_ushort) numActiveElementsInPartialComputeFold;
+                        instructionOAControl.numActiveCols = (t_uchar) numActiveCols;
+                        instructionOAControl.numNominalDramBlocksPerStrip = numNominalDramBlocksPerOutputStrip0;
+
+                        instructionOAControl.flagSparseCatFlagReluCatFlagSourceCatShift = (t_uchar)
+                                (   ((t_uchar) (scaleShift & 0x0F))
+                                    | ((t_uchar) ((leftShift & 0x01) << 0x4))
+                                    | (t_uchar)((flagRelu & 0x01) << 0x7)
+                                    | (t_uchar)((sourceIsMisc & 0x01) << 0x6) //drain source is convolution
+                                );
+
+                        //Concatenation fix-up
+                        if (iInst == 1)
+                        {
+                            instructionOAControl.numNominalDramBlocksPerStrip = numNominalDramBlocksPerOutputStrip1;
+                        }
+                        vecOATileControlInstruction.push_back(instructionOAControl);
+                    }
+
+                } //OA tile controller
 
                 unsigned int iterMClipped = (iterMGlobal < inputHeightPadding ) ?
                             0 : ( (iterMGlobal >= (inputHeightPadding + inputSPHeight)) ?
@@ -654,46 +707,6 @@ void instruction_generator(//Type of the operation
                 //TODO: consider the IA tile contoller instruction more carefully
                 if (op == CONVOLUTION)
                 {
-                    /*! Generate the output tile controller instruction.  */
-                    {
-                        t_oa_tile_controller_instruction instructionOAControl;
-
-                        instructionOAControl.numLocalTilePerColHxW = (t_uchar)(maxTQPerCol*maxTP);
-                        instructionOAControl.numBurstAlignedChannelsPerCurrentGroup =
-                                (t_ushort) (
-                                    DIVIDE_CEIL(numOAChannelsPerGroup, ACTIVATION_BURST_SIZE_BYTE)
-                                    * ACTIVATION_BURST_SIZE_BYTE);
-                        instructionOAControl.numDrainInstructions = (t_ushort) numComputeFoldPerGroup;
-                        instructionOAControl.numFoldsInGroupCurrentLayer = (t_ushort) numComputeFoldPerGroup;
-                        instructionOAControl.numFullFoldsInCurrentLayer = (t_ushort) numFullComputeFoldPerGroup;
-                        instructionOAControl.numActiveElementsInFullFold = (t_ushort) numActiveElementsInFullComputeFold;
-                        instructionOAControl.numActiveElementsInPartialFold = (t_ushort) numActiveElementsInPartialComputeFold;
-                        instructionOAControl.numActiveCols = (t_uchar) numActiveCols;
-                        instructionOAControl.numNominalDramBlocksPerStrip = numNominalDramBlocksPerOutputStrip0;
-
-                        unsigned char leftShift = flagOutputShiftLeft;
-                        unsigned char scaleShift = outputShiftBits;
-
-                        if (!(((flagOutputShiftLeft == 0x00) && (outputShiftBits > 0))
-                             || ((flagOutputShiftLeft == 0x01) && (outputShiftBits >= 0))))
-                        {
-                            std::cout << "If output shift direction is RIGHT, then the number of shift must be greater than 0."
-                                      << std::endl
-                                      << "shift left flag, shift amount: "
-                                      <<(unsigned int) flagOutputShiftLeft<<" "
-                                      <<(unsigned int) outputShiftBits<<std::endl;
-                            throw;
-                        }
-                        unsigned char sourceIsMisc = (op != CONVOLUTION) ? 0x01 : 0x00;
-                        instructionOAControl.flagSparseCatFlagReluCatFlagSourceCatShift = (t_uchar)
-                                (   ((t_uchar) (scaleShift & 0x0F))
-                                    | ((t_uchar) ((leftShift & 0x01) << 0x4))
-                                    | (t_uchar)((flagRelu & 0x01) << 0x7)
-                                    | (t_uchar)((sourceIsMisc & 0x01) << 0x6) //drain source is convolution
-                                );
-                        vecOATileControlInstruction.push_back(instructionOAControl);
-                    }
-
                      /*! Send the input IA controller instruction */
                     {
                         t_ia_tile_controller_instruction instructionIAControl;

@@ -3338,6 +3338,8 @@ __kernel void kernelOATileController (
 
 	    unsigned char outputModifierBits = inst.flagSparseCatFlagReluCatFlagSourceCatShift;
 	    unsigned char numActivePeCols = inst.numActiveCols;
+	    unsigned char flagDrainFromMisc = (outputModifierBits >> 0x06) & 0x01;
+	    if (flagDrainFromMisc == FALSE)
 		{		
 
 		    /*

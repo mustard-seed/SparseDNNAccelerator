@@ -138,21 +138,20 @@ protected:
 }; //testFixture
 
 #ifdef PLAY
-TEST_F (testFixture, conv_sparse_weight_grouped)
+TEST_F (testFixture, max_pool)
 {
-    unsigned char inputWidth = 2;
-    unsigned char inputHeight = 1;
-    unsigned char numInputChannel = 16;
+    unsigned char inputWidth = 4;
+    unsigned char inputHeight = 4;
+    unsigned char numInputChannel = 120;
     unsigned char numOutputChannel = numInputChannel;
-    unsigned char numInputGroup = 2;
+    unsigned char numInputGroup = 1;
     unsigned char inputHeightSPUnitSize = 1;
     unsigned char inputWidthSPUnitSize = 1;
     unsigned char sizeOutputTileWidthPerColFull = 2;
     unsigned char sizeOutputTileHeight = 4;
     unsigned char kernelSize = 3;
     bool flagEnableRelu = false;
-    OPERATION op = CONVOLUTION;
-    float denseProb = 1.0 / PRUNE_RANGE_IN_CLUSTER;
+    OPERATION op = MAX_POOL;
     float bias = 0.0f;
 
     launch(
@@ -168,27 +167,25 @@ TEST_F (testFixture, conv_sparse_weight_grouped)
                 kernelSize,
                 flagEnableRelu,
                 op,
-                bias,
-                denseProb
+                bias
           );
 }
 
-//TEST_F (testFixture, conv_sparse_weight_strided)
+//TEST_F (testFixture, elt_add)
 //{
 //    unsigned char inputWidth = 4;
 //    unsigned char inputHeight = 4;
-//    unsigned char numInputChannel = 16;
-//    unsigned char numOutputChannel = 16;
+//    unsigned char numInputChannel = 127;
+//    unsigned char numOutputChannel = numInputChannel;
 //    unsigned char numInputGroup = 1;
-//    unsigned char inputHeightSPUnitSize = 2;
-//    unsigned char inputWidthSPUnitSize = 2;
+//    unsigned char inputHeightSPUnitSize = 1;
+//    unsigned char inputWidthSPUnitSize = 1;
 //    unsigned char sizeOutputTileWidthPerColFull = 2;
 //    unsigned char sizeOutputTileHeight = 4;
 //    unsigned char kernelSize = 3;
 //    bool flagEnableRelu = false;
-//    OPERATION op = CONVOLUTION;
+//    OPERATION op = ELT_ADD;
 //    float bias = 0.0f;
-//    float denseProb = 1.0 / PRUNE_RANGE_IN_CLUSTER;
 
 //    launch(
 //                inputWidth,
@@ -203,8 +200,73 @@ TEST_F (testFixture, conv_sparse_weight_grouped)
 //                kernelSize,
 //                flagEnableRelu,
 //                op,
-//                bias,
-//                denseProb
+//                bias
+//          );
+//}
+
+//TEST_F (testFixture, concat)
+//{
+//    unsigned char inputWidth = 2;
+//    unsigned char inputHeight = 2;
+//    unsigned char numInputChannel = 120;
+//    unsigned char numOutputChannel = 2*numInputChannel;
+//    unsigned char numInputGroup = 1;
+//    unsigned char inputHeightSPUnitSize = 1;
+//    unsigned char inputWidthSPUnitSize = 1;
+//    unsigned char sizeOutputTileWidthPerColFull = 2;
+//    unsigned char sizeOutputTileHeight = 4;
+//    unsigned char kernelSize = 3;
+//    bool flagEnableRelu = false;
+//    OPERATION op = CONCATENATION;
+//    float bias = 0.0f;
+
+//    launch(
+//                inputWidth,
+//                inputHeight,
+//                numInputChannel,
+//                numOutputChannel,
+//                numInputGroup,
+//                inputHeightSPUnitSize,
+//                inputWidthSPUnitSize,
+//                sizeOutputTileWidthPerColFull,
+//                sizeOutputTileHeight,
+//                kernelSize,
+//                flagEnableRelu,
+//                op,
+//                bias
+//          );
+//}
+
+//TEST_F (testFixture, global_avg_pool)
+//{
+//    unsigned char inputWidth = 4;
+//    unsigned char inputHeight = 4;
+//    unsigned char numInputChannel = 120;
+//    unsigned char numOutputChannel = numInputChannel;
+//    unsigned char numInputGroup = 1;
+//    unsigned char inputHeightSPUnitSize = 1;
+//    unsigned char inputWidthSPUnitSize = 1;
+//    unsigned char sizeOutputTileWidthPerColFull = 2;
+//    unsigned char sizeOutputTileHeight = 4;
+//    unsigned char kernelSize = 3;
+//    bool flagEnableRelu = false;
+//    OPERATION op = AVG_POOL;
+//    float bias = 0.0f;
+
+//    launch(
+//                inputWidth,
+//                inputHeight,
+//                numInputChannel,
+//                numOutputChannel,
+//                numInputGroup,
+//                inputHeightSPUnitSize,
+//                inputWidthSPUnitSize,
+//                sizeOutputTileWidthPerColFull,
+//                sizeOutputTileHeight,
+//                kernelSize,
+//                flagEnableRelu,
+//                op,
+//                bias
 //          );
 //}
 
@@ -1516,6 +1578,111 @@ TEST_F (testFixture, conv_sparse_weight)
           );
 }
 
+TEST_F (testFixture, conv_sparse_weight_grouped)
+{
+    unsigned char inputWidth = 4;
+    unsigned char inputHeight = 4;
+    unsigned char numInputChannel = 16;
+    unsigned char numOutputChannel = numInputChannel;
+    unsigned char numInputGroup = 2;
+    unsigned char inputHeightSPUnitSize = 1;
+    unsigned char inputWidthSPUnitSize = 1;
+    unsigned char sizeOutputTileWidthPerColFull = 2;
+    unsigned char sizeOutputTileHeight = 4;
+    unsigned char kernelSize = 3;
+    bool flagEnableRelu = false;
+    OPERATION op = CONVOLUTION;
+    float denseProb = 1.0 / PRUNE_RANGE_IN_CLUSTER;
+    float bias = 0.0f;
+
+    launch(
+                inputWidth,
+                inputHeight,
+                numInputChannel,
+                numOutputChannel,
+                numInputGroup,
+                inputHeightSPUnitSize,
+                inputWidthSPUnitSize,
+                sizeOutputTileWidthPerColFull,
+                sizeOutputTileHeight,
+                kernelSize,
+                flagEnableRelu,
+                op,
+                bias,
+                denseProb
+          );
+}
+
+EST_F (testFixture, conv_sparse_weight_strided)
+{
+    unsigned char inputWidth = 4;
+    unsigned char inputHeight = 4;
+    unsigned char numInputChannel = 16;
+    unsigned char numOutputChannel = 16;
+    unsigned char numInputGroup = 1;
+    unsigned char inputHeightSPUnitSize = 2;
+    unsigned char inputWidthSPUnitSize = 2;
+    unsigned char sizeOutputTileWidthPerColFull = 2;
+    unsigned char sizeOutputTileHeight = 4;
+    unsigned char kernelSize = 3;
+    bool flagEnableRelu = false;
+    OPERATION op = CONVOLUTION;
+    float bias = 0.0f;
+    float denseProb = 1.0 / PRUNE_RANGE_IN_CLUSTER;
+
+    launch(
+                inputWidth,
+                inputHeight,
+                numInputChannel,
+                numOutputChannel,
+                numInputGroup,
+                inputHeightSPUnitSize,
+                inputWidthSPUnitSize,
+                sizeOutputTileWidthPerColFull,
+                sizeOutputTileHeight,
+                kernelSize,
+                flagEnableRelu,
+                op,
+                bias,
+                denseProb
+          );
+}
+
+TEST_F (testFixture, conv_dense_weight_small_tile)
+{
+    unsigned char inputWidth = 4;
+    unsigned char inputHeight = 4;
+    unsigned char numInputChannel = 16;
+    unsigned char numOutputChannel = numInputChannel;
+    unsigned char numInputGroup = 1;
+    unsigned char inputHeightSPUnitSize = 1;
+    unsigned char inputWidthSPUnitSize = 1;
+    unsigned char sizeOutputTileWidthPerColFull = 1;
+    unsigned char sizeOutputTileHeight = 1;
+    unsigned char kernelSize = 3;
+    bool flagEnableRelu = false;
+    OPERATION op = CONVOLUTION;
+    float bias = 0.0f;
+    float denseProb = 1.0f;
+
+    launch(
+                inputWidth,
+                inputHeight,
+                numInputChannel,
+                numOutputChannel,
+                numInputGroup,
+                inputHeightSPUnitSize,
+                inputWidthSPUnitSize,
+                sizeOutputTileWidthPerColFull,
+                sizeOutputTileHeight,
+                kernelSize,
+                flagEnableRelu,
+                op,
+                bias,
+                denseProb
+          );
+}
+
 TEST_F (testFixture, max_pool)
 {
     unsigned char inputWidth = 4;
@@ -1671,164 +1838,6 @@ TEST_F (testFixture, global_avg_pool_sparse_output_grouped)
                 bias
           );
 }
-
-
-TEST_F (testFixture, conv_dense_input_dense_output_grouped)
-{
-    unsigned char inputWidth = 4;
-    unsigned char inputHeight = 4;
-    unsigned char numInputChannel = 16;
-    unsigned char numOutputChannel = numInputChannel;
-    unsigned char numInputGroup = 2;
-    unsigned char numOutputGroup = 2;
-    unsigned char inputHeightSPUnitSize = 1;
-    unsigned char inputWidthSPUnitSize = 1;
-    unsigned char sizeOutputTileWidthPerColFull = 2;
-    unsigned char sizeOutputTileHeight = 4;
-    unsigned char kernelSize = 3;
-    bool flagEnableRelu = false;
-    bool flagSparseInput = false;
-    bool flagSparseOutput = false;
-    OPERATION op = CONVOLUTION;
-    float bias = 0.0f;
-
-    launch(
-                inputWidth,
-                inputHeight,
-                numInputChannel,
-                numOutputChannel,
-                numInputGroup,
-                numOutputGroup,
-                inputHeightSPUnitSize,
-                inputWidthSPUnitSize,
-                sizeOutputTileWidthPerColFull,
-                sizeOutputTileHeight,
-                kernelSize,
-                flagEnableRelu,
-                flagSparseInput,
-                flagSparseOutput,
-                op,
-                bias
-          );
-}
-
-TEST_F (testFixture, conv_dense_input_dense_output_strided)
-{
-    unsigned char inputWidth = 4;
-    unsigned char inputHeight = 4;
-    unsigned char numInputChannel = 16;
-    unsigned char numOutputChannel = numInputChannel;
-    unsigned char numInputGroup = 1;
-    unsigned char numOutputGroup = 1;
-    unsigned char inputHeightSPUnitSize = 2;
-    unsigned char inputWidthSPUnitSize = 2;
-    unsigned char sizeOutputTileWidthPerColFull = 2;
-    unsigned char sizeOutputTileHeight = 4;
-    unsigned char kernelSize = 3;
-    bool flagEnableRelu = false;
-    bool flagSparseInput = false;
-    bool flagSparseOutput = false;
-    OPERATION op = CONVOLUTION;
-    float bias = 0.0f;
-
-    launch(
-                inputWidth,
-                inputHeight,
-                numInputChannel,
-                numOutputChannel,
-                numInputGroup,
-                numOutputGroup,
-                inputHeightSPUnitSize,
-                inputWidthSPUnitSize,
-                sizeOutputTileWidthPerColFull,
-                sizeOutputTileHeight,
-                kernelSize,
-                flagEnableRelu,
-                flagSparseInput,
-                flagSparseOutput,
-                op,
-                bias
-          );
-}
-
-TEST_F (testFixture, conv_sparse_input_sparse_output)
-{
-    unsigned char inputWidth = 4;
-    unsigned char inputHeight = 4;
-    unsigned char numInputChannel = 16;
-    unsigned char numOutputChannel = numInputChannel;
-    unsigned char numInputGroup = 1;
-    unsigned char numOutputGroup = 1;
-    unsigned char inputHeightSPUnitSize = 1;
-    unsigned char inputWidthSPUnitSize = 1;
-    unsigned char sizeOutputTileWidthPerColFull = 2;
-    unsigned char sizeOutputTileHeight = 4;
-    unsigned char kernelSize = 3;
-    bool flagEnableRelu = false;
-    bool flagSparseInput = true;
-    bool flagSparseOutput = true;
-    OPERATION op = CONVOLUTION;
-    float bias = 0.0f;
-
-    launch(
-                inputWidth,
-                inputHeight,
-                numInputChannel,
-                numOutputChannel,
-                numInputGroup,
-                numOutputGroup,
-                inputHeightSPUnitSize,
-                inputWidthSPUnitSize,
-                sizeOutputTileWidthPerColFull,
-                sizeOutputTileHeight,
-                kernelSize,
-                flagEnableRelu,
-                flagSparseInput,
-                flagSparseOutput,
-                op,
-                bias
-          );
-}
-
-TEST_F (testFixture, conv_sparse_input_sparse_output_small_tile)
-{
-    unsigned char inputWidth = 4;
-    unsigned char inputHeight = 4;
-    unsigned char numInputChannel = 16;
-    unsigned char numOutputChannel = numInputChannel;
-    unsigned char numInputGroup = 1;
-    unsigned char numOutputGroup = 1;
-    unsigned char inputHeightSPUnitSize = 1;
-    unsigned char inputWidthSPUnitSize = 1;
-    unsigned char sizeOutputTileWidthPerColFull = 1;
-    unsigned char sizeOutputTileHeight = 1;
-    unsigned char kernelSize = 3;
-    bool flagEnableRelu = false;
-    bool flagSparseInput = true;
-    bool flagSparseOutput = true;
-    OPERATION op = CONVOLUTION;
-    float bias = 0.0f;
-
-    launch(
-                inputWidth,
-                inputHeight,
-                numInputChannel,
-                numOutputChannel,
-                numInputGroup,
-                numOutputGroup,
-                inputHeightSPUnitSize,
-                inputWidthSPUnitSize,
-                sizeOutputTileWidthPerColFull,
-                sizeOutputTileHeight,
-                kernelSize,
-                flagEnableRelu,
-                flagSparseInput,
-                flagSparseOutput,
-                op,
-                bias
-          );
-}
-
 
 
 TEST_F (testFixture, back_to_back_identity_conv)
@@ -2341,9 +2350,20 @@ void testFixture::launch (unsigned short _inputWidth,
             DIVIDE_CEIL(numInputChannel0, ACTIVATION_BURST_SIZE_BYTE) * ACTIVATION_BURST_SIZE_BYTE;
     std::cout <<"memIA0ColStride: "<<memIAColStride<<std::endl;
 
-    signed int memOAColStride =
+    signed int memOAColStride;
+    if (op == CONCATENATION)
+    {
+        memOAColStride =
+                numInputChannel0
+                + DIVIDE_CEIL(numInputChannel1, ACTIVATION_BURST_SIZE_BYTE) * ACTIVATION_BURST_SIZE_BYTE;
+    }
+    else
+    {
+        memOAColStride =
             (numGroupCurrentLayer - 1) * numOutputChannelPerGroup
-            + DIVIDE_CEIL(numOutputChannelPerGroup, ACTIVATION_BURST_SIZE_BYTE) * ACTIVATION_BURST_SIZE_BYTE;
+                + DIVIDE_CEIL(numOutputChannelPerGroup, ACTIVATION_BURST_SIZE_BYTE) * ACTIVATION_BURST_SIZE_BYTE;
+    }
+
     std::cout <<"memOAColStride: "<<memOAColStride<<std::endl;
 
 

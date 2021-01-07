@@ -391,6 +391,7 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
     //Number of dram blocks that belong to the same group at the same planar index
     //Only consider one group
     //This should be calculated assuming 100% density.
+    //Also seen by the misc tee
     t_ushort numNominalDramBlocksPerStrip;
 
     //Concatenated signal
@@ -398,6 +399,7 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
     //[4] Shift direction. 1 for left shift, 0 for right shift
     //[6] Source of the output. 0 for convolution engine, 1 for misc.
     //[7] Enable Relu. 1 for TRUE, 0 for false
+    ////Also seen by the misc tee
     t_uchar flagSparseCatFlagReluCatFlagSourceCatShift;
     
 } t_oa_tile_controller_instruction;
