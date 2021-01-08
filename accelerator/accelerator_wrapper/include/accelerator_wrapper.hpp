@@ -71,8 +71,8 @@ namespace GraphRuntime {
         //PE dimenions
         int numPERows;
         int numPECols;
-        int numClusterInCompressionBlock;
-        int numClusterInTransferBlock;
+//        int numClusterInCompressionBlock;
+//        int numClusterInTransferBlock;
         int numScalarInCluster;
     } t_accelerator_info;
 

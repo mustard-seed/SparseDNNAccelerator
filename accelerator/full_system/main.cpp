@@ -138,39 +138,6 @@ protected:
 }; //testFixture
 
 #ifdef PLAY
-//TEST_F (testFixture, global_avg_pool)
-//{
-//    unsigned char inputWidth = 4;
-//    unsigned char inputHeight = 4;
-//    unsigned char numInputChannel = 120;
-//    unsigned char numOutputChannel = numInputChannel;
-//    unsigned char numInputGroup = 1;
-//    unsigned char inputHeightSPUnitSize = 1;
-//    unsigned char inputWidthSPUnitSize = 1;
-//    unsigned char sizeOutputTileWidthPerColFull = 2;
-//    unsigned char sizeOutputTileHeight = 4;
-//    unsigned char kernelSize = 3;
-//    bool flagEnableRelu = false;
-//    OPERATION op = AVG_POOL;
-//    float bias = 0.0f;
-
-//    launch(
-//                inputWidth,
-//                inputHeight,
-//                numInputChannel,
-//                numOutputChannel,
-//                numInputGroup,
-//                inputHeightSPUnitSize,
-//                inputWidthSPUnitSize,
-//                sizeOutputTileWidthPerColFull,
-//                sizeOutputTileHeight,
-//                kernelSize,
-//                flagEnableRelu,
-//                op,
-//                bias
-//          );
-//}
-
 TEST_F (testFixture, concat)
 {
     unsigned char inputWidth = 2;
@@ -236,6 +203,79 @@ TEST_F (testFixture, elt_add)
                 bias
           );
 }
+
+TEST_F (testFixture, global_avg_pool)
+{
+    unsigned char inputWidth = 4;
+    unsigned char inputHeight = 4;
+    unsigned char numInputChannel = 120;
+    unsigned char numOutputChannel = numInputChannel;
+    unsigned char numInputGroup = 1;
+    unsigned char inputHeightSPUnitSize = 1;
+    unsigned char inputWidthSPUnitSize = 1;
+    unsigned char sizeOutputTileWidthPerColFull = 2;
+    unsigned char sizeOutputTileHeight = 4;
+    unsigned char kernelSize = 3;
+    bool flagEnableRelu = false;
+    OPERATION op = AVG_POOL;
+    float bias = 0.0f;
+
+    launch(
+                inputWidth,
+                inputHeight,
+                numInputChannel,
+                numOutputChannel,
+                numInputGroup,
+                inputHeightSPUnitSize,
+                inputWidthSPUnitSize,
+                sizeOutputTileWidthPerColFull,
+                sizeOutputTileHeight,
+                kernelSize,
+                flagEnableRelu,
+                op,
+                bias
+          );
+}
+
+
+TEST_F (testFixture, back_to_back_identity_conv)
+{
+    unsigned char inputWidth = 4;
+    unsigned char inputHeight = 4;
+    unsigned char numInputChannel =16;
+    unsigned char numOutputChannel = numInputChannel;
+    unsigned char numInputGroup = 1;
+    unsigned char numOutputGroup = 1;
+    unsigned char inputHeightSPUnitSize = 1;
+    unsigned char inputWidthSPUnitSize = 1;
+    unsigned char sizeOutputTileWidthPerColFull = 2;
+    unsigned char sizeOutputTileHeight = 4;
+    unsigned char kernelSize = 3;
+    bool flagEnableRelu = false;
+    OPERATION op = CONVOLUTION;
+    float denseProb = 1.0;
+    float bias = 0.0f;
+    bool flag2Layer = true;
+
+    launch(
+                inputWidth,
+                inputHeight,
+                numInputChannel,
+                numOutputChannel,
+                numInputGroup,
+                inputHeightSPUnitSize,
+                inputWidthSPUnitSize,
+                sizeOutputTileWidthPerColFull,
+                sizeOutputTileHeight,
+                kernelSize,
+                flagEnableRelu,
+                op,
+                bias,
+                denseProb,
+                flag2Layer
+          );
+}
+
 
 #endif
 #if defined(THROUGHPUT_DIAGNOSTIC)
@@ -1580,7 +1620,7 @@ TEST_F (testFixture, conv_sparse_weight_grouped)
           );
 }
 
-EST_F (testFixture, conv_sparse_weight_strided)
+TEST_F (testFixture, conv_sparse_weight_strided)
 {
     unsigned char inputWidth = 4;
     unsigned char inputHeight = 4;
@@ -1683,6 +1723,39 @@ TEST_F (testFixture, max_pool)
           );
 }
 
+TEST_F (testFixture, concat)
+{
+    unsigned char inputWidth = 2;
+    unsigned char inputHeight = 2;
+    unsigned char numInputChannel = 120;
+    unsigned char numOutputChannel = 2*numInputChannel;
+    unsigned char numInputGroup = 1;
+    unsigned char inputHeightSPUnitSize = 1;
+    unsigned char inputWidthSPUnitSize = 1;
+    unsigned char sizeOutputTileWidthPerColFull = 2;
+    unsigned char sizeOutputTileHeight = 4;
+    unsigned char kernelSize = 3;
+    bool flagEnableRelu = false;
+    OPERATION op = CONCATENATION;
+    float bias = 0.0f;
+
+    launch(
+                inputWidth,
+                inputHeight,
+                numInputChannel,
+                numOutputChannel,
+                numInputGroup,
+                inputHeightSPUnitSize,
+                inputWidthSPUnitSize,
+                sizeOutputTileWidthPerColFull,
+                sizeOutputTileHeight,
+                kernelSize,
+                flagEnableRelu,
+                op,
+                bias
+          );
+}
+
 TEST_F (testFixture, elt_add)
 {
     unsigned char inputWidth = 4;
@@ -1716,61 +1789,19 @@ TEST_F (testFixture, elt_add)
           );
 }
 
-TEST_F (testFixture, concat_sparse_output_grouped)
-{
-    unsigned char inputWidth = 2;
-    unsigned char inputHeight = 2;
-    unsigned char numInputChannel = 120;
-    unsigned char numOutputChannel = 2*numInputChannel;
-    unsigned char numInputGroup = 1;
-    unsigned char numOutputGroup = 2;
-    unsigned char inputHeightSPUnitSize = 1;
-    unsigned char inputWidthSPUnitSize = 1;
-    unsigned char sizeOutputTileWidthPerColFull = 2;
-    unsigned char sizeOutputTileHeight = 4;
-    unsigned char kernelSize = 3;
-    bool flagEnableRelu = false;
-    bool flagSparseInput = false;
-    bool flagSparseOutput = true;
-    OPERATION op = CONCATENATION;
-    float bias = 0.0f;
-
-    launch(
-                inputWidth,
-                inputHeight,
-                numInputChannel,
-                numOutputChannel,
-                numInputGroup,
-                numOutputGroup,
-                inputHeightSPUnitSize,
-                inputWidthSPUnitSize,
-                sizeOutputTileWidthPerColFull,
-                sizeOutputTileHeight,
-                kernelSize,
-                flagEnableRelu,
-                flagSparseInput,
-                flagSparseOutput,
-                op,
-                bias
-          );
-}
-
-TEST_F (testFixture, global_avg_pool_sparse_output_grouped)
+TEST_F (testFixture, global_avg_pool)
 {
     unsigned char inputWidth = 4;
     unsigned char inputHeight = 4;
     unsigned char numInputChannel = 120;
     unsigned char numOutputChannel = numInputChannel;
     unsigned char numInputGroup = 1;
-    unsigned char numOutputGroup = 2;
     unsigned char inputHeightSPUnitSize = 1;
     unsigned char inputWidthSPUnitSize = 1;
     unsigned char sizeOutputTileWidthPerColFull = 2;
     unsigned char sizeOutputTileHeight = 4;
     unsigned char kernelSize = 3;
     bool flagEnableRelu = false;
-    bool flagSparseInput = false;
-    bool flagSparseOutput = true;
     OPERATION op = AVG_POOL;
     float bias = 0.0f;
 
@@ -1780,15 +1811,12 @@ TEST_F (testFixture, global_avg_pool_sparse_output_grouped)
                 numInputChannel,
                 numOutputChannel,
                 numInputGroup,
-                numOutputGroup,
                 inputHeightSPUnitSize,
                 inputWidthSPUnitSize,
                 sizeOutputTileWidthPerColFull,
                 sizeOutputTileHeight,
                 kernelSize,
                 flagEnableRelu,
-                flagSparseInput,
-                flagSparseOutput,
                 op,
                 bias
           );
@@ -1847,7 +1875,7 @@ void testFixture::SetUp()
 #else
     binaryFile = "device_utils.aocx";
 #if defined(EMULATE)
-    binaryFile = "smallBuffer.aocx";
+    binaryFile = "c5_mac8bitx4_c_model.aocx";
 #endif
 #endif
 
@@ -1860,8 +1888,6 @@ void testFixture::SetUp()
     GraphRuntime::t_accelerator_info acceleratorInfo =
         {   .numPERows=PE_ROWS,
             .numPECols=PE_COLS,
-            .numClusterInCompressionBlock=COMPRESSION_WINDOW_SIZE,
-            .numClusterInTransferBlock=TRANSFER_SIZE,
             .numScalarInCluster=CLUSTER_SIZE
         };
    accelerator = GraphRuntime::AcceleratorWrapper(binaryFile, platformName, acceleratorInfo, 0);
@@ -2235,9 +2261,6 @@ void testFixture::launch (unsigned short _inputWidth,
     std::cout <<stepCount++<<". Allocate, align, and compress the test tensors."<<std::endl;
 
     unsigned short numICPerGroup = _numInputChannel / numGroupCurrentLayer;
-    unsigned short maxClusterIndexInCompressionBlock = COMPRESSION_WINDOW_SIZE-1;
-    unsigned short maxClusterIndexInTransferBlock = TRANSFER_SIZE-1;
-    unsigned short maxScalarIndexInCluster = CLUSTER_SIZE-1;
 
     std::shared_ptr<DeviceWeightTensor> pWeight;
 

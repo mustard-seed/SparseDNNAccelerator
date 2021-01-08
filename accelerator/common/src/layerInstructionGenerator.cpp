@@ -939,9 +939,7 @@ unsigned int deriveNumActivationDramBlockPerStrip(
         unsigned int _numInputChannelsPerGroup
     )
 {
-    unsigned int numTransferBlockPerChannelGroup = 1 + ( _numInputChannelsPerGroup -1) / (CLUSTER_SIZE*TRANSFER_SIZE);
-    unsigned int numDramBlockPerStrip = 1 + (numTransferBlockPerChannelGroup-1) / WIDE_SIZE;
-
+    unsigned int numDramBlockPerStrip = DIVIDE_CEIL(_numInputChannelsPerGroup, ACTIVATION_BURST_SIZE_BYTE);
     return numDramBlockPerStrip;
 }
 
@@ -964,7 +962,7 @@ unsigned int deriveConvComputationLatency(
     unsigned int numPERowFoldPerGroup =
             1 + (_numOutputChannelsPerGroup-1) / PE_ROWS;
     unsigned int numTranferBlockPerInputGroup =
-            1 + (_numInputChannelsPerGroup-1) / (TRANSFER_SIZE * CLUSTER_SIZE);
+            DIVIDE_CEIL(_numInputChannelsPerGroup, PE_SIMD_SIZE * CLUSTER_SIZE);
     unsigned int numIdealTransfersPerConvWindow = numTranferBlockPerInputGroup * _sizeKernel * _sizeKernel;
     unsigned int numTransfersPerConvWindow =
             numIdealTransfersPerConvWindow > PE_ROWS ? numIdealTransfersPerConvWindow : PE_ROWS;
@@ -1086,9 +1084,9 @@ unsigned int deriveConvWeightTransferLatency(
 {
     unsigned int numTileAlongHeight = _outputTileInfo.numOutputTileAlongHeight;
     unsigned int numTileAlongWidth = _outputTileInfo.numOutputTileAlongWidth;
-    unsigned int numTBPerStrip = 1 + (_numInputChannelsPerGroup - 1) / (CLUSTER_SIZE * TRANSFER_SIZE);
+    unsigned int numTBPerStrip = DIVIDE_CEIL(_numInputChannelsPerGroup, PE_SIMD_SIZE * CLUSTER_SIZE);
     unsigned int numDramBlocksInFilter =
-            1 + (_sizeKernel*_sizeKernel*numTBPerStrip - 1) / WEIGHT_WIDE_SIZE;
+            DIVIDE_CEIL(_sizeKernel * _sizeKernel * numTBPerStrip, WEIGHT_WIDE_SIZE);
     unsigned int latency =
             _numGroups * _numOutputChannelsPerGroup * numTileAlongHeight * numTileAlongWidth
             * (numDramBlocksInFilter + NUM_IDLE_CYCLES_PER_FILTER_TRANSFER_FROM_W_MOVER);
@@ -1150,7 +1148,7 @@ unsigned int deriveFirstTileConvComputationLatency(
     unsigned int numPERowFoldPerGroup =
             1 + (_numOutputChannelsPerGroup-1) / PE_ROWS;
     unsigned int numTranferBlockPerInputGroup =
-            1 + (_numInputChannelsPerGroup-1) / (TRANSFER_SIZE * CLUSTER_SIZE);
+            DIVIDE_CEIL(_numInputChannelsPerGroup, PE_SIMD_SIZE * CLUSTER_SIZE);
     unsigned int numIdealTransfersPerConvWindow = numTranferBlockPerInputGroup * _sizeKernel * _sizeKernel;
     unsigned int numTransfersPerConvWindow =
             numIdealTransfersPerConvWindow > PE_ROWS ? numIdealTransfersPerConvWindow : PE_ROWS;
