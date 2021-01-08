@@ -204,6 +204,39 @@ TEST_F (testFixture, concat)
           );
 }
 
+TEST_F (testFixture, elt_add)
+{
+    unsigned char inputWidth = 4;
+    unsigned char inputHeight = 4;
+    unsigned char numInputChannel = 127;
+    unsigned char numOutputChannel = numInputChannel;
+    unsigned char numInputGroup = 1;
+    unsigned char inputHeightSPUnitSize = 1;
+    unsigned char inputWidthSPUnitSize = 1;
+    unsigned char sizeOutputTileWidthPerColFull = 2;
+    unsigned char sizeOutputTileHeight = 4;
+    unsigned char kernelSize = 3;
+    bool flagEnableRelu = false;
+    OPERATION op = ELT_ADD;
+    float bias = 0.0f;
+
+    launch(
+                inputWidth,
+                inputHeight,
+                numInputChannel,
+                numOutputChannel,
+                numInputGroup,
+                inputHeightSPUnitSize,
+                inputWidthSPUnitSize,
+                sizeOutputTileWidthPerColFull,
+                sizeOutputTileHeight,
+                kernelSize,
+                flagEnableRelu,
+                op,
+                bias
+          );
+}
+
 #endif
 #if defined(THROUGHPUT_DIAGNOSTIC)
 TEST_F (testFixture, throughput_diagnostic_fully_connected)
@@ -2721,9 +2754,20 @@ void testFixture::launch (unsigned short _inputWidth,
                                         .blobName="input"
                                     });
     int oaRegion = ((op == CONVOLUTION) && (flagMultiLayerConv == true)) ? 0 : 1;
-    int oaStripStrideSeenBySource =
+    int oaStripStrideSeenBySource;
+    if (op == CONCATENATION)
+    {
+        oaStripStrideSeenBySource =
+                numInputChannel0
+                + DIVIDE_CEIL(numInputChannel1, ACTIVATION_BURST_SIZE_BYTE) * ACTIVATION_BURST_SIZE_BYTE;
+    }
+    else
+    {
+        oaStripStrideSeenBySource =
             numOutputChannelPerGroup * (numGroupCurrentLayer - 1)
             + DIVIDE_CEIL(numOutputChannelPerGroup, ACTIVATION_BURST_SIZE_BYTE) * ACTIVATION_BURST_SIZE_BYTE;
+    }
+
     graph.vecOutputInfo.emplace_back(
                 GraphRuntime::t_blob_info{
                     .memoryRegionID=oaRegion,
