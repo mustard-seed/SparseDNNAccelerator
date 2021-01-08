@@ -322,9 +322,9 @@ void instruction_generator(//Type of the operation
             numIAMoverGroup1 = 0;
             numActiveElementsInFullComputeFold = ACTIVATION_BURST_SIZE_BYTE;
             numOAGroupsCurrentLayer = numEffectiveGroups;
-            numOutputChannelsBlob0MK = numInputChannels0;
+            numOutputChannelsBlob0MK = ACTIVATION_BURST_SIZE_BYTE;
             numOutputChannelsBlob1MK = 0;
-            numOutputBlocksBlob0PerStripMK = DIVIDE_CEIL(numOutputChannelsBlob0MK, ACTIVATION_BURST_SIZE_BYTE);
+            numOutputBlocksBlob0PerStripMK = 1;
             numOutputBlocksBlob1PerStripMK = 0;
 //            numOutputBlocksBlob0PerStripMK = numOutputBlocksBlob0MK;
 //            numOutputBlocksBlob1PerStripMK = 0;
@@ -391,9 +391,9 @@ void instruction_generator(//Type of the operation
             numIAMoverGroup1 = 0;
             numActiveElementsInFullComputeFold = ACTIVATION_BURST_SIZE_BYTE;
             numOAGroupsCurrentLayer = 1;
-            numOutputChannelsBlob0MK = numInputChannels0;
+            numOutputChannelsBlob0MK = ACTIVATION_BURST_SIZE_BYTE;
             numOutputChannelsBlob1MK = 0;
-            numOutputBlocksBlob0PerStripMK = DIVIDE_CEIL(numOutputChannelsBlob0MK, ACTIVATION_BURST_SIZE_BYTE);
+            numOutputBlocksBlob0PerStripMK = 1;
             numOutputBlocksBlob1PerStripMK = 0;
             numDramBlocksToReduceMK = (unsigned int) kernelSize * (unsigned int) kernelSize;
         }
