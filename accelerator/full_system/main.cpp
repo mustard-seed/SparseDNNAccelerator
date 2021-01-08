@@ -138,45 +138,12 @@ protected:
 }; //testFixture
 
 #ifdef PLAY
-TEST_F (testFixture, global_avg_pool)
-{
-    unsigned char inputWidth = 4;
-    unsigned char inputHeight = 4;
-    unsigned char numInputChannel = 120;
-    unsigned char numOutputChannel = numInputChannel;
-    unsigned char numInputGroup = 1;
-    unsigned char inputHeightSPUnitSize = 1;
-    unsigned char inputWidthSPUnitSize = 1;
-    unsigned char sizeOutputTileWidthPerColFull = 2;
-    unsigned char sizeOutputTileHeight = 4;
-    unsigned char kernelSize = 3;
-    bool flagEnableRelu = false;
-    OPERATION op = AVG_POOL;
-    float bias = 0.0f;
-
-    launch(
-                inputWidth,
-                inputHeight,
-                numInputChannel,
-                numOutputChannel,
-                numInputGroup,
-                inputHeightSPUnitSize,
-                inputWidthSPUnitSize,
-                sizeOutputTileWidthPerColFull,
-                sizeOutputTileHeight,
-                kernelSize,
-                flagEnableRelu,
-                op,
-                bias
-          );
-}
-
-//TEST_F (testFixture, concat)
+//TEST_F (testFixture, global_avg_pool)
 //{
-//    unsigned char inputWidth = 2;
-//    unsigned char inputHeight = 2;
+//    unsigned char inputWidth = 4;
+//    unsigned char inputHeight = 4;
 //    unsigned char numInputChannel = 120;
-//    unsigned char numOutputChannel = 2*numInputChannel;
+//    unsigned char numOutputChannel = numInputChannel;
 //    unsigned char numInputGroup = 1;
 //    unsigned char inputHeightSPUnitSize = 1;
 //    unsigned char inputWidthSPUnitSize = 1;
@@ -184,7 +151,7 @@ TEST_F (testFixture, global_avg_pool)
 //    unsigned char sizeOutputTileHeight = 4;
 //    unsigned char kernelSize = 3;
 //    bool flagEnableRelu = false;
-//    OPERATION op = CONCATENATION;
+//    OPERATION op = AVG_POOL;
 //    float bias = 0.0f;
 
 //    launch(
@@ -203,6 +170,39 @@ TEST_F (testFixture, global_avg_pool)
 //                bias
 //          );
 //}
+
+TEST_F (testFixture, concat)
+{
+    unsigned char inputWidth = 2;
+    unsigned char inputHeight = 2;
+    unsigned char numInputChannel = 120;
+    unsigned char numOutputChannel = 2*numInputChannel;
+    unsigned char numInputGroup = 1;
+    unsigned char inputHeightSPUnitSize = 1;
+    unsigned char inputWidthSPUnitSize = 1;
+    unsigned char sizeOutputTileWidthPerColFull = 2;
+    unsigned char sizeOutputTileHeight = 4;
+    unsigned char kernelSize = 3;
+    bool flagEnableRelu = false;
+    OPERATION op = CONCATENATION;
+    float bias = 0.0f;
+
+    launch(
+                inputWidth,
+                inputHeight,
+                numInputChannel,
+                numOutputChannel,
+                numInputGroup,
+                inputHeightSPUnitSize,
+                inputWidthSPUnitSize,
+                sizeOutputTileWidthPerColFull,
+                sizeOutputTileHeight,
+                kernelSize,
+                flagEnableRelu,
+                op,
+                bias
+          );
+}
 
 #endif
 #if defined(THROUGHPUT_DIAGNOSTIC)
@@ -2158,9 +2158,9 @@ void testFixture::launch (unsigned short _inputWidth,
     std::cout <<"Input SP dimensions (H, W):  "<<(unsigned int) inputHeightSPSize<<" "<<(unsigned int) inputWidthSPSize<<std::endl
               <<"PE dimension (H, W): "<<PE_ROWS<<" "<<PE_COLS<<std::endl
               <<"CLUSTER_SIZE: "<<CLUSTER_SIZE<<std::endl
-              <<"PE_SIMD_SIZE: "<<TRANSFER_SIZE<<std::endl
+              <<"PE_SIMD_SIZE: "<<PE_SIMD_SIZE<<std::endl
               <<"PRUNE_RANGE_IN_CLUSTER "<<PRUNE_RANGE_IN_CLUSTER<<std::endl
-              <<"ACTIVATION_WIDE_SIZE "<<WIDE_SIZE<<std::endl
+              <<"ACTIVATION_WIDE_SIZE "<<ACTIVATION_WIDE_SIZE<<std::endl
               <<"WEIGHT_WIDE_SIZE "<<WEIGHT_WIDE_SIZE<<std::endl
               <<"Output planar dimensions (H, W): "<<(unsigned int)numOutputHeight<<" "<<(unsigned int)numOutputWidth<<std::endl
               <<"Full output tile per col planar sizes (H, W): "<<(unsigned int)sizeOutputTileHeight<<" "<<(unsigned int)sizeOutputTileWidthPerCol<<std::endl
