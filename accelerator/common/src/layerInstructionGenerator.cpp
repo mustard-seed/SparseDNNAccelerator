@@ -122,7 +122,7 @@ void instruction_generator(//Type of the operation
 
     unsigned char numActiveColsPartialOutputTile =
             ((op == MAX_POOL) || (op == AVG_POOL) || (op == ELT_ADD) || (op == CONCATENATION)) ?
-                (outputWidth % numActiveColsFullOutputTile)
+                1
                 : _numActiveColsPartialOutputTile;
 
     //Input height and width before stretch and padding
