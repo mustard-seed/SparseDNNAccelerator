@@ -433,7 +433,7 @@ typedef struct __attribute__((aligned(16)))
         Relu flag, shift direciton and the number of bits to shift the accumulator value 
         Bit 5: Enable relu
         Bit 4: shift direction. 0 for right, 1 for left. 
-        Bit 3:0: from the convolution PE array. Only relevant for loading
+        Bit 3:0: shift amount
     */
     t_uchar outputModifierControl;
 
@@ -653,7 +653,7 @@ typedef struct __attribute__((packed))
         Relu flag, shift direciton and the number of bits to shift the accumulator value 
         Bit 5: Enable relu
         Bit 4: shift direction. 0 for right, 1 for left. 
-        Bit 3:0: from the convolution PE array. Only relevant for loading
+        Bit 3:0: shift amount
     */
     t_uchar outputModifierControl;
 

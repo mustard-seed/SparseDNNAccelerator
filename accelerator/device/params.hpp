@@ -1,9 +1,9 @@
 #ifndef PARAMS_DEFINED
 #define PARAMS_DEFINED
 
-//#define HOST_DEBUG
-#define SPW_SYSTEM
-//#define DENSE_SYSTEM
+#define HOST_DEBUG
+//#define SPW_SYSTEM
+#define DENSE_SYSTEM
 #define OA_PING_PONG
 //#define WMOVER_STREAM_CACHE
 //#define OAMOVER_TB_STREAM_CACHE

@@ -788,6 +788,24 @@ void instruction_generator(//Type of the operation
                     instructionMisc.numOutputBlocksPerUnit =
                             (cl_ushort) maxTP * (cl_ushort) maxTQPerCol * (cl_ushort) numOutputBlocksBlob0PerStripMK;
 
+                    unsigned char leftShift = flagOutputShiftLeft;
+                    unsigned char scaleShift = outputShiftBits;
+
+                    if (!(((flagOutputShiftLeft == 0x00) && (outputShiftBits > 0))
+                         || ((flagOutputShiftLeft == 0x01) && (outputShiftBits >= 0))))
+                    {
+                        std::cout << "If output shift direction is RIGHT, then the number of shift must be greater than 0."
+                                  << std::endl
+                                  << "shift left flag, shift amount: "
+                                  <<(unsigned int) flagOutputShiftLeft<<" "
+                                  <<(unsigned int) outputShiftBits<<std::endl;
+                        throw;
+                    }
+
+                    instructionMisc.outputModifierControl =
+                            ((t_uchar) (scaleShift & 0x0F))
+                            | ((t_uchar) ((leftShift & 0x01) << 0x4))
+                            | ((t_uchar)((flagRelu & 0x01) << 0x5));
                     //Fix up for concatenation
                     if (op == CONCATENATION)
                     {
