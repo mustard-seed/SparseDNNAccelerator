@@ -2413,6 +2413,10 @@ typedef uint2_t t_oa_buffer_reader_state;
  */
 typedef uint2_t t_oa_buffer_dispatcher_state;
 
+typedef struct {
+	char values[PE_ROWS_PER_GROUP];
+} t_oa_buffer_access_block;
+
 
 void updateOABufferWriter (
 	//Inputs from the instruction dispatcher
@@ -2425,8 +2429,8 @@ void updateOABufferWriter (
 	t_flag _validValueFromPE,
 
 	//Modified buffers
-	char cacheOutputActivations0[OA_CACHE_DEPTH][ACTIVATION_BURST_SIZE_BYTE],
-	char cacheOutputActivations1[OA_CACHE_DEPTH][ACTIVATION_BURST_SIZE_BYTE],
+	t_oa_buffer_access_block cacheOutputActivations0[OA_CACHE_DEPTH][ACTIVATION_BURST_SIZE_IN_PE_ROW_GROUP],
+	t_oa_buffer_access_block cacheOutputActivations1[OA_CACHE_DEPTH][ACTIVATION_BURST_SIZE_IN_PE_ROW_GROUP],
 
 	//State variables
 	t_oa_buffer_writer_info *pRegisters,
@@ -2481,8 +2485,8 @@ void getOABufferReaderOutput (
 	t_flag* pOutAcceptInstruction,
 
 	//Buffer, read only
-	const char cacheOutputActivations0[OA_CACHE_DEPTH][ACTIVATION_BURST_SIZE_BYTE],
-	const char cacheOutputActivations1[OA_CACHE_DEPTH][ACTIVATION_BURST_SIZE_BYTE],
+	const t_oa_buffer_access_block cacheOutputActivations0[OA_CACHE_DEPTH][ACTIVATION_BURST_SIZE_IN_PE_ROW_GROUP],
+	const t_oa_buffer_access_block cacheOutputActivations1[OA_CACHE_DEPTH][ACTIVATION_BURST_SIZE_IN_PE_ROW_GROUP],
 
 	//Interface with the channel to OA Tee
 	t_flag* pToOATeeValid,
@@ -2543,10 +2547,10 @@ __kernel void kernelOABuffer ()
 	 * Activation buffer
 	 * TODO: might need to change the indexing in order to get the BRAM arrangement
 	 */
-	char cacheOutputActivations0 [OA_CACHE_DEPTH][ACTIVATION_BURST_SIZE_BYTE] __attribute__((
-                   numbanks(ACTIVATION_BURST_SIZE_BYTE), bankwidth(1), singlepump));
-	char cacheOutputActivations1 [OA_CACHE_DEPTH][ACTIVATION_BURST_SIZE_BYTE] __attribute__((
-                   numbanks(ACTIVATION_BURST_SIZE_BYTE), bankwidth(1), singlepump));
+	t_oa_buffer_access_block cacheOutputActivations0 [OA_CACHE_DEPTH][ACTIVATION_BURST_SIZE_IN_PE_ROW_GROUP] __attribute__((
+                   numbanks(ACTIVATION_BURST_SIZE_IN_PE_ROW_GROUP), bankwidth(PE_ROWS_PER_GROUP), singlepump));
+	t_oa_buffer_access_block cacheOutputActivations1 [OA_CACHE_DEPTH][ACTIVATION_BURST_SIZE_IN_PE_ROW_GROUP] __attribute__((
+                   numbanks(ACTIVATION_BURST_SIZE_IN_PE_ROW_GROUP), bankwidth(PE_ROWS_PER_GROUP), singlepump));
 
 	/**
 	 * Writer state and registers
@@ -2850,8 +2854,8 @@ void updateOABufferWriter (
 	t_flag _validValueFromPE,
 
 	//Modified buffers
-	char cacheOutputActivations0 [OA_CACHE_DEPTH][ACTIVATION_BURST_SIZE_BYTE],
-	char cacheOutputActivations1 [OA_CACHE_DEPTH][ACTIVATION_BURST_SIZE_BYTE],
+	t_oa_buffer_access_block cacheOutputActivations0 [OA_CACHE_DEPTH][ACTIVATION_BURST_SIZE_IN_PE_ROW_GROUP],
+	t_oa_buffer_access_block cacheOutputActivations1 [OA_CACHE_DEPTH][ACTIVATION_BURST_SIZE_IN_PE_ROW_GROUP],
 
 	//State variables
 	t_oa_buffer_writer_info *pRegisters,
@@ -2935,42 +2939,55 @@ void updateOABufferWriter (
 			{
 				unsigned int idxDramBlock = 
 					((*pRegisters).accessInfo.indexOutput >> ACTIVATION_BURST_SIZE_BYTE_OFFSET);
-				unsigned int idxInDramBlockBase = 
-					((*pRegisters).accessInfo.indexOutput & ACTIVATION_WIDE_SIZE_BYTE_MASK);
+				unsigned int idxOABlockInDramBlock = 
+					((*pRegisters).accessInfo.indexOutput >> DIVIDE_BY_PE_ROWS_PER_GROUP_SHIFT) 
+						& ACTIVATION_WIDE_SIZE_IN_PE_ROW_GROUP_MASK;
 				
 				//Assumption:
 				//All the output values from a PE row-group land in the same output activation dram block
 				//Specifically, indexOutput aligns with PE_ROW_GROUP blocks and ACTIVATION_BURST blocks
+				t_oa_buffer_access_block oaBlock;
 				#pragma unroll
 				for (unsigned int i=0; i<PE_ROWS_PER_GROUP; i++)
 				{
 					t_operand shortOutput = modifyOutput(
-					_wideOutputFromPEs[i], 
-					(*pRegisters).accumulatorShiftDirCatShiftAmount, 
-					(*pRegisters).enableRelu
+						_wideOutputFromPEs[i], 
+						(*pRegisters).accumulatorShiftDirCatShiftAmount, 
+						(*pRegisters).enableRelu
 					);
-					//cacheOutputActivations[indexOutput] = shortOutput;
-					if (((*pRegisters).accessInfo.accessBank & 0x01) == 0x00) 
-					{
-						cacheOutputActivations0
-							[idxDramBlock]
-							[(idxInDramBlockBase+i) & ACTIVATION_WIDE_SIZE_BYTE_MASK]
-							= shortOutput;
-					}
-					else
-					{
-						cacheOutputActivations1
-							[idxDramBlock]
-							[(idxInDramBlockBase+i) & ACTIVATION_WIDE_SIZE_BYTE_MASK]
-							= shortOutput;
-					}
-					EMULATOR_PRINT(("[kernelOABuffer %d] Read and processed values from PEs. "
-					 "Value: %#04x, %d out of %d values of the strip are read.\n\n", 
-					 colID, 
-					 shortOutput, 
-					 (*pRegisters).accessInfo.iLoopPerStip + i, 
-					 (*pRegisters).accessInfo.numOutputsPerStrip));
+
+					oaBlock.values[i] = shortOutput;
 				}
+				//cacheOutputActivations[indexOutput] = shortOutput;
+				if (((*pRegisters).accessInfo.accessBank & 0x01) == 0x00) 
+				{
+					// cacheOutputActivations0
+					// 	[idxDramBlock]
+					// 	[(idxInDramBlockBase+i) & ACTIVATION_WIDE_SIZE_BYTE_MASK]
+					// 	= shortOutput;
+					cacheOutputActivations0
+						[idxDramBlock]
+						[idxOABlockInDramBlock]
+						= oaBlock;
+				}
+				else
+				{
+					// cacheOutputActivations1
+					// 	[idxDramBlock]
+					// 	[(idxInDramBlockBase+i) & ACTIVATION_WIDE_SIZE_BYTE_MASK]
+					// 	= shortOutput;
+					cacheOutputActivations1
+						[idxDramBlock]
+						[idxOABlockInDramBlock]
+						= oaBlock;
+				}
+				EMULATOR_PRINT(("[kernelOABuffer %d] Read and processed values from PEs. "
+				 "Value: %#04x, %d out of %d values of the strip are read.\n\n", 
+				 colID, 
+				 shortOutput, 
+				 (*pRegisters).accessInfo.iLoopPerStip + i, 
+				 (*pRegisters).accessInfo.numOutputsPerStrip));
+
 
 				//Loop variable updates
 				(*pRegisters).accessInfo.indexOutput += PE_ROWS_PER_GROUP;
@@ -3124,8 +3141,8 @@ void getOABufferReaderOutput (
 	t_flag* pOutAcceptInstruction,
 
 	//Buffer, read only
-	const char cacheOutputActivations0 [OA_CACHE_DEPTH][ACTIVATION_BURST_SIZE_BYTE],
-	const char cacheOutputActivations1 [OA_CACHE_DEPTH][ACTIVATION_BURST_SIZE_BYTE],
+	const t_oa_buffer_access_block cacheOutputActivations0 [OA_CACHE_DEPTH][ACTIVATION_BURST_SIZE_IN_PE_ROW_GROUP],
+	const t_oa_buffer_access_block cacheOutputActivations1 [OA_CACHE_DEPTH][ACTIVATION_BURST_SIZE_IN_PE_ROW_GROUP],
 
 	//Interface with the channel to OA Tee
 	t_flag* pToOATeeValid,
@@ -3151,16 +3168,21 @@ void getOABufferReaderOutput (
 			int idxDramBlock = (_currentContext.accessInfo.indexOutput >> ACTIVATION_BURST_SIZE_BYTE_OFFSET);
 			//fetch the cluster
 			#pragma unroll
-			for (unsigned char i=0; i<ACTIVATION_BURST_SIZE_BYTE; i++)
+			for (unsigned char i=0; i<ACTIVATION_BURST_SIZE_IN_PE_ROW_GROUP; i++)
 			{
-				char cacheValue = ((_currentContext.accessInfo.accessBank & 0x01) == 0x00) ?
-						cacheOutputActivations0
-								[idxDramBlock]
-								[i & ACTIVATION_WIDE_SIZE_BYTE_MASK]
-						: cacheOutputActivations1
-								[idxDramBlock]
-								[i & ACTIVATION_WIDE_SIZE_BYTE_MASK];
-				taggedOutput.dramBlock.values[i] = cacheValue;
+				t_oa_buffer_access_block block = ((_currentContext.accessInfo.accessBank & 0x01) == 0x00) ?
+					cacheOutputActivations0
+							[idxDramBlock]
+							[i & ACTIVATION_WIDE_SIZE_BYTE_MASK]
+					: cacheOutputActivations1
+							[idxDramBlock]
+							[i & ACTIVATION_WIDE_SIZE_BYTE_MASK];
+				#pragma unroll
+				for (unsigned char j=0; j<PE_ROWS_PER_GROUP; j++)
+				{
+					taggedOutput.dramBlock.values[i*PE_ROWS_PER_GROUP + j]
+						= block.values[j];
+				}
 			}
 			
 			//Only set the isLastInStrip flag.
