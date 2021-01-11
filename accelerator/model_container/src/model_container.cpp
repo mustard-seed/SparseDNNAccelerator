@@ -64,6 +64,17 @@ namespace GraphRuntime {
         return result;
     }
 
+    IntVec Layer::getInputGroupsSeenBySource()
+    {
+        IntVec result;
+        YAML::Node item = node["inputGroupsSeenBySource"];
+        for (size_t i=0; i<item.size(); i++)
+        {
+            result.push_back(item[i].as<int>());
+        }
+        return result;
+    }
+
     bool Layer::getInputSparseFlag()
     {
         return node["sparseInput"].as<bool>();
@@ -204,6 +215,21 @@ namespace GraphRuntime {
     FloatVec ConvLayer::getBiases()
     {
         return vecBiases;
+    }
+
+    float ConvLayer::getWeightSparsity()
+    {
+        return node["sparsity"].as<float>();
+    }
+
+    int ConvLayer::getWeightPruneClusterSize()
+    {
+        return node["pruneClusterSize"].as<int>();
+    }
+
+    int ConvLayer::getWeightPruneRangeSizeInCluster()
+    {
+        return node["pruneRangeInCluster"].as<int>();
     }
 
     MaxPoolLayer::MaxPoolLayer(const YAML::Node& _node)

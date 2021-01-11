@@ -33,7 +33,6 @@ namespace GraphRuntime {
 
             /*
              * Input information getters
-             * TODO: Optional. In the tracer, regsiter input shape and frac bits information as vectors
              *
             */
             IntVec getInputHeights();
@@ -41,6 +40,7 @@ namespace GraphRuntime {
             IntVec getInputChannels();
             IntVec getInputFracBits();
             IntVec getInputMemoryLocations();
+            IntVec getInputGroupsSeenBySource();
             bool   getInputSparseFlag();
 
             /*
@@ -80,6 +80,9 @@ namespace GraphRuntime {
         int getTransConvPadding();
         bool getBiasFlag();
         int getWeightFracBits();
+        float getWeightSparsity();
+        int getWeightPruneClusterSize();
+        int getWeightPruneRangeSizeInCluster();
 
         /*
          * Parameter Related Flag
