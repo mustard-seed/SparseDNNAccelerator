@@ -279,7 +279,7 @@ namespace GraphRuntime {
                                     numNZClustersPerPruningRange
                                 ) );
                     #else
-                        pWeight.reset( new DeviceSpWTensor (
+                        pWeight.reset( new DeviceWeightTensor (
                                             fixedPointWeight,
                                             numOutputChannels, //_num3DTensors
                                             numInputChannelPerGroup0, //_inputChannel
@@ -507,7 +507,7 @@ namespace GraphRuntime {
                 int numChannelsPerGroupSeenBySource0 =
                         numInputChannel0 / pLayer->getInputGroupsSeenBySource().at(0);
                 memIA0ColStride =
-                        (pLayer->getInputGroupsSeenBySource().at(0)) - 1 * numChannelsPerGroupSeenBySource0
+                        ((pLayer->getInputGroupsSeenBySource().at(0)) - 1) * numChannelsPerGroupSeenBySource0
                         + DIVIDE_CEIL(numChannelsPerGroupSeenBySource0, ACTIVATION_BURST_SIZE_BYTE) * ACTIVATION_BURST_SIZE_BYTE;
 
                 memOAColStride = (numGroupCurrentLayer - 1) * numOutputChannelPerGroup
@@ -518,7 +518,7 @@ namespace GraphRuntime {
                     int numChannelsPerGroupSeenBySource1 =
                             numInputChannel1 / pLayer->getInputGroupsSeenBySource().at(1);
                     memIA1ColStride =
-                            (pLayer->getInputGroupsSeenBySource().at(0)) - 1 * numChannelsPerGroupSeenBySource1
+                            ((pLayer->getInputGroupsSeenBySource().at(0)) - 1) * numChannelsPerGroupSeenBySource1
                             + DIVIDE_CEIL(numChannelsPerGroupSeenBySource1, ACTIVATION_BURST_SIZE_BYTE) * ACTIVATION_BURST_SIZE_BYTE;
                 }
                 else
@@ -883,7 +883,7 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
                     maxLatency = actualTransferLatency;
                 }
 
-                if (maxLatency < minLatency)
+                if (maxLatency < (minLatency * 0.9f))
                 {
                     minLatency = maxLatency;
                     bestTileInfo = candidateTileInfo;

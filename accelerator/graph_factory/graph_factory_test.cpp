@@ -36,7 +36,7 @@ protected:
 TEST_F(testFixture, testTrace)
 {
     /*
-     *Test trace: https://drive.google.com/drive/folders/1k9m5-DMOAJaM3-psX6jmItSoer11TBqf?usp=sharing
+     *Test trace: https://drive.google.com/drive/folders/1HZ5jjIw-71bSwvaNlaOGVJSW_FvTdY5D?usp=sharing
     */
     std::string traceFileName = "testTrace_trace.yaml";
     std::string traceParameterFile = "testTrace_parameters.npz";
@@ -46,12 +46,51 @@ TEST_F(testFixture, testTrace)
     traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_15", "output"));
     launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
 }
+//TEST_F(testFixture, tinyNet)
+//{
+//    /*
+//     *Test trace: https://drive.google.com/drive/folders/1HZ5jjIw-71bSwvaNlaOGVJSW_FvTdY5D?usp=sharing
+//    */
+//    std::string traceFileName = "tinyTrace_trace.yaml";
+//    std::string traceParameterFile = "tinyTrace_parameters.npz";
+//    std::string inoutFile = "tinyTrace_inout.yaml";
+//    std::map<std::string, std::string> traceName2BlobName;
+//    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
+//    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_6", "output"));
+//    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
+//}
+//TEST_F(testFixture, pointConv)
+//{
+//    /*
+//     *Test trace: https://drive.google.com/drive/folders/1HZ5jjIw-71bSwvaNlaOGVJSW_FvTdY5D?usp=sharing
+//    */
+//    std::string traceFileName = "pointconvTrace_trace.yaml";
+//    std::string traceParameterFile = "pointconvTrace_parameters.npz";
+//    std::string inoutFile = "pointconvTrace_inout.yaml";
+//    std::map<std::string, std::string> traceName2BlobName;
+//    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
+//    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_2", "output"));
+//    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
+//}
+//TEST_F(testFixture, conv)
+//{
+//    /*
+//     *Test trace: https://drive.google.com/drive/folders/1HZ5jjIw-71bSwvaNlaOGVJSW_FvTdY5D?usp=sharing
+//    */
+//    std::string traceFileName = "convTrace_trace.yaml";
+//    std::string traceParameterFile = "convTrace_parameters.npz";
+//    std::string inoutFile = "convTrace_inout.yaml";
+//    std::map<std::string, std::string> traceName2BlobName;
+//    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
+//    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_2", "output"));
+//    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
+//}
 #endif
 #if defined(VALIDATE)
-TEST_F(testFixture, miniConv)
+TEST_F(testFixture, conv)
 {
     /*
-     *Test trace: https://drive.google.com/drive/folders/1k9m5-DMOAJaM3-psX6jmItSoer11TBqf?usp=sharing
+     *Test trace: https://drive.google.com/drive/folders/1HZ5jjIw-71bSwvaNlaOGVJSW_FvTdY5D?usp=sharing
     */
     std::string traceFileName = "convTrace_trace.yaml";
     std::string traceParameterFile = "convTrace_parameters.npz";
@@ -62,81 +101,24 @@ TEST_F(testFixture, miniConv)
     launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
 }
 
-TEST_F(testFixture, miniMaxPool)
+TEST_F(testFixture, pointConv)
 {
     /*
-     *Test trace: https://drive.google.com/drive/folders/1k9m5-DMOAJaM3-psX6jmItSoer11TBqf?usp=sharing
+     *Test trace: https://drive.google.com/drive/folders/1HZ5jjIw-71bSwvaNlaOGVJSW_FvTdY5D?usp=sharing
     */
-    std::string traceFileName = "mp_trace.yaml";
-    std::string traceParameterFile = "mp_parameters.npz";
-    std::string inoutFile = "mp_inout.yaml";
+    std::string traceFileName = "pointconvTrace_trace.yaml";
+    std::string traceParameterFile = "pointconvTrace_parameters.npz";
+    std::string inoutFile = "pointconvTrace_inout.yaml";
     std::map<std::string, std::string> traceName2BlobName;
     traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
     traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_2", "output"));
-    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
-}
-
-TEST_F(testFixture, miniAdd)
-{
-    /*
-     *Test trace: https://drive.google.com/drive/folders/1k9m5-DMOAJaM3-psX6jmItSoer11TBqf?usp=sharing
-    */
-    std::string traceFileName = "addbig_trace.yaml";
-    std::string traceParameterFile = "addbig_parameters.npz";
-    std::string inoutFile = "addbig_inout.yaml";
-    std::map<std::string, std::string> traceName2BlobName;
-    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input_0"));
-    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_1", "input_1"));
-    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_3", "output"));
-    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
-}
-
-TEST_F(testFixture, miniAvg)
-{
-    /*
-     *Test trace: https://drive.google.com/drive/folders/1k9m5-DMOAJaM3-psX6jmItSoer11TBqf?usp=sharing
-    */
-    std::string traceFileName = "avg_trace.yaml";
-    std::string traceParameterFile = "avg_parameters.npz";
-    std::string inoutFile = "avg_inout.yaml";
-    std::map<std::string, std::string> traceName2BlobName;
-    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
-    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_2", "output"));
-    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
-}
-
-TEST_F(testFixture, seq)
-{
-    /*
-     *Test trace: https://drive.google.com/drive/folders/1k9m5-DMOAJaM3-psX6jmItSoer11TBqf?usp=sharing
-    */
-    std::string traceFileName = "seq_trace.yaml";
-    std::string traceParameterFile = "seq_parameters.npz";
-    std::string inoutFile = "seq_inout.yaml";
-    std::map<std::string, std::string> traceName2BlobName;
-    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
-    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_3", "output"));
-    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
-}
-
-TEST_F(testFixture, avglinear)
-{
-    /*
-     *Test trace: https://drive.google.com/drive/folders/1k9m5-DMOAJaM3-psX6jmItSoer11TBqf?usp=sharing
-    */
-    std::string traceFileName = "avglinear_trace.yaml";
-    std::string traceParameterFile = "avglinear_parameters.npz";
-    std::string inoutFile = "avglinear_inout.yaml";
-    std::map<std::string, std::string> traceName2BlobName;
-    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
-    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_3", "output"));
     launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
 }
 
 TEST_F(testFixture, tinyNet)
 {
     /*
-     *Test trace: https://drive.google.com/drive/folders/1k9m5-DMOAJaM3-psX6jmItSoer11TBqf?usp=sharing
+     *Test trace: https://drive.google.com/drive/folders/1HZ5jjIw-71bSwvaNlaOGVJSW_FvTdY5D?usp=sharing
     */
     std::string traceFileName = "tinyTrace_trace.yaml";
     std::string traceParameterFile = "tinyTrace_parameters.npz";
@@ -147,19 +129,20 @@ TEST_F(testFixture, tinyNet)
     launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
 }
 
-//TEST_F(testFixture, resnet56_like)
-//{
-//    /*
-//     *Test trace: https://drive.google.com/drive/folders/1k9m5-DMOAJaM3-psX6jmItSoer11TBqf?usp=sharing
-//    */
-//    std::string traceFileName = "restest_resnet56_like_trace.yaml";
-//    std::string traceParameterFile = "restest_resnet56_like_parameters.yaml";
-//    std::string inoutFile = "restest_resnet56_like_inout.yaml";
-//    std::map<std::string, std::string> traceName2BlobName;
-//    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
-//    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_87", "output"));
-//    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
-//}
+TEST_F(testFixture, testTrace)
+{
+    /*
+     *Test trace: https://drive.google.com/drive/folders/1HZ5jjIw-71bSwvaNlaOGVJSW_FvTdY5D?usp=sharing
+    */
+    std::string traceFileName = "testTrace_trace.yaml";
+    std::string traceParameterFile = "testTrace_parameters.npz";
+    std::string inoutFile = "testTrace_inout.yaml";
+    std::map<std::string, std::string> traceName2BlobName;
+    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
+    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_15", "output"));
+    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
+}
+
 #endif
 #if defined(RESNET56)
 TEST_F(testFixture, resnet56_cifar10)
