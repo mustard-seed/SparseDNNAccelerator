@@ -2,13 +2,16 @@
 #include "layerInstructionGenerator.hpp"
 #include "params.hpp"
 #include "floatFixedPointConversion.hpp"
-#include "tensorCompression.hpp" //calculateExternalMemoryAddressStride
+//#include "tensorCompression.hpp" //calculateExternalMemoryAddressStride
+#include "spwTensorCompression.hpp"
 #include <cfenv> //For rounding modes
 
 #include <memory>
 #include <cmath>
 
 #include "cnpy.hpp" //Third party library used to load numpy array weights
+
+#define DIVIDE_CEIL(x, y) (1 + (x-1) / (y))
 
 using namespace std;
 using namespace GraphRuntime;
@@ -113,13 +116,6 @@ namespace GraphRuntime {
         int offsetOAMoverInstruction = 0;
         int offsetWeightsDramBlock = 0;
         int offsetBiasesDramBlock = 0;
-    #if defined(SPARSE_SYSTEM)
-        int offsetWeightTBCount = 0;
-    #endif
-
-        unsigned short maxClusterIndexInCompressionBlock = COMPRESSION_WINDOW_SIZE-1;
-        unsigned short maxClusterIndexInTransferBlock = TRANSFER_SIZE-1;
-        unsigned short maxScalarIndexInCluster = CLUSTER_SIZE-1;
 
         //Counter of the number of compute layers;
         unsigned int countComputeLayer = 0;
@@ -145,6 +141,10 @@ namespace GraphRuntime {
             unsigned char numGroupCurrentLayer = pLayer->getCurrentNumberGroups();
             unsigned int numInputChannelPerGroup0 = numInputChannel0 / numGroupCurrentLayer;
             unsigned int numInputChannelPerGroup1 = 0; //override
+            #if defined(SPW_SYSTEM)
+            int numNZClustersPerPruningRange = PRUNE_RANGE_IN_CLUSTER; //override
+            #endif
+
 
             unsigned char verticalBorderPadding = 0; //override this later
             unsigned char horizontalBorderPadding = 0; //override this later
@@ -176,24 +176,14 @@ namespace GraphRuntime {
             unsigned int outputMemoryRegion = pLayer->getOutputMemoryLocation();
 
             //Memory strides
-            signed int memDramBlockIA0ColStride = 0;
-            signed int memDramBlockIA1ColStride = 0;
-            signed int memDramBlockOAColStride = 0;
+            signed int memIA0ColStride = 0;
+            signed int memIA1ColStride = 0;
+            signed int memOAColStride = 0;
             signed int memDramBlockFilterStride = 0; //override
 
             int offsetWeightsDramBlockIncrement = 0; //override
             int offsetBiasesDramBlockIncrement = 0; //override
-        #if defined(SPARSE_SYSTEM)
-            int offsetWeightTBCountIncrement = 0; //override
-        #endif
 
-#if defined(SPARSE_SYSTEM)
-            bool flagSparseInput = pLayer->getInputSparseFlag();
-            bool flagSparseOutput = pLayer->getOutputSparseFlag();
-#else
-            bool flagSparseInput = false;
-            bool flagSparseOutput = false;
-#endif
             bool isComputeLayer = true; //override
             OPERATION op = ::CONVOLUTION; //override
             std::string layerName;
@@ -214,8 +204,6 @@ namespace GraphRuntime {
                 case CONVOLUTION: {
                     auto pLayerLocal = dynamic_pointer_cast<ConvLayer>(pLayer);
                     layerName = "conv_"+to_string(pLayerLocal->getLayerID());
-
-
                     numInputChannel1 = 0;
                     t_tile_pair tileConfig = calculateTileSizePerUnit(*pLayerLocal.get());
                     sizeOutputTileFullWidthPerCol = tileConfig.tileInfo.sizeOutputTileFullWidthPerCol;
@@ -257,19 +245,6 @@ namespace GraphRuntime {
                     std::vector<fixedPointNumber> fixedPointWeight;
                     fixedPointWeight.resize(floatWeights.size());
                     {
-//                        unsigned int i=0;
-//                        for (unsigned int h=0; h<kernelSize; h++)
-//                        {
-//                            for (unsigned int w=0; w<kernelSize; w++)
-//                            {
-//                                for (unsigned int c=0; c<numInputChannelPerGroup0; c++)
-//                                {
-//                                    unsigned int traceIdx = c*kernelSize*kernelSize + h*kernelSize + w;
-//                                    fixedPointWeight.at(i++) = fixedPointNumber(floatWeights.at(traceIdx), weightFracBits, 7-weightFracBits);
-//                                    //fixedPointWeight.at(i++) = fixedPointNumber(0.0f, weightFracBits, 7-weightFracBits);
-//                                }
-//                            }
-//                        }
                         for (unsigned int i=0; i<floatWeights.size(); i++)
                         {
                              fixedPointWeight.at(i) = fixedPointNumber(floatWeights.at(i), weightFracBits, 7-weightFracBits);
@@ -277,35 +252,45 @@ namespace GraphRuntime {
                     }
 
                     //Align and compress the weight tensor
-                    std::shared_ptr<AlignedTensor> pWeight;
-                    #if defined(SPARSE_SYSTEM)
-                        pWeight.reset(new FlexibleDirectCompressedTensor (
+                    std::shared_ptr<DeviceWeightTensor> pWeight;
+                    #if defined(SPW_SYSTEM)
+                        if (pLayerLocal->getWeightPruneClusterSize() != CLUSTER_SIZE)
+                        {
+                            std::cout <<"The accelerator's prune cluster size does not agree with the graph's prune cluster size."<<std::endl;
+                            throw;
+                        }
+
+                        if (pLayerLocal->getWeightPruneRangeSizeInCluster() != PRUNE_RANGE_IN_CLUSTER)
+                        {
+                            std::cout <<"The accelerator's prune range size does not agree with the graph's prune range size."<<std::endl;
+                            throw;
+                        }
+                        numNZClustersPerPruningRange =
+                            std::ceil((1.0f - pLayerLocal->getWeightSparsity()) * PRUNE_RANGE_IN_CLUSTER);
+                        pWeight.reset(new DeviceSpWTensor (
                                     fixedPointWeight,
                                     numOutputChannels, //_num3DTensors
-                                    numInputChannelPerGroup0, //channel
+                                    numInputChannelPerGroup0, //_inputChannel
                                     (unsigned char) kernelSize, //width
                                     (unsigned char) kernelSize, //height
-                                    numInputChannelPerGroup0-1, //_maxScalarIndexInChannelGroup
-                                    maxClusterIndexInCompressionBlock, //_maxClusterIndexInCompressionBlock
-                                    maxClusterIndexInTransferBlock, //_maxClusterIndexInTransferBlock
-                                    maxScalarIndexInCluster, //_maxScalarIndexInCluster
-                                    true //isKernel
+                                    PE_SIMD_SIZE, //_peSimdSize
+                                    CLUSTER_SIZE, //_clusterSize
+                                    PRUNE_RANGE_IN_CLUSTER, //_numClustersInPruningRange
+                                    numNZClustersPerPruningRange
                                 ) );
                     #else
-                        pWeight.reset( new AlignedTensor (
+                        pWeight.reset( new DeviceSpWTensor (
                                             fixedPointWeight,
                                             numOutputChannels, //_num3DTensors
-                                            numInputChannelPerGroup0, //channel
+                                            numInputChannelPerGroup0, //_inputChannel
                                             (unsigned char) kernelSize, //width
                                             (unsigned char) kernelSize, //height
-                                            numInputChannelPerGroup0-1,
-                                            maxClusterIndexInTransferBlock,
-                                            maxScalarIndexInCluster,
-                                            true //isKernel
+                                           PE_SIMD_SIZE, //_peSimdSize
+                                           CLUSTER_SIZE //_clusterSize
                                         ));
                     #endif
                     //Filter stride
-                    memDramBlockFilterStride = (pWeight->getExternalMemoryAddressStride()) >> WEIGHT_WIDE_SIZE_OFFSET;
+                    memDramBlockFilterStride =  pWeight->getDramBlocksInFilter();
 
                     //Prepare the fixed-point bias vector
                     std::shared_ptr<t_aligned_short_vector> pBiasVector = std::make_shared<t_aligned_short_vector>(numOutputChannels, 0x0);
@@ -324,17 +309,10 @@ namespace GraphRuntime {
                     //update weight count vecotr, bias count vector and offsets
                     pGraph->vecWeightDramBlockStart.push_back(offsetWeightsDramBlock);
                     pGraph->vecBiasStart.push_back(offsetBiasesDramBlock);
-                    #if defined(SPARSE_SYSTEM)
-                        pGraph->vecWeightTBCountStart.push_back(offsetWeightTBCount);
-                    #endif
                     pGraph->pWeights.push_back(pWeight);
                     pGraph->pBiasVector.push_back(pBiasVector);
-                    offsetWeightsDramBlockIncrement =
-                            (pWeight->getExternalMemoryAddressStride() >> WEIGHT_WIDE_SIZE_OFFSET) * numOutputChannels;
+                    offsetWeightsDramBlockIncrement = memDramBlockFilterStride * numOutputChannels;
                     offsetBiasesDramBlockIncrement = numOutputChannels;
-                    #if defined(SPARSE_SYSTEM)
-                        offsetWeightTBCountIncrement = numOutputChannels;
-                    #endif
 
                     //Memory region
                     input0MemoryRegion = pLayer->getInputMemoryLocations().at(0);
@@ -352,7 +330,7 @@ namespace GraphRuntime {
 
                     t_tile_pair tileConfig = calculateTileSizePerUnit(*pLayerLocal.get());
                     sizeOutputTileFullWidthPerCol = 1;
-                    numActiveColsPartialOutputTile = pLayerLocal->getOutputWidth() % MISC_COLS;
+                    numActiveColsPartialOutputTile = 1;
                     sizeOutputTileFullHeight = tileConfig.tileInfo.sizeOutputTileFullHeight;
                     inputTransferLatency = tileConfig.inputTransferLatency;
                     weightTransferLatency = 0;
@@ -486,12 +464,11 @@ namespace GraphRuntime {
                     pGraph->vecInputInfo.emplace_back(
                                 t_blob_info{
                                     .memoryRegionID=pLayerLocal->getOutputMemoryLocation(),
-                                    .channelPerGroup=numOutputChannels / (pLayerLocal->getNextNumberGroups()),
-                                    .group=pLayerLocal->getNextNumberGroups(),
+                                    .channel = numOutputChannels,
                                     .height=pLayerLocal->getOutputHeight(),
                                     .width=pLayerLocal->getOutputWidth(),
+                                    .stripStrideSeenBySource= DIVIDE_CEIL(numOutputChannels, ACTIVATION_BURST_SIZE_BYTE) * ACTIVATION_BURST_SIZE_BYTE,
                                     .numFracBits=pLayerLocal->getOutputFracBits(),
-                                    .flagCanBeSparse=flagSparseOutput,
                                     .blobName="quant_"+to_string(pLayerLocal->getLayerID())
                                     }
                                 );
@@ -504,12 +481,11 @@ namespace GraphRuntime {
                     pGraph->vecOutputInfo.emplace_back(
                                 t_blob_info{
                                     .memoryRegionID=pLayerLocal->getInputMemoryLocations().at(0),
-                                    .channelPerGroup=numOutputChannelPerGroup,
-                                    .group=pLayerLocal->getCurrentNumberGroups(),
+                                    .channel = numOutputChannels,
                                     .height=pLayerLocal->getInputHeights().at(0),
                                     .width=pLayerLocal->getInputWidths().at(0),
+                                    .stripStrideSeenBySource= DIVIDE_CEIL(numOutputChannels, ACTIVATION_BURST_SIZE_BYTE) * ACTIVATION_BURST_SIZE_BYTE,
                                     .numFracBits=pLayerLocal->getInputFracBits().at(0),
-                                    .flagCanBeSparse=flagSparseInput,
                                     .blobName="dequant_"+to_string(pLayerLocal->getLayerID())
                                     }
                                 );
@@ -517,60 +493,37 @@ namespace GraphRuntime {
                 break;
             } //switch
 
+            std::cout <<"Processing layer: "<<layerName<<std::endl;
+
             // Generate instruction if this is a computation layer
             if (isComputeLayer == true)
             {
                 unsigned int inputHeightSPSize = inputHeightSPUnitSize*(numInputHeight0-1) + 1;
                 unsigned int inputWidthSPSize = inputWidthSPUnitSize*(numInputWidth0-1) + 1;
-                char instFlagSparseInput = flagSparseInput ? TRUE : FALSE;
-                char instFlagSparseOutput = flagSparseOutput ? TRUE : FALSE;
                 char instEnableRelu = pLayer->getOutputReluFlag() ? TRUE : FALSE;
 
                 //strides
-                memDramBlockIA0ColStride = calculateExternalMemoryAddressStride(
-                            numInputChannelPerGroup0, //channelsPerGroup
-                            numGroupCurrentLayer, //group
-                            numInputHeight0, //height
-                            numInputWidth0, //width
-                            CLUSTER_SIZE, //clusterSize
-                            TRANSFER_SIZE, //transferBlockSize
-                            COMPRESSION_WINDOW_SIZE, //compressionWindowSize
-                            WIDE_SIZE, //numTransferBlockPerDramBlock
-                            false, //isKernel
-                            !flagSparseInput //isDense
-                      ) >> WIDE_SIZE_OFFSET;
+                //TODO: Need to add support for concatentation if we expand the work to YOLO!
+                int numChannelsPerGroupSeenBySource0 =
+                        numInputChannel0 / pLayer->getInputGroupsSeenBySource().at(0);
+                memIA0ColStride =
+                        (pLayer->getInputGroupsSeenBySource().at(0)) - 1 * numChannelsPerGroupSeenBySource0
+                        + DIVIDE_CEIL(numChannelsPerGroupSeenBySource0, ACTIVATION_BURST_SIZE_BYTE) * ACTIVATION_BURST_SIZE_BYTE;
 
-                memDramBlockOAColStride = calculateExternalMemoryAddressStride(
-                                numOutputChannelPerGroup, //channelsPerGroup
-                                pLayer->getNextNumberGroups(), //group
-                                numOutputHeight, //height
-                                numOutputWidth, //width
-                                CLUSTER_SIZE, //clusterSize
-                                TRANSFER_SIZE, //transferBlockSize
-                                COMPRESSION_WINDOW_SIZE, //compressionWindowSize
-                                WIDE_SIZE, //numTransferBlockPerDramBlock
-                                false, //isKernel
-                                !flagSparseOutput //isDense
-                            ) >> WIDE_SIZE_OFFSET;
+                memOAColStride = (numGroupCurrentLayer - 1) * numOutputChannelPerGroup
+                        + DIVIDE_CEIL(numOutputChannelPerGroup, ACTIVATION_BURST_SIZE_BYTE) * ACTIVATION_BURST_SIZE_BYTE;
 
                 if (pLayer->getInputMemoryLocations().size() > 1)
                 {
-                    memDramBlockIA1ColStride = calculateExternalMemoryAddressStride(
-                                numInputChannelPerGroup1, //channelsPerGroup
-                                numGroupCurrentLayer, //group
-                                numInputHeight1, //height
-                                numInputWidth1, //width
-                                CLUSTER_SIZE, //clusterSize
-                                TRANSFER_SIZE, //transferBlockSize
-                                COMPRESSION_WINDOW_SIZE, //compressionWindowSize
-                                WIDE_SIZE, //numTransferBlockPerDramBlock
-                                false, //isKernel
-                                !flagSparseInput //isDense
-                          ) >> WIDE_SIZE_OFFSET;
+                    int numChannelsPerGroupSeenBySource1 =
+                            numInputChannel1 / pLayer->getInputGroupsSeenBySource().at(1);
+                    memIA1ColStride =
+                            (pLayer->getInputGroupsSeenBySource().at(0)) - 1 * numChannelsPerGroupSeenBySource1
+                            + DIVIDE_CEIL(numChannelsPerGroupSeenBySource1, ACTIVATION_BURST_SIZE_BYTE) * ACTIVATION_BURST_SIZE_BYTE;
                 }
                 else
                 {
-                    memDramBlockIA1ColStride = 0;
+                    memIA1ColStride = 0;
                 }
 
                 //Synchornization flags
@@ -619,45 +572,21 @@ namespace GraphRuntime {
                         //signed int memBiasStartIndex,
                         offsetBiasesDramBlock,
 
-                        //signed int memIA0DramBlockColStride,
-                        memDramBlockIA0ColStride,
-                        //signed int memIA0DramBlockRowStride,
-                        memDramBlockIA0ColStride * numInputWidth0,
-                        //signed int _memIA0DramBlockGroupStride,
-                        memDramBlockIA1ColStride * numInputWidth0 * numInputHeight0,
+                        //signed int memIA0ColStride,
+                        memIA0ColStride,
+                        //signed int memIA0RowStride,
+                        memIA0ColStride * numInputWidth0,
 
+                        //signed int memIA1ColStride,
+                        memIA1ColStride,
+                        //signed int memIA1RowStride,
+                        memIA1ColStride * numInputWidth1,
 
-                        //signed int memIA1DramBlockColStride,
-                        memDramBlockIA1ColStride,
-                        //signed int memIA1DramBlockRowStride,
-                        memDramBlockIA1ColStride * numInputWidth1,
-                        //signed int _memIA1DramBlockGroupStride,
-                        memDramBlockIA1ColStride * numInputWidth1 * numInputHeight1,
-
-                        //signed int memOADramBlockColStride,
-                        memDramBlockOAColStride,
+                        //signed int memOADColStride,
+                        memOAColStride,
 
                         //signed int memWeightDramBlockFilterStride,
                         memDramBlockFilterStride,
-
-                        //TB count memory information. Only one input blob is supported for sparse operation
-                        #if defined(SPARSE_SYSTEM)
-                            //signed int memIATB0CountStart,
-                            input0MemoryRegion * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE,
-                            //unsigned int memIATB0CountColStride,
-                            1,
-                            //signed int memOATBCountStart,
-                            outputMemoryRegion * MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE,
-                            //unsigned int memOATBCountColStride,
-                            1,
-                            //signed int memWeightTBCountStart,
-                            offsetWeightTBCount,
-                        #endif
-
-                        //unsigned char flagSparseOutput,
-                        instFlagSparseOutput,
-                        //unsigned char flagSparseInput,
-                        instFlagSparseInput,
 
                         //unsigned char flagTensorSync,
                         flagTensorSync,
@@ -689,6 +618,11 @@ namespace GraphRuntime {
                         //unsigned char kernelStride,
                         stride,
 
+                        #if defined(SPW_SYSTEM)
+                            //unsigned int numNZClustersInPruningRange,
+                            numNZClustersPerPruningRange,
+                       #endif
+
                         //unsigned char _sizeOutputTileFullHeight,
                         sizeOutputTileFullHeight,
                         //unsigned char _sizeOutputTileFullWidthPerCol,
@@ -702,12 +636,8 @@ namespace GraphRuntime {
                         //unsigned short numGroupsCurrentLayer,
                         numGroupCurrentLayer,
                         //unsigned short numOutputChannels,
-                        numOutputChannels,
-                        //unsigned short numGroupsNextLayer
-                        pLayer->getNextNumberGroups()
-                        );
-
-                   {
+                        numOutputChannels
+                        );                   {
                        std::copy(vecIAMoverInstruction.begin(),
                                  vecIAMoverInstruction.end(),
                                  std::back_inserter(pGraph->vecIAMoverInstruction)
@@ -753,7 +683,7 @@ namespace GraphRuntime {
 
                     countComputeLayer++;
             } // if compute layer
-
+            std::cout <<"Finished layer: "<<layerName<<std::endl;
         } // for layer
 
         return pGraph;
@@ -776,37 +706,9 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
     unsigned int outputWidth = _convLayer.getOutputWidth();
     unsigned int outputChannels = _convLayer.getOutputChannel();
     unsigned int outputChannelsPerNextGroup = _convLayer.getOutputChannel() / _convLayer.getNextNumberGroups();
+    unsigned int outputChannelsPerCurrentGroup = _convLayer.getOutputChannel() / _convLayer.getCurrentNumberGroups();
     unsigned int inputChannels = _convLayer.getInputChannels().at(0);
     unsigned int inputChannelsPerGroup = inputChannels / _convLayer.getCurrentNumberGroups();
-
-#if defined(SPARSE_SYSTEM)
-    bool inputIsDense = _convLayer.getInputSparseFlag() ? false: true;
-#else
-    bool inputIsDense = true;
-#endif
-    unsigned int numTBPerInputGroupStrip = calculateExternalMemoryAddressStride(
-                inputChannelsPerGroup,
-                //group
-                1,
-                //height
-                1,
-                //width
-                1,
-                //clusterSize
-                CLUSTER_SIZE,
-                //transfBlockSize
-                TRANSFER_SIZE,
-                //compressionWindowSize
-                COMPRESSION_WINDOW_SIZE,
-                //numTransferBlockPerDramBlock
-                WIDE_SIZE,
-                //isKernel
-                false,
-                //isDense
-                inputIsDense
-                );
-
-    unsigned int numClustersPerOutputStrip = 1 + (outputChannels-1) / CLUSTER_SIZE;
 
     t_graph_output_tile_info bestTileInfo;
     unsigned int minLatency = 0xFFFFFFFF;
@@ -822,7 +724,8 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
     {
         //Generate a candidate tile configuration
         unsigned int sizeOutputFullTileHeightTemp =
-                OA_CACHE_DEPTH / (outputTileWidthPerCol*numClustersPerOutputStrip);
+                OA_CACHE_DEPTH /
+                (outputTileWidthPerCol * (DIVIDE_CEIL(outputChannels, PE_ROWS_PER_GROUP) * PE_ROWS_PER_GROUP));
         sizeOutputFullTileHeightTemp = sizeOutputFullTileHeightTemp < outputHeight ?
                     sizeOutputFullTileHeightTemp : outputHeight;
         unsigned int sizeOutputFullTileHeight = sizeOutputFullTileHeightTemp < maxOutputTileHeight?
@@ -856,59 +759,46 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
                             _convLayer.getKernelStride()
                          );
              //TODO: change the arguments passed to ia_cache_boundary_check
+             //In terms of ACTIVATION_DRAM_BLOCKS
              int iaCachePerColRequirement =
                      ia_cache_boundary_check(
                          sizeInputTileFullHeight,
                          sizeInputTileFullWidthPerCol,
-                         numTBPerInputGroupStrip / WIDE_SIZE
+                         DIVIDE_CEIL(inputChannels, ACTIVATION_BURST_SIZE_BYTE)
                          );
              int iaCachePerPartialColRequirement =
                      ia_cache_boundary_check(
                          sizeInputTileFullHeight,
                          sizeInputTilePartialWidthPerCol,
-                         numTBPerInputGroupStrip / WIDE_SIZE
+                         DIVIDE_CEIL(inputChannels, ACTIVATION_BURST_SIZE_BYTE)
                          );
              //TODO: Change the arguments to the OA cache requirement checker
              int oaCachePerColRequirement =
                      oa_cache_boundary_check(
                          candidateTileInfo.sizeOutputTileFullHeight,
                          candidateTileInfo.sizeOutputTileFullWidthPerCol,
-                         outputChannels
+                         outputChannelsPerCurrentGroup
                          );
              int oaCachePerPartialColRequirement =
                      oa_cache_boundary_check(
                          candidateTileInfo.sizeOutputTileFullHeight,
                          candidateTileInfo.sizeOutputTilePartialWidthPerCol,
-                         outputChannels
+                         outputChannelsPerCurrentGroup
                          );
              bool passCacheRequirement =
                      (iaCachePerColRequirement <= IA_CACHE_DEPTH)
                      && (iaCachePerPartialColRequirement <= IA_CACHE_DEPTH)
-                     && (oaCachePerColRequirement <= (OA_CACHE_DEPTH*CLUSTER_SIZE))
-                     && (oaCachePerPartialColRequirement <= (OA_CACHE_DEPTH*CLUSTER_SIZE))
+                     && (oaCachePerColRequirement <= OA_CACHE_DEPTH)
+                     && (oaCachePerPartialColRequirement <= OA_CACHE_DEPTH)
                      && (sizeInputTileFullHeight <= MAX_INPUT_TILE_HEIGHT)
                      && (sizeInputTileFullWidthPerCol <= MAX_INPUT_TILE_WIDTH_PER_COL)
                      && (sizeInputTilePartialWidthPerCol <= MAX_INPUT_TILE_WIDTH_PER_COL);
-    #if defined(SPARSE_SYSTEM)
-             int iaTBCachePerColRequirement =
-                     ia_tbcount_cache_boundary_check(
-                         sizeInputTileFullHeight,
-                         sizeInputTileFullWidthPerCol
-                         );
-             int iaTBCachePerPartialColRequirement =
-                     ia_tbcount_cache_boundary_check(
-                         sizeInputTileFullHeight,
-                         sizeInputTilePartialWidthPerCol
-                         );
-             passCacheRequirement = passCacheRequirement
-                     && (iaTBCachePerColRequirement <= IA_BUFFER_TBCOUNT_CACHE_SIZE)
-                     && (iaTBCachePerPartialColRequirement <= IA_BUFFER_TBCOUNT_CACHE_SIZE);
-    #endif
+
              if (passCacheRequirement == true)
              {
                 unsigned int computeLatency = deriveConvComputationLatency(
                             candidateTileInfo,
-                            outputChannels / _convLayer.getCurrentNumberGroups(),
+                            outputChannelsPerCurrentGroup,
                             inputChannelsPerGroup,
                             _convLayer.getCurrentNumberGroups(),
                             _convLayer.getKernelSize()
@@ -926,15 +816,15 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
                 unsigned int outputLatency = deriveOutputTransferLatency(
                             candidateTileInfo,
                             outputHeight,
-                            outputChannelsPerNextGroup,
-                            _convLayer.getNextNumberGroups()
+                            outputChannelsPerCurrentGroup,
+                            _convLayer.getCurrentNumberGroups()
                             );
                 //maxLatency = outputLatency > maxLatency ? outputLatency : maxLatency;
 
                 unsigned int weightLatency = deriveConvWeightTransferLatency(
                             candidateTileInfo,
                             inputChannelsPerGroup,
-                            outputChannels / _convLayer.getCurrentNumberGroups(),
+                            outputChannelsPerCurrentGroup,
                             _convLayer.getCurrentNumberGroups(),
                             _convLayer.getKernelSize()
                             );
@@ -950,7 +840,7 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
                 unsigned int firstTileComputeLatency = deriveFirstTileConvComputationLatency
                         (
                             candidateTileInfo,
-                            outputChannels / _convLayer.getCurrentNumberGroups(),
+                            outputChannelsPerCurrentGroup,
                             inputChannelsPerGroup,
                             _convLayer.getKernelSize()
                          );
@@ -958,7 +848,7 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
                 unsigned int lastTileOutputLatency = deriveLastTileOutputTransferLatency
                         (
                             candidateTileInfo,
-                            outputChannelsPerNextGroup
+                            outputChannelsPerCurrentGroup
                         );
 
                 unsigned int computeLatencyWithOverhead =
@@ -1016,7 +906,7 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
         throw;
     }
     unsigned int ops = _convLayer.getCurrentNumberGroups() * (
-                    outputChannels / _convLayer.getCurrentNumberGroups()
+                    outputChannelsPerCurrentGroup
                         * outputHeight * outputWidth
                         * _convLayer.getKernelSize() * _convLayer.getKernelSize() * inputChannelsPerGroup
                         *2
@@ -1034,113 +924,167 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
     return result;
 }
 
+//t_tile_pair calculateTileSizePerUnit(EltAddLayer &_eltAddLayer)
+//{
+//    unsigned int maxOutputTileHeight = MAX_OUTPUT_TILE_HEIGHT;
+
+//    //Search all possible solutions tile solution exhautively.
+//    unsigned int outputTileWidthPerCol = MAX_OUTPUT_TILE_WIDTH_PER_COL;
+
+//    unsigned int outputHeight = _eltAddLayer.getOutputHeight();
+//    unsigned int outputWidth = _eltAddLayer.getOutputWidth();
+//    unsigned int outputChannels = _eltAddLayer.getOutputChannel();
+//    unsigned int outputChannelsPerNextGroup = _eltAddLayer.getOutputChannel() / _eltAddLayer.getNextNumberGroups();
+
+//    unsigned int numClustersPerOutputStrip = 1 + (outputChannels-1) / CLUSTER_SIZE;
+
+//    t_graph_output_tile_info bestTileInfo;
+//    unsigned int minLatency = 0xFFFFFFFF;
+//    int     bestInputTransferLatency = 0x0;
+//    int     bestOutputTransferLatency = 0x0;
+//    while (outputTileWidthPerCol > 0)
+//    {
+//        //Generate a candidate tile configuration
+//        unsigned int sizeOutputFullTileHeightTemp =
+//                OA_CACHE_DEPTH / (outputTileWidthPerCol*numClustersPerOutputStrip);
+//        sizeOutputFullTileHeightTemp = sizeOutputFullTileHeightTemp < outputHeight ?
+//                    sizeOutputFullTileHeightTemp : outputHeight;
+//        unsigned int sizeOutputFullTileHeight = sizeOutputFullTileHeightTemp < maxOutputTileHeight?
+//                sizeOutputFullTileHeightTemp : maxOutputTileHeight;
+//         t_graph_output_tile_info candidateTileInfo =
+//                 deriveConvOutputTileShape(
+//                        outputHeight,
+//                        outputWidth,
+//                        sizeOutputFullTileHeight,
+//                        outputTileWidthPerCol,
+//                        false //isConv
+//                     );
+
+//         //TODO: Remove the call to the OA cache requirement check
+//         int oaCachePerColRequirementInWords =
+//                 oa_cache_boundary_check(
+//                     candidateTileInfo.sizeOutputTileFullHeight,
+//                     candidateTileInfo.sizeOutputTileFullWidthPerCol,
+//                     outputChannels
+//                     );
+//         int oaCachePerPartialColRequirementInWords =
+//                 oa_cache_boundary_check(
+//                     candidateTileInfo.sizeOutputTileFullHeight,
+//                     candidateTileInfo.sizeOutputTilePartialWidthPerCol,
+//                     outputChannels
+//                     );
+//         bool passCacheRequirement =
+//                (oaCachePerColRequirementInWords <= (OA_CACHE_DEPTH*CLUSTER_SIZE))
+//                 && (oaCachePerPartialColRequirementInWords <= (OA_CACHE_DEPTH*CLUSTER_SIZE));
+
+//         if (passCacheRequirement == true)
+//         {
+
+//            //Times 3 to account for two input transfers, and one output transfer for each
+//            //block of addition
+//            unsigned int inputLatency = deriveConvInputTransferLatency(
+//                        candidateTileInfo,
+//                        outputChannels,
+//                        1,
+//                        1,
+//                        1
+//                        );
+//            unsigned int outputLatency = deriveOutputTransferLatency(
+//                        candidateTileInfo,
+//                        outputHeight,
+//                        outputChannelsPerNextGroup,
+//                        _eltAddLayer.getNextNumberGroups()
+//                        );
+//            if (outputLatency < minLatency)
+//            {
+//                minLatency = outputLatency;
+//                bestTileInfo = candidateTileInfo;
+//                bestInputTransferLatency = inputLatency;
+//                bestOutputTransferLatency = outputLatency;
+//                break;
+//            }
+//            outputTileWidthPerCol--;
+//         } // if passCacheRequirement == true
+//         else
+//         {
+//             if (maxOutputTileHeight < outputTileWidthPerCol)
+//             {
+//                 outputTileWidthPerCol--;
+//             }
+//             else
+//             {
+//                 maxOutputTileHeight--;
+//             }
+//         }
+//    }
+
+//    if (minLatency == 0xFFFFFFFF)
+//    {
+//        std::cout <<"Warning: Cannot find a suitable tile configuration for EltAdd Layer "<<_eltAddLayer.getLayerID()<<std::endl;
+//        throw;
+//    }
+//    unsigned int ops = outputChannels * outputHeight * outputWidth;
+//    t_tile_pair result = {.tileInfo = bestTileInfo,
+//                          .inputTransferLatency = bestInputTransferLatency,
+//                          .weightTransferLatency = 0x0,
+//                          .outputTransferLatency = bestOutputTransferLatency,
+//                          .computeLatency = 0x0,
+//                          .computeLatencyWithOverhead = 0x0,
+//                          .latency = minLatency,
+//                          .flagComputeBound=false,
+//                          .ops = ops};
+//    return result;
+//}
+
 t_tile_pair calculateTileSizePerUnit(EltAddLayer &_eltAddLayer)
 {
     unsigned int maxOutputTileHeight = MAX_OUTPUT_TILE_HEIGHT;
 
     //Search all possible solutions tile solution exhautively.
-    unsigned int outputTileWidthPerCol = 1;
+    unsigned int outputTileWidthPerCol = MAX_OUTPUT_TILE_WIDTH_PER_COL;
 
     unsigned int outputHeight = _eltAddLayer.getOutputHeight();
     unsigned int outputWidth = _eltAddLayer.getOutputWidth();
     unsigned int outputChannels = _eltAddLayer.getOutputChannel();
-    unsigned int outputChannelsPerNextGroup = _eltAddLayer.getOutputChannel() / _eltAddLayer.getNextNumberGroups();
 
-    unsigned int numClustersPerOutputStrip = 1 + (outputChannels-1) / CLUSTER_SIZE;
+    //Generate a candidate tile configuration
+    unsigned int sizeOutputFullTileHeight = outputHeight < maxOutputTileHeight?
+            outputHeight : maxOutputTileHeight;
+     t_graph_output_tile_info candidateTileInfo =
+             deriveConvOutputTileShape(
+                    outputHeight,
+                    outputWidth,
+                    sizeOutputFullTileHeight,
+                    outputTileWidthPerCol,
+                    false //isConv
+                 );
 
-    t_graph_output_tile_info bestTileInfo;
-    unsigned int minLatency = 0xFFFFFFFF;
-    int     bestInputTransferLatency = 0x0;
-    int     bestOutputTransferLatency = 0x0;
-    while (outputTileWidthPerCol > 0)
-    {
-        //Generate a candidate tile configuration
-        unsigned int sizeOutputFullTileHeightTemp =
-                OA_CACHE_DEPTH / (outputTileWidthPerCol*numClustersPerOutputStrip);
-        sizeOutputFullTileHeightTemp = sizeOutputFullTileHeightTemp < outputHeight ?
-                    sizeOutputFullTileHeightTemp : outputHeight;
-        unsigned int sizeOutputFullTileHeight = sizeOutputFullTileHeightTemp < maxOutputTileHeight?
-                sizeOutputFullTileHeightTemp : maxOutputTileHeight;
-         t_graph_output_tile_info candidateTileInfo =
-                 deriveConvOutputTileShape(
-                        outputHeight,
-                        outputWidth,
-                        sizeOutputFullTileHeight,
-                        outputTileWidthPerCol,
-                        false //isConv
-                     );
 
-         //TODO: Remove the call to the OA cache requirement check
-         int oaCachePerColRequirementInWords =
-                 oa_cache_boundary_check(
-                     candidateTileInfo.sizeOutputTileFullHeight,
-                     candidateTileInfo.sizeOutputTileFullWidthPerCol,
-                     outputChannels
-                     );
-         int oaCachePerPartialColRequirementInWords =
-                 oa_cache_boundary_check(
-                     candidateTileInfo.sizeOutputTileFullHeight,
-                     candidateTileInfo.sizeOutputTilePartialWidthPerCol,
-                     outputChannels
-                     );
-         bool passCacheRequirement =
-                (oaCachePerColRequirementInWords <= (OA_CACHE_DEPTH*CLUSTER_SIZE))
-                 && (oaCachePerPartialColRequirementInWords <= (OA_CACHE_DEPTH*CLUSTER_SIZE));
 
-         if (passCacheRequirement == true)
-         {
+    //Times 3 to account for two input transfers, and one output transfer for each
+    //block of addition
+    unsigned int inputLatency = deriveConvInputTransferLatency(
+                candidateTileInfo,
+                outputChannels,
+                1,
+                1,
+                1
+                );
+    unsigned int outputLatency = deriveOutputTransferLatency(
+                candidateTileInfo,
+                outputHeight,
+                outputChannels,
+                1
+                );
 
-            //Times 3 to account for two input transfers, and one output transfer for each
-            //block of addition
-            unsigned int inputLatency = deriveConvInputTransferLatency(
-                        candidateTileInfo,
-                        outputChannels,
-                        1,
-                        1,
-                        1
-                        );
-            unsigned int outputLatency = deriveOutputTransferLatency(
-                        candidateTileInfo,
-                        outputHeight,
-                        outputChannelsPerNextGroup,
-                        _eltAddLayer.getNextNumberGroups()
-                        );
-            if (outputLatency < minLatency)
-            {
-                minLatency = outputLatency;
-                bestTileInfo = candidateTileInfo;
-                bestInputTransferLatency = inputLatency;
-                bestOutputTransferLatency = outputLatency;
-                break;
-            }
-            outputTileWidthPerCol--;
-         } // if passCacheRequirement == true
-         else
-         {
-             if (maxOutputTileHeight < outputTileWidthPerCol)
-             {
-                 outputTileWidthPerCol--;
-             }
-             else
-             {
-                 maxOutputTileHeight--;
-             }
-         }
-    }
-
-    if (minLatency == 0xFFFFFFFF)
-    {
-        std::cout <<"Warning: Cannot find a suitable tile configuration for EltAdd Layer "<<_eltAddLayer.getLayerID()<<std::endl;
-        throw;
-    }
     unsigned int ops = outputChannels * outputHeight * outputWidth;
-    t_tile_pair result = {.tileInfo = bestTileInfo,
-                          .inputTransferLatency = bestInputTransferLatency,
+    t_tile_pair result = {.tileInfo = candidateTileInfo,
+                          .inputTransferLatency = inputLatency,
                           .weightTransferLatency = 0x0,
-                          .outputTransferLatency = bestOutputTransferLatency,
+                          .outputTransferLatency = outputLatency,
                           .computeLatency = 0x0,
                           .computeLatencyWithOverhead = 0x0,
-                          .latency = minLatency,
+                          .latency = inputLatency + outputLatency,
                           .flagComputeBound=false,
                           .ops = ops};
     return result;

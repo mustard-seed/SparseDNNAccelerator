@@ -124,7 +124,6 @@ void instruction_generator(//Type of the operation
             ((op == MAX_POOL) || (op == AVG_POOL) || (op == ELT_ADD) || (op == CONCATENATION)) ?
                 1
                 : _numActiveColsPartialOutputTile;
-
     //Input height and width before stretch and padding
     if ((inputSPHeightUnit != 1) && ((inputSPHeight-1) % inputSPHeightUnit != 0))
     {
@@ -141,6 +140,7 @@ void instruction_generator(//Type of the operation
 
     unsigned int numFullOutputTileY =
             ((unsigned int) outputHeight) / ((unsigned int) sizeOutputTileFullHeight);
+
 
     unsigned int numOutputTileY =
             1 + ((unsigned int) (outputHeight - 1)) / ((unsigned int) sizeOutputTileFullHeight);
@@ -1055,22 +1055,30 @@ unsigned int deriveConvInputTransferLatency(
     return latency;
  }
 
-unsigned int deriveOutputTransferLatency(
-        t_graph_output_tile_info _outputTileInfo,
+unsigned int deriveOutputTransferLatency(t_graph_output_tile_info _outputTileInfo,
         unsigned int _sizeOutputHeight,
-        unsigned int _numOutputChannelsPerNextGroup,
-        unsigned int _numNextGroups)
+        unsigned int _numOutputChannelsPerGroup,
+        unsigned int _numGroups)
 {
     //Adjust for the face that the output bandwidth is the number of compute columns
+//    unsigned int latency =
+//            _numOutputChannelsPerGroup
+//            * _numNextGroups
+//            * _sizeOutputHeight
+//           * (
+//                _outputTileInfo.numFullOutputTileAlongWidth * _outputTileInfo.sizeOutputTileFullWidthPerCol
+//                + (_outputTileInfo.numOutputTileAlongWidth - _outputTileInfo.numFullOutputTileAlongWidth)
+//                    * _outputTileInfo.sizeOutputTilePartialWidthPerCol
+//             );
+    unsigned int sizeOutputWidth =
+            _outputTileInfo.numFullOutputTileAlongWidth * _outputTileInfo.sizeOutputTileFullWidthPerCol * PE_COLS
+            + (_outputTileInfo.numOutputTileAlongWidth - _outputTileInfo.numFullOutputTileAlongWidth)
+                   * _outputTileInfo.sizeOutputTilePartialWidthPerCol * _outputTileInfo.numActiveColsForPartialWidthTile;
     unsigned int latency =
-            _numOutputChannelsPerNextGroup
-            * _numNextGroups
+            DIVIDE_CEIL(_numOutputChannelsPerGroup, ACTIVATION_BURST_SIZE_BYTE)
+            * _numGroups
             * _sizeOutputHeight
-           * (
-                _outputTileInfo.numFullOutputTileAlongWidth * _outputTileInfo.sizeOutputTileFullWidthPerCol
-                + (_outputTileInfo.numOutputTileAlongWidth - _outputTileInfo.numFullOutputTileAlongWidth)
-                    * _outputTileInfo.sizeOutputTilePartialWidthPerCol
-             );
+            * sizeOutputWidth;
     return latency;
 }
 
@@ -1173,7 +1181,7 @@ unsigned int deriveFirstTileConvComputationLatency(
 
 unsigned int deriveLastTileOutputTransferLatency(
         t_graph_output_tile_info _outputTileInfo,
-        unsigned int _numOutputChannelsPerNextGroup
+        unsigned int _numOutputChannelsPerGroup
         )
 {
     unsigned int sizeLastTileOutputHeight =
@@ -1186,8 +1194,12 @@ unsigned int deriveLastTileOutputTransferLatency(
                 _outputTileInfo.sizeOutputTileFullWidthPerCol
               : _outputTileInfo.sizeOutputTilePartialWidthPerCol;
 
+    unsigned int numActiveColsLastTile =
+            (_outputTileInfo.numFullOutputTileAlongWidth == _outputTileInfo.numOutputTileAlongWidth)?
+                PE_COLS : _outputTileInfo.numActiveColsForPartialWidthTile;
     unsigned int latency =
-            sizeLastTileOutputHeight * sizeLastTileOutputWidthPerCol * _numOutputChannelsPerNextGroup;
+            sizeLastTileOutputHeight * sizeLastTileOutputWidthPerCol * numActiveColsLastTile *
+                DIVIDE_CEIL(_numOutputChannelsPerGroup, ACTIVATION_BURST_SIZE_BYTE);
 
     return latency;
 }

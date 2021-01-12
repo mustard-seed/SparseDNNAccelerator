@@ -7,11 +7,11 @@
 
 //Prirority of the MACRO flags:
 //PLAY > VALIDATE > RESNET56
-//#define PLAY
+#define PLAY
 //#define VALIDATE
 //#define RESNET50_CONV12
 //#define RESNET56
-#define RESNET50
+//#define RESNET50
 #ifndef C5SOC
  //#define EMULATE
 #endif
@@ -33,17 +33,17 @@ protected:
                 std::map<std::string, std::string> _traceName2BlobName);
 };
 #if defined(PLAY) //focus on one test
-TEST_F(testFixture, miniConv)
+TEST_F(testFixture, testTrace)
 {
     /*
      *Test trace: https://drive.google.com/drive/folders/1k9m5-DMOAJaM3-psX6jmItSoer11TBqf?usp=sharing
     */
-    std::string traceFileName = "convTrace_trace.yaml";
-    std::string traceParameterFile = "convTrace_parameters.npz";
-    std::string inoutFile = "convTrace_inout.yaml";
+    std::string traceFileName = "testTrace_trace.yaml";
+    std::string traceParameterFile = "testTrace_parameters.npz";
+    std::string inoutFile = "testTrace_inout.yaml";
     std::map<std::string, std::string> traceName2BlobName;
     traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
-    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_2", "output"));
+    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_15", "output"));
     launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
 }
 #endif
@@ -208,9 +208,9 @@ void testFixture::SetUp()
 #ifdef C5SOC
     aocxBinaryFile = "device_utils.aocx";
 #else
-    aocxBinaryFile = "device_utils.aocx";
+    aocxBinaryFile = "sparse_pe_system.aocx";
 #if defined(EMULATE)
-    aocxBinaryFile = "smallBuffer.aocx";
+    aocxBinaryFile = "c5_mac8bitx4_c_model.aocx";
 #endif
 #endif
 
@@ -223,8 +223,6 @@ void testFixture::SetUp()
     GraphRuntime::t_accelerator_info acceleratorInfo =
         {   .numPERows=PE_ROWS,
             .numPECols=PE_COLS,
-            .numClusterInCompressionBlock=COMPRESSION_WINDOW_SIZE,
-            .numClusterInTransferBlock=TRANSFER_SIZE,
             .numScalarInCluster=CLUSTER_SIZE
         };
    accelerator = GraphRuntime::AcceleratorWrapper(aocxBinaryFile, platformName, acceleratorInfo, 0);
@@ -258,24 +256,20 @@ void testFixture::launch(std::string _traceFileName,
        {
            std::string layerName = _traceName2BlobName[inputInfo.blobName];
            YAML::Node blob = rawBlobs[layerName];
-           int size = inputInfo.group
-                   * inputInfo.channelPerGroup
+           int size = inputInfo.channel
                    * inputInfo.height
                    * inputInfo.width;
            std::vector<float> inputReordered(size, 0.0f);
            int iter=0;
-           for (int g=0; g<inputInfo.group; g++)
+           for (int h=0; h<inputInfo.height; h++)
            {
-               for (int h=0; h<inputInfo.height; h++)
+               for (int w=0; w<inputInfo.width; w++)
                {
-                   for (int w=0; w<inputInfo.width; w++)
+                   for (int c=0; c<inputInfo.channel; c++)
                    {
-                       for (int c=0; c<inputInfo.channelPerGroup; c++)
-                       {
-                           int rawIter = (c + g*inputInfo.channelPerGroup) * inputInfo.height * inputInfo.width
-                                   + h * inputInfo.width + w;
-                           inputReordered.at(iter++) = blob[rawIter].as<float>();
-                       }
+                       int rawIter = c * inputInfo.height * inputInfo.width
+                               + h * inputInfo.width + w;
+                       inputReordered.at(iter++) = blob[rawIter].as<float>();
                    }
                }
            }
@@ -318,26 +312,23 @@ void testFixture::launch(std::string _traceFileName,
 //           float tolerance = (numFracBitsDifference >= 0) ?
 //                      1.0 / (1 << numFracBitsDifference) : 1 << (-1 * numFracBitsDifference);
            float tolerance = 1e-3;
-           for (int g=0; g<blobInfo.group; g++)
+           for (int h=0; h<blobInfo.height; h++)
            {
-               for (int h=0; h<blobInfo.height; h++)
+               for (int w=0; w<blobInfo.width; w++)
                {
-                   for (int w=0; w<blobInfo.width; w++)
+                   for (int c=0; c<blobInfo.channel; c++)
                    {
-                       for (int c=0; c<blobInfo.channelPerGroup; c++)
-                       {
-                           int rawIter = (c + g*blobInfo.channelPerGroup) * blobInfo.height * blobInfo.width
-                                   + h * blobInfo.width + w;
-                           float expected = blob[rawIter].as<float>();
-                           float actual = actualResult.at(iter++);
-                           //The computation is like adding two signed numbers with numFracBits
-                           //hence the difference's number of frac bits is numFracBits - 1
-                           EXPECT_TRUE(std::abs(actual -expected) <= tolerance)
-                                   <<"Inference output disagreement at [tensor, group, channel, height, col]: ["
-                                   <<blobID<<" "<<g<<" "<<c<<" "<<h<<" "<<w<<"]"<<std::endl
-                                   <<"Expected: "<<expected<<std::endl
-                                   <<"Actual: "<<actual<<std::endl;
-                       }
+                       int rawIter = c * blobInfo.height * blobInfo.width
+                               + h * blobInfo.width + w;
+                       float expected = blob[rawIter].as<float>();
+                       float actual = actualResult.at(iter++);
+                       //The computation is like adding two signed numbers with numFracBits
+                       //hence the difference's number of frac bits is numFracBits - 1
+                       EXPECT_TRUE(std::abs(actual -expected) <= tolerance)
+                               <<"Inference output disagreement at [tensor, channel, height, col]: ["
+                               <<blobID<<" "<<c<<" "<<h<<" "<<w<<"]"<<std::endl
+                               <<"Expected: "<<expected<<std::endl
+                               <<"Actual: "<<actual<<std::endl;
                    }
                }
            }

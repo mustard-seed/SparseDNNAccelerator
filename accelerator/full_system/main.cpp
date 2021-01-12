@@ -29,17 +29,17 @@
 #define DIVIDE_CEIL(x, y) (1 + (x-1) / (y))
 #define SEED 27
 
-#define PLAY
+//#define PLAY
 //#define PERF_TEST
 //#define THROUGHPUT_DIAGNOSTIC
-//#define VALIDATE
+#define VALIDATE
 //#define TEST1_20201126
 //#define TEST2_20201126
 //#define ELTADD7_202021129
 //Some how if repeat is 100, bad things will happen on concat
 #define REPEAT 1
 #ifndef C5SOC
-#define EMULATE
+//#define EMULATE
 #endif
 //#define PERF_TEST
 //#NOOP
@@ -138,44 +138,11 @@ protected:
 }; //testFixture
 
 #ifdef PLAY
-TEST_F (testFixture, concat)
-{
-    unsigned char inputWidth = 2;
-    unsigned char inputHeight = 2;
-    unsigned char numInputChannel = 120;
-    unsigned char numOutputChannel = 2*numInputChannel;
-    unsigned char numInputGroup = 1;
-    unsigned char inputHeightSPUnitSize = 1;
-    unsigned char inputWidthSPUnitSize = 1;
-    unsigned char sizeOutputTileWidthPerColFull = 2;
-    unsigned char sizeOutputTileHeight = 4;
-    unsigned char kernelSize = 3;
-    bool flagEnableRelu = false;
-    OPERATION op = CONCATENATION;
-    float bias = 0.0f;
-
-    launch(
-                inputWidth,
-                inputHeight,
-                numInputChannel,
-                numOutputChannel,
-                numInputGroup,
-                inputHeightSPUnitSize,
-                inputWidthSPUnitSize,
-                sizeOutputTileWidthPerColFull,
-                sizeOutputTileHeight,
-                kernelSize,
-                flagEnableRelu,
-                op,
-                bias
-          );
-}
-
-TEST_F (testFixture, elt_add)
+TEST_F (testFixture, conv_sparse_weight)
 {
     unsigned char inputWidth = 4;
     unsigned char inputHeight = 4;
-    unsigned char numInputChannel = 127;
+    unsigned char numInputChannel = 13;
     unsigned char numOutputChannel = numInputChannel;
     unsigned char numInputGroup = 1;
     unsigned char inputHeightSPUnitSize = 1;
@@ -184,78 +151,9 @@ TEST_F (testFixture, elt_add)
     unsigned char sizeOutputTileHeight = 4;
     unsigned char kernelSize = 3;
     bool flagEnableRelu = false;
-    OPERATION op = ELT_ADD;
-    float bias = 0.0f;
-
-    launch(
-                inputWidth,
-                inputHeight,
-                numInputChannel,
-                numOutputChannel,
-                numInputGroup,
-                inputHeightSPUnitSize,
-                inputWidthSPUnitSize,
-                sizeOutputTileWidthPerColFull,
-                sizeOutputTileHeight,
-                kernelSize,
-                flagEnableRelu,
-                op,
-                bias
-          );
-}
-
-TEST_F (testFixture, global_avg_pool)
-{
-    unsigned char inputWidth = 4;
-    unsigned char inputHeight = 4;
-    unsigned char numInputChannel = 120;
-    unsigned char numOutputChannel = numInputChannel;
-    unsigned char numInputGroup = 1;
-    unsigned char inputHeightSPUnitSize = 1;
-    unsigned char inputWidthSPUnitSize = 1;
-    unsigned char sizeOutputTileWidthPerColFull = 2;
-    unsigned char sizeOutputTileHeight = 4;
-    unsigned char kernelSize = 3;
-    bool flagEnableRelu = false;
-    OPERATION op = AVG_POOL;
-    float bias = 0.0f;
-
-    launch(
-                inputWidth,
-                inputHeight,
-                numInputChannel,
-                numOutputChannel,
-                numInputGroup,
-                inputHeightSPUnitSize,
-                inputWidthSPUnitSize,
-                sizeOutputTileWidthPerColFull,
-                sizeOutputTileHeight,
-                kernelSize,
-                flagEnableRelu,
-                op,
-                bias
-          );
-}
-
-
-TEST_F (testFixture, back_to_back_identity_conv)
-{
-    unsigned char inputWidth = 4;
-    unsigned char inputHeight = 4;
-    unsigned char numInputChannel =16;
-    unsigned char numOutputChannel = numInputChannel;
-    unsigned char numInputGroup = 1;
-    unsigned char numOutputGroup = 1;
-    unsigned char inputHeightSPUnitSize = 1;
-    unsigned char inputWidthSPUnitSize = 1;
-    unsigned char sizeOutputTileWidthPerColFull = 2;
-    unsigned char sizeOutputTileHeight = 4;
-    unsigned char kernelSize = 3;
-    bool flagEnableRelu = false;
+    float denseProb = 1.0 / PRUNE_RANGE_IN_CLUSTER;
     OPERATION op = CONVOLUTION;
-    float denseProb = 1.0;
     float bias = 0.0f;
-    bool flag2Layer = true;
 
     launch(
                 inputWidth,
@@ -271,8 +169,7 @@ TEST_F (testFixture, back_to_back_identity_conv)
                 flagEnableRelu,
                 op,
                 bias,
-                denseProb,
-                flag2Layer
+                denseProb
           );
 }
 
@@ -1873,7 +1770,7 @@ void testFixture::SetUp()
 #ifdef C5SOC
     binaryFile = "device_utils.aocx";
 #else
-    binaryFile = "device_utils.aocx";
+    binaryFile = "sparse_pe_system.aocx";
 #if defined(EMULATE)
     binaryFile = "c5_mac8bitx4_c_model.aocx";
 #endif

@@ -1,9 +1,9 @@
 #ifndef PARAMS_DEFINED
 #define PARAMS_DEFINED
 
-#define HOST_DEBUG
-//#define SPW_SYSTEM
-#define DENSE_SYSTEM
+//#define HOST_DEBUG
+#define SPW_SYSTEM
+//#define DENSE_SYSTEM
 #define OA_PING_PONG
 //#define WMOVER_STREAM_CACHE
 //#define OAMOVER_TB_STREAM_CACHE
@@ -201,9 +201,9 @@
 
 //#define NUM_CLUSTER_IN_DRAM_SIZE BURST_SIZE_BYTE/CLUSTER_SIZE
 
-#define ACTIVATION_WIDE_SIZE 4
-#define ACTIVATION_WIDE_SIZE_OFFSET 0x2 //Numnber of bits to shift the transfer block index to the right in order to recover the wide offset
-#define ACTIVATION_WIDE_SIZE_REMAINDER_MASK 0x3
+#define ACTIVATION_WIDE_SIZE 1
+#define ACTIVATION_WIDE_SIZE_OFFSET 0x0 //Numnber of bits to shift the transfer block index to the right in order to recover the wide offset
+#define ACTIVATION_WIDE_SIZE_REMAINDER_MASK 0x0
 #define ACTIVATION_BURST_SIZE_BYTE (PE_ACTIVATION_BLOCK_SIZE_IN_WORD * ACTIVATION_WIDE_SIZE)
 #define ACTIVATION_BURST_SIZE_BYTE_OFFSET (ACTIVATION_WIDE_SIZE_OFFSET + PE_ACTIVATION_BLOCK_SIZE_IN_WORD_OFFSET)
 #define ACTIVATION_WIDE_SIZE_BYTE_MASK ((1 << ACTIVATION_BURST_SIZE_BYTE_OFFSET) - 1)
