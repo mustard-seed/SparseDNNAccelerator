@@ -12,7 +12,8 @@
 //channel t_transferblock_tagged channel_weightOutput __attribute__((depth(1)));
 
 channel t_pe_a_block channel_activation[PE_ROW_GROUPS][PE_COLS]  __attribute__((depth(CHANNEL_DEPTH)));
-channel t_pe_w_block channel_weight[PE_ROWS][PE_COLS]  __attribute__((depth(CHANNEL_DEPTH)));
+channel t_pe_w_block channel_weight[PE_ROWS][PE_COLS]  __attribute__((depth(1)));
+channel t_pe_w_block channel_weight_local[PE_ROWS][PE_COLS] __attribute__((depth(CHANNEL_DEPTH)));
 
 //channel t_accumulator channel_drainInput __attribute__((depth(1)));
 //channel t_accumulator channel_drainOutput __attribute__((depth(1)));

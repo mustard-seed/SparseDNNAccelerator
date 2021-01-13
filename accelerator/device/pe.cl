@@ -54,6 +54,44 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 	return output;
 }
 
+
+//__attribute__((task))
+__attribute__((max_global_work_dim(0)))
+__attribute__((num_compute_units(PE_ROWS, PE_COLS)))
+__attribute__ ((autorun))
+__kernel void kernelWeightTransport (
+	)
+{
+	
+	int idx = get_compute_id(1);
+	int idy = get_compute_id(0);
+
+	while (true)
+	{
+
+			EMULATOR_PRINT(("[WEIGHT TRANSPORT (%d, %d)] Waiting weight/bias transfer block.\n", idy, idx));
+
+			t_pe_w_block block;
+			block = read_channel_intel(channel_weight[idy][idx]);
+
+			EMULATOR_PRINT(("[WEIGHT TRANSPORT (%d, %d)] Read weight/bias transfer block. Tag is %#04x\n", idy, idx, block.isLastConcatMaxTransportID));
+
+			uint5_t maxTransportID = block.maxTransportID;
+			#if defined(FULL_SYSTEM)
+			if (idx < (PE_COLS - 1))
+			#endif
+			{
+				if ( ((uint5_t) idx) < maxTransportID ) {
+					//EMULATOR_PRINT ( ("[kernelWeightTransport]: Waiting to pass a weight block to the output\n") );
+					write_channel_intel(channel_weight[idy][idx+1], block);
+
+					EMULATOR_PRINT(("[WEIGHT TRANSPORT (%d, %d)] Passed on weight/bias transfer block.\n", idy, idx));
+				}
+			}
+			write_channel_intel(channel_weight_local[idy][idx], block); 
+	}
+}
+
 #if defined(SPW_SYSTEM)
 typedef uint1_t t_spw_pe_state;
 #define SPW_PE_INSTRUCTION_READ_BIAS 0x0
@@ -116,21 +154,21 @@ __kernel void kernelSpWPE ()
 				// when it is given the unroll pragma
 				// so we have to unroll manually
 			sigWBlocks[0] = read_channel_intel(
-						channel_weight[idy*PE_ROWS_PER_GROUP+0][idx]
+						channel_weight_local[idy*PE_ROWS_PER_GROUP+0][idx]
 					);
 			#if (PE_ROWS_PER_GROUP>1)
 			sigWBlocks[1] = read_channel_intel(
-						channel_weight[idy*PE_ROWS_PER_GROUP+1][idx]
+						channel_weight_local[idy*PE_ROWS_PER_GROUP+1][idx]
 					);
 			#endif
 			#if (PE_ROWS_PER_GROUP>2)
 			sigWBlocks[2] = read_channel_intel(
-						channel_weight[idy*PE_ROWS_PER_GROUP+2][idx]
+						channel_weight_local[idy*PE_ROWS_PER_GROUP+2][idx]
 					);
 			#endif
 			#if (PE_ROWS_PER_GROUP>3)
 			sigWBlocks[3] = read_channel_intel(
-						channel_weight[idy*PE_ROWS_PER_GROUP+3][idx]
+						channel_weight_local[idy*PE_ROWS_PER_GROUP+3][idx]
 					);
 			#endif
 			#if (PE_ROWS_PER_GROUP>4)
@@ -139,47 +177,47 @@ __kernel void kernelSpWPE ()
 
 			sigIsLastWBlockInFilter = sigWBlocks[0].isLastInFilter;
 			sigIsLastWBlockInPruneRange = sigWBlocks[0].isLastInPruneRange;
-			uint5_t maxTransportID = sigWBlocks[0].maxTransportID;
-			#if defined(FULL_SYSTEM)
-			if (idx < (PE_COLS - 1))
-			#endif
-			{
-				if ( idx < maxTransportID ) {
-					// The compiler refuses to unroll the loop 
-					// when it is given the unroll pragma
-					// so we have to unroll manually
-					write_channel_intel(
-								channel_weight[idy*PE_ROWS_PER_GROUP+0][idx+1], 
-								sigWBlocks[0]
-							);
-					#if (PE_ROWS_PER_GROUP>1)
-					write_channel_intel(
-								channel_weight[idy*PE_ROWS_PER_GROUP+1][idx+1], 
-								sigWBlocks[1]
-							);
-					#endif
-					#if (PE_ROWS_PER_GROUP>2)
-					write_channel_intel(
-								channel_weight[idy*PE_ROWS_PER_GROUP+2][idx+1], 
-								sigWBlocks[2]
-							);
-					#endif
-					#if (PE_ROWS_PER_GROUP>3)
-					write_channel_intel(
-								channel_weight[idy*PE_ROWS_PER_GROUP+3][idx+1], 
-								sigWBlocks[3]
-							);
-					#endif
-					#if (PE_ROWS_PER_GROUP>4)
-						#error "PE_ROWS_PER_GROUP should be between 1 and 4"
-					#endif
-				}
-			} //end (optional) if
+			// uint5_t maxTransportID = sigWBlocks[0].maxTransportID;
+			// #if defined(FULL_SYSTEM)
+			// if (idx < (PE_COLS - 1))
+			// #endif
+			// {
+			// 	if ( idx < maxTransportID ) {
+			// 		// The compiler refuses to unroll the loop 
+			// 		// when it is given the unroll pragma
+			// 		// so we have to unroll manually
+			// 		write_channel_intel(
+			// 					channel_weight[idy*PE_ROWS_PER_GROUP+0][idx+1], 
+			// 					sigWBlocks[0]
+			// 				);
+			// 		#if (PE_ROWS_PER_GROUP>1)
+			// 		write_channel_intel(
+			// 					channel_weight[idy*PE_ROWS_PER_GROUP+1][idx+1], 
+			// 					sigWBlocks[1]
+			// 				);
+			// 		#endif
+			// 		#if (PE_ROWS_PER_GROUP>2)
+			// 		write_channel_intel(
+			// 					channel_weight[idy*PE_ROWS_PER_GROUP+2][idx+1], 
+			// 					sigWBlocks[2]
+			// 				);
+			// 		#endif
+			// 		#if (PE_ROWS_PER_GROUP>3)
+			// 		write_channel_intel(
+			// 					channel_weight[idy*PE_ROWS_PER_GROUP+3][idx+1], 
+			// 					sigWBlocks[3]
+			// 				);
+			// 		#endif
+			// 		#if (PE_ROWS_PER_GROUP>4)
+			// 			#error "PE_ROWS_PER_GROUP should be between 1 and 4"
+			// 		#endif
+			// 	}
+			// } //end (optional) if
 			#if defined(EMULATOR)
 				weightBlockCount++;
 				EMULATOR_PRINT((
 						"[SpW PE (%d, %d)]: "
-						"Read and passed on %d weight blocks.\n",
+						"Read %d weight blocks.\n",
 						idy, idx, weightBlockCount
 					));
 			#endif
@@ -449,7 +487,7 @@ __kernel void kernelDensePE ()
 				// when it is given the unroll pragma
 				// so we have to unroll manually
 			sigWeightTB[0] = read_channel_intel(
-						channel_weight[idy*PE_ROWS_PER_GROUP+0][idx]
+						channel_weight_local[idy*PE_ROWS_PER_GROUP+0][idx]
 					);
 			EMULATOR_PRINT(("[DENSE PE WEIGHT (%d, %d)] Read new weight block from channel 0. [0-3]: %#04x %#04x %#04x %#04x Current instruction: %#04x \n\n"
 						,idy, idx, 
@@ -460,7 +498,7 @@ __kernel void kernelDensePE ()
 						(unsigned char) regInstruction));
 			#if (PE_ROWS_PER_GROUP>1)
 			sigWeightTB[1] = read_channel_intel(
-						channel_weight[idy*PE_ROWS_PER_GROUP+1][idx]
+						channel_weight_local[idy*PE_ROWS_PER_GROUP+1][idx]
 					);
 			EMULATOR_PRINT(("[DENSE PE WEIGHT (%d, %d)] Read new weight block from channel 1. [0-3]: %#04x %#04x %#04x %#04x Current instruction: %#04x \n\n"
 						,idy, idx, 
@@ -472,7 +510,7 @@ __kernel void kernelDensePE ()
 			#endif
 			#if (PE_ROWS_PER_GROUP>2)
 			sigWeightTB[2] = read_channel_intel(
-						channel_weight[idy*PE_ROWS_PER_GROUP+2][idx]
+						channel_weight_local[idy*PE_ROWS_PER_GROUP+2][idx]
 					);
 			EMULATOR_PRINT(("[DENSE PE WEIGHT (%d, %d)] Read new weight block from channel 2. [0-3]: %#04x %#04x %#04x %#04x Current instruction: %#04x \n\n"
 						,idy, idx, 
@@ -484,7 +522,7 @@ __kernel void kernelDensePE ()
 			#endif
 			#if (PE_ROWS_PER_GROUP>3)
 			sigWeightTB[3] = read_channel_intel(
-						channel_weight[idy*PE_ROWS_PER_GROUP+3][idx]
+						channel_weight_local[idy*PE_ROWS_PER_GROUP+3][idx]
 					);
 			EMULATOR_PRINT(("[DENSE PE WEIGHT (%d, %d)] Read new weight block from channel 3. [0-3]: %#04x %#04x %#04x %#04x Current instruction: %#04x \n\n"
 						,idy, idx, 
@@ -499,47 +537,47 @@ __kernel void kernelDensePE ()
 			#endif
 
 			sigIsLastWBlockInFilter = sigWeightTB[0].isLastInFilter;
-			uint5_t maxTransportID = sigWeightTB[0].maxTransportID;
-			#if defined(FULL_SYSTEM)
-			if (idx < (PE_COLS - 1))
-			#endif
-			{
-				if ( idx < maxTransportID ) {
-					// The compiler refuses to unroll the loop 
-					// when it is given the unroll pragma
-					// so we have to unroll manually
-					write_channel_intel(
-								channel_weight[idy*PE_ROWS_PER_GROUP+0][idx+1], 
-								sigWeightTB[0]
-							);
-					#if (PE_ROWS_PER_GROUP>1)
-					write_channel_intel(
-								channel_weight[idy*PE_ROWS_PER_GROUP+1][idx+1], 
-								sigWeightTB[1]
-							);
-					#endif
-					#if (PE_ROWS_PER_GROUP>2)
-					write_channel_intel(
-								channel_weight[idy*PE_ROWS_PER_GROUP+2][idx+1], 
-								sigWeightTB[2]
-							);
-					#endif
-					#if (PE_ROWS_PER_GROUP>3)
-					write_channel_intel(
-								channel_weight[idy*PE_ROWS_PER_GROUP+3][idx+1], 
-								sigWeightTB[3]
-							);
-					#endif
-					#if (PE_ROWS_PER_GROUP>4)
-						#error "PE_ROWS_PER_GROUP should be between 1 and 4"
-					#endif
-				}
-			} //end (optional) if
+			// uint5_t maxTransportID = sigWeightTB[0].maxTransportID;
+			// #if defined(FULL_SYSTEM)
+			// if (idx < (PE_COLS - 1))
+			// #endif
+			// {
+			// 	if ( idx < maxTransportID ) {
+			// 		// The compiler refuses to unroll the loop 
+			// 		// when it is given the unroll pragma
+			// 		// so we have to unroll manually
+			// 		write_channel_intel(
+			// 					channel_weight[idy*PE_ROWS_PER_GROUP+0][idx+1], 
+			// 					sigWeightTB[0]
+			// 				);
+			// 		#if (PE_ROWS_PER_GROUP>1)
+			// 		write_channel_intel(
+			// 					channel_weight[idy*PE_ROWS_PER_GROUP+1][idx+1], 
+			// 					sigWeightTB[1]
+			// 				);
+			// 		#endif
+			// 		#if (PE_ROWS_PER_GROUP>2)
+			// 		write_channel_intel(
+			// 					channel_weight[idy*PE_ROWS_PER_GROUP+2][idx+1], 
+			// 					sigWeightTB[2]
+			// 				);
+			// 		#endif
+			// 		#if (PE_ROWS_PER_GROUP>3)
+			// 		write_channel_intel(
+			// 					channel_weight[idy*PE_ROWS_PER_GROUP+3][idx+1], 
+			// 					sigWeightTB[3]
+			// 				);
+			// 		#endif
+			// 		#if (PE_ROWS_PER_GROUP>4)
+			// 			#error "PE_ROWS_PER_GROUP should be between 1 and 4"
+			// 		#endif
+			// 	}
+			// } //end (optional) if
 			#if defined(EMULATOR)
 				weightBlockCount++;
 				EMULATOR_PRINT((
 						"[Dense PE (%d, %d)]: "
-						"Read and passed on %d group of weight blocks.\n",
+						"Read %d group of weight blocks.\n",
 						idy, idx, weightBlockCount
 					));
 			#endif
