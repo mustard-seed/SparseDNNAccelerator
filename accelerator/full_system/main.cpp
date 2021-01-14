@@ -29,21 +29,21 @@
 #define DIVIDE_CEIL(x, y) (1 + (x-1) / (y))
 #define SEED 27
 
-#define PLAY
-//#define PERF_TEST
+//#define PLAY
+#define PERF_TEST
 //#define THROUGHPUT_DIAGNOSTIC
 //#define VALIDATE
 //#define TEST1_20201126
 //#define TEST2_20201126
 //#define ELTADD7_202021129
 //Some how if repeat is 100, bad things will happen on concat
-#define REPEAT 1
+#define REPEAT 50
 #ifndef C5SOC
-#define EMULATE
+//#define EMULATE
 #endif
 //#define PERF_TEST
 //#NOOP
-#define PROFILE
+//#define PROFILE
 
 #define FRAC_WIDTH 4
 #define INT_WIDTH 3
@@ -138,6 +138,40 @@ protected:
 }; //testFixture
 
 #ifdef PLAY
+TEST_F (testFixture, perf_test_elt_add_128x56x56)
+{
+    unsigned char inputWidth = 56;
+    unsigned char inputHeight = 56;
+    unsigned char numInputChannel = 128;
+    unsigned char numOutputChannel = numInputChannel;
+    unsigned char numInputGroup = 1;
+    unsigned char inputHeightSPUnitSize = 1;
+    unsigned char inputWidthSPUnitSize = 1;
+    unsigned char sizeOutputTileWidthPerColFull = 7;
+    unsigned char sizeOutputTileHeight = 32;
+    unsigned char kernelSize = 3;
+    bool flagEnableRelu = false;
+    OPERATION op = ELT_ADD;
+    float bias = 0.0f;
+    launch(
+                inputWidth,
+                inputHeight,
+                numInputChannel,
+                numOutputChannel,
+                numInputGroup,
+                inputHeightSPUnitSize,
+                inputWidthSPUnitSize,
+                sizeOutputTileWidthPerColFull,
+                sizeOutputTileHeight,
+                kernelSize,
+                flagEnableRelu,
+                op,
+                bias,
+                1.0f, //dense prob
+                false, //back to back
+                true //perf test
+          );
+}
 //TEST_F (testFixture, perf_test_conv_sparse_128x128x3x3x32x16COL)
 //{
 //    unsigned char inputWidth = 8*2*PE_COLS;
@@ -152,7 +186,7 @@ protected:
 //    bool flagEnableRelu = false;
 //    OPERATION op = CONVOLUTION;
 //    float bias = 0.0f;
-//    std::vector<float> vecDenseProb = {1.0};
+//    std::vector<float> vecDenseProb = {1.0f};
 //    //std::vector<int> vecPruneScale = {1, CLUSTER_SIZE};
 //    //for (auto& pruneScale: vecPruneScale)
 //    //{
@@ -315,77 +349,77 @@ protected:
 //          );
 //}
 
-TEST_F (testFixture, global_avg_pool)
-{
-    unsigned char inputWidth = 4;
-    unsigned char inputHeight = 4;
-    unsigned char numInputChannel = 120;
-    unsigned char numOutputChannel = numInputChannel;
-    unsigned char numInputGroup = 1;
-    unsigned char inputHeightSPUnitSize = 1;
-    unsigned char inputWidthSPUnitSize = 1;
-    unsigned char sizeOutputTileWidthPerColFull = 2;
-    unsigned char sizeOutputTileHeight = 4;
-    unsigned char kernelSize = 3;
-    bool flagEnableRelu = false;
-    OPERATION op = AVG_POOL;
-    float bias = 0.0f;
+//TEST_F (testFixture, global_avg_pool)
+//{
+//    unsigned char inputWidth = 4;
+//    unsigned char inputHeight = 4;
+//    unsigned char numInputChannel = 120;
+//    unsigned char numOutputChannel = numInputChannel;
+//    unsigned char numInputGroup = 1;
+//    unsigned char inputHeightSPUnitSize = 1;
+//    unsigned char inputWidthSPUnitSize = 1;
+//    unsigned char sizeOutputTileWidthPerColFull = 2;
+//    unsigned char sizeOutputTileHeight = 4;
+//    unsigned char kernelSize = 3;
+//    bool flagEnableRelu = false;
+//    OPERATION op = AVG_POOL;
+//    float bias = 0.0f;
 
-    launch(
-                inputWidth,
-                inputHeight,
-                numInputChannel,
-                numOutputChannel,
-                numInputGroup,
-                inputHeightSPUnitSize,
-                inputWidthSPUnitSize,
-                sizeOutputTileWidthPerColFull,
-                sizeOutputTileHeight,
-                kernelSize,
-                flagEnableRelu,
-                op,
-                bias
-          );
-}
+//    launch(
+//                inputWidth,
+//                inputHeight,
+//                numInputChannel,
+//                numOutputChannel,
+//                numInputGroup,
+//                inputHeightSPUnitSize,
+//                inputWidthSPUnitSize,
+//                sizeOutputTileWidthPerColFull,
+//                sizeOutputTileHeight,
+//                kernelSize,
+//                flagEnableRelu,
+//                op,
+//                bias
+//          );
+//}
 
 
-TEST_F (testFixture, back_to_back_identity_conv)
-{
-    unsigned char inputWidth = 4;
-    unsigned char inputHeight = 4;
-    unsigned char numInputChannel =16;
-    unsigned char numOutputChannel = numInputChannel;
-    unsigned char numInputGroup = 1;
-    unsigned char numOutputGroup = 1;
-    unsigned char inputHeightSPUnitSize = 1;
-    unsigned char inputWidthSPUnitSize = 1;
-    unsigned char sizeOutputTileWidthPerColFull = 2;
-    unsigned char sizeOutputTileHeight = 4;
-    unsigned char kernelSize = 3;
-    bool flagEnableRelu = false;
-    OPERATION op = CONVOLUTION;
-    float denseProb = 1.0;
-    float bias = 0.0f;
-    bool flag2Layer = true;
+//TEST_F (testFixture, back_to_back_identity_conv)
+//{
+//    unsigned char inputWidth = 4;
+//    unsigned char inputHeight = 4;
+//    unsigned char numInputChannel =16;
+//    unsigned char numOutputChannel = numInputChannel;
+//    unsigned char numInputGroup = 1;
+//    unsigned char numOutputGroup = 1;
+//    unsigned char inputHeightSPUnitSize = 1;
+//    unsigned char inputWidthSPUnitSize = 1;
+//    unsigned char sizeOutputTileWidthPerColFull = 2;
+//    unsigned char sizeOutputTileHeight = 4;
+//    unsigned char kernelSize = 3;
+//    bool flagEnableRelu = false;
+//    OPERATION op = CONVOLUTION;
+//    float denseProb = 1.0;
+//    float bias = 0.0f;
+//    bool flag2Layer = true;
 
-    launch(
-                inputWidth,
-                inputHeight,
-                numInputChannel,
-                numOutputChannel,
-                numInputGroup,
-                inputHeightSPUnitSize,
-                inputWidthSPUnitSize,
-                sizeOutputTileWidthPerColFull,
-                sizeOutputTileHeight,
-                kernelSize,
-                flagEnableRelu,
-                op,
-                bias,
-                denseProb,
-                flag2Layer
-          );
-}
+//    launch(
+//                inputWidth,
+//                inputHeight,
+//                numInputChannel,
+//                numOutputChannel,
+//                numInputGroup,
+//                inputHeightSPUnitSize,
+//                inputWidthSPUnitSize,
+//                sizeOutputTileWidthPerColFull,
+//                sizeOutputTileHeight,
+//                kernelSize,
+//                flagEnableRelu,
+//                op,
+//                bias,
+//                denseProb,
+//                flag2Layer
+//          );
+//}
 
 
 #endif
@@ -1826,6 +1860,8 @@ std::vector<fixedPointNumber> testFixture::generateSparseWeights (
     fixedPointNumber fpZero(0.0f, FRAC_WIDTH, INT_WIDTH);
     assert ((((unsigned int) _numOutputChannel) % _numGroups == 0) && "Number of output channels is not divisble by the number of groups.");
 
+    int actualNumNZClustersInPruneRange = (_numNZClustersInPruneRange <= 0) ?
+                1 : _numNZClustersInPruneRange;
     unsigned int numOCPerGroup = _numOutputChannel / _numGroups;
     unsigned int numICPerGroup = _numInputChannel / _numGroups;
     unsigned int numPruneRangePerStrip =
@@ -1854,7 +1890,7 @@ std::vector<fixedPointNumber> testFixture::generateSparseWeights (
                         std::vector<int> idxClusters (PRUNE_RANGE_IN_CLUSTER, 0x0);
                         std::iota(idxClusters.begin(), idxClusters.end(), 0);
                         std::shuffle(idxClusters.begin(), idxClusters.end(), generator);
-                        for (int i=0; i<_numNZClustersInPruneRange; i++)
+                        for (int i=0; i<actualNumNZClustersInPruneRange; i++)
                         {
                             int idx = idxClusters.at(i);
                             for (int c=0; c<CLUSTER_SIZE; c++)

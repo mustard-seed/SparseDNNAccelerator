@@ -97,6 +97,10 @@ void instruction_generator(//Type of the operation
         //Only relevant for convolution
         unsigned short numOutputChannels)
 {
+#if defined(SPW_SYSTEM)
+    int actualNumNZClustersInPruningRange = (numNZClustersInPruningRange <= 0) ?
+                1 : numNZClustersInPruningRange;
+#endif
     /*!
      * Important (20201224): Only allow the output tile height size to exceed 1 if the operation is
      * convolution, elt_add, or concatenation
@@ -248,7 +252,7 @@ void instruction_generator(//Type of the operation
                             PE_SIMD_SIZE * CLUSTER_SIZE,
                             #if defined(SPW_SYSTEM)
                                 PRUNE_RANGE_IN_CLUSTER,
-                                numNZClustersInPruningRange
+                                actualNumNZClustersInPruningRange
                             #else
                                 1,
                                 1
@@ -747,7 +751,7 @@ void instruction_generator(//Type of the operation
                              unsigned int numTBPerInputStrip =
                                      DIVIDE_CEIL(numIAMoverInputChannelsPerGroup0,
                                                  PE_SIMD_SIZE * CLUSTER_SIZE * PRUNE_RANGE_IN_CLUSTER)
-                                     * numNZClustersInPruningRange;
+                                     * actualNumNZClustersInPruningRange;
                         #else
                             unsigned int numTBPerInputStrip =
                                     DIVIDE_CEIL(
@@ -758,7 +762,7 @@ void instruction_generator(//Type of the operation
                         instructionWMover.numTBPerFilter = (t_uint) numTBPerInputStrip*kernelSize*kernelSize;
 
                         #if defined(SPW_SYSTEM)
-                            instructionWMover.numNZClustersPerPruneRange = numNZClustersInPruningRange;
+                            instructionWMover.numNZClustersPerPruneRange = actualNumNZClustersInPruningRange;
                         #endif
                         vecWeightMoverInstruction.push_back(instructionWMover);
                     } //Generate the weight mover instruction

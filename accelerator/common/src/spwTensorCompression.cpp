@@ -345,14 +345,21 @@ DeviceSpWTensor::DeviceSpWTensor(
     width = _width;
     height = _height;
     numClustersInPruningRange = _numClustersInPruningRange;
-    numNZClustersInPruningRange = _numNZClustersPerPruningRange;
     peSimdSize = _peSimdSize;
     clusterSize = _clusterSize;
-    if (numNZClustersInPruningRange > numClustersInPruningRange)
+    if (_numNZClustersPerPruningRange > numClustersInPruningRange)
     {
         std::cerr <<"Number of non-zero clusters in a pruning range should not exceed "
                     "the size of the pruning range in terms of cluster size"<<std::endl;
         throw;
+    }
+    if (_numNZClustersPerPruningRange <= 0)
+    {
+        numNZClustersInPruningRange = 1;
+    }
+    else
+    {
+        numNZClustersInPruningRange = _numNZClustersPerPruningRange;
     }
     int sizeTB = _peSimdSize * _clusterSize;
     numTBPerStrip =
