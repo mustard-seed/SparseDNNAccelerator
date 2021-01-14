@@ -329,7 +329,7 @@ namespace GraphRuntime {
                     numInputChannelPerGroup1 = numInputChannel1 / numGroupCurrentLayer;
 
                     t_tile_pair tileConfig = calculateTileSizePerUnit(*pLayerLocal.get());
-                    sizeOutputTileFullWidthPerCol = 1;
+                    sizeOutputTileFullWidthPerCol = tileConfig.tileInfo.sizeOutputTileFullWidthPerCol;
                     numActiveColsPartialOutputTile = 1;
                     sizeOutputTileFullHeight = tileConfig.tileInfo.sizeOutputTileFullHeight;
                     inputTransferLatency = tileConfig.inputTransferLatency;
@@ -724,7 +724,7 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
     {
         //Generate a candidate tile configuration
         unsigned int sizeOutputFullTileHeightTemp =
-                OA_CACHE_DEPTH /
+                OA_CACHE_DEPTH * ACTIVATION_BURST_SIZE_BYTE /
                 (outputTileWidthPerCol * (DIVIDE_CEIL(outputChannels, PE_ROWS_PER_GROUP) * PE_ROWS_PER_GROUP));
         sizeOutputFullTileHeightTemp = sizeOutputFullTileHeightTemp < outputHeight ?
                     sizeOutputFullTileHeightTemp : outputHeight;
