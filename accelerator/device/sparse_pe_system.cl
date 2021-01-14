@@ -2079,7 +2079,7 @@ __kernel void kernelMisc ()
 							inputDramBlock.values[2] & 0xFF, 
 							inputDramBlock.values[3] & 0xFF));
 
-						#pragma unroll MISC_UNROLL
+						#pragma unroll ACTIVATION_BURST_SIZE_BYTE
 						#pragma ii 1
 						#pragma speculated_iterations 0
 						for (int iValue=0; iValue < ACTIVATION_BURST_SIZE_BYTE; iValue++)
