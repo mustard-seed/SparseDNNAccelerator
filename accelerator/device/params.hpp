@@ -30,14 +30,18 @@
 #define PACKET_SIZE 1
 
 #if defined(FULL_SYSTEM)
-	#define PE_COLS 2
-	#define PE_ROWS_PER_GROUP 4
-	#define PE_ROW_GROUPS 2
-	#define MISC_COLS 1
+	// #define PE_COLS 2
+	// #define PE_ROWS_PER_GROUP 4
+	// #define PE_ROW_GROUPS 2
+	// #define MISC_COLS 1
 	// #define PE_COLS 1
 	// #define PE_ROWS_PER_GROUP 1
 	// #define PE_ROW_GROUPS 1
 	// #define MISC_COLS 1
+	#define PE_COLS 1
+	#define PE_ROWS_PER_GROUP 8
+	#define PE_ROW_GROUPS 1
+	#define MISC_COLS 1
 #else
 	#define PE_COLS 1
 	#define PE_ROWS_PER_GROUP 1
@@ -163,7 +167,7 @@
 #define INDEX_CHAR_ARRAY_SIZE 2
 #define INDEX_CHAR_ARRAY_SIZE_OFFSET 1
 #elif (PE_SIMD_SIZE <= 8)
-#define INDEX_CHAR_ARRAY_SIZE 4
+#define INDEX_CHAR_ARRAY_SIZE 432/
 #define INDEX_CHAR_ARRAY_SIZE_OFFSET 2
 #elif (PE_SIMD_SIZE <= 16)
 #define INDEX_CHAR_ARRAY_SIZE 8
