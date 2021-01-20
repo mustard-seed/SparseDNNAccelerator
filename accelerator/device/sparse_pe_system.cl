@@ -1658,6 +1658,7 @@ __kernel void kernelIATileController (
 			unsigned short iaCacheColStride = drainInstruction.cacheIAStripColStride;
 
 
+			#pragma ii 2
 	        for (unsigned int i=0; i<numOutputInstructions; i++)
 			{
 				unsigned char numActivePeRows = ((numOutputChannelsInGroup - iFilterInGroup) < (unsigned short) (PE_ROWS)) ?
@@ -3833,13 +3834,13 @@ __kernel void kernelFilterTee ()
 	}
 }
 
-#define STATE_FILTER_STREAMER_WRITE_CACHE_SETUP_CONTROL 0X1
-#define STATE_FILTER_STREAMER_WRITE_CACHE_WRITE 0X2
-#define STATE_FILTER_STREAMER_WRITE_CACHE_WAIT 0X4
+#define STATE_FILTER_STREAMER_WRITE_CACHE_SETUP_CONTROL 0X0
+#define STATE_FILTER_STREAMER_WRITE_CACHE_WRITE 0X1
+#define STATE_FILTER_STREAMER_WRITE_CACHE_WAIT 0X2
 
-#define STATE_FILTER_STREAMER_READ_CACHE_SETUP 0X1
-#define STATE_FILTER_STREAMER_READ_CACHE_READ 0X2
-#define STATE_FILTER_STREAMER_READ_CACHE_WAIT 0X4
+#define STATE_FILTER_STREAMER_READ_CACHE_WAIT 0X0
+#define STATE_FILTER_STREAMER_READ_CACHE_READ 0X1
+//#define STATE_FILTER_STREAMER_READ_CACHE_WAIT 0X4
 
 /*! kernelFilterStreamer
 	\brief Stream filter values to the PE array
@@ -3851,7 +3852,8 @@ __kernel void kernelFilterBuffer ()
 {
 	int rowID = get_compute_id(0);
 
-	typedef uint3_t t_state;
+	typedef uint2_t t_filter_streamer_write_state;
+	typedef uint1_t t_filter_streamer_read_state;
 
 	typedef struct {
     	t_char values[WEIGHT_BURST_SIZE_VALUE_BYTE];
@@ -3877,11 +3879,11 @@ __kernel void kernelFilterBuffer ()
 	#endif
 
 	//=================Write into cache variables=================
-	t_state stateWriteCache = STATE_FILTER_STREAMER_WRITE_CACHE_SETUP_CONTROL;
+	t_filter_streamer_write_state stateWriteCache = STATE_FILTER_STREAMER_WRITE_CACHE_SETUP_CONTROL;
 	unsigned short iTransferBlockInFilterWrite; //iCg
 
 	//=================Read from cache variables=================
-	t_state stateReadCache = STATE_FILTER_STREAMER_READ_CACHE_WAIT;
+	t_filter_streamer_read_state stateReadCache = STATE_FILTER_STREAMER_READ_CACHE_WAIT;
 	unsigned short iTransferBlockInFilterRead = 0; //iCg
 	//unsigned char iWidthInOutputTileRead; //pq*A
 	//unsigned char iHeightInOutputTileRead; //p
@@ -3899,7 +3901,7 @@ __kernel void kernelFilterBuffer ()
 	while (true)
 	{
 		//===============Write side====================
-		t_state nextStateWriteCache = stateWriteCache;
+		t_filter_streamer_write_state nextStateWriteCache = stateWriteCache;
 		{
 			bool success = false;
 			t_weight_dram_block writeBlock;
@@ -3977,26 +3979,26 @@ __kernel void kernelFilterBuffer ()
 			} // STATE_FILTER_STREAMER_WRITE_CACHE_WRITE
 		} // WRITE
 
-		t_state nextStateReadCache = stateReadCache;
+		t_filter_streamer_read_state nextStateReadCache = stateReadCache;
 		//t_transferblock_tagged weightBlockTagged;
 		
-		if (stateReadCache == STATE_FILTER_STREAMER_READ_CACHE_SETUP)
-		{
-			iTransferBlockInFilterRead = 0;
-			if (iOutputRead == maxOutputCount[(~regWriteSide) & 0x1])
-			{
-				nextStateReadCache = STATE_FILTER_STREAMER_READ_CACHE_WAIT;
-				iOutputRead = 0;
-				EMULATOR_PRINT(("[kernelFilterBuffer %d] FINISHED stream all the weights in the buffer for the tile.\n\n", rowID));
-			}
-			else
-			{
-				nextStateReadCache = STATE_FILTER_STREAMER_READ_CACHE_READ;
-				//iOutputRead++;
-			}
-		} // STATE_FILTER_STREAMER_READ_CACHE_SETUP
+		// if (stateReadCache == STATE_FILTER_STREAMER_READ_CACHE_SETUP)
+		// {
+		// 	iTransferBlockInFilterRead = 0;
+		// 	if (iOutputRead == maxOutputCount[(~regWriteSide) & 0x1])
+		// 	{
+		// 		nextStateReadCache = STATE_FILTER_STREAMER_READ_CACHE_WAIT;
+		// 		iOutputRead = 0;
+		// 		EMULATOR_PRINT(("[kernelFilterBuffer %d] FINISHED stream all the weights in the buffer for the tile.\n\n", rowID));
+		// 	}
+		// 	else
+		// 	{
+		// 		nextStateReadCache = STATE_FILTER_STREAMER_READ_CACHE_READ;
+		// 		//iOutputRead++;
+		// 	}
+		// } // STATE_FILTER_STREAMER_READ_CACHE_SETUP
 		// Send bias, then followed by the clusters
-		else if ( stateReadCache == STATE_FILTER_STREAMER_READ_CACHE_READ)
+		if ( stateReadCache == STATE_FILTER_STREAMER_READ_CACHE_READ)
 		{
 			t_pe_w_block peWeightBlock;
 
@@ -4141,8 +4143,16 @@ __kernel void kernelFilterBuffer ()
 				//Omit plus 1 to send the bias
 				if ((iTransferBlockInFilterRead) >= maxTransferBlockInFilter[(~regWriteSide) & 0x1])
 				{
-					nextStateReadCache = STATE_FILTER_STREAMER_READ_CACHE_SETUP;
+					nextStateReadCache = STATE_FILTER_STREAMER_READ_CACHE_READ;
 					iOutputRead++;
+					iTransferBlockInFilterRead = 0;
+					if (iOutputRead == maxOutputCount[(~regWriteSide) & 0x1])
+					{
+						nextStateReadCache = STATE_FILTER_STREAMER_READ_CACHE_WAIT;
+						iOutputRead = 0;
+						EMULATOR_PRINT(("[kernelFilterBuffer %d] FINISHED stream all the weights in the buffer for the tile.\n\n", rowID));
+					}
+
 				}
 				else
 				{
