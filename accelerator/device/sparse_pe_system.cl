@@ -1658,7 +1658,6 @@ __kernel void kernelIATileController (
 			unsigned short iaCacheColStride = drainInstruction.cacheIAStripColStride;
 
 
-			#pragma ii 2
 	        for (unsigned int i=0; i<numOutputInstructions; i++)
 			{
 				unsigned char numActivePeRows = ((numOutputChannelsInGroup - iFilterInGroup) < (unsigned short) (PE_ROWS)) ?
