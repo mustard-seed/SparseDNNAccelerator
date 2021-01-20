@@ -554,22 +554,22 @@ __kernel void kernelDensePE ()
 						(unsigned char) regInstruction));
 			#endif
 			#if (PE_ROWS_PER_GROUP>4)
-			sigWBlocks[4] = read_channel_intel(
+			sigWeightTB[4] = read_channel_intel(
 						channel_weight_local[idy*PE_ROWS_PER_GROUP+4][idx]
 					);
 			#endif
 			#if (PE_ROWS_PER_GROUP>5)
-			sigWBlocks[5] = read_channel_intel(
+			sigWeightTB[5] = read_channel_intel(
 						channel_weight_local[idy*PE_ROWS_PER_GROUP+5][idx]
 					);
 			#endif
 			#if (PE_ROWS_PER_GROUP>6)
-			sigWBlocks[6] = read_channel_intel(
+			sigWeightTB[6] = read_channel_intel(
 						channel_weight_local[idy*PE_ROWS_PER_GROUP+6][idx]
 					);
 			#endif
 			#if (PE_ROWS_PER_GROUP>7)
-			sigWBlocks[7] = read_channel_intel(
+			sigWeightTB[7] = read_channel_intel(
 						channel_weight_local[idy*PE_ROWS_PER_GROUP+7][idx]
 					);
 			#endif
