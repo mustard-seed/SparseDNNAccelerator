@@ -232,6 +232,11 @@ namespace GraphRuntime {
         return node["pruneRangeInCluster"].as<int>();
     }
 
+    bool ConvLayer::getIsAfterInput()
+    {
+        return node["isAfterInput"].as<bool>();
+    }
+
     MaxPoolLayer::MaxPoolLayer(const YAML::Node& _node)
         :Layer(_node)
     {

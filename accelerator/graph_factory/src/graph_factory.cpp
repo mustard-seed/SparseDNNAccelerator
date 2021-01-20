@@ -42,9 +42,10 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer &_convLayer);
 t_tile_pair calculateTileSizePerUnit(EltAddLayer &_eltAddLayer);
 
 namespace GraphRuntime {
-    GraphFactory::GraphFactory(std::string _traceFileName, std::string _parameterFileName)
+    GraphFactory::GraphFactory(std::string _traceFileName, std::string _parameterFileName, bool _inputScatter)
     {
        typedef YAML::Node YN;
+       flagInputScatter = _inputScatter;
        YN traceNodes = YAML::LoadFile(_traceFileName);
        std::cout <<"Loaded YAML trace file "<<_traceFileName<<"."<<std::endl;
        //YN parameterNodes = YAML::LoadFile(_parameterFileName);
@@ -243,6 +244,72 @@ namespace GraphRuntime {
                     //Convert the weights from float to fixed point
                     std::vector<float> floatWeights = pLayerLocal->getWeights();
                     std::vector<fixedPointNumber> fixedPointWeight;
+#if defined(SPW_SYSTEM)
+                    bool flagAdjustInputChannelSize =  false;
+                    if ((pLayerLocal->getIsAfterInput() == true) && flagInputScatter) {
+                        if (numInputChannel0 <= (CLUSTER_SIZE * PE_SIMD_SIZE)) {
+                            numInputChannel0 = CLUSTER_SIZE * PE_SIMD_SIZE * PRUNE_RANGE_IN_CLUSTER;
+                            flagAdjustInputChannelSize = true;
+                            numInputChannelPerGroup0 = numInputChannel0;
+                            if (numGroupCurrentLayer > 1) {
+                                std::cout <<"Modifying the number of input channels for a convolution layer after input, but its input has more than one channel groups."
+                                         <<std::endl;
+                                throw;
+                            }
+                        }
+                    }
+
+                    fixedPointWeight.resize(
+                                pLayerLocal->getOutputChannel()
+                                * pLayerLocal->getKernelSize()
+                                * pLayerLocal->getKernelSize()
+                                * numInputChannel0);
+
+                    if (flagAdjustInputChannelSize) {
+                        unsigned int oCh=0, iKxK=0, iInCluster=0, iClusterInPR=0, iPR=0;
+                        unsigned int KxK = pLayerLocal->getKernelSize() * pLayerLocal->getKernelSize();
+                        for (unsigned int i=0; i<fixedPointWeight.size(); i++){
+                            float floatVal;
+                            int idxICInOriginal = iPR * CLUSTER_SIZE + iInCluster;
+                            int idxInOriginal =
+                                    oCh * KxK * pLayerLocal->getInputChannels().at(0)
+                                    + iKxK * pLayerLocal->getInputChannels().at(0)
+                                    + idxICInOriginal;
+                            if ((iClusterInPR == 0) && (idxICInOriginal < pLayerLocal->getInputChannels().at(0))) {
+                                floatVal = floatWeights.at(idxInOriginal);
+                            }
+                            else {
+                                floatVal = 0.0f;
+                            }
+
+                            fixedPointWeight.at(i) = fixedPointNumber(floatVal, weightFracBits, 7-weightFracBits);
+
+                            //Update the counters
+                            iInCluster++;
+                            if (iInCluster == CLUSTER_SIZE) {
+                                iInCluster = 0;
+                                iClusterInPR++;
+                                if (iClusterInPR == PRUNE_RANGE_IN_CLUSTER) {
+                                    iClusterInPR = 0;
+                                    iPR++;
+                                    if (iPR == PE_SIMD_SIZE) {
+                                        iPR = 0;
+                                        iKxK++;
+                                        if (iKxK == KxK) {
+                                            iKxK=0;
+                                            oCh++;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    else {
+                        for (unsigned int i=0; i<fixedPointWeight.size(); i++) {
+                             fixedPointWeight.at(i) = fixedPointNumber(floatWeights.at(i), weightFracBits, 7-weightFracBits);
+                        }
+                    }
+#else
                     fixedPointWeight.resize(floatWeights.size());
                     {
                         for (unsigned int i=0; i<floatWeights.size(); i++)
@@ -250,6 +317,7 @@ namespace GraphRuntime {
                              fixedPointWeight.at(i) = fixedPointNumber(floatWeights.at(i), weightFracBits, 7-weightFracBits);
                         }
                     }
+#endif
 
                     //Align and compress the weight tensor
                     std::shared_ptr<DeviceWeightTensor> pWeight;
@@ -265,8 +333,8 @@ namespace GraphRuntime {
                             std::cout <<"The accelerator's prune range size does not agree with the graph's prune range size."<<std::endl;
                             throw;
                         }
-                        numNZClustersPerPruningRange =
-                            std::ceil((1.0f - pLayerLocal->getWeightSparsity()) * PRUNE_RANGE_IN_CLUSTER);
+                        numNZClustersPerPruningRange = flagAdjustInputChannelSize ?
+                            1 : std::ceil((1.0f - pLayerLocal->getWeightSparsity()) * PRUNE_RANGE_IN_CLUSTER);
                         pWeight.reset(new DeviceSpWTensor (
                                     fixedPointWeight,
                                     numOutputChannels, //_num3DTensors
@@ -460,6 +528,16 @@ namespace GraphRuntime {
                 case QUANT: {
                     isComputeLayer = false;
                     auto pLayerLocal = dynamic_pointer_cast<QuantLayer>(pLayer);
+                    int numChannels = numOutputChannels;
+//#if defined(SPW_SYSTEM)
+//                    if (flagInputScatter)
+//                    {
+//                        if (numOutputChannels < (PE_SIMD_SIZE * CLUSTER_SIZE))
+//                        {
+//                            numChannels = PE_SIMD_SIZE * CLUSTER_SIZE * PRUNE_RANGE_IN_CLUSTER;
+//                        }
+//                    }
+//#endif
                     //Add an input
                     pGraph->vecInputInfo.emplace_back(
                                 t_blob_info{
@@ -467,9 +545,10 @@ namespace GraphRuntime {
                                     .channel = numOutputChannels,
                                     .height=pLayerLocal->getOutputHeight(),
                                     .width=pLayerLocal->getOutputWidth(),
-                                    .stripStrideSeenBySource= DIVIDE_CEIL(numOutputChannels, ACTIVATION_BURST_SIZE_BYTE) * ACTIVATION_BURST_SIZE_BYTE,
+                                    .stripStrideSeenBySource= DIVIDE_CEIL(numChannels, ACTIVATION_BURST_SIZE_BYTE) * ACTIVATION_BURST_SIZE_BYTE,
                                     .numFracBits=pLayerLocal->getOutputFracBits(),
-                                    .blobName="quant_"+to_string(pLayerLocal->getLayerID())
+                                    .blobName="quant_"+to_string(pLayerLocal->getLayerID()),
+                                    .flagInputScatter = flagInputScatter
                                     }
                                 );
                 } //QUANT

@@ -29,6 +29,7 @@ namespace GraphRuntime {
         signed int numFracBits;
 //        bool flagCanBeSparse;
         std::string blobName;
+        bool flagInputScatter;
     } t_blob_info;
 
     typedef struct {
@@ -110,6 +111,7 @@ namespace GraphRuntime {
 
         //Helper information that faciliate the execution of the graph
         std::vector<t_layer_info> vecLayerInfo;
+
     } t_execution_graph;
 
     class AcceleratorWrapper {

@@ -7,15 +7,15 @@
 
 //Prirority of the MACRO flags:
 //PLAY > VALIDATE > RESNET56
-#define PLAY
+//#define PLAY
 //#define VALIDATE
 //#define RESNET50_CONV12
 //#define RESNET56
-//#define RESNET50
+#define RESNET50
 #ifndef C5SOC
  //#define EMULATE
 #endif
-#define INFERENCE_REPEAT 20
+#define INFERENCE_REPEAT 40
 #define CHECKOUTPUT
 //#define PROFILE
 
@@ -30,7 +30,8 @@ protected:
     void launch(std::string _traceFileName,
                 std::string _parameterFileName,
                 std::string _inoutFileName,
-                std::map<std::string, std::string> _traceName2BlobName);
+                std::map<std::string, std::string> _traceName2BlobName,
+                bool _scatterInput=false);
 };
 #if defined(PLAY) //focus on one test
 TEST_F(testFixture, testTrace)
@@ -166,10 +167,11 @@ TEST_F(testFixture, resnet50_imagenet1k)
     std::string traceFileName = "resnet50_imagenet_trace.yaml";
     std::string traceParameterFile = "resnet50_imagenet_parameters.npz";
     std::string inoutFile = "resnet50_imagenet_inout.yaml";
+    bool scatterInput = true;
     std::map<std::string, std::string> traceName2BlobName;
     traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
     traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_73", "output"));
-    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
+    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName, scatterInput);
 }
 #endif
 #if defined(RESNET50_CONV12)
@@ -191,9 +193,10 @@ void testFixture::SetUp()
 #ifdef C5SOC
     aocxBinaryFile = "device_utils.aocx";
 #else
-    aocxBinaryFile = "sparse_pe_system.aocx";
 #if defined(EMULATE)
     aocxBinaryFile = "c5_mac8bitx4_c_model.aocx";
+#else
+    aocxBinaryFile = "sparse_pe_system.aocx";
 #endif
 #endif
 
@@ -214,14 +217,15 @@ void testFixture::SetUp()
 void testFixture::launch(std::string _traceFileName,
                          std::string _parameterFileName,
                          std::string _inoutFileName,
-                         std::map<std::string, std::string> _traceName2BlobName)
+                         std::map<std::string, std::string> _traceName2BlobName,
+                         bool _scatterInput)
 {
     int stepCount = 1;
 
     //Load the trace file and the parameter file
     std::cout <<"Step "<<stepCount++<<": Loading trace file and parameter file."<<std::endl;
     std::cout <<testPrefix+_traceFileName<<" "<<testPrefix+_parameterFileName<<std::endl;
-    GraphRuntime::GraphFactory graphFactory(testPrefix+_traceFileName, testPrefix+_parameterFileName);
+    GraphRuntime::GraphFactory graphFactory(testPrefix+_traceFileName, testPrefix+_parameterFileName, _scatterInput);
 
     std::cout <<"Step "<<stepCount++<<": Generate the execution graph."<<std::endl;
     auto pGraph = std::move(graphFactory.generateGraph());

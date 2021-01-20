@@ -11,9 +11,10 @@ namespace GraphRuntime {
     class GraphFactory {
     private:
         std::vector<std::shared_ptr<Layer>> vecLayers;
+        bool flagInputScatter;
     public:
        GraphFactory() = default;
-       GraphFactory(std::string _traceFileName, std::string _parameterFileName);
+       GraphFactory(std::string _traceFileName, std::string _parameterFileName, bool _inputScatter=false);
        ~GraphFactory() = default;
 
        std::unique_ptr<t_execution_graph> generateGraph();

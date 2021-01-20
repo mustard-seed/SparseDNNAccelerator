@@ -21,6 +21,8 @@ class DeviceActivationTensor {
 
     int stripStrideInExternalMemory;
 
+    bool inputScatter;
+
 public:
     DeviceActivationTensor () = delete;
 

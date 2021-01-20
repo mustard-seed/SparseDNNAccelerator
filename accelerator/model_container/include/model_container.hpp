@@ -91,6 +91,11 @@ namespace GraphRuntime {
         void    loadBiases(const cnpy::NpyArray&  _biasNode);
         FloatVec getWeights();
         FloatVec getBiases();
+
+        /*
+         * Special input processing
+         */
+        bool getIsAfterInput();
     };
 
     class MaxPoolLayer: public Layer {

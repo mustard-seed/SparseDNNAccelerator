@@ -816,8 +816,6 @@ namespace GraphRuntime {
                       <<" of the requested input tensor size."<<std::endl;
         }
 
-        //Quantize the input
-        std::vector<fixedPointNumber> inputBlobQuantized = quantize(floatBlob, blobInfo.numFracBits);
 //        if (vecInputBlobsInfo.at(inputBlobID).flagCanBeSparse == true)
 //        {
 //            //TODO: change the data types
@@ -852,10 +850,52 @@ namespace GraphRuntime {
 //                            )
 //                        );
 //        }
+        int numChannels = blobInfo.channel;
+        std::vector<fixedPointNumber> inputBlobQuantized;
+#if defined(SPW_SYSTEM)
+        if (blobInfo.flagInputScatter && (blobInfo.channel < (PE_SIMD_SIZE * CLUSTER_SIZE))) {
+            numChannels = PE_SIMD_SIZE * CLUSTER_SIZE * PRUNE_RANGE_IN_CLUSTER;
+            std::vector<float> floatBlobLocal(numChannels*blobInfo.width*blobInfo.height, 0.0f);
+            unsigned int iStrip=0, iInCluster=0, iClusterInPR=0, iPR=0;
+            unsigned int sizePlane = blobInfo.width * blobInfo.height;
+            for (unsigned int i=0; i<floatBlobLocal.size(); i++){
+                int idxICInOriginal = iPR * CLUSTER_SIZE + iInCluster;
+                int idxInOriginal =
+                        iStrip * blobInfo.channel
+                        + idxICInOriginal;
+                if ((iClusterInPR == 0) && (idxICInOriginal < blobInfo.channel)) {
+                    floatBlobLocal.at(i) = floatBlob.at(idxInOriginal);
+                }
+                //Update the counters
+                iInCluster++;
+                if (iInCluster == CLUSTER_SIZE) {
+                    iInCluster = 0;
+                    iClusterInPR++;
+                    if (iClusterInPR == PRUNE_RANGE_IN_CLUSTER) {
+                        iClusterInPR = 0;
+                        iPR++;
+                        if (iPR == PE_SIMD_SIZE) {
+                            iPR = 0;
+                            iStrip++;
+                            if (iStrip == sizePlane) {
+                                iStrip=0;
+                            }
+                        }
+                    }
+                }
+            }
+            inputBlobQuantized = quantize(floatBlobLocal, blobInfo.numFracBits);
+        }
+        else {
+            inputBlobQuantized = quantize(floatBlob, blobInfo.numFracBits);
+        }
+#else
+        inputBlobQuantized = quantize(floatBlob, blobInfo.numFracBits);
+#endif
         vecInputBlobsInternal.at(inputBlobID).reset(
                     new DeviceActivationTensor(
                             inputBlobQuantized,
-                            blobInfo.channel,
+                            numChannels,
                             blobInfo.width,
                             blobInfo.height,
                             blobInfo.stripStrideSeenBySource

@@ -7,8 +7,7 @@
 
 #define DIVIDE_CEIL(x, y) (1 + (x-1) / (y) )
 
-DeviceActivationTensor::DeviceActivationTensor (
-        int _channel,
+DeviceActivationTensor::DeviceActivationTensor (int _channel,
         int _width,
         int _height,
         int _stripStrideInExternalMemory)
@@ -21,13 +20,11 @@ DeviceActivationTensor::DeviceActivationTensor (
     valueVector.resize(tensorSize, 0x0);
 }
 
-DeviceActivationTensor ::DeviceActivationTensor(
-           std::vector<fixedPointNumber> & _vecFixedPoint,
+DeviceActivationTensor ::DeviceActivationTensor(std::vector<fixedPointNumber> & _vecFixedPoint,
            int _channel,
            int _width,
            int _height,
-           int _stripStrideInExternalMemory
-           )
+           int _stripStrideInExternalMemory)
     :DeviceActivationTensor(
             _channel,
             _width,
