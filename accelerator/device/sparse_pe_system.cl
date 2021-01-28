@@ -416,7 +416,7 @@ __kernel void kernelWMover (
 
 			//Setup the control bias
 			t_filter_streamer_control control;
-			control.numOutputs = inst.filterReuse;
+			control.numOutputsXNumTransferBlocks = (unsigned int) inst.filterReuse * (unsigned int) numTransferBlockInFilter;
 			control.bias = bias;
 			control.numTransferBlocks = numTransferBlockInFilter;
 			control.flagIsReal = (isRealFilter == TRUE) ? TRUE : FALSE;
@@ -531,7 +531,7 @@ __kernel void kernelWMover (
 
 #define IA_BUFFER_READ_STATE_DECODE 0x0
 #define IA_BUFFER_READ_STATE_ACCESS 0x1
-#define IA_BUFFER_READ_STATE_UPDATE_STRIP 0x2
+// #define IA_BUFFER_READ_STATE_UPDATE_STRIP 0x2
 
 #define IA_BUFFER_INSTRUCTION_STATE_DECODE 0x0
 #define IA_BUFFER_INSTRUCTION_STATE_SEND_TO_READER 0x1
@@ -546,8 +546,8 @@ typedef unsigned char t_ia_buffer_w_state;
 typedef unsigned char t_ia_buffer_r_state;
 typedef unsigned char t_ia_buffer_d_state;
 #else
-typedef uint3_t t_ia_buffer_w_state;
-typedef uint3_t t_ia_buffer_r_state;
+typedef uint2_t t_ia_buffer_w_state;
+typedef uint1_t t_ia_buffer_r_state;
 typedef uint2_t t_ia_buffer_d_state;
 #endif
 
@@ -663,7 +663,7 @@ typedef struct __attribute__((packed)) {
 
 	//Instruction on how the dram cache pointer should be updated in update_strip state
 	//Also used to indicate whether the current strip is the last one to be streamed
-	uint1_t stripUpdateMode;
+	// uint1_t stripUpdateMode;
 
 	//Whether the IA buffer reader is streaming the last row of a convolution window to the PEs
 	uint1_t flagIsLastRow;
@@ -829,7 +829,7 @@ __kernel void kernelIABuffer ()
 			.iterAccess=0,
 			.accessBank = 0,
 			.maxPeRowGroupID = 0,
-			.stripUpdateMode = 0,
+			// .stripUpdateMode = 0,
 			.flagIsLastRow = FALSE
 		};
 	t_ia_buffer_r_state regReaderState = IA_BUFFER_READ_STATE_DECODE;
@@ -1271,11 +1271,11 @@ void getIABufferReaderOutput (
 				+ ((unsigned short)(currentRegisters.iterAccess >> ACTIVATION_WIDE_SIZE_OFFSET))];	
 
 		//TODO: Change this
-		unsigned char isLastTemp =  (
-			((currentRegisters.iterAccess + 1) == currentRegisters.numTBPerStrip) 
-			&& (currentRegisters.stripUpdateMode == IA_BUFFER_READ_STRIP_UPDATE_DONE) 
-			&& (currentRegisters.flagIsLastRow == TRUE))
-			? TRUE : FALSE;
+		// unsigned char isLastTemp =  (
+		// 	((currentRegisters.iterAccess + 1) == currentRegisters.numTBPerStrip) 
+		// 	&& (currentRegisters.stripUpdateMode == IA_BUFFER_READ_STRIP_UPDATE_DONE) 
+		// 	&& (currentRegisters.flagIsLastRow == TRUE))
+		// 	? TRUE : FALSE;
 
 		unsigned char idxTBInDramBlock = (currentRegisters.iterAccess) & ACTIVATION_WIDE_SIZE_REMAINDER_MASK;
 		#pragma unroll PE_ACTIVATION_BLOCK_SIZE_IN_WORD
@@ -1321,13 +1321,11 @@ void updateIABufferReader (
 				pCurrentRegisters->iaBlockInfo.colStride = control.iaDramBlockColStride;
 				pCurrentRegisters->iaBlockInfo.colContribution = 0;
 
-				pCurrentRegisters->tileInfo.iCol = 1;
+				pCurrentRegisters->tileInfo.iCol = 0;
 				pCurrentRegisters->tileInfo.numStripsCol = control.numStripsCol;
 
 				pCurrentRegisters->accessBank = control.controlBits & 0x01;
 				pCurrentRegisters->iterAccess = 0;
-				//Number of IA dram block cache per-strip
-				pCurrentRegisters->numTBPerStrip = 0;
 
 				pCurrentRegisters->maxPeRowGroupID = control.maxPeRowGroupID;
 				pCurrentRegisters->flagIsLastRow = control.flagIsLastRow & 0x01;
@@ -1359,44 +1357,39 @@ void updateIABufferReader (
 					 * increment the tile pointer and TB count pointers in advance,
 					 * obtain the strip update mode
 					 */
-					pCurrentRegisters->stripUpdateMode = IA_BUFFER_READ_STRIP_UPDATE_HORIZONTAL;
-					if ((unsigned char ) 1 == pCurrentRegisters->tileInfo.numStripsCol)
-					{
-						pCurrentRegisters->stripUpdateMode = IA_BUFFER_READ_STRIP_UPDATE_DONE;
-					}
+					// pCurrentRegisters->stripUpdateMode = IA_BUFFER_READ_STRIP_UPDATE_HORIZONTAL;
+					// if ((unsigned char ) 1 == pCurrentRegisters->tileInfo.numStripsCol)
+					// {
+					// 	pCurrentRegisters->stripUpdateMode = IA_BUFFER_READ_STRIP_UPDATE_DONE;
+					// }
 				}
 					
 			} // if validControl == TRUE
 		}
 		break; //IA_BUFFER_READ_STATE_DECODE
 
-		case IA_BUFFER_READ_STATE_UPDATE_STRIP: {
+		// case IA_BUFFER_READ_STATE_UPDATE_STRIP: {
 			
-			*pCurrentState = IA_BUFFER_READ_STATE_ACCESS;
+		// 	*pCurrentState = IA_BUFFER_READ_STATE_ACCESS;
 
-			/**
-			 * Access the number of IA cache number of access in the upcoming strip
-			 */
-			pCurrentRegisters->numTBPerStrip = numTBPerStrip [(pCurrentRegisters->accessBank) & 0x01]; 
+		// 	/*
+		// 	 * Reset strip counters
+		// 	*/
+		// 	pCurrentRegisters->iterAccess = 0;
 
-			/*
-			 * Reset strip counters
-			*/
-			pCurrentRegisters->iterAccess = 0;
+		// 	/**
+		// 	 * increment the tile pointer and TB count pointers in advance,
+		// 	 * obtain the strip update mode
+		// 	 */
+		// 	pCurrentRegisters->tileInfo.iCol += 0x1;
+		// 	pCurrentRegisters->stripUpdateMode = IA_BUFFER_READ_STRIP_UPDATE_HORIZONTAL;
 
-			/**
-			 * increment the tile pointer and TB count pointers in advance,
-			 * obtain the strip update mode
-			 */
-			pCurrentRegisters->tileInfo.iCol += 0x1;
-			pCurrentRegisters->stripUpdateMode = IA_BUFFER_READ_STRIP_UPDATE_HORIZONTAL;
-
-			if (pCurrentRegisters->tileInfo.iCol == pCurrentRegisters->tileInfo.numStripsCol)
-			{
-				pCurrentRegisters->stripUpdateMode = IA_BUFFER_READ_STRIP_UPDATE_DONE;
-			}
-		}
-		break;
+		// 	if (pCurrentRegisters->tileInfo.iCol == pCurrentRegisters->tileInfo.numStripsCol)
+		// 	{
+		// 		pCurrentRegisters->stripUpdateMode = IA_BUFFER_READ_STRIP_UPDATE_DONE;
+		// 	}
+		// }
+		// break;
 
 		case IA_BUFFER_READ_STATE_ACCESS: {
 			/**
@@ -1412,18 +1405,27 @@ void updateIABufferReader (
 				 */
 				if (pCurrentRegisters->iterAccess == pCurrentRegisters->numTBPerStrip)
 				{
-					if (pCurrentRegisters->stripUpdateMode == IA_BUFFER_READ_STRIP_UPDATE_HORIZONTAL)
-					{
-						pCurrentRegisters->iaBlockInfo.colContribution +=
+					pCurrentRegisters->iterAccess = 0;
+					pCurrentRegisters->iaBlockInfo.colContribution +=
 							pCurrentRegisters->iaBlockInfo.colStride;
-
-						*pCurrentState = IA_BUFFER_READ_STATE_UPDATE_STRIP;
-					}
-					else if (pCurrentRegisters->stripUpdateMode == IA_BUFFER_READ_STRIP_UPDATE_DONE)
+					pCurrentRegisters->tileInfo.iCol += 0x1;
+					if (pCurrentRegisters->tileInfo.iCol == pCurrentRegisters->tileInfo.numStripsCol)
 					{
 						*pCurrentState = IA_BUFFER_READ_STATE_DECODE;
 						EMULATOR_PRINT(("[kernelIABuffer READER %d] FINISHED processing instruction.\n\n", colID));
 					}
+					// if (pCurrentRegisters->stripUpdateMode == IA_BUFFER_READ_STRIP_UPDATE_HORIZONTAL)
+					// {
+					// 	pCurrentRegisters->iaBlockInfo.colContribution +=
+					// 		pCurrentRegisters->iaBlockInfo.colStride;
+
+					// 	*pCurrentState = IA_BUFFER_READ_STATE_UPDATE_STRIP;
+					// }
+					// else if (pCurrentRegisters->stripUpdateMode == IA_BUFFER_READ_STRIP_UPDATE_DONE)
+					// {
+					// 	*pCurrentState = IA_BUFFER_READ_STATE_DECODE;
+					// 	EMULATOR_PRINT(("[kernelIABuffer READER %d] FINISHED processing instruction.\n\n", colID));
+					// }
 				}
 			}
 			
@@ -1650,12 +1652,16 @@ __kernel void kernelIATileController (
 
 			unsigned char inputTileWidth = drainInstruction.localTileWidth;
 		    unsigned char inputTileHeight = drainInstruction.localTileHeight;
-		    unsigned char stride = drainInstruction.kernelStride;
-		    unsigned char kernelSize = drainInstruction.kernelSize;
+		    unsigned char strideY = drainInstruction.kernelStrideY;
+		    unsigned char strideX = drainInstruction.kernelStrideX;
+		    unsigned char kernelSizeHeight = drainInstruction.kernelSizeHeight;
+		    unsigned char kernelSizeWidth = drainInstruction.kernelSizeWidth;
 	        unsigned int numOutputInstructions = drainInstruction.numOutputInstructions;
 		    unsigned char numActivePeCols = drainInstruction.flagPadBitmaskCatNumActiveCols & 0x7F;
 		    unsigned short numOutputChannelsInGroup = drainInstruction.numOutputChannelsInGroup;
 			unsigned short iaCacheColStride = drainInstruction.cacheIAStripColStride;
+			unsigned short iaCacheColStrideMultiplier = drainInstruction.cacheIAStripColStrideMultiplier;
+			unsigned char numStripsToPEPerInstruction = drainInstruction.numStripsToPEPerInstruction;
 
 
 	        for (unsigned int i=0; i<numOutputInstructions; i++)
@@ -1674,7 +1680,7 @@ __kernel void kernelIATileController (
 				 */
 				tileBufferControlPacket.maxPeRowGroupID = (numActivePeRows - 1) >> DIVIDE_BY_PE_ROWS_PER_GROUP_SHIFT;
 				
-				tileBufferControlPacket.iaDramBlockColStride = iaCacheColStride;
+				tileBufferControlPacket.iaDramBlockColStride = iaCacheColStride * iaCacheColStrideMultiplier;
 
 				unsigned char sendInstructionType = 0x2; //Stream from the buffer
 				tileBufferControlPacket.controlBits =
@@ -1682,8 +1688,8 @@ __kernel void kernelIATileController (
 					| (((unsigned char) (~writeSideIndex)) & 0x01)
 					| ((numActivePeCols-1) << 0x3);
 				
-				tileBufferControlPacket.numStripsCol = kernelSize;
-				tileBufferControlPacket.flagIsLastRow = ((iRowInTile + 1) == kernelSize) ? TRUE : FALSE;
+				tileBufferControlPacket.numStripsCol = numStripsToPEPerInstruction;
+				tileBufferControlPacket.flagIsLastRow = ((iRowInTile + 1) == kernelSizeHeight) ? TRUE : FALSE;
 
 				//bool success = write_channel_nb_intel(channel_control_to_ia_buffer[0], tileBufferControlPacket);
 				write_channel_intel(channel_control_to_ia_buffer[0], tileBufferControlPacket);	
@@ -1691,39 +1697,33 @@ __kernel void kernelIATileController (
 					Parameters update
 				*/
 				//if (success)
-				//{
-				#if defined(SPARSE_SYSTEM)
-					EMULATOR_PRINT(("[kernelIATileController] Sent a buffer stream command. "
-					"iInstructionCycle=%d, numActivePeRows=%d, iInputTileHeight=%d, iInputTileWidth=%d. flagPadBitmask=%#03x\n\n", 
-					iInstructionCycle, numActivePeRows, iInputTileHeight, iInputTileWidth, ((unsigned char) flagPadBitmask)));
-				#else
-					EMULATOR_PRINT(("[kernelIATileController] Sent a buffer stream command. "
-					"iInstructionCycle=%d, numActivePeRows=%d, iInputTileHeight=%d, iInputTileWidth=%d.\n\n", 
-					iInstructionCycle, numActivePeRows, iInputTileHeight, iInputTileWidth));
-				#endif
+				//{e
+				EMULATOR_PRINT(("[kernelIATileController] Sent a buffer stream command. "
+				"iInstructionCycle=%d, numActivePeRows=%d, iInputTileHeight=%d, iInputTileWidth=%d.\n\n", 
+				iInstructionCycle, numActivePeRows, iInputTileHeight, iInputTileWidth));
 					
 				iRowInTile++;
-				if (iRowInTile == kernelSize)
+				if (iRowInTile == kernelSizeHeight)
 				{
 					iRowInTile = 0;
 
-					if ((iInputTileWidth + kernelSize) >= inputTileWidth)
+					if ((iInputTileWidth + kernelSizeWidth) >= inputTileWidth)
 					{
 						iInputTileWidth = 0;
 
-						if ((iInputTileHeight + kernelSize) >= inputTileHeight)
+						if ((iInputTileHeight + kernelSizeHeight) >= inputTileHeight)
 						{
 							iInputTileHeight = 0;
 							iFilterInGroup += numActivePeRows;
 						}
 						else
 						{
-							iInputTileHeight += stride;
+							iInputTileHeight += strideY;
 						}
 					}
 					else
 					{
-						iInputTileWidth += stride;
+						iInputTileWidth += strideX;
 					}
 				}
 			} // for
@@ -2957,6 +2957,13 @@ void updateOABufferWriter (
 					);
 
 					oaBlock.values[i] = shortOutput;
+
+					EMULATOR_PRINT(("[kernelOABuffer %d] Read and processed values from PEs. "
+					 "Value: %#04x, %d out of %d values of the strip are read.\n\n", 
+					 colID, 
+					 shortOutput, 
+					 (*pRegisters).accessInfo.iLoopPerStip + i, 
+					 (*pRegisters).accessInfo.numOutputsPerStrip));
 				}
 				//cacheOutputActivations[indexOutput] = shortOutput;
 				if (((*pRegisters).accessInfo.accessBank & 0x01) == 0x00) 
@@ -2981,12 +2988,6 @@ void updateOABufferWriter (
 						[idxOABlockInDramBlock]
 						= oaBlock;
 				}
-				EMULATOR_PRINT(("[kernelOABuffer %d] Read and processed values from PEs. "
-				 "Value: %#04x, %d out of %d values of the strip are read.\n\n", 
-				 colID, 
-				 shortOutput, 
-				 (*pRegisters).accessInfo.iLoopPerStip + i, 
-				 (*pRegisters).accessInfo.numOutputsPerStrip));
 
 
 				//Loop variable updates
@@ -3866,10 +3867,11 @@ __kernel void kernelFilterBuffer ()
 	t_weight_dram_block_indices cacheIndices [2][KERNEL_CACHE_DEPTH] __attribute__((bankwidth(WEIGHT_WIDE_SIZE*INDEX_CHAR_ARRAY_SIZE))); 
 	#endif
 	uint1_t regWriteSide = 0x0;
-	unsigned short maxOutputCount[2];
+	unsigned int regOutputxTransferBlocks[2];
 	//unsigned char maxOutputHeightTileSize[2]; //maxTP
 	//unsigned char maxOutputWidthTileSize[2]; //maxTQ 
 	unsigned short maxTransferBlockInFilter[2]; //maxCg
+
 	unsigned char maxPeCols[2];
 	t_bias cacheBias[2];
 	t_flag regIsRealFilter[2];
@@ -3886,7 +3888,7 @@ __kernel void kernelFilterBuffer ()
 	unsigned short iTransferBlockInFilterRead = 0; //iCg
 	//unsigned char iWidthInOutputTileRead; //pq*A
 	//unsigned char iHeightInOutputTileRead; //p
-	unsigned short iOutputRead = 0;
+	unsigned int iOutputXTransferBlocksRead = 0;
 	#if defined(SPW_SYSTEM)
 	unsigned char iNZClusterInPruneRange = 0;
 	#endif
@@ -3919,7 +3921,7 @@ __kernel void kernelFilterBuffer ()
 
 					//maxOutputHeightTileSize[regWriteSide] = control.maxOutputHeightTileSize;
 					//maxOutputWidthTileSize[regWriteSide] = control.maxOutputWidthTileSize;
-					maxOutputCount[regWriteSide] = control.numOutputs;
+					regOutputxTransferBlocks[regWriteSide] = control.numOutputsXNumTransferBlocks;
 					maxPeCols[regWriteSide] = control.maxPeCols;
 					maxTransferBlockInFilter[regWriteSide] = control.numTransferBlocks;
 					cacheBias[regWriteSide] = control.bias;
@@ -4006,10 +4008,12 @@ __kernel void kernelFilterBuffer ()
 				t_flag tempIsLastBlockInPruneRange = FALSE; 
 			#endif
 
-			if (iTransferBlockInFilterRead > 0)
-			{
-				unsigned short dramIndex = (iTransferBlockInFilterRead - 1) >> WEIGHT_WIDE_SIZE_OFFSET;
-				unsigned short indexInDramBlock = (iTransferBlockInFilterRead - 1) & WEIGHT_WIDE_SIZE_REMAINDER_MASK;
+			// if (iTransferBlockInFilterRead > 0)
+			// {
+				// unsigned short dramIndex = (iTransferBlockInFilterRead - 1) >> WEIGHT_WIDE_SIZE_OFFSET;
+				// unsigned short indexInDramBlock = (iTransferBlockInFilterRead - 1) & WEIGHT_WIDE_SIZE_REMAINDER_MASK;
+				unsigned short dramIndex = iTransferBlockInFilterRead >> WEIGHT_WIDE_SIZE_OFFSET;
+				unsigned short indexInDramBlock = iTransferBlockInFilterRead & WEIGHT_WIDE_SIZE_REMAINDER_MASK;
 
 				t_weight_dram_block_values valueBlock = cacheNzBlocks[(~regWriteSide) & 0x1][dramIndex];
 				//Bridge the weight values
@@ -4057,23 +4061,24 @@ __kernel void kernelFilterBuffer ()
 				//The comparsion is greater or equal to 
 				//since iTransferBlockInFilterRead is also incremented to transmitting the bias
 				tempIsLastBlockInFilter = 
-					((iTransferBlockInFilterRead) >= maxTransferBlockInFilter[(~regWriteSide) & 0x1]) ?
+					((iTransferBlockInFilterRead + (unsigned short) 1) >= maxTransferBlockInFilter[(~regWriteSide) & 0x1]) ?
 					TRUE : FALSE;
 				#if defined(SPW_SYSTEM)
 					tempIsLastBlockInPruneRange = 
-						((iNZClusterInPruneRange+1) == regNumNZClustersInPruneRange[(~regWriteSide) & 0x1]) ?
+						((iNZClusterInPruneRange + (unsigned short) 1) == regNumNZClustersInPruneRange[(~regWriteSide) & 0x1]) ?
 						TRUE : FALSE;
 				#endif
-			}
-			else //Bias
-			{
-				t_bias bias = (regIsRealFilter[(~regWriteSide) & 0x1] == TRUE) ?
+			// }
+			// else //Bias
+			// {
+			// 	t_bias bias = (regIsRealFilter[(~regWriteSide) & 0x1] == TRUE) ?
+			// 		cacheBias[(~regWriteSide) & 0x1] : 0x0;
+			// 	peWeightBlock.values[0] = bias & 0x0FF;
+			// 	peWeightBlock.values[1] = (bias >> 0x08) & 0x0FF;
+			// 	//weightBlockTagged.isLast = false;
+			// }
+			peWeightBlock.bias = (regIsRealFilter[(~regWriteSide) & 0x1] == TRUE) ?
 					cacheBias[(~regWriteSide) & 0x1] : 0x0;
-				peWeightBlock.values[0] = bias & 0x0FF;
-				peWeightBlock.values[1] = (bias >> 0x08) & 0x0FF;
-				//weightBlockTagged.isLast = false;
-			}
-			
 			//Set the control signals for the block
 			peWeightBlock.isLastInFilter = tempIsLastBlockInFilter;
 			peWeightBlock.maxTransportID = maxPeCols[(~regWriteSide) & 0x1];
@@ -4090,14 +4095,14 @@ __kernel void kernelFilterBuffer ()
 				#if !defined(SPW_SYSTEM)
 					EMULATOR_PRINT((
 						"[kernelFilterBuffer %d]"
-						"Sent transfer block %d / %d the %d / %d time.\n"
+						"Sent transfer block %d / %d. Total transfer: %d / %d.\n"
 						"TB[0-3]: %#04x %#04x %#04x %#04x. \n"
 						"isLastInFilter: %#03x, maxTransportID: %#04x.\n",
 						rowID, 
 						iTransferBlockInFilterRead, 
 						maxTransferBlockInFilter[(~regWriteSide) & 0x1], 
-						iOutputRead, 
-						maxOutputCount[(~regWriteSide) & 0x1],
+						iOutputXTransferBlocksRead, 
+						regOutputxTransferBlocks[(~regWriteSide) & 0x1],
 						peWeightBlock.values[0],
 	                    peWeightBlock.values[1],
 	                    peWeightBlock.values[2],
@@ -4108,14 +4113,14 @@ __kernel void kernelFilterBuffer ()
 				#else
 					EMULATOR_PRINT((
 						"[kernelFilterBuffer %d]"
-						"Sent transfer block %d / %d the %d / %d time.\n"
+						"Sent transfer block %d / %d. Total transfer: %d / %d.\n"
 						"TB[0-3]: %#04x %#04x %#04x %#04x. \n"
 						"isLastInFilter: %#03x, isLastInPruneRange: %#03x, maxTransportID: %#04x.\n",
 						rowID, 
 						iTransferBlockInFilterRead, 
 						maxTransferBlockInFilter[(~regWriteSide) & 0x1], 
-						iOutputRead, 
-						maxOutputCount[(~regWriteSide) & 0x1],
+						iOutputXTransferBlocksRead, 
+						regOutputxTransferBlocks[(~regWriteSide) & 0x1],
 						peWeightBlock.values[0],
 	                    peWeightBlock.values[1],
 	                    peWeightBlock.values[2],
@@ -4130,32 +4135,32 @@ __kernel void kernelFilterBuffer ()
 				#if defined(SPW_SYSTEM)
 					//Only update iNZClusterInPruneRange when sending weights, 
 					//NOT when sending biases
-					if (iTransferBlockInFilterRead > 0)
-					{
+					// if (iTransferBlockInFilterRead > 0)
+					// {
 						iNZClusterInPruneRange++;
 						if (iNZClusterInPruneRange == regNumNZClustersInPruneRange[(~regWriteSide) & 0x1])
 						{
 							iNZClusterInPruneRange = 0x0;
 						}
-					}
+					// }
 				#endif
-				//Omit plus 1 to send the bias
-				if ((iTransferBlockInFilterRead) >= maxTransferBlockInFilter[(~regWriteSide) & 0x1])
+				// //Omit plus 1 to send the bias
+				// if ((iTransferBlockInFilterRead + 1) >= maxTransferBlockInFilter[(~regWriteSide) & 0x1])
+				if (tempIsLastBlockInFilter == TRUE)
 				{
-					nextStateReadCache = STATE_FILTER_STREAMER_READ_CACHE_READ;
-					iOutputRead++;
 					iTransferBlockInFilterRead = 0;
-					if (iOutputRead == maxOutputCount[(~regWriteSide) & 0x1])
-					{
-						nextStateReadCache = STATE_FILTER_STREAMER_READ_CACHE_WAIT;
-						iOutputRead = 0;
-						EMULATOR_PRINT(("[kernelFilterBuffer %d] FINISHED stream all the weights in the buffer for the tile.\n\n", rowID));
-					}
-
 				}
 				else
 				{
 					iTransferBlockInFilterRead++;
+				}
+
+				iOutputXTransferBlocksRead++;
+				if (iOutputXTransferBlocksRead == regOutputxTransferBlocks[(~regWriteSide) & 0x1]) {
+					nextStateReadCache = STATE_FILTER_STREAMER_READ_CACHE_WAIT;
+					iOutputXTransferBlocksRead = 0;
+					EMULATOR_PRINT(("[kernelFilterBuffer %d] FINISHED stream all the weights in the buffer for the tile.\n\n", rowID));
+					
 				}
 
 			}

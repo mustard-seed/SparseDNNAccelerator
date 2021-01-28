@@ -716,14 +716,23 @@ void instruction_generator(//Type of the operation
                         t_ia_tile_controller_instruction instructionIAControl;
                         instructionIAControl.localTileWidth = (t_uchar) maxTNPerCol;
                         instructionIAControl.localTileHeight = (t_uchar) maxTM;
-                        instructionIAControl.kernelStride = (t_uchar) kernelStride;
-                        instructionIAControl.kernelSize = (t_uchar) kernelSize;
-                        instructionIAControl.numOutputInstructions = (t_uint)
-                                ((t_uint) maxTP * (t_uint) maxTQPerCol * numComputeFoldPerGroup * (t_uint) kernelSize);
+                        instructionIAControl.kernelStrideY = (t_uchar) kernelStride;
+                        instructionIAControl.kernelStrideX = (kernelSize == 1) ?
+                                    (t_uchar) maxTNPerCol :  (t_uchar) kernelStride;
+                        instructionIAControl.kernelSizeHeight = (t_uchar) kernelSize;
+                        instructionIAControl.kernelSizeWidth = (kernelSize == 1) ?
+                                    (t_uchar) maxTNPerCol : (t_uchar) kernelSize;
+                        instructionIAControl.numOutputInstructions = (kernelSize == 1) ?
+                                ((t_uint) maxTP * numComputeFoldPerGroup * (t_uint) kernelSize)
+                                : ((t_uint) maxTP * (t_uint) maxTQPerCol * numComputeFoldPerGroup * (t_uint) kernelSize);
                         //Number of TBs in a strip seen by the IA buffer
                         //(not the same as an IA strip seen by the IA mover when performing multi-grouped convolution
                         unsigned short cacheIAStripColStrideTBCount = DIVIDE_CEIL(numIAMoverInputChannelsPerGroup0, PE_ACTIVATION_BLOCK_SIZE_IN_WORD);
                         instructionIAControl.cacheIAStripColStride = DIVIDE_CEIL(cacheIAStripColStrideTBCount, ACTIVATION_WIDE_SIZE);
+                        instructionIAControl.cacheIAStripColStrideMultiplier = (kernelSize == 1) ?
+                                    kernelStride : 1;
+                        instructionIAControl.numStripsToPEPerInstruction = (kernelSize == 1) ?
+                                    maxTQPerCol : kernelSize;
                         instructionIAControl.numOutputChannelsInGroup = (t_ushort) numOAChannelsPerGroup;
                         //unsigned char inputNeedsBitmaskPadding = (flagSparseInput == 0x00) ? 0x80 : 0x00;
 //                            instructionIAControl.flagPadBitmaskCatNumActiveCols = (t_uchar)

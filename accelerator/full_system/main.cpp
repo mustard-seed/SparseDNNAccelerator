@@ -30,16 +30,16 @@
 #define SEED 27
 
 //#define PLAY
-#define PERF_TEST
+//#define PERF_TEST
 //#define THROUGHPUT_DIAGNOSTIC
-//#define VALIDATE
+#define VALIDATE
 //#define TEST1_20201126
 //#define TEST2_20201126
 //#define ELTADD7_202021129
 //Some how if repeat is 100, bad things will happen on concat
-#define REPEAT 50
+#define REPEAT 1
 #ifndef C5SOC
-//#define EMULATE
+#define EMULATE
 #endif
 //#define PERF_TEST
 //#NOOP
@@ -138,21 +138,23 @@ protected:
 }; //testFixture
 
 #ifdef PLAY
-TEST_F (testFixture, perf_test_elt_add_128x56x56)
+TEST_F (testFixture, conv_dense_3x3_weight)
 {
-    unsigned char inputWidth = 56;
-    unsigned char inputHeight = 56;
-    unsigned char numInputChannel = 128;
+    unsigned char inputWidth = 4;
+    unsigned char inputHeight = 4;
+    unsigned char numInputChannel = 13;
     unsigned char numOutputChannel = numInputChannel;
     unsigned char numInputGroup = 1;
     unsigned char inputHeightSPUnitSize = 1;
     unsigned char inputWidthSPUnitSize = 1;
-    unsigned char sizeOutputTileWidthPerColFull = 7;
-    unsigned char sizeOutputTileHeight = 32;
+    unsigned char sizeOutputTileWidthPerColFull = 2;
+    unsigned char sizeOutputTileHeight = 4;
     unsigned char kernelSize = 3;
     bool flagEnableRelu = false;
-    OPERATION op = ELT_ADD;
+    float denseProb = 1.0;
+    OPERATION op = CONVOLUTION;
     float bias = 0.0f;
+
     launch(
                 inputWidth,
                 inputHeight,
@@ -167,11 +169,161 @@ TEST_F (testFixture, perf_test_elt_add_128x56x56)
                 flagEnableRelu,
                 op,
                 bias,
-                1.0f, //dense prob
-                false, //back to back
-                true //perf test
+                denseProb
           );
 }
+
+TEST_F (testFixture, conv_dense_1x1_weight)
+{
+    unsigned char inputWidth = 4;
+    unsigned char inputHeight = 4;
+    unsigned char numInputChannel = 13;
+    unsigned char numOutputChannel = numInputChannel;
+    unsigned char numInputGroup = 1;
+    unsigned char inputHeightSPUnitSize = 1;
+    unsigned char inputWidthSPUnitSize = 1;
+    unsigned char sizeOutputTileWidthPerColFull = 2;
+    unsigned char sizeOutputTileHeight = 4;
+    unsigned char kernelSize = 1;
+    bool flagEnableRelu = false;
+    float denseProb = 1.0;
+    OPERATION op = CONVOLUTION;
+    float bias = 0.0f;
+
+    launch(
+                inputWidth,
+                inputHeight,
+                numInputChannel,
+                numOutputChannel,
+                numInputGroup,
+                inputHeightSPUnitSize,
+                inputWidthSPUnitSize,
+                sizeOutputTileWidthPerColFull,
+                sizeOutputTileHeight,
+                kernelSize,
+                flagEnableRelu,
+                op,
+                bias,
+                denseProb
+          );
+}
+//TEST_F (testFixture, throughput_diagnostic_2x2maxpool_input_channel_size)
+//{
+//    unsigned short inputWidth = 128;
+//    unsigned short inputHeight = 128;
+//    unsigned char numInputGroup = 1;
+//    unsigned char inputHeightSPUnitSize = 1;
+//    unsigned char inputWidthSPUnitSize = 1;
+//    unsigned short sizeOutputTileWidthPerColFull = 16;
+//    unsigned short sizeOutputTileHeight = 8;
+//    unsigned int UNIT_SIZE = 8;
+//    std::vector<unsigned int> vecInputChannel = {
+//        UNIT_SIZE,
+//        4* UNIT_SIZE,
+//        8* UNIT_SIZE,
+//        16* UNIT_SIZE,
+//        24* UNIT_SIZE,
+//        32* UNIT_SIZE,
+//        40* UNIT_SIZE,
+//        48* UNIT_SIZE,
+//        56* UNIT_SIZE,
+//        72* UNIT_SIZE,
+//        80* UNIT_SIZE,
+//        88* UNIT_SIZE,
+//        96* UNIT_SIZE,
+//        104* UNIT_SIZE,
+//        112* UNIT_SIZE
+//        };
+////    std::vector<unsigned int> vecInputChannel = {
+////        8*UNIT_SIZE
+////        };
+
+//    unsigned char kernelSize = 2;
+//    bool flagEnableRelu = false;
+//    OPERATION op = MAX_POOL;
+//    float bias = 0.0f;
+//    float prob = 1.0;
+//    for (auto& channel: vecInputChannel)
+//    {
+//        launch(
+//                    inputWidth,
+//                    inputHeight,
+//                    channel,
+//                    channel,
+//                    numInputGroup,
+//                    inputHeightSPUnitSize,
+//                    inputWidthSPUnitSize,
+//                    sizeOutputTileWidthPerColFull,
+//                    sizeOutputTileHeight,
+//                    kernelSize,
+//                    flagEnableRelu,
+//                    op,
+//                    bias,
+//                    prob, //dense prob
+//                    false, //back to back
+//                    true //perf test
+//              );
+//     }
+//}
+//TEST_F (testFixture, throughput_diagnostic_conv1x1_deep_output_input_channel_size)
+//{
+//    unsigned short inputWidth = 16*PE_COLS;
+//    unsigned short inputHeight = 16;
+//    unsigned short numOutputChannel = 24*PE_ROWS;
+//    unsigned char numInputGroup = 1;
+//    unsigned char inputHeightSPUnitSize = 1;
+//    unsigned char inputWidthSPUnitSize = 1;
+//    unsigned short sizeOutputTileWidthPerColFull = 4;
+//    unsigned short sizeOutputTileHeight = 8;
+//    unsigned int UNIT_SIZE = 8;
+//    std::vector<unsigned int> vecInputChannel = {
+//        UNIT_SIZE,
+//        4* UNIT_SIZE,
+//        8* UNIT_SIZE,
+//        16* UNIT_SIZE,
+//        24* UNIT_SIZE,
+//        32* UNIT_SIZE,
+//        40* UNIT_SIZE,
+//        48* UNIT_SIZE,
+//        56* UNIT_SIZE,
+//        72* UNIT_SIZE,
+//        80* UNIT_SIZE,
+//        88* UNIT_SIZE,
+//        96* UNIT_SIZE,
+//        104* UNIT_SIZE,
+//        112* UNIT_SIZE
+//        };
+////    std::vector<unsigned int> vecInputChannel = {
+////        8*UNIT_SIZE
+////        };
+
+//    unsigned char kernelSize = 1;
+//    bool flagEnableRelu = false;
+//    OPERATION op = CONVOLUTION;
+//    float bias = 0.0f;
+//    float prob = 1.0;
+//    for (auto& inputChannel: vecInputChannel)
+//    {
+//        launch(
+//                    inputWidth,
+//                    inputHeight,
+//                    inputChannel,
+//                    numOutputChannel,
+//                    numInputGroup,
+//                    inputHeightSPUnitSize,
+//                    inputWidthSPUnitSize,
+//                    sizeOutputTileWidthPerColFull,
+//                    sizeOutputTileHeight,
+//                    kernelSize,
+//                    flagEnableRelu,
+//                    op,
+//                    bias,
+//                    prob, //dense prob
+//                    false, //back to back
+//                    true //perf test
+//              );
+//     }
+//}
 //TEST_F (testFixture, perf_test_conv_sparse_128x128x3x3x32x16COL)
 //{
 //    unsigned char inputWidth = 8*2*PE_COLS;
@@ -1359,7 +1511,7 @@ TEST_F (testFixture, perf_test_concat_64x32x32)
 }
 #endif //PERF_TEST
 #if defined(VALIDATE)
-TEST_F (testFixture, conv_dense_weight)
+TEST_F (testFixture, conv_dense_3x3_weight)
 {
     unsigned char inputWidth = 4;
     unsigned char inputHeight = 4;
@@ -1371,6 +1523,41 @@ TEST_F (testFixture, conv_dense_weight)
     unsigned char sizeOutputTileWidthPerColFull = 2;
     unsigned char sizeOutputTileHeight = 4;
     unsigned char kernelSize = 3;
+    bool flagEnableRelu = false;
+    float denseProb = 1.0;
+    OPERATION op = CONVOLUTION;
+    float bias = 0.0f;
+
+    launch(
+                inputWidth,
+                inputHeight,
+                numInputChannel,
+                numOutputChannel,
+                numInputGroup,
+                inputHeightSPUnitSize,
+                inputWidthSPUnitSize,
+                sizeOutputTileWidthPerColFull,
+                sizeOutputTileHeight,
+                kernelSize,
+                flagEnableRelu,
+                op,
+                bias,
+                denseProb
+          );
+}
+
+TEST_F (testFixture, conv_dense_1x1_weight)
+{
+    unsigned char inputWidth = 4;
+    unsigned char inputHeight = 4;
+    unsigned char numInputChannel = 13;
+    unsigned char numOutputChannel = numInputChannel;
+    unsigned char numInputGroup = 1;
+    unsigned char inputHeightSPUnitSize = 1;
+    unsigned char inputWidthSPUnitSize = 1;
+    unsigned char sizeOutputTileWidthPerColFull = 2;
+    unsigned char sizeOutputTileHeight = 4;
+    unsigned char kernelSize = 1;
     bool flagEnableRelu = false;
     float denseProb = 1.0;
     OPERATION op = CONVOLUTION;

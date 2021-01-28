@@ -74,7 +74,8 @@ __kernel void kernelWeightTransport (
 			t_pe_w_block block;
 			block = read_channel_intel(channel_weight[idy][idx]);
 
-			EMULATOR_PRINT(("[WEIGHT TRANSPORT (%d, %d)] Read weight/bias transfer block. Tag is %#04x\n", idy, idx, block.isLastConcatMaxTransportID));
+			EMULATOR_PRINT(("[WEIGHT TRANSPORT (%d, %d)] Read weight/bias transfer block. IsLast: %#04x, maxTransportID: %#04x\n", 
+				idy, idx, (unsigned int) block.isLastInFilter, (unsigned int) block.maxTransportID));
 
 			uint5_t maxTransportID = block.maxTransportID;
 			#if defined(FULL_SYSTEM)
@@ -120,7 +121,7 @@ __kernel void kernelSpWPE ()
 	 * Control registers
 	 */
 	t_spw_pe_state regState = SPW_PE_INSTRUCTION_READ_BIAS;
-
+	t_flag regLoadActivation = TRUE;
 	#pragma ii 1
 	#pragma speculated_iterations 0
 	while (1)
@@ -128,6 +129,7 @@ __kernel void kernelSpWPE ()
 		t_spw_pe_state sigState = regState;
 		t_flag sigIsLastRowGroup = regIsLastRowGroup;
 		t_char nextActivations[PE_SIMD_SIZE][PRUNE_RANGE_IN_CLUSTER][CLUSTER_SIZE];
+		t_flag nextLoadActivation = regLoadActivation;
 
 		#pragma unroll
 		for (int s=0; s<PE_SIMD_SIZE; s++)
@@ -247,17 +249,8 @@ __kernel void kernelSpWPE ()
 		/**
 		 * Handle the activation read
 		 */
-		t_flag flagLoadActivation = (
-			(regState == SPW_PE_INSTRUCTION_READ_BIAS) || 
-				(
-					(regState == SPW_PE_INSTRUCTION_MAC) 
-					&& (sigIsLastWBlockInPruneRange == TRUE) 
-					&& (sigIsLastWBlockInFilter == FALSE)
-				)
-			) ?
-			TRUE : FALSE;
 		t_pe_a_block sigABlocks;
-		if (flagLoadActivation == TRUE)
+		if (regLoadActivation == TRUE)
 		{
 			sigABlocks = read_channel_intel(channel_activation[idy][idx]);
 
@@ -309,18 +302,18 @@ __kernel void kernelSpWPE ()
 		/**
 		 * Handle pSum update
 		 */
-		if (regState == SPW_PE_INSTRUCTION_READ_BIAS)
-		{
-			#pragma unroll
-			for (int i=0; i<PE_ROWS_PER_GROUP; i++)
-			{
-				t_bias tempBias = 
-					(((t_bias) sigWBlocks[i].values[0]) & 0x0FF)
-					| ((((t_bias) sigWBlocks[i].values[1]) & 0x0FF) << 8);
-				regPSums[i] = ((t_bias) ACCUM_MASK) & ((t_bias) tempBias);
-			}
-		}
-		else
+		// if (regState == SPW_PE_INSTRUCTION_READ_BIAS)
+		// {
+		// 	#pragma unroll
+		// 	for (int i=0; i<PE_ROWS_PER_GROUP; i++)
+		// 	{
+		// 		t_bias tempBias = 
+		// 			(((t_bias) sigWBlocks[i].values[0]) & 0x0FF)
+		// 			| ((((t_bias) sigWBlocks[i].values[1]) & 0x0FF) << 8);
+		// 		regPSums[i] = ((t_bias) ACCUM_MASK) & ((t_bias) tempBias);
+		// 	}
+		// }
+		// else
 		{
 			#pragma unroll
 			for (int row = 0; row < PE_ROWS_PER_GROUP; row++)
@@ -342,12 +335,18 @@ __kernel void kernelSpWPE ()
 					for (int v=0; v < CLUSTER_SIZE; v++)
 					{
 						activations.values[simd * CLUSTER_SIZE + v] = 
-							regActivations[simd][index][v];
+							nextActivations[simd][index][v];
 					} //unroll-for CLUSTER_SIZE
 				} //unroll-for PE_SIMD_SIZE
 
 				t_accumulator tempPSum = madd(activations, weights);
-				regPSums[row] += tempPSum;
+				if (regState == SPW_PE_INSTRUCTION_READ_BIAS) {
+					regPSums[row] = 
+						(((t_accumulator) ACCUM_MASK) & ((t_accumulator) sigWBlocks[row].bias)) + tempPSum;
+				}
+				else {
+					regPSums[row] += tempPSum;
+				}
 			} //unroll-for PE_ROWS_PER_GROUP
 
 
@@ -374,6 +373,14 @@ __kernel void kernelSpWPE ()
 			}
 		} //Handle PSum update
 
+		//Whether the next cycle should load activation
+		if ((sigIsLastWBlockInPruneRange == TRUE) || (sigIsLastWBlockInFilter == TRUE)) {
+			nextLoadActivation = TRUE;
+		}
+		else {
+			nextLoadActivation = FALSE;
+		}
+
 		//State update
 		switch (regState) {
 			case SPW_PE_INSTRUCTION_READ_BIAS: {
@@ -399,8 +406,10 @@ __kernel void kernelSpWPE ()
 			break;
 		}
 
+
 		regState = sigState;
 		regIsLastRowGroup = sigIsLastRowGroup;
+		regLoadActivation = nextLoadActivation;
 		#pragma unroll
 		for (int s=0; s<PE_SIMD_SIZE; s++)
 		{
@@ -460,7 +469,7 @@ __kernel void kernelDensePE ()
 		//Access the activation block
 		
 		t_pe_a_block sigActivationTB;
-		if (regInstruction == DENSE_PE_INSTRUCTION_MAC)
+		// if (regInstruction == DENSE_PE_INSTRUCTION_MAC)
 		{
 			sigActivationTB = read_channel_intel(
 				channel_activation[idy][idx]);
@@ -627,20 +636,20 @@ __kernel void kernelDensePE ()
 		/**
 		 * Handle PSum update
 		 */
-		if (regInstruction == DENSE_PE_INSTRUCTION_READ_BIAS)
-		{
-			#pragma unroll
-			for (int i=0; i<PE_ROWS_PER_GROUP; i++)
-			{
-				t_bias tempBias = 
-					(((t_bias) sigWeightTB[i].values[0]) & 0x0FF)
-					| ((((t_bias) sigWeightTB[i].values[1]) & 0x0FF) << 8);
-				regPSums[i] = ((t_bias) ACCUM_MASK) & ((t_bias) tempBias);
-			}
+		// if (regInstruction == DENSE_PE_INSTRUCTION_READ_BIAS)
+		// {
+		// 	#pragma unroll
+		// 	for (int i=0; i<PE_ROWS_PER_GROUP; i++)
+		// 	{
+		// 		t_bias tempBias = 
+		// 			(((t_bias) sigWeightTB[i].values[0]) & 0x0FF)
+		// 			| ((((t_bias) sigWeightTB[i].values[1]) & 0x0FF) << 8);
+		// 		regPSums[i] = ((t_bias) ACCUM_MASK) & ((t_bias) tempBias);
+		// 	}
 
-			sigNextInstruction = DENSE_PE_INSTRUCTION_MAC;
-		}
-		else //DENSE_PE_INSTRUCTION_MAC
+		// 	sigNextInstruction = DENSE_PE_INSTRUCTION_MAC;
+		// }
+		//else //DENSE_PE_INSTRUCTION_MAC
 		{
 			#pragma unroll
 			for (int row = 0; row < PE_ROWS_PER_GROUP; row++)
@@ -653,15 +662,21 @@ __kernel void kernelDensePE ()
 					activations.values[v] = sigActivationTB.values[v];
 				} //unroll-for PE_SIMD_SIZE * CLUSTER_SIZE
 
-
 				t_accumulator tempPSum = madd(activations, weights);
-				regPSums[row] += tempPSum;
+				if (regInstruction == DENSE_PE_INSTRUCTION_READ_BIAS) {
+					regPSums[row] = 
+						(((t_accumulator) ACCUM_MASK) & ((t_accumulator) sigWeightTB[row].bias)) + tempPSum;
+				}
+				else {
+					regPSums[row] += tempPSum;
+				}
+
+				// t_accumulator tempPSum = madd(activations, weights);
+				// regPSums[row] += tempPSum;
 			} //unroll-for PE_ROWS_PER_GROUP
 
 			if (sigIsLastWBlockInFilter == TRUE)
 			{
-				sigNextInstruction = DENSE_PE_INSTRUCTION_READ_BIAS;
-
 				t_conv_drain_multiple_tagged drainBlock;
 				drainBlock.sourceRowGroupID = idy;
 				drainBlock.flagIsLast = sigIsLastRowGroup;
@@ -678,6 +693,19 @@ __kernel void kernelDensePE ()
 					drainBlock.values[row] = regPSums[row];
 				}
 				write_channel_intel(channel_drain_conv_local[idy][idx], drainBlock);
+			}
+		}
+
+		//State update 
+		switch (regInstruction) {
+			case DENSE_PE_INSTRUCTION_READ_BIAS: {
+				sigNextInstruction = DENSE_PE_INSTRUCTION_MAC;
+			}
+			break;
+			case DENSE_PE_INSTRUCTION_MAC: {
+				if (sigIsLastWBlockInFilter == TRUE) {
+					sigNextInstruction = DENSE_PE_INSTRUCTION_READ_BIAS;
+				}
 			}
 		}
 

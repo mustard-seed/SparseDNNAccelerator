@@ -148,6 +148,7 @@ typedef signed short t_bias;
         #endif
         uint5_t maxTransportID;
         t_flag  isLastInFilter;
+        t_bias  bias;
     } t_pe_w_block;
 
     typedef struct __attribute__((packed)) {
@@ -337,9 +338,11 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
     //Input tile height per compute column
     t_uchar localTileHeight;
     //Filter planar stride
-    t_uchar kernelStride;
-    //Filter planar kernel size
-    t_uchar kernelSize;
+    t_uchar kernelStrideY;
+    t_uchar kernelStrideX;
+    //Filter planar kernel sizes
+    t_uchar kernelSizeHeight;
+    t_uchar kernelSizeWidth;
     //Number of streaming instruction for this tile
     t_uint numOutputInstructions;
     //Column stride of IA strip in IA cache in terms of DRAM BLOCK
@@ -347,6 +350,12 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
     //In other words, when the accelerator processes multiple groups
     //the strip seen by the IA buffer is shorter than the strip seen by the IA mover
     t_ushort cacheIAStripColStride;
+    //Used to convert the col stride seen by the IA Buffer reader from
+    //cacheIAStripColStride to cacheIAStripColStride * cacheIAStripColStrideMultiplier
+    //Useful only for the 1x1 convolution optimization
+    t_ushort cacheIAStripColStrideMultiplier;
+    //Number of strips streamed by the IA Buffer Reader to the PE array per instruction
+    t_uchar numStripsToPEPerInstruction;
     //Number of output channels in the output group
     t_ushort numOutputChannelsInGroup;
     //Bit[6:0] Number of active PE columns
@@ -453,7 +462,7 @@ typedef struct {
 
 //Control packet for the weight buffers
 typedef struct __attribute__((packed)) {
-    unsigned short numOutputs;
+    unsigned int numOutputsXNumTransferBlocks;
     unsigned short numTransferBlocks;
     t_bias bias; //short
     unsigned char maxPeCols; //Number of PE COLS that is activated

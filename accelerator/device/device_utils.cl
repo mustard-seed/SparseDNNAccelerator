@@ -183,22 +183,25 @@ t_filter_streamer_control dramBlock2FilterStreamerControl (t_weight_dram_block b
     #if defined(SPW_SYSTEM)
         control.numNZClustersPerPruneRange = block.indices[0];
     #endif
-    control.numOutputs =
-        ( ( ( (unsigned short) (block.values[0]) ) & 0xFF )
-            | ( (((unsigned short) (block.values[1])) & 0xFF) << 8));
+    control.numOutputsXNumTransferBlocks =
+        ( ( ( (unsigned int) (block.values[0]) ) & 0xFF )
+            | ( (((unsigned int) (block.values[1])) & 0xFF) << 8)
+            | ( (((unsigned int) (block.values[2])) & 0xFF) << 16)
+            | ( (((unsigned int) (block.values[3])) & 0xFF) << 24)
+            );
 
     //control.destinationRow 
     //    = block.transferBlocks[2].values[0].cluster_values[0];
     control.numTransferBlocks
-        = ( ( ( (short) (block.values[2]) ) & 0xFF )
-            | ( (((short) (block.values[3])) & 0xFF) << 8));
+        = ( ( ( (short) (block.values[4]) ) & 0xFF )
+            | ( (((short) (block.values[5])) & 0xFF) << 8));
 
     control.bias
-            = ( ( ( (t_bias) (block.values[4]) ) & 0xFF )
-                | ( (((t_bias) (block.values[5])) & 0xFF) << 8));
+            = ( ( ( (t_bias) (block.values[6]) ) & 0xFF )
+                | ( (((t_bias) (block.values[7])) & 0xFF) << 8));
 
-    control.maxPeCols = (unsigned char) block.values[6];
-    control.flagIsReal = (unsigned char) block.values[7]; 
+    control.maxPeCols = (unsigned char) block.values[8];
+    control.flagIsReal = (unsigned char) block.values[9]; 
 
     //Recover bias
     // #if ((PE_SIMD_SIZE * CLUSTER_SIZE) <= 4)
@@ -226,17 +229,19 @@ t_weight_dram_block filterStreamerControl2dramBlock (t_filter_streamer_control c
     #if defined(SPW_SYSTEM)
         block.indices[0] = control.numNZClustersPerPruneRange;
     #endif
-    block.values[0] = control.numOutputs & 0xFF;
-    block.values[1] = ((control.numOutputs >> 8) & 0xFF);
+    block.values[0] = control.numOutputsXNumTransferBlocks & 0xFF;
+    block.values[1] = ((control.numOutputsXNumTransferBlocks >> 8) & 0xFF);
+    block.values[2] = ((control.numOutputsXNumTransferBlocks >> 16) & 0xFF);
+    block.values[3] = ((control.numOutputsXNumTransferBlocks >> 24) & 0xFF);
 
-    block.values[2] = control.numTransferBlocks & 0xFF;
-    block.values[3] = ((control.numTransferBlocks >> 8) & 0xFF);
+    block.values[4] = control.numTransferBlocks & 0xFF;
+    block.values[5] = ((control.numTransferBlocks >> 8) & 0xFF);
 
-    block.values[4] = control.bias & 0xFF;
-    block.values[5] = ((control.bias >> 8) & 0xFF);
+    block.values[6] = control.bias & 0xFF;
+    block.values[7] = ((control.bias >> 8) & 0xFF);
     //block.transferBlocks[2].values[0].cluster_values[0] = control.destinationRow;
-    block.values[6] = (char) control.maxPeCols;
-    block.values[7] = (char) control.flagIsReal;
+    block.values[8] = (char) control.maxPeCols;
+    block.values[9] = (char) control.flagIsReal;
 
     // #if ( (PE_SIMD_SIZE * CLUSTER_SIZE) <= 4)
     //     block.transferBlocks[1].values[0] = control.bias & 0xFF;
