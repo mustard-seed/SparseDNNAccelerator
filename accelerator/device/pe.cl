@@ -194,7 +194,47 @@ __kernel void kernelSpWPE ()
 					);
 			#endif
 			#if (PE_ROWS_PER_GROUP>8)
-				#error "PE_ROWS_PER_GROUP should be between 1 and 8"
+			sigWBlocks[8] = read_channel_intel(
+						channel_weight_local[idy*PE_ROWS_PER_GROUP+8][idx]
+					);
+			#endif
+			#if (PE_ROWS_PER_GROUP>9)
+			sigWBlocks[9] = read_channel_intel(
+						channel_weight_local[idy*PE_ROWS_PER_GROUP+9][idx]
+					);
+			#endif
+			#if (PE_ROWS_PER_GROUP>10)
+			sigWBlocks[10] = read_channel_intel(
+						channel_weight_local[idy*PE_ROWS_PER_GROUP+10][idx]
+					);
+			#endif
+			#if (PE_ROWS_PER_GROUP>11)
+			sigWBlocks[11] = read_channel_intel(
+						channel_weight_local[idy*PE_ROWS_PER_GROUP+11][idx]
+					);
+			#endif
+			#if (PE_ROWS_PER_GROUP>12)
+			sigWBlocks[12] = read_channel_intel(
+						channel_weight_local[idy*PE_ROWS_PER_GROUP+12][idx]
+					);
+			#endif
+			#if (PE_ROWS_PER_GROUP>13)
+			sigWBlocks[13] = read_channel_intel(
+						channel_weight_local[idy*PE_ROWS_PER_GROUP+13][idx]
+					);
+			#endif
+			#if (PE_ROWS_PER_GROUP>14)
+			sigWBlocks[14] = read_channel_intel(
+						channel_weight_local[idy*PE_ROWS_PER_GROUP+14][idx]
+					);
+			#endif
+			#if (PE_ROWS_PER_GROUP>15)
+			sigWBlocks[15] = read_channel_intel(
+						channel_weight_local[idy*PE_ROWS_PER_GROUP+15][idx]
+					);
+			#endif
+			#if (PE_ROWS_PER_GROUP>16)
+				#error "PE_ROWS_PER_GROUP should be between 1 and 16"
 			#endif
 
 
@@ -583,7 +623,47 @@ __kernel void kernelDensePE ()
 					);
 			#endif
 			#if (PE_ROWS_PER_GROUP>8)
-				#error "PE_ROWS_PER_GROUP should be between 1 and 8"
+			sigWeightTB[8] = read_channel_intel(
+						channel_weight_local[idy*PE_ROWS_PER_GROUP+8][idx]
+					);
+			#endif
+			#if (PE_ROWS_PER_GROUP>9)
+			sigWeightTB[9] = read_channel_intel(
+						channel_weight_local[idy*PE_ROWS_PER_GROUP+9][idx]
+					);
+			#endif
+			#if (PE_ROWS_PER_GROUP>10)
+			sigWeightTB[10] = read_channel_intel(
+						channel_weight_local[idy*PE_ROWS_PER_GROUP+10][idx]
+					);
+			#endif
+			#if (PE_ROWS_PER_GROUP>11)
+			sigWeightTB[11] = read_channel_intel(
+						channel_weight_local[idy*PE_ROWS_PER_GROUP+11][idx]
+					);
+			#endif
+			#if (PE_ROWS_PER_GROUP>12)
+			sigWeightTB[12] = read_channel_intel(
+						channel_weight_local[idy*PE_ROWS_PER_GROUP+12][idx]
+					);
+			#endif
+			#if (PE_ROWS_PER_GROUP>13)
+			sigWeightTB[13] = read_channel_intel(
+						channel_weight_local[idy*PE_ROWS_PER_GROUP+13][idx]
+					);
+			#endif
+			#if (PE_ROWS_PER_GROUP>14)
+			sigWeightTB[14] = read_channel_intel(
+						channel_weight_local[idy*PE_ROWS_PER_GROUP+14][idx]
+					);
+			#endif
+			#if (PE_ROWS_PER_GROUP>15)
+			sigWeightTB[15] = read_channel_intel(
+						channel_weight_local[idy*PE_ROWS_PER_GROUP+15][idx]
+					);
+			#endif
+			#if (PE_ROWS_PER_GROUP>16)
+				#error "PE_ROWS_PER_GROUP should be between 1 and 16"
 			#endif
 
 			sigIsLastWBlockInFilter = sigWeightTB[0].isLastInFilter;

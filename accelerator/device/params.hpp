@@ -34,9 +34,9 @@
 	// #define PE_ROWS_PER_GROUP 4
 	// #define PE_ROW_GROUPS 2
 	// #define MISC_COLS 1
-	#define PE_COLS 1
-	#define PE_ROWS_PER_GROUP 4
-	#define PE_ROW_GROUPS 2
+	#define PE_COLS 2
+	#define PE_ROWS_PER_GROUP 16
+	#define PE_ROW_GROUPS 1
 	#define MISC_COLS 1
 	// #define PE_COLS 7
 	// #define PE_ROWS_PER_GROUP 8
@@ -64,8 +64,11 @@
 #elif (PE_ROWS_PER_GROUP == 8)
 #define DIVIDE_BY_PE_ROWS_PER_GROUP_SHIFT 3
 #define DIVIDE_BY_PE_ROWS_PER_GROUP_REMAINDER_MASK 0x7
+#elif (PE_ROWS_PER_GROUP == 16)
+#define DIVIDE_BY_PE_ROWS_PER_GROUP_SHIFT 4
+#define DIVIDE_BY_PE_ROWS_PER_GROUP_REMAINDER_MASK 0xF
 #else
-#error DIVIDE_BY_PE_ROWS_PER_GROUP_SHIFT should be chosen from {1, 2, 4, 8}
+#error DIVIDE_BY_PE_ROWS_PER_GROUP_SHIFT should be chosen from {1, 2, 4, 8, 16}
 #endif
 
 #if (MISC_COLS > PE_COLS)
@@ -209,9 +212,9 @@
 
 //#define NUM_CLUSTER_IN_DRAM_SIZE BURST_SIZE_BYTE/CLUSTER_SIZE
 
-#define ACTIVATION_WIDE_SIZE 1
-#define ACTIVATION_WIDE_SIZE_OFFSET 0x0 //Numnber of bits to shift the transfer block index to the right in order to recover the wide offset
-#define ACTIVATION_WIDE_SIZE_REMAINDER_MASK 0x0
+#define ACTIVATION_WIDE_SIZE 2
+#define ACTIVATION_WIDE_SIZE_OFFSET 0x1 //Numnber of bits to shift the transfer block index to the right in order to recover the wide offset
+#define ACTIVATION_WIDE_SIZE_REMAINDER_MASK 0x1
 #define ACTIVATION_BURST_SIZE_BYTE (PE_ACTIVATION_BLOCK_SIZE_IN_WORD * ACTIVATION_WIDE_SIZE)
 #define ACTIVATION_BURST_SIZE_BYTE_OFFSET (ACTIVATION_WIDE_SIZE_OFFSET + PE_ACTIVATION_BLOCK_SIZE_IN_WORD_OFFSET)
 #define ACTIVATION_WIDE_SIZE_BYTE_MASK ((1 << ACTIVATION_BURST_SIZE_BYTE_OFFSET) - 1)
