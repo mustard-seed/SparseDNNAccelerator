@@ -189,7 +189,7 @@ namespace GraphRuntime {
             std::vector<cl_double> vecLayerExecutionTime;
             int numRunExecuted;
 
-            double minInferenceDuration, maxInferenceDuration, averageInferenceDuration;
+            double minInferenceDuration, maxInferenceDuration, averageInferenceDuration, minStartOverhead, maxStartOverhead, averageStartOverhead;
 
             bool launchIATileController, launchWMover, launchMKController;
 
@@ -239,7 +239,7 @@ namespace GraphRuntime {
              * \brief inference
              * \details Perform inference using the content of the current inference buffers
              */
-            void inference(bool flagEnableProfile=false);
+            void inference(bool updateCounter=false, bool flagEnableProfile=false);
 
             /*!
              * \brief getInvocationOverhead

@@ -283,7 +283,10 @@ namespace GraphRuntime {
         numRunExecuted = 0;
         minInferenceDuration = std::numeric_limits<double>::max();
         maxInferenceDuration = 0.0;
+        minStartOverhead = std::numeric_limits<double>::max();
+        maxStartOverhead = 0.0;
         averageInferenceDuration = 0.00;
+        averageStartOverhead = 0.00;
         launchIATileController = false;
         launchMKController = false;
         launchWMover = false;
@@ -924,10 +927,12 @@ namespace GraphRuntime {
         return vecOutputBlobsInfo;
     }
 
-    void AcceleratorWrapper::inference(bool flagEnableProfile)
+    void AcceleratorWrapper::inference(bool updateCounter, bool flagEnableProfile)
     {
-        Timer t;
+        Timer t, tOverhead;
+        double totalOverHead = 0.00;
         t.start();
+        tOverhead.start();
         cl_int status = CL_SUCCESS;
         /*
           1. Launch all kernels, except for the IA mover and the OA mover
@@ -953,7 +958,8 @@ namespace GraphRuntime {
 
         status = clCQOATileController.enqueueTask(KernelOATileController, NULL);
         aocl_utils_cpp::checkError(status, "Failed to launch KernelOATileController!");
-
+        tOverhead.stop();
+        totalOverHead += tOverhead.get_time_s();
         /*
          *2. Transfer all input blobs to the FPGA
         */
@@ -1096,6 +1102,7 @@ namespace GraphRuntime {
 
         for (int i=0; i<numLayers; i++)
         {
+            tOverhead.start();
             #if defined(HOST_DEBUG)
                 std::cout<<"Launching layer "<<vecLayerInfo.at(i).layerName<<std::endl;
             #endif
@@ -1124,6 +1131,8 @@ namespace GraphRuntime {
                 aocl_utils_cpp::checkError(status, "Failed to launch kernelIAMover!");
                 #endif
             }
+            tOverhead.stop();
+            totalOverHead += tOverhead.get_time_s();
             #if defined(HOST_DEBUG)
                 clCQOAMover.finish();
             #endif
@@ -1254,6 +1263,7 @@ namespace GraphRuntime {
         t.stop();
 
         //Update runtime of eacy layer
+        if (updateCounter == true)
         {
             int index = 0;
             for (const auto& event : vecOAFinishes)
@@ -1262,14 +1272,18 @@ namespace GraphRuntime {
                 cl_ulong endTime = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
                 vecLayerExecutionTime.at(index++) += (cl_double)((endTime - startTime)*(cl_double)(1e-3));
             }
-        }
-        numRunExecuted++;
+            numRunExecuted++;
 
-        //Updat clocks
-        double timeElapsed = (double) t.get_time_s();
-        averageInferenceDuration = (averageInferenceDuration*(numRunExecuted-1) + timeElapsed) / numRunExecuted;
-        maxInferenceDuration = std::max(timeElapsed, maxInferenceDuration);
-        minInferenceDuration = std::min(timeElapsed, minInferenceDuration);
+            //Updat clocks
+            double timeElapsed = (double) t.get_time_s();
+    //        double overHead = (double) tOverhead.get_time_s();
+            averageInferenceDuration = (averageInferenceDuration*(numRunExecuted-1) + timeElapsed) / numRunExecuted;
+            maxInferenceDuration = std::max(timeElapsed, maxInferenceDuration);
+            minInferenceDuration = std::min(timeElapsed, minInferenceDuration);
+            averageStartOverhead = (averageStartOverhead*(numRunExecuted-1) + totalOverHead) / numRunExecuted;
+            maxStartOverhead = std::max(totalOverHead, maxStartOverhead);
+            minStartOverhead = std::min(totalOverHead, minStartOverhead);
+          }
 
     }
 
@@ -1445,6 +1459,9 @@ namespace GraphRuntime {
         dumpFile <<"Average Inference Latency (us)"<<sep<<std::to_string(averageInferenceDuration * 1000000.0)<<std::endl;
         dumpFile <<"Maximum Inference Latency (us)"<<sep<<std::to_string(maxInferenceDuration * 1000000.0)<<std::endl;
         dumpFile <<"Minimum Inference Latency (us)"<<sep<<std::to_string(minInferenceDuration * 1000000.0)<<std::endl;
+        dumpFile <<"Average Total Overhead latency (us)"<<sep<<std::to_string(averageStartOverhead * 1000000.0)<<std::endl;
+        dumpFile <<"Maximum Total Overhead Latency (us)"<<sep<<std::to_string(maxStartOverhead * 1000000.0)<<std::endl;
+        dumpFile <<"Minimum Total Overhead Latency (us)"<<sep<<std::to_string(minStartOverhead * 1000000.0)<<std::endl;
         dumpFile.close();
     }
 }

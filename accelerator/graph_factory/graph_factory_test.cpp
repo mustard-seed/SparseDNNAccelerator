@@ -15,7 +15,8 @@
 #ifndef C5SOC
  //#define EMULATE
 #endif
-#define INFERENCE_REPEAT 40
+#define INFERENCE_REPEAT 100
+#define WARMUP 100
 #define CHECKOUTPUT
 //#define PROFILE
 
@@ -271,9 +272,10 @@ void testFixture::launch(std::string _traceFileName,
 #else
     bool profile = false;
 #endif
-    for (int i=0; i<INFERENCE_REPEAT; i++)
+    for (int i=0; i<(INFERENCE_REPEAT+WARMUP); i++)
     {
-        accelerator.inference(profile);
+        bool includeInCount = (i<WARMUP) ? false : true;
+        accelerator.inference(includeInCount, profile);
     }
 
     std::cout <<"Step "<<stepCount++<<": Performance counts"<<std::endl;
