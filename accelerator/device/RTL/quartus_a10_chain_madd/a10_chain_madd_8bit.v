@@ -256,7 +256,7 @@ module a10_chain_madd_8bitx8 (
 			.ay(datab_0),
 			.bx(dataa_1),
 			.by(datab_1),
-			.chainin ({64{1'b0}}),
+			// .chainin ({64{1'b0}}), GOTTCHA: leave the port unconnected if it is not being used!
 			.ena({3'b001}),
 			.chainout(chain_d0d1),
 			.clk0    (clock)
