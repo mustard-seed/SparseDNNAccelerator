@@ -60,7 +60,7 @@ module dsp_no_input_pipeline_reg(
                     twentynm_mac_component.by_use_scan_in = "false",
                     twentynm_mac_component.delay_scan_out_ay = "false",
                     twentynm_mac_component.delay_scan_out_by = "false",
-                    twentynm_mac_component.use_chainadder = "true",
+                    twentynm_mac_component.use_chainadder = "false", //GOTTCHA, set it to false, since we are not using chainin
                     twentynm_mac_component.enable_double_accum = "false",
                     twentynm_mac_component.load_const_value = 0,
                     twentynm_mac_component.coef_a_0 = 0,
