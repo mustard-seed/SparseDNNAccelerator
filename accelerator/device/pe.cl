@@ -54,6 +54,37 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 	return output;
 }
 
+t_accumulator chain_maddx8 (t_simd_operand activations, t_simd_operand weights) {
+	t_accumulator output;
+
+	#if defined (ARRIA10)
+	output = MULT_MASK & ((t_accumulator)
+			a10_chain_madd_8bitx8(
+					activations.values[0],
+					weights.values[0],
+					activations.values[1],
+					weights.values[1],
+					activations.values[2],
+					weights.values[2],
+					activations.values[3],
+					weights.values[3],
+					activations.values[4],
+					weights.values[4],
+					activations.values[5],
+					weights.values[5],
+					activations.values[6],
+					weights.values[6],
+					activations.values[7],
+					weights.values[7]
+				)
+		);
+	#else
+	#error Unsupported FPGA type!
+	#endif
+
+	return output;
+}
+
 
 //__attribute__((task))
 __attribute__((max_global_work_dim(0)))
@@ -379,7 +410,7 @@ __kernel void kernelSpWPE ()
 					} //unroll-for CLUSTER_SIZE
 				} //unroll-for PE_SIMD_SIZE
 
-				t_accumulator tempPSum = madd(activations, weights);
+				t_accumulator tempPSum = chain_maddx8(activations, weights);
 				if (regState == SPW_PE_INSTRUCTION_READ_BIAS) {
 					regPSums[row] = 
 						(((t_accumulator) ACCUM_MASK) & ((t_accumulator) sigWBlocks[row].bias)) + tempPSum;
@@ -387,6 +418,15 @@ __kernel void kernelSpWPE ()
 				else {
 					regPSums[row] += tempPSum;
 				}
+				// t_accumulator localAddTerm;
+				// if (regState == SPW_PE_INSTRUCTION_READ_BIAS) {
+				// 	localAddTerm = (t_accumulator) sigWBlocks[row].bias;
+				// }
+				// else {
+				// 	localAddTerm = regPSums[row];
+				// }
+
+				// regPSums[row] = chain_maddx8(activations, weights, localAddTerm);
 			} //unroll-for PE_ROWS_PER_GROUP
 
 
