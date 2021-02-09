@@ -5,7 +5,7 @@ module dsp_no_input_pipeline_reg(
 		input wire [7:0] ay,  //multiplier-a input Y
 		input wire [7:0] bx,  //multiplier-b input X
 		input wire [7:0] by,  //multiplier-b input Y
-		input wire [63:0] chainin, //chain-adder input
+		// input wire [63:0] chainin, //chain-adder input
 		input wire [2:0] ena, //clock anbles, {ena2, ena1, ena0}
 		output wire [63:0] chainout, //chain out
 		output wire [31:0] resulta,
@@ -21,7 +21,7 @@ module dsp_no_input_pipeline_reg(
                                         .ay (ay),
                                         .bx (bx),
                                         .by (by),
-                                        .chainin (chainin),
+                                        .chainin (),
                                         .ena (ena),
                                         .chainout (chainout),
                                         .resulta (resulta),
