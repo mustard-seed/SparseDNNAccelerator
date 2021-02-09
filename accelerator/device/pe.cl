@@ -55,6 +55,10 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 }
 
 t_accumulator chain_maddx8 (t_simd_operand activations, t_simd_operand weights) {
+	#if ((PE_SIMD_SIZE * CLUSTER_SIZE) != 8)
+	#error When using chain_maddx8, PE_SIMD_SIZE * CLUSTER_SIZE must be 8
+	#endif
+	
 	t_accumulator output;
 
 	#if defined (ARRIA10)
@@ -782,7 +786,7 @@ __kernel void kernelDensePE ()
 					activations.values[v] = sigActivationTB.values[v];
 				} //unroll-for PE_SIMD_SIZE * CLUSTER_SIZE
 
-				t_accumulator tempPSum = madd(activations, weights);
+				t_accumulator tempPSum = chain_maddx8(activations, weights);
 				if (regInstruction == DENSE_PE_INSTRUCTION_READ_BIAS) {
 					regPSums[row] = 
 						(((t_accumulator) ACCUM_MASK) & ((t_accumulator) sigWeightTB[row].bias)) + tempPSum;
