@@ -111,11 +111,11 @@ target_link_libraries(${AOCL_LIBRARY_NAME}
     )
 set_target_properties (${AOCL_LIBRARY_NAME} PROPERTIES "CMAKE_CXX_FLAGS" "${CMAKE_CXX_FLAGS}")
 
-target_compile_definitions(
-    ${AOCL_LIBRARY_NAME}
-    PUBLIC
-    ${PREPROCESSOR_DEFS}
-    )
+#target_compile_definitions(
+#    ${AOCL_LIBRARY_NAME}
+#    PUBLIC
+#    ${PREPROCESSOR_DEFS}
+#    )
 
 #################################################################
 # Library for tensor compression, and instruction generation

@@ -20,11 +20,11 @@
 #include "spw_pe_test_types.hpp"
 #include "device_structures.hpp"
 
-//#define EMULATE
+#define EMULATE
 #define MAX_BUFFER_SIZE_BYTES 65536
 #define SEED 27
 #if defined(EMULATE)
-#define AOCX_FILE_NAME "smallBuffer.aocx"
+#define AOCX_FILE_NAME "c5_mac8bitx4_c_model.aocx"
 #else
 #define AOCX_FILE_NAME "spw_pe_test_harness.aocx"
 #endif
@@ -146,7 +146,7 @@ TEST_F(spwTestFixture, test0)
     int numCompressionWindows = 4;
     int numNZClustersInRange = 1;
     t_bias bias = 0x02;
-    int numRepeat = 10;
+    int numRepeat = 1;
 //    int numCompressionWindows = 1;
 //    int numNZClustersInRange = 1;
 //    t_bias bias = 0x02;

@@ -14,6 +14,7 @@ __kernel void kernelActivationFeeder (
 		unsigned int numActivationBlocks
 	)
 {
+	EMULATOR_PRINT(("[Kernel activation feeder. Start \n."));
 	#pragma speculated_iterations 0
 	for (unsigned int iBlock=0; iBlock<numActivationBlocks; iBlock++)
 	{
@@ -61,74 +62,60 @@ __kernel void kernelFilterFeeder (
 {
 	//Total number of loops is ONE PLUs the number of weight blocks
 	//One extra iteration a the beginning to transfer the bias
-	unsigned int numIterations = numWeightBlocks + 1;
+	unsigned int numIterations = numWeightBlocks;
 	unsigned int iBlock = 0;
 	unsigned int iterNZClustersPerPruneRange = 0;
+	t_bias bias = pBias[0];
 	#pragma speculated_iterations 0
 	for (unsigned int iter=0; iter<numIterations; iter++)
 	{
 		t_pe_w_block peBlock;
-		//Transfer the bias
-		if (iter == 0)
-		{
-			t_bias bias = pBias[0];
-
-			//Use the PE weight block to encode the bias
-			peBlock.values[0] = bias & 0x0FF;
-			peBlock.values[1] = (bias >> 0x08) & 0x0FF;
-
-			peBlock.isLastInPruneRange = FALSE;
-			peBlock.maxTransportID = 0x01;
-			peBlock.isLastInFilter = FALSE;
-		}
 		//Transfer weights
+		bool isLastInPruneRange = 
+			(iterNZClustersPerPruneRange+1) == numNZClustersPerPruneRange;
+
+		t_test_weight_host_block block = pWeight[iBlock];
+		//Bridge the weight values
+		#pragma unroll 
+		for (int v=0; v<PE_SIMD_SIZE*CLUSTER_SIZE; v++)
+		{
+			peBlock.values[v] = block.values[v];
+		}
+
+		//Brdige the indices
+		#pragma unroll
+		for (unsigned char iChar=0; iChar<INDEX_CHAR_ARRAY_SIZE; iChar++)
+		{
+			unsigned char index0 = iChar << 1; //*2
+			unsigned char index1 = (iChar << 1) + 1; //*2, +1
+			t_spw_index val0 = block.indices[iChar] & CHAR_TO_SPW_INDEX_MASK;
+			t_spw_index val1 = (block.indices[iChar] >> 0x04) & CHAR_TO_SPW_INDEX_MASK;
+			if (index0 < PE_SIMD_SIZE)
+			{
+				peBlock.indices[index0] = val0;
+			}
+			if (index1 < PE_SIMD_SIZE)
+			{
+				peBlock.indices[index1] = val1;
+			}
+		}
+
+		peBlock.bias = bias;
+		peBlock.isLastInPruneRange = isLastInPruneRange ? TRUE : FALSE;
+		peBlock.maxTransportID = 0x01;
+		peBlock.isLastInFilter = ((iBlock+1) == numWeightBlocks) ?
+			TRUE : FALSE;
+		
+		iBlock++;
+		if (isLastInPruneRange == true)
+		{
+			iterNZClustersPerPruneRange = 0x0;
+		}
 		else
 		{
-			bool isLastInPruneRange = 
-				(iterNZClustersPerPruneRange+1) == numNZClustersPerPruneRange;
-
-			t_test_weight_host_block block = pWeight[iBlock];
-			//Bridge the weight values
-			#pragma unroll 
-			for (int v=0; v<PE_SIMD_SIZE*CLUSTER_SIZE; v++)
-			{
-				peBlock.values[v] = block.values[v];
-			}
-
-			//Brdige the indices
-			#pragma unroll
-			for (unsigned char iChar=0; iChar<INDEX_CHAR_ARRAY_SIZE; iChar++)
-			{
-				unsigned char index0 = iChar << 1; //*2
-				unsigned char index1 = (iChar << 1) + 1; //*2, +1
-				t_spw_index val0 = block.indices[iChar] & CHAR_TO_SPW_INDEX_MASK;
-				t_spw_index val1 = (block.indices[iChar] >> 0x04) & CHAR_TO_SPW_INDEX_MASK;
-				if (index0 < PE_SIMD_SIZE)
-				{
-					peBlock.indices[index0] = val0;
-				}
-				if (index1 < PE_SIMD_SIZE)
-				{
-					peBlock.indices[index1] = val1;
-				}
-			}
-
-			peBlock.isLastInPruneRange = isLastInPruneRange ? TRUE : FALSE;
-			peBlock.maxTransportID = 0x01;
-			peBlock.isLastInFilter = ((iBlock+1) == numWeightBlocks) ?
-				TRUE : FALSE;
-			
-			iBlock++;
-			if (isLastInPruneRange == true)
-			{
-				iterNZClustersPerPruneRange = 0x0;
-			}
-			else
-			{
-				iterNZClustersPerPruneRange += 0x01;
-			}
-
+			iterNZClustersPerPruneRange += 0x01;
 		}
+
 
 		//Duplicate the weight block and broadcast them
 		// #pragma unroll
@@ -160,7 +147,7 @@ __kernel void kernelFilterDrainer (
 {
 	//Total number of loops is ONE PLUs the number of weight blocks
 	//One extra iteration a the beginning to transfer the bias
-	unsigned int numIterations = numWeightBlocks + 1;
+	unsigned int numIterations = numWeightBlocks;
 	unsigned int iBlock = 0;
 	#pragma speculated_iterations 0
 	for (unsigned int iter=0; iter<numIterations; iter++)
@@ -178,52 +165,42 @@ __kernel void kernelFilterDrainer (
 		#if (PE_ROWS_PER_GROUP>4)
 		#error "PE_ROWS_PER_GROUP should be between 1 and 4"
 		#endif
-		//Transfer the bias
-		if (iter == 0)
-		{
-			t_bias bias = 
-				((t_bias) peBlock.values[0])
-				| (((t_bias) peBlock.values[1]) << 0x08);
-
-			pBias[0] = bias;
-		}
 		//Transfer weights
-		else
+		if (iter == 0) {
+			pBias[0] = peBlock.bias;
+		}	
+		t_test_weight_host_block block;
+		//Bridge the weight values
+		#pragma unroll 
+		for (int v=0; v<PE_SIMD_SIZE*CLUSTER_SIZE; v++)
 		{
-			
-			t_test_weight_host_block block;
-			//Bridge the weight values
-			#pragma unroll 
-			for (int v=0; v<PE_SIMD_SIZE*CLUSTER_SIZE; v++)
-			{
-				block.values[v] = peBlock.values[v];
-			}
-
-			//Brdige the indices
-			#pragma unroll
-			for (unsigned char iChar=0; iChar<INDEX_CHAR_ARRAY_SIZE; iChar++)
-			{
-				unsigned char index0 = iChar << 1; //*2
-				unsigned char index1 = (iChar << 1) + 1; //*2, +1
-				t_spw_index val0 = 0;
-				t_spw_index val1 = 0;
-				if (index0 < PE_SIMD_SIZE)
-				{
-					val0 = peBlock.indices[index0];
-				}
-				if (index1 < PE_SIMD_SIZE)
-				{
-					val1 = peBlock.indices[index1];
-				}
-				block.indices[iChar] = 
-					(((unsigned char) val0) & 0x0F)
-					| ((((unsigned char) val1) & 0x0F) << 0x04);
-			}
-			
-			pWeight[iBlock] = block;
-
-			iBlock++;
+			block.values[v] = peBlock.values[v];
 		}
+
+		//Brdige the indices
+		#pragma unroll
+		for (unsigned char iChar=0; iChar<INDEX_CHAR_ARRAY_SIZE; iChar++)
+		{
+			unsigned char index0 = iChar << 1; //*2
+			unsigned char index1 = (iChar << 1) + 1; //*2, +1
+			t_spw_index val0 = 0;
+			t_spw_index val1 = 0;
+			if (index0 < PE_SIMD_SIZE)
+			{
+				val0 = peBlock.indices[index0];
+			}
+			if (index1 < PE_SIMD_SIZE)
+			{
+				val1 = peBlock.indices[index1];
+			}
+			block.indices[iChar] = 
+				(((unsigned char) val0) & 0x0F)
+				| ((((unsigned char) val1) & 0x0F) << 0x04);
+		}
+		
+		pWeight[iBlock] = block;
+
+		iBlock++;
 	} //for over iter
 }
 
@@ -231,6 +208,7 @@ __kernel void kernelResultDrainer (
 		__global t_wide_psum* restrict pOutputs
 	)
 {
+	EMULATOR_PRINT(("[Kernel result drainer. Start \n."));
 	t_conv_drain_multiple_tagged peOutputs = 
 		read_channel_intel(channel_drain_conv_local[0][0]);
 
@@ -238,9 +216,14 @@ __kernel void kernelResultDrainer (
 	#pragma unroll
 	for (int i=0; i<PE_ROWS_PER_GROUP; i++)
 	{
+
 		//Naively cast from t_accumulator to int without explicit sign extension
 		outputs.psums[i] = peOutputs.values[i];
+
+		EMULATOR_PRINT(("[Kernel result drainer. Sent the pSum: %#04x \n.",
+						outputs.psums[i]));
 	}
 
 	pOutputs[0] = outputs;
+	EMULATOR_PRINT(("[Kernel result drainer. Done \n."));
 }
