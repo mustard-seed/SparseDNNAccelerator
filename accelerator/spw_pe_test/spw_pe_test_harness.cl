@@ -134,7 +134,43 @@ __kernel void kernelFilterFeeder (
 		write_channel_intel(channel_weight[3][0], peBlock);
 		#endif
 		#if (PE_ROWS_PER_GROUP>4)
-		#error "PE_ROWS_PER_GROUP should be between 1 and 4"
+		write_channel_intel(channel_weight[4][0], peBlock);
+		#endif
+		#if (PE_ROWS_PER_GROUP>5)
+		write_channel_intel(channel_weight[5][0], peBlock);
+		#endif
+		#if (PE_ROWS_PER_GROUP>6)
+		write_channel_intel(channel_weight[6][0], peBlock);
+		#endif
+		#if (PE_ROWS_PER_GROUP>7)
+		write_channel_intel(channel_weight[7][0], peBlock);
+		#endif
+		#if (PE_ROWS_PER_GROUP>8)
+		write_channel_intel(channel_weight[8][0], peBlock);
+		#endif
+		#if (PE_ROWS_PER_GROUP>9)
+		write_channel_intel(channel_weight[9][0], peBlock);
+		#endif
+		#if (PE_ROWS_PER_GROUP>10)
+		write_channel_intel(channel_weight[10][0], peBlock);
+		#endif
+		#if (PE_ROWS_PER_GROUP>11)
+		write_channel_intel(channel_weight[11][0], peBlock);
+		#endif
+		#if (PE_ROWS_PER_GROUP>12)
+		write_channel_intel(channel_weight[12][0], peBlock);
+		#endif
+		#if (PE_ROWS_PER_GROUP>13)
+		write_channel_intel(channel_weight[13][0], peBlock);
+		#endif
+		#if (PE_ROWS_PER_GROUP>14)
+		write_channel_intel(channel_weight[14][0], peBlock);
+		#endif
+		#if (PE_ROWS_PER_GROUP>15)
+		write_channel_intel(channel_weight[15][0], peBlock);
+		#endif
+		#if (PE_ROWS_PER_GROUP>16)
+		#error "PE_ROWS_PER_GROUP should be between 1 and 16"
 		#endif
 	}
 }
@@ -163,7 +199,43 @@ __kernel void kernelFilterDrainer (
 		read_channel_intel(channel_weight[3][1]);
 		#endif
 		#if (PE_ROWS_PER_GROUP>4)
-		#error "PE_ROWS_PER_GROUP should be between 1 and 4"
+		read_channel_intel(channel_weight[4][1]);
+		#endif
+		#if (PE_ROWS_PER_GROUP>5)
+		read_channel_intel(channel_weight[5][1]);
+		#endif
+		#if (PE_ROWS_PER_GROUP>6)
+		read_channel_intel(channel_weight[6][1]);
+		#endif
+		#if (PE_ROWS_PER_GROUP>7)
+		read_channel_intel(channel_weight[7][1]);
+		#endif
+		#if (PE_ROWS_PER_GROUP>8)
+		read_channel_intel(channel_weight[8][1]);
+		#endif
+		#if (PE_ROWS_PER_GROUP>9)
+		read_channel_intel(channel_weight[9][1]);
+		#endif
+		#if (PE_ROWS_PER_GROUP>10)
+		read_channel_intel(channel_weight[10][1]);
+		#endif
+		#if (PE_ROWS_PER_GROUP>11)
+		read_channel_intel(channel_weight[11][1]);
+		#endif
+		#if (PE_ROWS_PER_GROUP>12)
+		read_channel_intel(channel_weight[12][1]);
+		#endif
+		#if (PE_ROWS_PER_GROUP>13)
+		read_channel_intel(channel_weight[13][1]);
+		#endif
+		#if (PE_ROWS_PER_GROUP>14)
+		read_channel_intel(channel_weight[14][1]);
+		#endif
+		#if (PE_ROWS_PER_GROUP>15)
+		read_channel_intel(channel_weight[15][1]);
+		#endif
+		#if (PE_ROWS_PER_GROUP>16)
+		#error "PE_ROWS_PER_GROUP should be between 1 and 16"
 		#endif
 		//Transfer weights
 		if (iter == 0) {

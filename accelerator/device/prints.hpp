@@ -2,7 +2,7 @@
 #define PRINTS_HPP
 #include "params.hpp"
 //#define HW_DEBUG
-//#define EMUPRINT
+#define EMUPRINT
 /*
 printf enabled during SW emulation
 */

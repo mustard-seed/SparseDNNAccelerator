@@ -145,7 +145,7 @@ TEST_F(spwTestFixture, test0)
 {
     int numCompressionWindows = 4;
     int numNZClustersInRange = 1;
-    t_bias bias = 0x02;
+    t_bias bias = 0x2;
     int numRepeat = 1;
 //    int numCompressionWindows = 1;
 //    int numNZClustersInRange = 1;

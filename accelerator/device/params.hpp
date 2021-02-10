@@ -2,7 +2,7 @@
 #define PARAMS_DEFINED
 
 //#define HOST_DEBUG
-#define SPW_SYSTEM
+//#define SPW_SYSTEM
 //#define DENSE_SYSTEM
 #define OA_PING_PONG
 //#define WMOVER_STREAM_CACHE
@@ -10,6 +10,10 @@
 //#define WMOVER_WEIGHT_COALESCE_CACHE
 
 #define NOOP
+#if defined(SPW_TEST)
+#undef DENSE_SYSTEM
+#define SPW_SYSTEM
+#endif
 /**
  * Global memory settings
  */
@@ -44,7 +48,7 @@
 	// #define MISC_COLS 1
 #else
 	#define PE_COLS 1
-	#define PE_ROWS_PER_GROUP 4
+	#define PE_ROWS_PER_GROUP 16
 	#define PE_ROW_GROUPS 1
 	#define MISC_COLS 1
 #endif
