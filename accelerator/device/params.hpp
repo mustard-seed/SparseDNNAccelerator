@@ -3,7 +3,7 @@
 
 //#define HOST_DEBUG
 //#define SPW_SYSTEM
-//#define DENSE_SYSTEM
+#define DENSE_SYSTEM
 #define OA_PING_PONG
 //#define WMOVER_STREAM_CACHE
 //#define OAMOVER_TB_STREAM_CACHE
@@ -31,7 +31,10 @@
 #define MAX_DRAM_BYTE_OUTPUT_TILE_CONTROLLER_INSTRUCTION (1 << 23)
 #define MAX_DRAM_BYTE_MISC_CONTROLLER_INSTRUCTION (1 << 23)
 
-#define PACKET_SIZE 1
+// #define PACKET_SIZE 1
+
+//Assume on Arria 10 Dev Kit, the memory bandwidth is on
+#define DDR_BYTES_PER_CYCLE 32 
 
 #if defined(FULL_SYSTEM)
 	// #define PE_COLS 2

@@ -26,6 +26,7 @@ typedef struct {
     int     outputTransferLatency;
     int     computeLatency;
     int     computeLatencyWithOverhead;
+    int     ddrLatency;
     unsigned int latency;
     bool flagComputeBound;
     unsigned int ops;
@@ -197,6 +198,8 @@ namespace GraphRuntime {
             unsigned int computeLatency = 0;
             unsigned int computeLatencyWithOverhead = 0;
             bool flagComputeBound = false; //override
+            unsigned int ddrLatency = 0;
+            float weightSparsity = 0.0f;
             unsigned int ops = 0; //override
 #if defined(HOST_DEBUG)
            cout <<"Generating for Layer(ID): "<<pLayer->getLayerID()<<endl;
@@ -217,6 +220,8 @@ namespace GraphRuntime {
                     computeLatency = tileConfig.computeLatency;
                     computeLatencyWithOverhead = tileConfig.computeLatencyWithOverhead;
                     flagComputeBound = tileConfig.flagComputeBound;
+                    ddrLatency = tileConfig.ddrLatency;
+                    weightSparsity = pLayerLocal->getWeightSparsity();
                     ops = tileConfig.ops;
 
                     kernelSize = pLayerLocal->getKernelSize();
@@ -406,6 +411,7 @@ namespace GraphRuntime {
                     computeLatency = tileConfig.computeLatency;
                     estimatedLatency = tileConfig.latency;
                     flagComputeBound = tileConfig.flagComputeBound;
+                    ddrLatency = tileConfig.ddrLatency;
                     ops = tileConfig.ops;
 
                     //Align input bits
@@ -743,6 +749,8 @@ namespace GraphRuntime {
                            .computeLatencyWithOverhead = computeLatencyWithOverhead,
                            .expectedLatency = estimatedLatency,
                            .isComputeBound = flagComputeBound ? 1 : 0,
+                           .ddrLatency = ddrLatency,
+                           .weightSparsity = weightSparsity,
                            .ops = ops
                             });
                        offsetIAMoverInstruction += numIAMoverInstructions;
@@ -784,19 +792,18 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
     unsigned int outputHeight = _convLayer.getOutputHeight();
     unsigned int outputWidth = _convLayer.getOutputWidth();
     unsigned int outputChannels = _convLayer.getOutputChannel();
-    unsigned int outputChannelsPerNextGroup = _convLayer.getOutputChannel() / _convLayer.getNextNumberGroups();
     unsigned int outputChannelsPerCurrentGroup = _convLayer.getOutputChannel() / _convLayer.getCurrentNumberGroups();
     unsigned int inputChannels = _convLayer.getInputChannels().at(0);
     unsigned int inputChannelsPerGroup = inputChannels / _convLayer.getCurrentNumberGroups();
 
     t_graph_output_tile_info bestTileInfo;
     unsigned int minLatency = 0xFFFFFFFF;
-    bool solutionExists = false;
     int     bestInputTransferLatency = 0x0;
     int     bestWeightTransferLatency = 0x0;
     int     bestOutputTransferLatency = 0x0;
     int     bestRawComputeLatency = 0x0;
     int     bestCompuateLatencyWithOverhead = 0x0;
+    int     bestDDRLatency = 0x0;
     bool isComputeBound = true;
 
     for (;outputTileWidthPerCol > 0; outputTileWidthPerCol--)
@@ -875,38 +882,99 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
 
              if (passCacheRequirement == true)
              {
-                unsigned int computeLatency = deriveConvComputationLatency(
+                 unsigned int computeLatency;
+                 unsigned int weightOnChipLatency, weightDDRLatency;
+#if defined(SPW_SYSTEM)
+                computeLatency = deriveSparseConvComputationLatency(
                             candidateTileInfo,
                             outputChannelsPerCurrentGroup,
                             inputChannelsPerGroup,
                             _convLayer.getCurrentNumberGroups(),
-                            _convLayer.getKernelSize()
+                            _convLayer.getKernelSize(),
+                            (int) std::ceil((1.0f - ConvLayer.getWeightSparsity()) * PRUNE_RANGE_IN_CLUSTER
                             );
-
-                unsigned int inputLatency = deriveConvInputTransferLatency(
+                 weightOnChipLatency = deriveSparseConvWeightTransferLatency(
+                                candidateTileInfo,
+                                inputChannelsPerGroup,
+                                outputChannelsPerCurrentGroup,
+                                _convLayer.getCurrentNumberGroups(),
+                                _convLayer.getKernelSize(),
+                                PE_SIMD_SIZE,
+                                CLUSTER_SIZE,
+                                PRUNE_RANGE_IN_CLUSTER,
+                                (int) std::ceil((1.0f - ConvLayer.getWeightSparsity()) * PRUNE_RANGE_IN_CLUSTER,
+                                WEIGHT_BURST_SIZE_VALUE_BYTE
+                            );
+                 weightDDRLatency = deriveSparseConvWeightTransferLatency(
+                            candidateTileInfo,
+                            inputChannelsPerGroup,
+                            outputChannelsPerCurrentGroup,
+                            _convLayer.getCurrentNumberGroups(),
+                            _convLayer.getKernelSize(),
+                            PE_SIMD_SIZE,
+                            CLUSTER_SIZE,
+                            PRUNE_RANGE_IN_CLUSTER,
+                            (int) std::ceil((1.0f - ConvLayer.getWeightSparsity()) * PRUNE_RANGE_IN_CLUSTER,
+                            DDR_BYTES_PER_CYCLE
+                        );
+#else
+                 computeLatency = deriveDenseConvComputationLatency(
+                             candidateTileInfo,
+                             outputChannelsPerCurrentGroup,
+                             inputChannelsPerGroup,
+                             _convLayer.getCurrentNumberGroups(),
+                             _convLayer.getKernelSize()
+                             );
+                 weightOnChipLatency = deriveDenseConvWeightTransferLatency(
+                             candidateTileInfo,
+                             inputChannelsPerGroup,
+                             outputChannelsPerCurrentGroup,
+                             _convLayer.getCurrentNumberGroups(),
+                             _convLayer.getKernelSize(),
+                              WEIGHT_BURST_SIZE_VALUE_BYTE
+                             );
+                 weightDDRLatency = deriveDenseConvWeightTransferLatency(
+                             candidateTileInfo,
+                             inputChannelsPerGroup,
+                             outputChannelsPerCurrentGroup,
+                             _convLayer.getCurrentNumberGroups(),
+                             _convLayer.getKernelSize(),
+                              DDR_BYTES_PER_CYCLE
+                             );
+#endif
+                unsigned int inputOnChipLatency = deriveInputTransferLatency(
                             candidateTileInfo,
                             inputChannelsPerGroup,
                             _convLayer.getCurrentNumberGroups(),
                             _convLayer.getKernelSize(),
-                            _convLayer.getKernelStride()
+                            _convLayer.getKernelStride(),
+                            ACTIVATION_BURST_SIZE_BYTE
                             );
-                //maxLatency = inputLatency > maxLatency ? inputLatency : maxLatency;
+                unsigned int inputDDRLatency = deriveInputTransferLatency(
+                            candidateTileInfo,
+                            inputChannelsPerGroup,
+                            _convLayer.getCurrentNumberGroups(),
+                            _convLayer.getKernelSize(),
+                            _convLayer.getKernelStride(),
+                            DDR_BYTES_PER_CYCLE
+                            );
 
-                unsigned int outputLatency = deriveOutputTransferLatency(
+                unsigned int outputOnChipLatency = deriveOutputTransferLatency(
                             candidateTileInfo,
                             outputHeight,
                             outputChannelsPerCurrentGroup,
-                            _convLayer.getCurrentNumberGroups()
+                            _convLayer.getCurrentNumberGroups(),
+                            ACTIVATION_BURST_SIZE_BYTE
+                            );
+                unsigned int outputDDRLatency = deriveOutputTransferLatency(
+                            candidateTileInfo,
+                            outputHeight,
+                            outputChannelsPerCurrentGroup,
+                            _convLayer.getCurrentNumberGroups(),
+                            DDR_BYTES_PER_CYCLE
                             );
                 //maxLatency = outputLatency > maxLatency ? outputLatency : maxLatency;
 
-                unsigned int weightLatency = deriveConvWeightTransferLatency(
-                            candidateTileInfo,
-                            inputChannelsPerGroup,
-                            outputChannelsPerCurrentGroup,
-                            _convLayer.getCurrentNumberGroups(),
-                            _convLayer.getKernelSize()
-                            );
 
                 unsigned int firstTileInputLatency = deriveFirstTileConvInputTransferLatency
                         (
@@ -915,14 +983,6 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
                             _convLayer.getKernelSize(),
                             _convLayer.getKernelStride()
                         );
-
-                unsigned int firstTileComputeLatency = deriveFirstTileConvComputationLatency
-                        (
-                            candidateTileInfo,
-                            outputChannelsPerCurrentGroup,
-                            inputChannelsPerGroup,
-                            _convLayer.getKernelSize()
-                         );
 
                 unsigned int lastTileOutputLatency = deriveLastTileOutputTransferLatency
                         (
@@ -933,34 +993,28 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
                 unsigned int computeLatencyWithOverhead =
                         computeLatency + firstTileInputLatency + lastTileOutputLatency;
 
-                unsigned int weightBoundedLatency =
-                        weightLatency + firstTileInputLatency + lastTileOutputLatency;
-                //maxLatency = weightLatency > maxLatency ? weightLatency : maxLatency;
+                unsigned int totalDDRLatency = inputDDRLatency + outputDDRLatency + weightDDRLatency;
 
-               unsigned int adjustedOutputLatency =
-                        firstTileInputLatency + firstTileComputeLatency + outputLatency;
 
-               //Get the input/output activation bound
-                unsigned int actualTransferLatency = inputLatency;
-                if (actualTransferLatency < weightLatency)
-                {
-                    actualTransferLatency = weightLatency;
-                }
-                if (actualTransferLatency <adjustedOutputLatency)
-                {
-                    actualTransferLatency = adjustedOutputLatency;
-                }
-
-                //Pick from the compute bound, weight bound, and input/output activation transfer bound
+                //Pick the actual latency
                 unsigned int maxLatency = computeLatencyWithOverhead;
-                if (maxLatency < weightBoundedLatency)
+                if (maxLatency < totalDDRLatency)
                 {
-                    maxLatency = weightBoundedLatency;
+                    maxLatency = totalDDRLatency;
                 }
-                if (maxLatency < actualTransferLatency)
+                if (maxLatency < inputOnChipLatency)
                 {
-                    maxLatency = actualTransferLatency;
+                    maxLatency = inputOnChipLatency;
                 }
+                if (maxLatency < outputOnChipLatency)
+                {
+                    maxLatency = outputOnChipLatency;
+                }
+                if (maxLatency < weightOnChipLatency)
+                {
+                    maxLatency = weightOnChipLatency;
+                }
+
 
                 if (maxLatency < (minLatency * 0.9f))
                 {
@@ -969,9 +1023,10 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
                     isComputeBound = (maxLatency <= computeLatencyWithOverhead);
                     bestRawComputeLatency = computeLatency;
                     bestCompuateLatencyWithOverhead = computeLatencyWithOverhead;
-                    bestInputTransferLatency = inputLatency;
-                    bestWeightTransferLatency = weightLatency;
-                    bestOutputTransferLatency = outputLatency;
+                    bestInputTransferLatency = inputOnChipLatency;
+                    bestWeightTransferLatency = weightOnChipLatency;
+                    bestOutputTransferLatency = outputOnChipLatency;
+                    bestDDRLatency = totalDDRLatency;
                 }
 
              } // if passCacheRequirement == true
@@ -996,6 +1051,7 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
                           .outputTransferLatency = bestOutputTransferLatency,
                           .computeLatency = bestRawComputeLatency,
                           .computeLatencyWithOverhead = bestCompuateLatencyWithOverhead,
+                          .ddrLatency = bestDDRLatency,
                           .latency = minLatency,
                           .flagComputeBound=isComputeBound,
                           .ops = ops
@@ -1142,28 +1198,49 @@ t_tile_pair calculateTileSizePerUnit(EltAddLayer &_eltAddLayer)
 
     //Times 3 to account for two input transfers, and one output transfer for each
     //block of addition
-    unsigned int inputLatency = deriveConvInputTransferLatency(
+    unsigned int inputOnChipLatency = deriveInputTransferLatency(
                 candidateTileInfo,
                 outputChannels,
                 1,
                 1,
-                1
-                );
-    unsigned int outputLatency = deriveOutputTransferLatency(
+                1,
+                ACTIVATION_BURST_SIZE_BYTE
+                ) * 2;
+    unsigned int inputDDRLatency = deriveInputTransferLatency(
+                candidateTileInfo,
+                outputChannels,
+                1,
+                1,
+                1,
+                DDR_BYTES_PER_CYCLE
+                ) * 2;
+    unsigned int outputOnChipLatency = deriveOutputTransferLatency(
                 candidateTileInfo,
                 outputHeight,
                 outputChannels,
-                1
+                1,
+                ACTIVATION_BURST_SIZE_BYTE
+                );
+    unsigned int outputDDRLatency = deriveOutputTransferLatency(
+                candidateTileInfo,
+                outputHeight,
+                outputChannels,
+                1,
+                DDR_BYTES_PER_CYCLE
                 );
 
     unsigned int ops = outputChannels * outputHeight * outputWidth;
+    unsigned int totalDDRLatency = outputDDRLatency + inputDDRLatency;
+    unsigned int actualLatency = totalDDRLatency > outputOnChipLatency ? totalDDRLatency : outputOnChipLatency;
+    actualLatency = actualLatency > inputOnChipLatency ? actualLatency : inputDDRLatency;
     t_tile_pair result = {.tileInfo = candidateTileInfo,
-                          .inputTransferLatency = inputLatency,
+                          .inputTransferLatency = inputOnChipLatency,
                           .weightTransferLatency = 0x0,
-                          .outputTransferLatency = outputLatency,
+                          .outputTransferLatency = outputOnChipLatency,
                           .computeLatency = 0x0,
                           .computeLatencyWithOverhead = 0x0,
-                          .latency = inputLatency + outputLatency,
+                          .ddrLatency = totalDDRLatency,
+                          .latency = actualLatency,
                           .flagComputeBound=false,
                           .ops = ops};
     return result;

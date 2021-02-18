@@ -964,7 +964,7 @@ unsigned int deriveNumActivationDramBlockPerStrip(
 #define NUM_IDLE_CYCLES_PER_STRIP_TRANSFER_FROM_IA_MOVER 0
 #define NUM_IDLE_CYCLES_PER_STRIP_TRANSFER_TO_OA_MOVER 0
 
-unsigned int deriveConvComputationLatency(
+unsigned int deriveDenseConvComputationLatency(
         t_graph_output_tile_info _outputTileInfo,
         unsigned int _numOutputChannelsPerGroup,
         unsigned int _numInputChannelsPerGroup,
@@ -972,42 +972,131 @@ unsigned int deriveConvComputationLatency(
         unsigned int _sizeKernel
         )
 {
-    unsigned int numPERowFoldPerGroup =
-            1 + (_numOutputChannelsPerGroup-1) / PE_ROWS;
-    unsigned int numTranferBlockPerInputGroup =
-            DIVIDE_CEIL(_numInputChannelsPerGroup, PE_SIMD_SIZE * CLUSTER_SIZE);
-    unsigned int numIdealTransfersPerConvWindow = numTranferBlockPerInputGroup * _sizeKernel * _sizeKernel;
-    unsigned int numTransfersPerConvWindow =
-            numIdealTransfersPerConvWindow > PE_ROWS ? numIdealTransfersPerConvWindow : PE_ROWS;
-    unsigned int latency =
-            _numGroups * numPERowFoldPerGroup * numTransfersPerConvWindow
-            * (
-                _outputTileInfo.numFullOutputTileAlongHeight
-                    * ( _outputTileInfo.numFullOutputTileAlongWidth
-                        * _outputTileInfo.sizeOutputTileFullWidthPerCol
-                        * _outputTileInfo.sizeOutputTileFullHeight
-                        + (_outputTileInfo.numOutputTileAlongWidth - _outputTileInfo.numFullOutputTileAlongWidth)
-                          * _outputTileInfo.sizeOutputTileFullHeight * _outputTileInfo.sizeOutputTilePartialWidthPerCol
-                      )
-                +
-                  (_outputTileInfo.numOutputTileAlongHeight -  _outputTileInfo.numFullOutputTileAlongHeight)
-                    * ( _outputTileInfo.numFullOutputTileAlongWidth
-                        * _outputTileInfo.sizeOutputTileFullWidthPerCol
-                        * _outputTileInfo.sizeOutputTilePartialHeight
-                        + (_outputTileInfo.numOutputTileAlongWidth - _outputTileInfo.numFullOutputTileAlongWidth)
-                          * _outputTileInfo.sizeOutputTilePartialHeight * _outputTileInfo.sizeOutputTilePartialWidthPerCol
-                      )
-              );
+    int latency;
+    latency = deriveDenseComputeLatencyOneTile(
+                    _numInputChannelsPerGroup,
+                    CLUSTER_SIZE,
+                    PE_SIMD_SIZE,
+                    _sizeKernel,
+                    _outputTileInfo.sizeOutputTileFullWidthPerCol,
+                    _outputTileInfo.sizeOutputTileFullHeight,
+                    _numOutputChannelsPerGroup,
+                    PE_ROWS
+                )
+                * _outputTileInfo.numFullOutputTileAlongHeight * _outputTileInfo.numFullOutputTileAlongWidth;
+    latency += deriveDenseComputeLatencyOneTile(
+                    _numInputChannelsPerGroup,
+                    CLUSTER_SIZE,
+                    PE_SIMD_SIZE,
+                    _sizeKernel,
+                    _outputTileInfo.sizeOutputTilePartialWidthPerCol,
+                    _outputTileInfo.sizeOutputTileFullHeight,
+                    _numOutputChannelsPerGroup,
+                    PE_ROWS
+                )
+                * _outputTileInfo.numFullOutputTileAlongHeight * (_outputTileInfo.numOutputTileAlongWidth - _outputTileInfo.numFullOutputTileAlongWidth);
+    latency += deriveDenseComputeLatencyOneTile(
+                _numInputChannelsPerGroup,
+                CLUSTER_SIZE,
+                PE_SIMD_SIZE,
+                _sizeKernel,
+                _outputTileInfo.sizeOutputTileFullWidthPerCol,
+                _outputTileInfo.sizeOutputTilePartialHeight,
+                _numOutputChannelsPerGroup,
+                PE_ROWS
+            )
+            * (_outputTileInfo.numOutputTileAlongHeight - _outputTileInfo.numFullOutputTileAlongHeight) * _outputTileInfo.numFullOutputTileAlongWidth;
+    latency += deriveDenseComputeLatencyOneTile(
+                _numInputChannelsPerGroup,
+                CLUSTER_SIZE,
+                PE_SIMD_SIZE,
+                _sizeKernel,
+                _outputTileInfo.sizeOutputTilePartialWidthPerCol,
+                _outputTileInfo.sizeOutputTilePartialHeight,
+                _numOutputChannelsPerGroup,
+                PE_ROWS
+            )
+            * (_outputTileInfo.numOutputTileAlongHeight - _outputTileInfo.numFullOutputTileAlongHeight)
+            * (_outputTileInfo.numOutputTileAlongWidth - _outputTileInfo.numFullOutputTileAlongWidth);
+
+    latency *= _numGroups;
     return latency;
 }
 
-unsigned int deriveConvInputTransferLatency(
+unsigned int deriveSparseConvComputationLatency(
         t_graph_output_tile_info _outputTileInfo,
+        unsigned int _numOutputChannelsPerGroup,
         unsigned int _numInputChannelsPerGroup,
         unsigned int _numGroups,
         unsigned int _sizeKernel,
-        unsigned _sizeStride
+         int _pruningRangeSizeActual
         )
+{
+    int latency;
+    latency = deriveSparseComputeLatencyOneTile(
+                    _numInputChannelsPerGroup,
+                    PE_SIMD_SIZE,
+                    CLUSTER_SIZE,
+                    PRUNE_RANGE_IN_CLUSTER,
+                    _pruningRangeSizeActual,
+                    _sizeKernel,
+                    _outputTileInfo.sizeOutputTileFullWidthPerCol,
+                    _outputTileInfo.sizeOutputTileFullHeight,
+                    _numOutputChannelsPerGroup,
+                    PE_ROWS
+                )
+                * _outputTileInfo.numFullOutputTileAlongHeight * _outputTileInfo.numFullOutputTileAlongWidth;
+    latency += deriveSparseComputeLatencyOneTile(
+                _numInputChannelsPerGroup,
+                PE_SIMD_SIZE,
+                CLUSTER_SIZE,
+                PRUNE_RANGE_IN_CLUSTER,
+                _pruningRangeSizeActual,
+                _sizeKernel,
+                _outputTileInfo.sizeOutputTileFullWidthPerCol,
+                _outputTileInfo.sizeOutputTileFullHeight,
+                _numOutputChannelsPerGroup,
+                PE_ROWS
+            )
+                * _outputTileInfo.numFullOutputTileAlongHeight * (_outputTileInfo.numOutputTileAlongWidth - _outputTileInfo.numFullOutputTileAlongWidth);
+    latency += deriveSparseComputeLatencyOneTile(
+                _numInputChannelsPerGroup,
+                PE_SIMD_SIZE,
+                CLUSTER_SIZE,
+                PRUNE_RANGE_IN_CLUSTER,
+                _pruningRangeSizeActual,
+                _sizeKernel,
+                _outputTileInfo.sizeOutputTileFullWidthPerCol,
+                _outputTileInfo.sizeOutputTileFullHeight,
+                _numOutputChannelsPerGroup,
+                PE_ROWS
+            )
+            * (_outputTileInfo.numOutputTileAlongHeight - _outputTileInfo.numFullOutputTileAlongHeight) * _outputTileInfo.numFullOutputTileAlongWidth;
+    latency += deriveSparseComputeLatencyOneTile(
+                _numInputChannelsPerGroup,
+                PE_SIMD_SIZE,
+                CLUSTER_SIZE,
+                PRUNE_RANGE_IN_CLUSTER,
+                _pruningRangeSizeActual,
+                _sizeKernel,
+                _outputTileInfo.sizeOutputTileFullWidthPerCol,
+                _outputTileInfo.sizeOutputTileFullHeight,
+                _numOutputChannelsPerGroup,
+                PE_ROWS
+            )
+            * (_outputTileInfo.numOutputTileAlongHeight - _outputTileInfo.numFullOutputTileAlongHeight)
+            * (_outputTileInfo.numOutputTileAlongWidth - _outputTileInfo.numFullOutputTileAlongWidth);
+
+    latency *= _numGroups;
+    return latency;
+}
+
+unsigned int deriveInputTransferLatency(t_graph_output_tile_info _outputTileInfo,
+        unsigned int _numInputChannelsPerGroup,
+        unsigned int _numGroups,
+        unsigned int _sizeKernel,
+        unsigned int _sizeStride,
+        unsigned int _bw)
 {
     unsigned int numFullOutputTileAlongHeight =
             _outputTileInfo.numFullOutputTileAlongHeight;
@@ -1053,66 +1142,97 @@ unsigned int deriveConvInputTransferLatency(
                     //unsigned int kernelStride
                     _sizeStride
                 );
-
-    unsigned int numDramBlockPerStrip =
-            deriveNumActivationDramBlockPerStrip(_numInputChannelsPerGroup);
-    //TODO: adjust the number of idle cycles after HW changes.
-    unsigned int latency =
-            _numGroups * (numDramBlockPerStrip + NUM_IDLE_CYCLES_PER_STRIP_TRANSFER_FROM_IA_MOVER)
-            * (
-                numFullOutputTileAlongHeight*numFullOutputTileAlongWidth*sizeFullTileInputHeight*sizeFullTileInputWidth
-                + numFullOutputTileAlongHeight*numPartialTileAlongWidth*sizeFullTileInputHeight*sizePartialTileInputWidth
-                + numPartialTileAlongHeight*numFullOutputTileAlongWidth*sizePartialTileInputHeight*sizeFullTileInputWidth
-                + numPartialTileAlongHeight*numPartialTileAlongWidth*sizePartialTileInputHeight*sizePartialTileInputWidth
-              );
+    unsigned int latency = deriveInputTranserLatencyOneTile(
+                   sizeFullTileInputWidth,
+                   sizeFullTileInputHeight,
+                   _numInputChannelsPerGroup,
+                   _bw
+                ) * numFullOutputTileAlongHeight*numFullOutputTileAlongWidth;
+    latency += deriveInputTranserLatencyOneTile(
+                sizePartialTileInputWidth,
+                sizeFullTileInputHeight,
+                _numInputChannelsPerGroup,
+                _bw
+             ) * numFullOutputTileAlongHeight*numPartialTileAlongWidth;
+    latency += deriveInputTranserLatencyOneTile(
+                sizeFullTileInputWidth,
+                sizePartialTileInputHeight,
+                _numInputChannelsPerGroup,
+                _bw
+             ) * numPartialTileAlongHeight*numFullOutputTileAlongWidth;
+    latency += deriveInputTranserLatencyOneTile(
+                sizePartialTileInputWidth,
+                sizePartialTileInputHeight,
+                _numInputChannelsPerGroup,
+                _bw
+             ) * numPartialTileAlongHeight*numPartialTileAlongWidth;
+    latency *= _numGroups;
     return latency;
  }
 
 unsigned int deriveOutputTransferLatency(t_graph_output_tile_info _outputTileInfo,
         unsigned int _sizeOutputHeight,
         unsigned int _numOutputChannelsPerGroup,
-        unsigned int _numGroups)
+        unsigned int _numGroups,
+        unsigned int _bw)
 {
-    //Adjust for the face that the output bandwidth is the number of compute columns
-//    unsigned int latency =
-//            _numOutputChannelsPerGroup
-//            * _numNextGroups
-//            * _sizeOutputHeight
-//           * (
-//                _outputTileInfo.numFullOutputTileAlongWidth * _outputTileInfo.sizeOutputTileFullWidthPerCol
-//                + (_outputTileInfo.numOutputTileAlongWidth - _outputTileInfo.numFullOutputTileAlongWidth)
-//                    * _outputTileInfo.sizeOutputTilePartialWidthPerCol
-//             );
     unsigned int sizeOutputWidth =
             _outputTileInfo.numFullOutputTileAlongWidth * _outputTileInfo.sizeOutputTileFullWidthPerCol * PE_COLS
             + (_outputTileInfo.numOutputTileAlongWidth - _outputTileInfo.numFullOutputTileAlongWidth)
                    * _outputTileInfo.sizeOutputTilePartialWidthPerCol * _outputTileInfo.numActiveColsForPartialWidthTile;
     unsigned int latency =
-            DIVIDE_CEIL(_numOutputChannelsPerGroup, ACTIVATION_BURST_SIZE_BYTE)
+            DIVIDE_CEIL(_numOutputChannelsPerGroup, _bw)
             * _numGroups
             * _sizeOutputHeight
             * sizeOutputWidth;
     return latency;
 }
 
-unsigned int deriveConvWeightTransferLatency(
+unsigned int deriveDenseConvWeightTransferLatency(
         t_graph_output_tile_info _outputTileInfo,
         unsigned int _numInputChannelsPerGroup,
         unsigned int _numOutputChannelsPerGroup,
         unsigned int _numGroups,
-        unsigned int _sizeKernel
+        unsigned int _sizeKernel,
+        unsigned int _bw
         )
 {
     unsigned int numTileAlongHeight = _outputTileInfo.numOutputTileAlongHeight;
     unsigned int numTileAlongWidth = _outputTileInfo.numOutputTileAlongWidth;
-    unsigned int numTBPerStrip = DIVIDE_CEIL(_numInputChannelsPerGroup, PE_SIMD_SIZE * CLUSTER_SIZE);
-    unsigned int numDramBlocksInFilter =
-            DIVIDE_CEIL(_sizeKernel * _sizeKernel * numTBPerStrip, WEIGHT_WIDE_SIZE);
     unsigned int latency =
             _numGroups * _numOutputChannelsPerGroup * numTileAlongHeight * numTileAlongWidth
-            * (numDramBlocksInFilter + NUM_IDLE_CYCLES_PER_FILTER_TRANSFER_FROM_W_MOVER);
+            * _sizeKernel * _sizeKernel * DIVIDE_CEIL(_numInputChannelsPerGroup, _bw);
 
     return latency;
+}
+
+
+unsigned int deriveSparseConvWeightTransferLatency(
+        t_graph_output_tile_info _outputTileInfo,
+        unsigned int _numInputChannelsPerGroup,
+        unsigned int _numOutputChannelsPerGroup,
+        unsigned int _numGroups,
+        unsigned int _sizeKernel,
+        int _interPruningRangePara,
+        int _clusteSize,
+        int _pruningRangeSizeFull,
+        int _pruningRangeSizeActual,
+        int _bw
+        )
+{
+    unsigned int effectiveICPerGroup = _numInputChannelsPerGroup < (_interPruningRangePara * _clusteSize)?
+                _interPruningRangePara * _clusteSize :
+            DIVIDE_CEIL(_numInputChannelsPerGroup, _interPruningRangePara * _clusteSize * _pruningRangeSizeFull)
+                * _interPruningRangePara * _clusteSize * _pruningRangeSizeActual;
+
+    return deriveDenseConvWeightTransferLatency(
+                    _outputTileInfo,
+                    effectiveICPerGroup,
+                    _numOutputChannelsPerGroup,
+                    _numGroups,
+                    _sizeKernel,
+                    _bw
+                );
 }
 
 unsigned int deriveFirstTileConvInputTransferLatency(
@@ -1148,49 +1268,14 @@ unsigned int deriveFirstTileConvInputTransferLatency(
                 _sizeStride
                 );
 
-    unsigned int numDramBlockPerStrip =
-            deriveNumActivationDramBlockPerStrip(_numInputChannelsPerGroup);
-
-    unsigned int latency =
-            sizeFirstTileInputHeight
-            * sizeFirstTileInputWidth
-            * (numDramBlockPerStrip + NUM_IDLE_CYCLES_PER_STRIP_TRANSFER_FROM_IA_MOVER);
-
-    return latency;
+    return deriveInputTranserLatencyOneTile(
+                    sizeFirstTileInputWidth,
+                    sizeFirstTileInputHeight,
+                    _numInputChannelsPerGroup,
+                    ACTIVATION_BURST_SIZE_BYTE
+                );
 }
 
-unsigned int deriveFirstTileConvComputationLatency(
-        t_graph_output_tile_info _outputTileInfo,
-        unsigned int _numOutputChannelsPerGroup,
-        unsigned int _numInputChannelsPerGroup,
-        unsigned int _sizeKernel
-        )
-{
-    unsigned int numPERowFoldPerGroup =
-            1 + (_numOutputChannelsPerGroup-1) / PE_ROWS;
-    unsigned int numTranferBlockPerInputGroup =
-            DIVIDE_CEIL(_numInputChannelsPerGroup, PE_SIMD_SIZE * CLUSTER_SIZE);
-    unsigned int numIdealTransfersPerConvWindow = numTranferBlockPerInputGroup * _sizeKernel * _sizeKernel;
-    unsigned int numTransfersPerConvWindow =
-            numIdealTransfersPerConvWindow > PE_ROWS ? numIdealTransfersPerConvWindow : PE_ROWS;
-
-    unsigned int sizeFirstTileOutputHeight =
-        (_outputTileInfo.numFullOutputTileAlongHeight==0) ?
-                 _outputTileInfo.sizeOutputTilePartialHeight
-              : _outputTileInfo.sizeOutputTileFullHeight;
-
-    unsigned int sizeFirstTileOuputWidthPerCol =
-         (_outputTileInfo.numFullOutputTileAlongWidth==0) ?
-                _outputTileInfo.sizeOutputTilePartialWidthPerCol
-               : _outputTileInfo.sizeOutputTileFullWidthPerCol;
-
-    unsigned int latency =
-            numPERowFoldPerGroup
-            * numTransfersPerConvWindow
-            * sizeFirstTileOutputHeight
-            * sizeFirstTileOuputWidthPerCol;
-    return latency;
-}
 
 unsigned int deriveLastTileOutputTransferLatency(
         t_graph_output_tile_info _outputTileInfo,
@@ -1210,10 +1295,103 @@ unsigned int deriveLastTileOutputTransferLatency(
     unsigned int numActiveColsLastTile =
             (_outputTileInfo.numFullOutputTileAlongWidth == _outputTileInfo.numOutputTileAlongWidth)?
                 PE_COLS : _outputTileInfo.numActiveColsForPartialWidthTile;
-    unsigned int latency =
-            sizeLastTileOutputHeight * sizeLastTileOutputWidthPerCol * numActiveColsLastTile *
-                DIVIDE_CEIL(_numOutputChannelsPerGroup, ACTIVATION_BURST_SIZE_BYTE);
+
+    return  deriveOutputTranserLatencyOneTile(
+                sizeLastTileOutputWidthPerCol * numActiveColsLastTile,
+                sizeLastTileOutputHeight,
+                _numOutputChannelsPerGroup,
+                ACTIVATION_BURST_SIZE_BYTE
+            );
+}
+
+int deriveDenseComputeLatencyOneTile(int _numIC,
+                                     int _clusteSize,
+                                     int _interClusterPara,
+                                     int _kernelSize,
+                                     int _outputTileWidthPerCol,
+                                     int _outputTileHeightPerCol,
+                                     int _outputChannel,
+                                     int _numPeRows)
+{
+    int numPERowFoldPerGroup =
+            DIVIDE_CEIL(_outputChannel, _numPeRows);
+    int numTranferBlockPerInputGroup =
+            DIVIDE_CEIL(_numIC, _interClusterPara * _clusteSize);
+    int numTransfersPerConvWindow = numTranferBlockPerInputGroup * _kernelSize * _kernelSize;
+    int latency = numTransfersPerConvWindow * _outputTileWidthPerCol * _outputTileHeightPerCol * numPERowFoldPerGroup;
 
     return latency;
+
+}
+
+int deriveSparseComputeLatencyOneTile(int _numIC,
+                                      int _interPruningRangePara,
+                                      int _clusteSize,
+                                      int _pruningRangeSizeFull,
+                                      int _pruningRangeSizeActual,
+                                      int _kernelSize,
+                                      int _outputTileWidthPerCol,
+                                      int _outputTileHeightPerCol,
+                                      int _outputChannel,
+                                      int _numPeRows)
+{
+    unsigned int effectiveIC = _numIC < (_interPruningRangePara * _clusteSize)?
+                _interPruningRangePara * _clusteSize :
+            DIVIDE_CEIL(_numIC, _interPruningRangePara * _clusteSize * _pruningRangeSizeFull)
+                * _interPruningRangePara * _clusteSize * _pruningRangeSizeActual;
+    return deriveDenseComputeLatencyOneTile(
+                    effectiveIC,
+                    _clusteSize,
+                    _interPruningRangePara,
+                    _kernelSize,
+                    _outputTileWidthPerCol,
+                    _outputTileHeightPerCol,
+                    _outputChannel,
+                    _numPeRows
+                );
+}
+
+int deriveInputTranserLatencyOneTile(
+            int _inputTileWidth,
+            int _inputTileHeight,
+            int _numIC,
+            int _bw
+        )
+{
+    return _inputTileHeight * _inputTileWidth * DIVIDE_CEIL(_numIC, _bw);
+}
+
+int deriveOutputTranserLatencyOneTile(int _outputTileWidth, int _outputTileHeight, int _numOC, int _bw)
+{
+    return _outputTileHeight * _outputTileWidth * DIVIDE_CEIL(_numOC, _bw);
+}
+
+int deriveDenseWeightTranserLatencyOneTile(
+            int _kernelSize,
+            int _numIC,
+            int _numOC,
+            int _bw
+        )
+{
+    return _numOC * DIVIDE_CEIL(_kernelSize * _kernelSize * _numIC, _bw);
+}
+
+int deriveSparseWeightTranserLatencyOneTile(
+            int _kernelSize,
+            int _numIC,
+            int _numOC,
+            int _sizeFullPruneRange,
+            int _sizeCluster,
+            int _sizeSparsesPruneRange,
+            int _interPruneRangePara,
+            int _bw
+        )
+{
+    int effectiveIC = _numIC < (_interPruneRangePara * _sizeCluster)?
+                _interPruneRangePara * _sizeCluster :
+                DIVIDE_CEIL(effectiveIC, _interPruneRangePara * _sizeCluster * _sizeFullPruneRange)
+                    * _interPruneRangePara * _sizeCluster * _sizeSparsesPruneRange;
+
+    return deriveDenseWeightTranserLatencyOneTile(_kernelSize, effectiveIC, _numOC, _bw);
 }
 

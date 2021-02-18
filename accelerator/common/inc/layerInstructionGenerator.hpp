@@ -211,7 +211,7 @@ unsigned int deriveConvInputDimension1D(
         unsigned int kernelStride
         );
 
-unsigned int deriveConvComputationLatency(
+unsigned int deriveDenseConvComputationLatency(
         t_graph_output_tile_info _outputTileInfo,
         unsigned int _numOutputChannelsPerGroup,
         unsigned int _numInputChannelsPerGroup,
@@ -219,31 +219,112 @@ unsigned int deriveConvComputationLatency(
         unsigned int _sizeKernel
         );
 
-unsigned int deriveConvInputTransferLatency(
+unsigned int deriveSparseConvComputationLatency(
+        t_graph_output_tile_info _outputTileInfo,
+        unsigned int _numOutputChannelsPerGroup,
+        unsigned int _numInputChannelsPerGroup,
+        unsigned int _numGroups,
+        unsigned int _sizeKernel,
+         int _pruningRangeSizeActual
+        );
+
+unsigned int deriveInputTransferLatency(
         t_graph_output_tile_info _outputTileInfo,
         unsigned int _numInputChannelsPerGroup,
         unsigned int _numGroups,
         unsigned int _sizeKernel,
-        unsigned _sizeStride
+        unsigned int _sizeStride,
+        unsigned int _bw
         );
 
-unsigned int deriveConvWeightTransferLatency(
+unsigned int deriveDenseConvWeightTransferLatency(
         t_graph_output_tile_info _outputTileInfo,
         unsigned int _numInputChannelsPerGroup,
         unsigned int _numOutputChannelsPerGroup,
         unsigned int _numGroups,
-        unsigned int _sizeKernel
+        unsigned int _sizeKernel,
+        unsigned int _bw
+        );
+
+unsigned int deriveSparseConvWeightTransferLatency(
+        t_graph_output_tile_info _outputTileInfo,
+        unsigned int _numInputChannelsPerGroup,
+        unsigned int _numOutputChannelsPerGroup,
+        unsigned int _numGroups,
+        unsigned int _sizeKernel,
+        int _interPruningRangePara,
+        int _clusteSize,
+        int _pruningRangeSizeFull,
+        int _pruningRangeSizeActual
         );
 
 unsigned int deriveOutputTransferLatency(
         t_graph_output_tile_info _outputTileInfo,
         unsigned int _sizeOutputHeight,
         unsigned int _numOutputChannelsPerGroup,
-        unsigned int _numGroups);
+        unsigned int _numGroups,
+        unsigned int _bw);
 
 unsigned int deriveNumActivationDramBlockPerStrip(
         unsigned int _numInputChannelsPerGroup
     );
+
+
+int deriveSparseComputeLatencyOneTile(
+           int _numIC,
+           int _interPruningRangePara,
+            int _clusteSize,
+            int _pruningRangeSizeFull,
+            int _pruningRangeSizeActual,
+            int _kernelSize,
+            int _outputTileWidthPerCol,
+            int _outputTileHeightPerCol,
+            int _outputChannel,
+            int _numPeRows
+        );
+
+int deriveDenseComputeLatencyOneTile(
+           int _numIC,
+            int _clusteSize,
+            int _interClusterPara,
+            int _kernelSize,
+            int _outputTileWidthPerCol,
+            int _outputTileHeightPerCol,
+            int _outputChannel,
+            int _numPeRows
+        );
+
+int deriveInputTranserLatencyOneTile(
+            int _inputTileWidth,
+            int _inputTileHeight,
+            int _numIC,
+            int _bw
+        );
+
+int deriveOutputTranserLatencyOneTile(
+            int _outputTileWidth,
+            int _outputTileHeight,
+            int _numOC,
+            int _bw
+        );
+
+int deriveDenseWeightTranserLatencyOneTile(
+            int _kernelSize,
+            int _numIC,
+            int _numOC,
+            int _bw
+        );
+
+int deriveSparseWeightTranserLatencyOneTile(
+            int _kernelSize,
+            int _numIC,
+            int _numOC,
+            int _sizeFullPruneRange,
+            int _sizeCluster,
+            int _sizeSparsesPruneRange,
+            int _interPruneRangePara,
+            int _bw
+        );
 
 unsigned int deriveFirstTileConvInputTransferLatency(
         t_graph_output_tile_info _outputTileInfo,
@@ -252,16 +333,8 @@ unsigned int deriveFirstTileConvInputTransferLatency(
         unsigned _sizeStride
         );
 
-unsigned int deriveFirstTileConvComputationLatency(
-        t_graph_output_tile_info _outputTileInfo,
-        unsigned int _numOutputChannelsPerGroup,
-        unsigned int _numInputChannelsPerGroup,
-        unsigned int _sizeKernel
-        );
-
 unsigned int deriveLastTileOutputTransferLatency(
         t_graph_output_tile_info _outputTileInfo,
         unsigned int _numOutputChannelsPerGroup
         );
-
 #endif

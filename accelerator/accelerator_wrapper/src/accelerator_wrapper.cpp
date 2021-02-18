@@ -1417,6 +1417,8 @@ namespace GraphRuntime {
                 unsigned int weightLatency = layerInfo.weightTransferLatency;
                 unsigned int rawComputeLatency = layerInfo.rawComputeLatency;
                 unsigned int computeLatencyWithOverhead = layerInfo.computeLatencyWithOverhead;
+                unsigned int ddrLatency = layerInfo.ddrLatency;
+                float weightSparsity = layerInfo.weightSparsity;
                 auto layerTime = vecLayerExecutionTime.at(i);
                 std::string name = layerInfo.layerName;
                 if (name.length() > maxName)
@@ -1430,11 +1432,13 @@ namespace GraphRuntime {
                         <<sep<<sizeOutputTileWidthPerCol
                         <<sep<<numActiveColsPartialCol
                         <<sep<<expectedLatency
+                        <<sep<<std::to_string(weightSparsity)
                         <<sep<<ops
                         <<sep<<isComputeBound
                         <<sep<<inputLatency
                         <<sep<<weightLatency
                         <<sep<<outputLatency
+                        <<sep<<ddrLatency
                         <<sep<<rawComputeLatency
                         <<sep<<computeLatencyWithOverhead
                         <<std::endl;
