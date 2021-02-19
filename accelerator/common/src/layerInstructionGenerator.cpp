@@ -1096,6 +1096,7 @@ unsigned int deriveInputTransferLatency(t_graph_output_tile_info _outputTileInfo
         unsigned int _numGroups,
         unsigned int _sizeKernel,
         unsigned int _sizeStride,
+        bool isConv,
         unsigned int _bw)
 {
     unsigned int numFullOutputTileAlongHeight =
@@ -1124,10 +1125,11 @@ unsigned int deriveInputTransferLatency(t_graph_output_tile_info _outputTileInfo
                     //unsigned int kernelStride
                     _sizeStride
                 );
+    int cols = isConv ? PE_COLS : 1;
     unsigned int sizeFullTileInputWidth =
             deriveConvInputDimension1D(
                     //unsigned int outputDimension1D,
-                    _outputTileInfo.sizeOutputTileFullWidthPerCol * PE_COLS,
+                    _outputTileInfo.sizeOutputTileFullWidthPerCol * cols,
                     //unsigned int kernelSize,
                     _sizeKernel,
                     //unsigned int kernelStride
@@ -1174,10 +1176,12 @@ unsigned int deriveOutputTransferLatency(t_graph_output_tile_info _outputTileInf
         unsigned int _sizeOutputHeight,
         unsigned int _numOutputChannelsPerGroup,
         unsigned int _numGroups,
+        bool isConv,
         unsigned int _bw)
 {
+    int cols = isConv ? PE_COLS : 1;
     unsigned int sizeOutputWidth =
-            _outputTileInfo.numFullOutputTileAlongWidth * _outputTileInfo.sizeOutputTileFullWidthPerCol * PE_COLS
+            _outputTileInfo.numFullOutputTileAlongWidth * _outputTileInfo.sizeOutputTileFullWidthPerCol * cols
             + (_outputTileInfo.numOutputTileAlongWidth - _outputTileInfo.numFullOutputTileAlongWidth)
                    * _outputTileInfo.sizeOutputTilePartialWidthPerCol * _outputTileInfo.numActiveColsForPartialWidthTile;
     unsigned int latency =
@@ -1199,9 +1203,10 @@ unsigned int deriveDenseConvWeightTransferLatency(
 {
     unsigned int numTileAlongHeight = _outputTileInfo.numOutputTileAlongHeight;
     unsigned int numTileAlongWidth = _outputTileInfo.numOutputTileAlongWidth;
+    unsigned int roundedChannels = DIVIDE_CEIL(_numInputChannelsPerGroup, PE_SIMD_SIZE * CLUSTER_SIZE) * PE_SIMD_SIZE * CLUSTER_SIZE;
     unsigned int latency =
             _numGroups * _numOutputChannelsPerGroup * numTileAlongHeight * numTileAlongWidth
-            * _sizeKernel * _sizeKernel * DIVIDE_CEIL(_numInputChannelsPerGroup, _bw);
+            * DIVIDE_CEIL(_sizeKernel * _sizeKernel * roundedChannels, _bw);
 
     return latency;
 }

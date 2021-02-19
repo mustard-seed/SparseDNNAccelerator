@@ -2,8 +2,8 @@
 #define PARAMS_DEFINED
 
 //#define HOST_DEBUG
-//#define SPW_SYSTEM
-#define DENSE_SYSTEM
+#define SPW_SYSTEM
+//#define DENSE_SYSTEM
 #define OA_PING_PONG
 //#define WMOVER_STREAM_CACHE
 //#define OAMOVER_TB_STREAM_CACHE
@@ -34,7 +34,7 @@
 // #define PACKET_SIZE 1
 
 //Assume on Arria 10 Dev Kit, the memory bandwidth is on
-#define DDR_BYTES_PER_CYCLE 32 
+#define DDR_BYTES_PER_CYCLE 64
 
 #if defined(FULL_SYSTEM)
 	// #define PE_COLS 2
@@ -219,9 +219,9 @@
 
 //#define NUM_CLUSTER_IN_DRAM_SIZE BURST_SIZE_BYTE/CLUSTER_SIZE
 
-#define ACTIVATION_WIDE_SIZE 8
-#define ACTIVATION_WIDE_SIZE_OFFSET 0x3 //Numnber of bits to shift the transfer block index to the right in order to recover the wide offset
-#define ACTIVATION_WIDE_SIZE_REMAINDER_MASK 0x7
+#define ACTIVATION_WIDE_SIZE 2
+#define ACTIVATION_WIDE_SIZE_OFFSET 0x1 //Numnber of bits to shift the transfer block index to the right in order to recover the wide offset
+#define ACTIVATION_WIDE_SIZE_REMAINDER_MASK 0x1
 #define ACTIVATION_BURST_SIZE_BYTE (PE_ACTIVATION_BLOCK_SIZE_IN_WORD * ACTIVATION_WIDE_SIZE)
 #define ACTIVATION_BURST_SIZE_BYTE_OFFSET (ACTIVATION_WIDE_SIZE_OFFSET + PE_ACTIVATION_BLOCK_SIZE_IN_WORD_OFFSET)
 #define ACTIVATION_WIDE_SIZE_BYTE_MASK ((1 << ACTIVATION_BURST_SIZE_BYTE_OFFSET) - 1)

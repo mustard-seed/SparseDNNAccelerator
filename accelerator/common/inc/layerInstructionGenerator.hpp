@@ -234,6 +234,7 @@ unsigned int deriveInputTransferLatency(
         unsigned int _numGroups,
         unsigned int _sizeKernel,
         unsigned int _sizeStride,
+        bool isConv,
         unsigned int _bw
         );
 
@@ -255,7 +256,8 @@ unsigned int deriveSparseConvWeightTransferLatency(
         int _interPruningRangePara,
         int _clusteSize,
         int _pruningRangeSizeFull,
-        int _pruningRangeSizeActual
+        int _pruningRangeSizeActual,
+        int _bw
         );
 
 unsigned int deriveOutputTransferLatency(
@@ -263,6 +265,7 @@ unsigned int deriveOutputTransferLatency(
         unsigned int _sizeOutputHeight,
         unsigned int _numOutputChannelsPerGroup,
         unsigned int _numGroups,
+        bool isConv,
         unsigned int _bw);
 
 unsigned int deriveNumActivationDramBlockPerStrip(

@@ -891,7 +891,7 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
                             inputChannelsPerGroup,
                             _convLayer.getCurrentNumberGroups(),
                             _convLayer.getKernelSize(),
-                            (int) std::ceil((1.0f - ConvLayer.getWeightSparsity()) * PRUNE_RANGE_IN_CLUSTER
+                            (int) std::ceil( (1.0f - _convLayer.getWeightSparsity()) * PRUNE_RANGE_IN_CLUSTER)
                             );
                  weightOnChipLatency = deriveSparseConvWeightTransferLatency(
                                 candidateTileInfo,
@@ -902,7 +902,7 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
                                 PE_SIMD_SIZE,
                                 CLUSTER_SIZE,
                                 PRUNE_RANGE_IN_CLUSTER,
-                                (int) std::ceil((1.0f - ConvLayer.getWeightSparsity()) * PRUNE_RANGE_IN_CLUSTER,
+                                (int) std::ceil( (1.0f - _convLayer.getWeightSparsity()) * PRUNE_RANGE_IN_CLUSTER),
                                 WEIGHT_BURST_SIZE_VALUE_BYTE
                             );
                  weightDDRLatency = deriveSparseConvWeightTransferLatency(
@@ -914,7 +914,7 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
                             PE_SIMD_SIZE,
                             CLUSTER_SIZE,
                             PRUNE_RANGE_IN_CLUSTER,
-                            (int) std::ceil((1.0f - ConvLayer.getWeightSparsity()) * PRUNE_RANGE_IN_CLUSTER,
+                            (int) std::ceil( (1.0f - _convLayer.getWeightSparsity()) * PRUNE_RANGE_IN_CLUSTER),
                             DDR_BYTES_PER_CYCLE
                         );
 #else
@@ -948,6 +948,7 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
                             _convLayer.getCurrentNumberGroups(),
                             _convLayer.getKernelSize(),
                             _convLayer.getKernelStride(),
+                            true,
                             ACTIVATION_BURST_SIZE_BYTE
                             );
                 unsigned int inputDDRLatency = deriveInputTransferLatency(
@@ -956,6 +957,7 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
                             _convLayer.getCurrentNumberGroups(),
                             _convLayer.getKernelSize(),
                             _convLayer.getKernelStride(),
+                            true,
                             DDR_BYTES_PER_CYCLE
                             );
 
@@ -964,6 +966,7 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
                             outputHeight,
                             outputChannelsPerCurrentGroup,
                             _convLayer.getCurrentNumberGroups(),
+                            true,
                             ACTIVATION_BURST_SIZE_BYTE
                             );
                 unsigned int outputDDRLatency = deriveOutputTransferLatency(
@@ -971,6 +974,7 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
                             outputHeight,
                             outputChannelsPerCurrentGroup,
                             _convLayer.getCurrentNumberGroups(),
+                            true,
                             DDR_BYTES_PER_CYCLE
                             );
                 //maxLatency = outputLatency > maxLatency ? outputLatency : maxLatency;
@@ -1204,6 +1208,7 @@ t_tile_pair calculateTileSizePerUnit(EltAddLayer &_eltAddLayer)
                 1,
                 1,
                 1,
+                false,
                 ACTIVATION_BURST_SIZE_BYTE
                 ) * 2;
     unsigned int inputDDRLatency = deriveInputTransferLatency(
@@ -1212,6 +1217,7 @@ t_tile_pair calculateTileSizePerUnit(EltAddLayer &_eltAddLayer)
                 1,
                 1,
                 1,
+                false,
                 DDR_BYTES_PER_CYCLE
                 ) * 2;
     unsigned int outputOnChipLatency = deriveOutputTransferLatency(
@@ -1219,6 +1225,7 @@ t_tile_pair calculateTileSizePerUnit(EltAddLayer &_eltAddLayer)
                 outputHeight,
                 outputChannels,
                 1,
+                false,
                 ACTIVATION_BURST_SIZE_BYTE
                 );
     unsigned int outputDDRLatency = deriveOutputTransferLatency(
@@ -1226,6 +1233,7 @@ t_tile_pair calculateTileSizePerUnit(EltAddLayer &_eltAddLayer)
                 outputHeight,
                 outputChannels,
                 1,
+                false,
                 DDR_BYTES_PER_CYCLE
                 );
 
