@@ -96,6 +96,51 @@ TEST_F(testFixture, 128x128x3x3x56x56)
     }
 }
 
+TEST_F(testFixture, 128x128x1x1x56x56)
+{
+    testFixture::t_conv_spec spec {
+        .inputChannel=128,
+        .outputChannel=128,
+        .inputWidth=56,
+        .inputHeight=56,
+        .borderPadding=1,
+        .kernel=1,
+        .stride=1,
+        .transConvPadding=0,
+        .numGroups=1,
+        .numSourceGroups=1,
+        .relu=true,
+        .inputFracBits=2,
+        .weightFracBits=2,
+        .outputFracBits=2,
+        .sparsity=0.0
+    };
+
+    typedef struct {
+        int sizeOutputFullTileHeight;
+        int sizeOutputFullTileWidthPerCol;
+    } t_tile;
+
+    std::vector<t_tile> vecTileConfigs {
+        {.sizeOutputFullTileHeight = 28, .sizeOutputFullTileWidthPerCol = 4},
+        {.sizeOutputFullTileHeight = 14, .sizeOutputFullTileWidthPerCol = 4},
+        {.sizeOutputFullTileHeight = 7, .sizeOutputFullTileWidthPerCol = 4},
+        {.sizeOutputFullTileHeight = 1, .sizeOutputFullTileWidthPerCol = 4},
+        {.sizeOutputFullTileHeight = 28, .sizeOutputFullTileWidthPerCol = 2},
+        {.sizeOutputFullTileHeight = 14, .sizeOutputFullTileWidthPerCol = 2},
+        {.sizeOutputFullTileHeight = 7, .sizeOutputFullTileWidthPerCol = 2},
+        {.sizeOutputFullTileHeight = 1, .sizeOutputFullTileWidthPerCol = 2},
+        {.sizeOutputFullTileHeight = 28, .sizeOutputFullTileWidthPerCol = 1},
+        {.sizeOutputFullTileHeight = 14, .sizeOutputFullTileWidthPerCol = 1},
+        {.sizeOutputFullTileHeight = 7, .sizeOutputFullTileWidthPerCol = 1},
+        {.sizeOutputFullTileHeight = 1, .sizeOutputFullTileWidthPerCol = 1},
+    };
+
+    for (auto &config : vecTileConfigs) {
+        launch(spec, config.sizeOutputFullTileHeight, config.sizeOutputFullTileWidthPerCol);
+    }
+}
+
 void testFixture::SetUp()
 {
 #ifdef C5SOC
