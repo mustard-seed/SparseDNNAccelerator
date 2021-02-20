@@ -21,6 +21,7 @@ target_link_libraries(model_container
     PUBLIC
     yaml-cpp
     cnpy
+    "tile"
   )
 
 #######################################d

@@ -5,6 +5,8 @@
 #include <vector>
 #include <cassert>
 
+#include "tile.hpp"
+
 #include "yaml-cpp/yaml.h"
 #include "cnpy.hpp"
 
@@ -30,6 +32,7 @@ namespace GraphRuntime {
             */
             int getLayerID();
             virtual LayerType getLayerType() = 0;
+            void setLayerID(int _id);
 
             /*
              * Input information getters
@@ -43,6 +46,17 @@ namespace GraphRuntime {
             IntVec getInputGroupsSeenBySource();
             bool   getInputSparseFlag();
 
+            /*!
+              Input information setters
+            */
+            void setInputHeights(IntVec _inputHeights);
+            void setInputWidths(IntVec _inputWidths);
+            void setInputChannels(IntVec _inputChannels);
+            void setInputFracBits(IntVec _inputFracBits);
+            void setInputMemoryLocations(IntVec _inputMemLocations);
+            void setInputGroupsSeenBySource(IntVec _inputGroupsSeenBySource);
+            void setInputSparseFlag(bool _inputSparseFlag);
+
             /*
              * Output information getters
             */
@@ -54,11 +68,32 @@ namespace GraphRuntime {
             bool getOutputReluFlag();
             bool getOutputSparseFlag();
 
+            /*!
+              Output information setters
+             */
+            void setOutputFracBits(int);
+            void setOutputHeight(int);
+            void setOutputWidth(int);
+            void setOutputChannel(int);
+            void setOutputMemoryLocation(int);
+            void setOutputReluFlag(bool);
+            void setOutputSparseFlag(bool);
+
             /*
-             * Group information
+             * Group information getters and setters
             */
             int getCurrentNumberGroups();
             int getNextNumberGroups();
+
+            void setCurrentNumberGroups(int);
+            void setNextNumberGroups(int);
+
+            /*!
+              Tile helper functions
+             */
+            virtual bool cacheBoundaryCheck(t_graph_output_tile_info _tileCandidate);
+            virtual t_latency_info deriveLatency(t_graph_output_tile_info _tileCandidate);
+            virtual int deriveOps();
     };
 
     class ConvLayer: public Layer {
@@ -84,11 +119,23 @@ namespace GraphRuntime {
         int getWeightPruneClusterSize();
         int getWeightPruneRangeSizeInCluster();
 
+        void setKernelStride(int);
+        void setKernelSize(int);
+        void setInputBorderPadding(int);
+        void setTransConvPadding(int);
+        void setBiasFlag(bool);
+        void setWeightFracBits(int);
+        void setWeightSparsity(float);
+        void setWeightPruneClusterSize(int);
+        void setWeightPruneRangeSizeInCluster(int);
+
         /*
          * Parameter Related Flag
         */
         void    loadWeights(const cnpy::NpyArray& _weightNode);
         void    loadBiases(const cnpy::NpyArray&  _biasNode);
+        void    loadWeights(const float* _pWeights);
+        void    loadBiases (const float* _pBiases);
         FloatVec getWeights();
         FloatVec getBiases();
 
@@ -96,6 +143,15 @@ namespace GraphRuntime {
          * Special input processing
          */
         bool getIsAfterInput();
+        void setIsAfterInput (bool);
+
+        /*!
+            Class specific implementations
+        */
+        bool cacheBoundaryCheck(t_graph_output_tile_info _tileCandidate) override;
+        t_latency_info deriveLatency(t_graph_output_tile_info _tileCandidate) override;
+        int deriveOps() override;
+
     };
 
     class MaxPoolLayer: public Layer {
@@ -111,6 +167,13 @@ namespace GraphRuntime {
         int getKernelStride();
         int getKernelSize();
         int getInputBorderPadding();
+
+        void setKernelStride(int);
+        void setKernelSize(int);
+        void setInputBorderPadding(int);
+
+        t_latency_info deriveLatency(t_graph_output_tile_info _tileCandidate) override;
+        int deriveOps() override;
     };
 
     class AveragePoolLayer: public Layer {
@@ -127,6 +190,14 @@ namespace GraphRuntime {
         int getKernelSize();
         int getInputBorderPadding();
         float getDivisor();
+
+        void setKernelStride(int);
+        void setKernelSize(int);
+        void setInputBorderPadding(int);
+        void setDivisor(float);
+
+        t_latency_info deriveLatency(t_graph_output_tile_info _tileCandidate) override;
+        int deriveOps() override;
     };
 
     class EltAddLayer: public Layer {
@@ -135,6 +206,8 @@ namespace GraphRuntime {
         EltAddLayer(const YAML::Node& _node);
 
         LayerType getLayerType() override;
+        t_latency_info deriveLatency(t_graph_output_tile_info _tileCandidate) override;
+        int deriveOps() override;
     };
 
     class QuantLayer: public Layer {

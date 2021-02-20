@@ -1342,7 +1342,8 @@ namespace GraphRuntime {
             //Print average layer transfer time
             buffer <<"===========Layer inference time"<<std::endl;
             buffer <<std::setw(30)<<std::left<<"Layer Name";
-            buffer <<std::setw(30)<<std::left<<"Average latency (us)"<<std::endl;
+            buffer <<std::setw(30)<<std::left<<"Average latency (us)";
+            buffer <<std::setw(30)<<std::left<<"Predicted latency (us)"<<std::endl;
             for (unsigned int i=0; i<vecLayerExecutionTime.size(); i++)
             {
                 auto layerInfo = vecLayerInfo.at(i);
@@ -1354,8 +1355,10 @@ namespace GraphRuntime {
                     name += "...";
                 }
                 double averageTimeUs = layerTime / ((double) numRunExecuted);
+                double expectedLatency = layerInfo.expectedLatency / (double) FMAX_MHZ;
                 buffer <<std::setw(30)<<std::left<<name;
-                buffer <<std::setw(30)<<std::left<<std::to_string(averageTimeUs)<<std::endl;
+                buffer <<std::setw(30)<<std::left<<std::to_string(averageTimeUs);
+                buffer <<std::setw(30)<<std::left<<expectedLatency<<std::endl;
             }
             //Print average outout blob transfer time
             buffer <<"===========Output blob transfer time"<<std::endl;

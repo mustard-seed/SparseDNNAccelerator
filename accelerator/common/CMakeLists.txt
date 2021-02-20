@@ -117,6 +117,21 @@ set_target_properties (${AOCL_LIBRARY_NAME} PROPERTIES "CMAKE_CXX_FLAGS" "${CMAK
 #    ${PREPROCESSOR_DEFS}
 #    )
 
+#####################################################################
+# LIBRARY FOR TILES
+######################################################################
+add_library("tile" ${CMAKE_CURRENT_SOURCE_DIR}/src/tile.cpp)
+target_include_directories("tile"
+        PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/inc
+        ${PROJECT_SOURCE_DIR}/device
+    )
+set_target_properties ("tile" PROPERTIES "CMAKE_CXX_FLAGS" "${CMAKE_CXX_FLAGS}")
+target_compile_definitions(
+    tile
+    PUBLIC
+    ${PREPROCESSOR_DEFS}
+    )
 #################################################################
 # Library for tensor compression, and instruction generation
 #################################################################
@@ -136,6 +151,9 @@ target_include_directories("data_instruction_gen"
         $ENV{INTELFPGAOCLSDKROOT}/host/include
 )
 set_target_properties ("data_instruction_gen" PROPERTIES "CMAKE_CXX_FLAGS" "${CMAKE_CXX_FLAGS}")
+target_link_libraries("data_instruction_gen"
+         "tile"
+    )
 
 target_compile_definitions(
     data_instruction_gen
