@@ -28,6 +28,7 @@ t_operand modifyOutput (
 	}
 
     //Handle the right shift case
+    //See round half to even in https://zipcpu.com/dsp/2017/07/22/rounding.html
     //Note the mask below makes sense if the accumulator is 16-bit
     // unsigned char rndRightShift = shiftAmount - 1;
     t_accumulator accumulatorMask = ACCUM_MASK;

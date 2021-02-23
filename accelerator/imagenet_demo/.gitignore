@@ -1,0 +1,5 @@
+*.yaml
+*.mat
+*.txt
+!CMakeLists.txt
+!requirements.txt

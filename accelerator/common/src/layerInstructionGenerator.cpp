@@ -547,6 +547,11 @@ void instruction_generator(//Type of the operation
                                   <<(unsigned int) outputShiftBits<<std::endl;
                         throw;
                     }
+                    if (abs(outputShiftBits) >= 15) {
+                        std::cout <<"[Insturction generator]Too many bits to shift in output modification!"<<std::endl;
+                        std::cout <<"Shift = "<<(int) outputShiftBits<<std::endl;
+                        throw;
+                    }
                     unsigned char sourceIsMisc = (op != CONVOLUTION) ? 0x01 : 0x00;
 
                     int numOAInstructionPerTile = (op == CONCATENATION) ? 2 : 1;
@@ -813,6 +818,11 @@ void instruction_generator(//Type of the operation
                                   << "shift left flag, shift amount: "
                                   <<(unsigned int) flagOutputShiftLeft<<" "
                                   <<(unsigned int) outputShiftBits<<std::endl;
+                        throw;
+                    }
+                    if (abs(outputShiftBits) >= 15) {
+                        std::cout <<"[Insturction generator]Too many bits to shift in output modification!"<<std::endl;
+                        std::cout <<"Shift = "<<(int) outputShiftBits<<std::endl;
                         throw;
                     }
 
