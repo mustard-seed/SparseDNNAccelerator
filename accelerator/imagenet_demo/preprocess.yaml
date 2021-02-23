@@ -1,0 +1,7 @@
+scale: 0.003921569
+means: [123.675, 116.28, 103.53]
+vars: [0.229, 0.224, 0.225]
+loadHeight: 256
+loadWidth: 256
+procHeight: 224
+procWidth: 224

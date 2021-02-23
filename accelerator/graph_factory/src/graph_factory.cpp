@@ -610,8 +610,9 @@ namespace GraphRuntime {
                 break;
             } //switch
 
+#if defined(HOST_DEBUG)
             std::cout <<"Processing layer: "<<layerName<<std::endl;
-
+#endif
             // Generate instruction if this is a computation layer
             if (isComputeLayer == true)
             {
@@ -802,7 +803,9 @@ namespace GraphRuntime {
 
                     countComputeLayer++;
             } // if compute layer
+#if defined(HOST_DEBUG)
             std::cout <<"Finished layer: "<<layerName<<std::endl;
+#endif
             idxLayer++;
         } // for layer
 
