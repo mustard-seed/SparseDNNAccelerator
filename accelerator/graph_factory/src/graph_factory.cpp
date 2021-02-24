@@ -32,7 +32,7 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer &_convLayer);
 t_tile_pair calculateTileSizePerUnit(EltAddLayer &_eltAddLayer);
 
 namespace GraphRuntime {
-    GraphFactory::GraphFactory(std::string _traceFileName, std::string _parameterFileName, bool _inputScatter)
+    GraphFactory::GraphFactory(std::string _traceFileName, std::string _parameterFileName, bool _inputScatter, int _lastLayerID)
     {
        typedef YAML::Node YN;
        flagInputScatter = _inputScatter;
@@ -47,7 +47,9 @@ namespace GraphRuntime {
        {
            std::cout <<"Failed to load npz_load, but the test might be ok."<<std::endl;
        }
-       for (int i=0; i<traceNodes.size(); i++) {
+       bool appendDequant = _lastLayerID >= 0;
+       int size = (_lastLayerID < 0) ? traceNodes.size() : std::min((int)_lastLayerID+1, (int)traceNodes.size());
+       for (int i=0; i<size; i++) {
            YAML::Node traceLayer = traceNodes[i];
            //Hash the string to a enum type, so we can use switch-case statement
            //See https://stackoverflow.com/a/650307
@@ -97,6 +99,33 @@ namespace GraphRuntime {
                break;
            } // end of case
        } //end of for loop iterating through all nodes
+
+       if (appendDequant) {
+           int layerID = vecLayers.back()->getLayerID() + 1;
+           int outputMemoryLocation = vecLayers.back()->getOutputMemoryLocation();
+           int height = vecLayers.back()->getOutputHeight();
+           int width = vecLayers.back()->getOutputWidth();
+           int channel = vecLayers.back()->getOutputChannel();
+           int fracBits = vecLayers.back()->getOutputFracBits();
+           int groups = vecLayers.back()->getCurrentNumberGroups();
+
+           auto pOutputBlob = std::make_shared<DeQuantLayer>(DeQuantLayer());
+
+           pOutputBlob->setLayerID(layerID);
+           pOutputBlob->setInputHeights({height});
+           pOutputBlob->setInputWidths({width});
+           pOutputBlob->setInputChannels({channel});
+           pOutputBlob->setInputFracBits({fracBits});
+           pOutputBlob->setOutputMemoryLocation(outputMemoryLocation);
+           pOutputBlob->setInputMemoryLocations({outputMemoryLocation});
+           pOutputBlob->setInputGroupsSeenBySource({groups});
+           pOutputBlob->setCurrentNumberGroups(groups);
+           pOutputBlob->setOutputFracBits(fracBits);
+           pOutputBlob->setOutputHeight(height);
+           pOutputBlob->setOutputWidth(width);
+           pOutputBlob->setOutputChannel(channel);
+           this->addLayer(pOutputBlob);
+       }
     }
 
     void GraphFactory::setInputScatter(bool _flag)
@@ -392,6 +421,10 @@ namespace GraphRuntime {
                     bool hasBias = pLayerLocal->getBiasFlag();
                     if (hasBias)
                     {
+                        if (pSumFracBits < 0) {
+                            std::cout <<"[graph factory] pSumFracBits cannot be less than 0 when preparing bias!"<<std::endl;
+                            throw;
+                        }
                         std::fesetround(FE_TONEAREST); //round to even
                         std::vector<float> biasVector = pLayerLocal->getBiases();
                         for (int i=0; i<biasVector.size(); i++)

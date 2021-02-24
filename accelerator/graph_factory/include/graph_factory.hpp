@@ -6,6 +6,7 @@
 #include "yaml-cpp/yaml.h"
 #include <vector>
 #include <memory>
+#include <limits>
 
 namespace GraphRuntime {
     typedef struct {
@@ -22,7 +23,7 @@ namespace GraphRuntime {
         bool flagInputScatter;
     public:
        GraphFactory() = default;
-       GraphFactory(std::string _traceFileName, std::string _parameterFileName, bool _inputScatter=false);
+       GraphFactory(std::string _traceFileName, std::string _parameterFileName, bool _inputScatter=false, int _lastLayerID = -1);
        ~GraphFactory() = default;
 
        /*!

@@ -4,20 +4,22 @@
 #include <iostream>
 #include <vector>
 #include <map>
+#include <numeric> //iota
+#include <algorithm> //stable_sort
 
 //Prirority of the MACRO flags:
 //PLAY > VALIDATE > RESNET56
-//#define PLAY
+#define PLAY
 //#define VALIDATE
 //#define RESNET50_CONV12
 //#define RESNET56
-#define RESNET50
+//#define RESNET50
 #ifndef C5SOC
 //#define EMULATE
 #endif
-#define INFERENCE_REPEAT 100
-#define WARMUP 100
-#define CHECKOUTPUT
+#define INFERENCE_REPEAT 1
+#define WARMUP 0
+//#define CHECKOUTPUT
 //#define PROFILE
 
 class testFixture : public ::testing::Test {
@@ -32,21 +34,30 @@ protected:
                 std::string _parameterFileName,
                 std::string _inoutFileName,
                 std::map<std::string, std::string> _traceName2BlobName,
-                bool _scatterInput=false);
+                bool _scatterInput=false,
+                int _targetLayerID=-1);
 };
+
+typedef struct {
+    int idx;
+    float val;
+} t_topK_elem;
+
+std::vector<t_topK_elem> getTopK(std::vector<float> _vec, int k=10);
 #if defined(PLAY) //focus on one test
 TEST_F(testFixture, testTrace)
 {
     /*
      *Test trace: https://drive.google.com/drive/folders/1HZ5jjIw-71bSwvaNlaOGVJSW_FvTdY5D?usp=sharing
     */
-    std::string traceFileName = "testTrace_trace.yaml";
-    std::string traceParameterFile = "testTrace_parameters.npz";
-    std::string inoutFile = "testTrace_inout.yaml";
+    std::string traceFileName = "resnet50_imagenet_trace.yaml";
+    std::string traceParameterFile = "resnet50_imagenet_parameters.npz";
+    std::string inoutFile = "resnet50_imagenet_inout_1.yaml";
+    bool scatterInput = true;
     std::map<std::string, std::string> traceName2BlobName;
     traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
-    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_15", "output"));
-    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName);
+    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_2", "output"));
+    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName, scatterInput, 1);
 }
 //TEST_F(testFixture, tinyNet)
 //{
@@ -219,14 +230,15 @@ void testFixture::launch(std::string _traceFileName,
                          std::string _parameterFileName,
                          std::string _inoutFileName,
                          std::map<std::string, std::string> _traceName2BlobName,
-                         bool _scatterInput)
+                         bool _scatterInput,
+                         int _targetLayerID)
 {
     int stepCount = 1;
 
     //Load the trace file and the parameter file
     std::cout <<"Step "<<stepCount++<<": Loading trace file and parameter file."<<std::endl;
     std::cout <<testPrefix+_traceFileName<<" "<<testPrefix+_parameterFileName<<std::endl;
-    GraphRuntime::GraphFactory graphFactory(testPrefix+_traceFileName, testPrefix+_parameterFileName, _scatterInput);
+    GraphRuntime::GraphFactory graphFactory(testPrefix+_traceFileName, testPrefix+_parameterFileName, _scatterInput, _targetLayerID);
 
     std::cout <<"Step "<<stepCount++<<": Generate the execution graph."<<std::endl;
     auto pGraph = std::move(graphFactory.generateGraph());
@@ -285,7 +297,6 @@ void testFixture::launch(std::string _traceFileName,
     std::string csvFileName = _traceFileName.substr(0, dotPos) + ".csv";
     accelerator.dumpRuntimeToCSV(csvFileName);
 
-#if defined(CHECKOUTPUT)
     std::cout <<"Step "<<stepCount++<<": Extract output and perform checks"<<std::endl;
     {
        YAML::Node rawBlobs = YAML::LoadFile(testPrefix+_inoutFileName);
@@ -294,13 +305,13 @@ void testFixture::launch(std::string _traceFileName,
        for (const auto& blobInfo: vecBlobInfo)
        {
            std::string layerName = _traceName2BlobName[blobInfo.blobName];
-           YAML::Node blob = rawBlobs[layerName];
+           std::vector<float> blob = rawBlobs[layerName].as<std::vector<float>>();
            std::vector<float> actualResult = accelerator.extractOutputBlob(blobID);
+           std::cout<<"Actual blob size: "<<actualResult.size()<<std::endl;
+           std::cout<<"Reference blob size: "<<blob.size()<<std::endl;
            int iter=0;
-           signed char numFracBitsDifference = blobInfo.numFracBits - 1;
-//           float tolerance = (numFracBitsDifference >= 0) ?
-//                      1.0 / (1 << numFracBitsDifference) : 1 << (-1 * numFracBitsDifference);
            float tolerance = 1e-3;
+           #if defined(CHECKOUTPUT)
            for (int h=0; h<blobInfo.height; h++)
            {
                for (int w=0; w<blobInfo.width; w++)
@@ -309,7 +320,7 @@ void testFixture::launch(std::string _traceFileName,
                    {
                        int rawIter = c * blobInfo.height * blobInfo.width
                                + h * blobInfo.width + w;
-                       float expected = blob[rawIter].as<float>();
+                       float expected = blob.at(rawIter);
                        float actual = actualResult.at(iter++);
                        //The computation is like adding two signed numbers with numFracBits
                        //hence the difference's number of frac bits is numFracBits - 1
@@ -321,8 +332,52 @@ void testFixture::launch(std::string _traceFileName,
                    }
                }
            }
+           #endif //CHECKOUTPUT
+
+           //Compare the top-10 from each output
+           int K = 5;
+           std::vector<t_topK_elem> referenceTopK = getTopK(blob, K);
+           std::cout <<"Reference Top "<<K<<": "<<std::endl;
+           iter=0;
+           for (const auto& elem: referenceTopK) {
+               int idx = elem.idx;
+               int ch = idx / (blobInfo.height * blobInfo.width);
+               int row = idx % (blobInfo.height * blobInfo.width) / blobInfo.width;
+               int col = idx  % blobInfo.width;
+               std::cout<<iter<<". [ch="<<ch<<", row="<<row<<", col="<<col<<"]: "<<elem.val<<std::endl;
+               iter++;
+           }
+           iter = 0;
+           std::cout <<"Actual Top "<<K<<": "<<std::endl;
+           std::vector<t_topK_elem> actualTopK = getTopK(actualResult, K);
+           for (const auto& elem: actualTopK) {
+               int idx = elem.idx;
+               int ch = idx % blobInfo.channel;
+               int row = idx / (blobInfo.channel * blobInfo.width);
+               int col = idx % (blobInfo.channel * blobInfo.width) / blobInfo.channel;
+               std::cout<<iter<<". [ch="<<ch<<", row="<<row<<", col="<<col<<"]: "<<elem.val<<std::endl;
+               iter++;
+           }
            blobID++;
        }
     }
-#endif //CHECKOUTPUT
+}
+
+std::vector<t_topK_elem> getTopK(std::vector<float> _vec, int k)
+{
+    std::vector<int> indices(k, 0);
+    std::iota(indices.begin(), indices.end(), 0);
+    std::stable_sort(
+                indices.begin(),
+                indices.end(),
+                [&_vec](size_t i1, size_t i2) {return _vec[i1] > _vec[i2];}
+                     );
+    std::vector<t_topK_elem> result;
+    for (int i=0; i<k; i++) {
+        t_topK_elem elem;
+        elem.idx = indices.at(i);
+        elem.val = _vec.at(elem.idx);
+        result.push_back(elem);
+    }
+    return result;
 }
