@@ -469,6 +469,18 @@ __kernel void kernelSpWPE ()
 		switch (regState) {
 			case SPW_PE_INSTRUCTION_READ_BIAS: {
 				sigState = SPW_PE_INSTRUCTION_MAC;
+				if (sigIsLastWBlockInPruneRange == TRUE)
+				{
+					EMULATOR_PRINT((
+						"[SpW PE (%d, %d)]: "
+						"Detected the last SpW block in prune ranges.\n",
+						idy, idx, weightBlockCount
+					));
+					if (sigIsLastWBlockInFilter == TRUE)
+					{
+						sigState = SPW_PE_INSTRUCTION_READ_BIAS;
+					}
+				}
 			} //case SPW_PE_INSTRUCTION_READ_BIAS
 			break;
 			case SPW_PE_INSTRUCTION_MAC: {
@@ -824,6 +836,9 @@ __kernel void kernelDensePE ()
 		switch (regInstruction) {
 			case DENSE_PE_INSTRUCTION_READ_BIAS: {
 				sigNextInstruction = DENSE_PE_INSTRUCTION_MAC;
+				if (sigIsLastWBlockInFilter == TRUE) {
+					sigNextInstruction = DENSE_PE_INSTRUCTION_READ_BIAS;
+				}
 			}
 			break;
 			case DENSE_PE_INSTRUCTION_MAC: {
