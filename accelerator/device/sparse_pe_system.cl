@@ -165,10 +165,10 @@ __kernel void kernelIAMover (
 					{
 						/*!Setup the strip transfer parameters*/
 						//Determine whether the strip consists of padding, or actual values from memory
-						bool colIsDense = (iColInSPTile >= ((signed char) tileLeftPadding))
+						bool colIsDense = (iColInSPTile >= ((unsigned char) tileLeftPadding))
 							&& (iColInSPTile < (inst.tileSPWidth - ((unsigned char) tileRightPadding)) )
 							&& (iColSPUnitIndex == 0);
-						bool rowIsDense = (iRowInSPTile >= ((signed char) tileTopPadding))
+						bool rowIsDense = (iRowInSPTile >= ((unsigned char) tileTopPadding))
 							&& (iRowInSPTile < (inst.tileSPHeight - ((unsigned char) tileBottomPadding)) )
 							&& (iRowSPUnitIndex == 0);
 
@@ -1699,8 +1699,8 @@ __kernel void kernelIATileController (
 				//if (success)
 				//{e
 				EMULATOR_PRINT(("[kernelIATileController] Sent a buffer stream command. "
-				"iInstructionCycle=%d, numActivePeRows=%d, iInputTileHeight=%d, iInputTileWidth=%d.\n\n", 
-				iInstructionCycle, numActivePeRows, iInputTileHeight, iInputTileWidth));
+				"iInstructionCycle=%d, numActivePeRows=%d, iInputTileHeight=%d, iInputTileWidth=%d. iRowInTile=%d.\n\n", 
+				iInstructionCycle, numActivePeRows, iInputTileHeight, iInputTileWidth, iRowInTile));
 					
 				iRowInTile++;
 				if (iRowInTile == kernelSizeHeight)
