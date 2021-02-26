@@ -665,11 +665,11 @@ void instruction_generator(//Type of the operation
                         instructionIA.tileSPHeight = (t_uchar) maxTM;
                         instructionIA.tileSPWidth = (t_uchar) maxTN;
                         unsigned char inputTileLeftPadding = (iterNGlobal < inputWidthPadding) ?
-                                    inputWidthPadding : 0;
+                                    inputWidthPadding -  iterNGlobal : 0;
                         unsigned char inputTileRightPadding = ((iterNGlobal + maxTN) > (inputWidthPadding + inputDenseWidth)) ?
                                     ((iterNGlobal + maxTN) - (inputWidthPadding + inputDenseWidth)) : 0;
                         unsigned char inputTileTopPadding = (iterMGlobal < inputHeightPadding) ?
-                                    inputHeightPadding : 0;
+                                    inputHeightPadding - iterMGlobal : 0;
                         unsigned char inputTileBottomPadding = ((iterMGlobal + maxTM) > (inputHeightPadding + inputDenseHeight)) ?
                                     ((iterMGlobal + maxTM) - (inputHeightPadding + inputDenseHeight)) : 0;
                         instructionIA.concatPadding = (t_uchar) (
