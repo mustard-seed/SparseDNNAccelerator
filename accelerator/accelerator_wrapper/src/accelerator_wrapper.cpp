@@ -665,7 +665,7 @@ namespace GraphRuntime {
             cl_double elapsedTimeUs = 0.0;
             int transferBytes = 0;
             int idxTensor = 0;
-            for (std::shared_ptr<t_aligned_short_vector>& ptr : _executionGraph.pBiasVector)
+            for (std::shared_ptr<t_aligned_bias_vector>& ptr : _executionGraph.pBiasVector)
             {
                 cl::Event event;
                 auto pBiases = ptr.get();

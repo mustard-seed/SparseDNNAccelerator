@@ -50,7 +50,10 @@ typedef
 std::vector<t_misc_instruction, boost::alignment::aligned_allocator<t_misc_instruction, aocl_utils_cpp::AOCL_ALIGNMENT>>
 t_aligned_misc_instruction_vector;
 
-typedef
+/*typedef
 std::vector<cl_short, boost::alignment::aligned_allocator<cl_short, aocl_utils_cpp::AOCL_ALIGNMENT>>
-t_aligned_short_vector;
+t_aligned_short_vector*/
+
+std::vector<cl_int, boost::alignment::aligned_allocator<cl_int, aocl_utils_cpp::AOCL_ALIGNMENT>>
+t_aligned_bias_vector;
 #endif

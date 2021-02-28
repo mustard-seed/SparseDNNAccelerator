@@ -2287,7 +2287,7 @@ void testFixture::launch (unsigned short _inputWidth,
     }
     //Generate biases
     t_bias fixedBias = (t_bias) (std::nearbyint(_bias * (float) (1 << (FRAC_WIDTH + FRAC_WIDTH)) ));
-    auto pBiasVector = std::make_shared<t_aligned_short_vector>(numOutputChannels, fixedBias);
+    auto pBiasVector = std::make_shared<t_aligned_bias_vector>(numOutputChannels, fixedBias);
 
     /* 2. Allocate the aligned weight tensors and compress them if necessary
      * */

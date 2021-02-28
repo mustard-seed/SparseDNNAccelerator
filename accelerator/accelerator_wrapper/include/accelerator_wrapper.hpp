@@ -89,7 +89,7 @@ namespace GraphRuntime {
 //#endif
 
         //Pointers to each layer's quantized biases
-        std::vector<std::shared_ptr<t_aligned_short_vector>> pBiasVector;
+        std::vector<std::shared_ptr<t_aligned_bias_vector>> pBiasVector;
 
         //Instructions of layers
         t_aligned_ia_mover_instruction_vector vecIAMoverInstruction;

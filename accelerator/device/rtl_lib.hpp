@@ -5,23 +5,23 @@
 	int a10_mac_8bitx4 (char a0, char b0, char a1, char b1, char a2, char b2, char a3, char b3);
 	int a10_mac_8bitx4_input_registered (char a0, char b0, char a1, char b1, char a2, char b2, char a3, char b3);
 	int a10_mac_8bitx2 (char a0, char b0, char a1, char b1);
-	int a10_chain_madd_8bitx8(
-		char a0,
-		char b0,
-		char a1,
-		char b1,
-		char a2,
-		char b2,
-		char a3,
-		char b3,
-		char a4,
-		char b4,
-		char a5,
-		char b5,
-		char a6,
-		char b6,
-		char a7,
-		char b7
+	signed int a10_chain_madd_8bitx8(
+		signed char a0,
+		signed char b0,
+		signed char a1,
+		signed char b1,
+		signed char a2,
+		signed char b2,
+		signed char a3,
+		signed char b3,
+		signed char a4,
+		signed char b4,
+		signed char a5,
+		signed char b5,
+		signed char a6,
+		signed char b6,
+		signed char a7,
+		signed char b7
 	);
 #elif defined (C5SOC)
 	int c5_mac_8bitx4 (char a0, char b0, char a1, char b1, char a2, char b2, char a3, char b3);

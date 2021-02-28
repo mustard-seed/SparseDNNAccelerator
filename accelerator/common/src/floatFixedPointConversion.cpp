@@ -22,6 +22,7 @@ fixedPointNumber::fixedPointNumber (float _realNumber
     //int fullBits = (int) round(_realNumber / resolution);
     std::fesetround(FE_TONEAREST); //round to even
     int fullBits = (int) std::nearbyint(_realNumber / resolution);
+//    int fullBits = (int) std::round(_realNumber / resolution);
     int totalWidth = _fracWidth + _intWidth;
     int minimum = -1 * (1 << totalWidth);
     int maximum = (1 << totalWidth) - 1;
@@ -82,5 +83,5 @@ float fixedPointNumber::convert2Float () {
     //        signBit > 0 ?
     //        bits | 0xFFFF << (fractionWidth + integerWidth) :
     //        bits;
-    return (signed char) (bits & 0xFF) * resolution;
+    return (float) ((signed char) (bits & 0xFF)) * resolution;
 }

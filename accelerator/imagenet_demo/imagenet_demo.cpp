@@ -126,10 +126,12 @@ t_preprocess parsePreProcess(YAML::Node &_node)
     proc.scale = _node["scale"].as<float>();
     YAML::Node means = _node["means"];
     YAML::Node vars = _node["vars"];
-    for (int i=0; i<3; i++) {
-        proc.bgrMean[i] = means[i].as<float>();
-        proc.vars[i] = vars[i].as<float>();
-    }
+    proc.bgrMean = cv::Scalar(means[0].as<float>(), means[1].as<float>(), means[2].as<float>());
+    proc.vars = cv::Scalar(vars[0].as<float>(), vars[1].as<float>(), vars[2].as<float>());
+//    for (int i=0; i<3; i++) {
+//        proc.bgrMean[i] = means[i].as<float>();
+//        proc.vars[i] = vars[i].as<float>();
+//    }
     proc.loadSize.height = _node["loadHeight"].as<int>();
     proc.loadSize.width = _node["loadWidth"].as<int>();
     proc.processSize.height = _node["procHeight"].as<int>();
@@ -140,19 +142,28 @@ t_preprocess parsePreProcess(YAML::Node &_node)
 
 std::vector<t_prediction> inference(AcceleratorWrapper &_accelerator, t_preprocess _preprocess, std::string _imgPath, int _k=5)
 {
-    cv::Mat _image = cv::imread(_imgPath);
+    cv::Mat _image = cv::imread(_imgPath, IMREAD_COLOR);
     Mat blob;
+
     if (_preprocess.loadSize.height != 0 && _preprocess.loadSize.width !=0) {
-        resize(_image, _image, _preprocess.loadSize);
+        //std::cout <<"Preprocessing. Load h/w: "<<_preprocess.loadSize.height<<" "<<_preprocess.loadSize.width<<std::endl;
+        resize(_image, blob, _preprocess.loadSize);
     }
     //Preprocess the image. Set channel swap and crop to true
-    blobFromImage(_image, blob, _preprocess.scale, _preprocess.processSize, _preprocess.bgrMean, true, true);
+//    blobFromImage(blob, blob, _preprocess.scale, _preprocess.processSize, _preprocess.bgrMean, true, true);
+    cv::Rect cropRect(_preprocess.loadSize.width / 2 - _preprocess.processSize.width /2,
+                      _preprocess.loadSize.height / 2 - _preprocess.processSize.height /2,
+                      _preprocess.processSize.width, _preprocess.processSize.height);
+    blob = blob(cropRect);
+    blobFromImage(blob, blob, _preprocess.scale, _preprocess.processSize, _preprocess.bgrMean, true, false);
+//    blobFromImage(blob, blob, _preprocess.scale, _preprocess.processSize, _preprocess.bgrMean, true, true);
     //cv::dnn::blobFromImage(_image, blob, 1.0f);
 
 //    imshow("abc", blob);
 //    int g = waitKey(0); // Wait for a keystroke in the window
     if (_preprocess.vars[0] != 0.0 && _preprocess.vars[1] != 0.0 && _preprocess.vars[2] != 0.0) {
         cv::divide(blob, _preprocess.vars, blob);
+        //cv::divide(blob, Scalar(1.0, 1.0, 1.0), blob);
     }
     if (!blob.isContinuous()) {
         std::runtime_error except("OpenCV Blob is not continuous.");
@@ -170,9 +181,8 @@ std::vector<t_prediction> inference(AcceleratorWrapper &_accelerator, t_preproce
     for (int k=0; k<channels; k++) {
         for (int i=0; i<rows; i++) {
             for (int j=0; j<cols; j++) {
-                int dstIdx = k + (j + i * cols) * blob.channels();
-                int srcIdx = j + (i + k * cols) * rows;
-
+                int dstIdx = k + (j + i * cols) * channels;
+                int srcIdx = j + (i + k * rows) * cols;
                 inputReordered.at(dstIdx) = data[srcIdx];
             }
         }
@@ -186,7 +196,7 @@ std::vector<t_prediction> inference(AcceleratorWrapper &_accelerator, t_preproce
     float maxRaw = std::max_element(rawResult.begin(), rawResult.end())[0];
     std::vector<float> softmaxResult(rawResult.size(), 0.0f);
     for (int i=0; i<rawResult.size(); i++) {
-        std::cout<<"rawResult["<<i<<"]: "<<rawResult.at(i)<<std::endl;
+        //std::cout<<"rawResult["<<i<<"]: "<<rawResult.at(i)<<std::endl;
         float z = std::exp(rawResult.at(i) - maxRaw);
         softmaxResult.at(i) = z;
         tempSum += z;

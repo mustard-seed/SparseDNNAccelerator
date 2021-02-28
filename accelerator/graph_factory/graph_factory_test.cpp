@@ -19,7 +19,7 @@
 #endif
 #define INFERENCE_REPEAT 1
 #define WARMUP 0
-//#define CHECKOUTPUT
+#define CHECKOUTPUT
 //#define PROFILE
 
 class testFixture : public ::testing::Test {
@@ -45,20 +45,128 @@ typedef struct {
 
 std::vector<t_topK_elem> getTopK(std::vector<float> _vec, int k=10);
 #if defined(PLAY) //focus on one test
-TEST_F(testFixture, testTrace)
+TEST_F(testFixture, resnet50_conv3)
 {
     /*
      *Test trace: https://drive.google.com/drive/folders/1HZ5jjIw-71bSwvaNlaOGVJSW_FvTdY5D?usp=sharing
     */
     std::string traceFileName = "resnet50_imagenet_trace.yaml";
     std::string traceParameterFile = "resnet50_imagenet_parameters.npz";
-    std::string inoutFile = "resnet50_imagenet_inout_1.yaml";
+    std::string inoutFile = "resnet50_imagenet_inout_img00000008_end.yaml";
     bool scatterInput = true;
     std::map<std::string, std::string> traceName2BlobName;
     traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
-    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_2", "output"));
-    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName, scatterInput, 1);
+    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_73", "output"));
+    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName, scatterInput, -1);
 }
+//TEST_F(testFixture, resnet50_input_conv_nobn_temp)
+//{
+//    std::string traceFileName = "resnet50_conv_trace.yaml";
+//    std::string traceParameterFile = "resnet50_conv_parameters.npz";
+//    std::string inoutFile = "resnet50_conv_inout.yaml";
+//    bool scatterInput = true;
+//    std::map<std::string, std::string> traceName2BlobName;
+//    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
+//    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_2", "output"));
+//    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName, scatterInput);
+//}
+//TEST_F(testFixture, resnet50_input_conv_nobn_ic3_oc64_k7_s2_iw2_ih2)
+//{
+//    std::string traceFileName = "resnet50_input_conv_nobn_ic3_oc64_k7_s2_iw2_ih2_trace.yaml";
+//    std::string traceParameterFile = "resnet50_input_conv_nobn_ic3_oc64_k7_s2_parameters.npz";
+//    std::string inoutFile = "resnet50_input_conv_nobn_ic3_oc64_k7_s2_iw2_ih2_inout.yaml";
+//    bool scatterInput = true;
+//    std::map<std::string, std::string> traceName2BlobName;
+//    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
+//    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_2", "output"));
+//    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName, scatterInput, 1);
+//}
+//TEST_F(testFixture, resnet50_input_conv_nobn1x1)
+//{
+//    std::string traceFileName = "resnet50_input_conv_nobn1x1_trace.yaml";
+//    std::string traceParameterFile = "resnet50_input_conv_nobn1x1_parameters.npz";
+//    std::string inoutFile = "resnet50_input_conv_nobn1x1_inout.yaml";
+//    bool scatterInput = true;
+//    std::map<std::string, std::string> traceName2BlobName;
+//    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
+//    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_2", "output"));
+//    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName, scatterInput, 1);
+//}
+//TEST_F(testFixture, resnet50_input_conv_nobn3x3)
+//{
+//    std::string traceFileName = "resnet50_input_conv_nobn3x3_trace.yaml";
+//    std::string traceParameterFile = "resnet50_input_conv_nobn3x3_parameters.npz";
+//    std::string inoutFile = "resnet50_input_conv_nobn3x3_inout.yaml";
+//    bool scatterInput = true;
+//    std::map<std::string, std::string> traceName2BlobName;
+//    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
+//    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_2", "output"));
+//    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName, scatterInput, 1);
+//}
+//TEST_F(testFixture, resnet50_input_conv_nobn7x7)
+//{
+//    std::string traceFileName = "resnet50_input_conv_nobn7x7_trace.yaml";
+//    std::string traceParameterFile = "resnet50_input_conv_nobn7x7_parameters.npz";
+//    std::string inoutFile = "resnet50_input_conv_nobn7x7_inout.yaml";
+//    bool scatterInput = true;
+//    std::map<std::string, std::string> traceName2BlobName;
+//    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
+//    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_2", "output"));
+//    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName, scatterInput, 1);
+//}
+//TEST_F(testFixture, resnet50_input_conv)
+//{
+//    std::string traceFileName = "resnet50_input_conv_trace.yaml";
+//    std::string traceParameterFile = "resnet50_input_conv_parameters.npz";
+//    std::string inoutFile = "resnet50_input_conv_inout.yaml";
+//    bool scatterInput = true;
+//    std::map<std::string, std::string> traceName2BlobName;
+//    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
+//    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_2", "output"));
+//    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName, scatterInput, 1);
+//}
+//TEST_F(testFixture, resnet50_inputconvbn)
+//{
+//    /*
+//     *Test trace: https://drive.google.com/drive/folders/1HZ5jjIw-71bSwvaNlaOGVJSW_FvTdY5D?usp=sharing
+//    */
+//    std::string traceFileName = "resnet50_imagenet_trace.yaml";
+//    std::string traceParameterFile = "resnet50_imagenet_parameters.npz";
+//    std::string inoutFile = "resnet50_imagenet_inout_1.yaml";
+//    bool scatterInput = true;
+//    std::map<std::string, std::string> traceName2BlobName;
+//    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
+//    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_2", "output"));
+//    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName, scatterInput, 1);
+//}
+//TEST_F(testFixture, resnet50_residualblock1)
+//{
+//    /*
+//     *Test trace: https://drive.google.com/drive/folders/1HZ5jjIw-71bSwvaNlaOGVJSW_FvTdY5D?usp=sharing
+//    */
+//    std::string traceFileName = "resnet50_imagenet_trace.yaml";
+//    std::string traceParameterFile = "resnet50_imagenet_parameters.npz";
+//    std::string inoutFile = "resnet50_imagenet_inout_7.yaml";
+//    bool scatterInput = true;
+//    std::map<std::string, std::string> traceName2BlobName;
+//    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
+//    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_8", "output"));
+//    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName, scatterInput, 7);
+//}
+//TEST_F(testFixture, resnet50_conv3)
+//{
+//    /*
+//     *Test trace: https://drive.google.com/drive/folders/1HZ5jjIw-71bSwvaNlaOGVJSW_FvTdY5D?usp=sharing
+//    */
+//    std::string traceFileName = "resnet50_imagenet_trace.yaml";
+//    std::string traceParameterFile = "resnet50_imagenet_parameters.npz";
+//    std::string inoutFile = "resnet50_imagenet_inout_8.yaml";
+//    bool scatterInput = true;
+//    std::map<std::string, std::string> traceName2BlobName;
+//    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
+//    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_9", "output"));
+//    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName, scatterInput, 8);
+//}
 //TEST_F(testFixture, tinyNet)
 //{
 //    /*
@@ -310,7 +418,8 @@ void testFixture::launch(std::string _traceFileName,
            std::cout<<"Actual blob size: "<<actualResult.size()<<std::endl;
            std::cout<<"Reference blob size: "<<blob.size()<<std::endl;
            int iter=0;
-           float tolerance = 1e-3;
+           float tolerance = std::pow(2.0f, -1.0 * blobInfo.numFracBits);
+           //float tolerance = 1e-6;
            #if defined(CHECKOUTPUT)
            for (int h=0; h<blobInfo.height; h++)
            {
@@ -332,6 +441,7 @@ void testFixture::launch(std::string _traceFileName,
                    }
                }
            }
+           std::cout <<"Tolerance is "<<tolerance<<std::endl;
            #endif //CHECKOUTPUT
 
            //Compare the top-10 from each output
@@ -365,7 +475,9 @@ void testFixture::launch(std::string _traceFileName,
 
 std::vector<t_topK_elem> getTopK(std::vector<float> _vec, int k)
 {
-    std::vector<int> indices(k, 0);
+    int size = _vec.size();
+    k = std::min(k, size);
+    std::vector<int> indices(size, 0);
     std::iota(indices.begin(), indices.end(), 0);
     std::stable_sort(
                 indices.begin(),

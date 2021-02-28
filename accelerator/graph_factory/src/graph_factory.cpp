@@ -417,7 +417,7 @@ namespace GraphRuntime {
                     memDramBlockFilterStride =  pWeight->getDramBlocksInFilter();
 
                     //Prepare the fixed-point bias vector
-                    std::shared_ptr<t_aligned_short_vector> pBiasVector = std::make_shared<t_aligned_short_vector>(numOutputChannels, 0x0);
+                    std::shared_ptr<t_aligned_bias_vector> pBiasVector = std::make_shared<t_aligned_bias_vector>(numOutputChannels, 0x0);
                     bool hasBias = pLayerLocal->getBiasFlag();
                     if (hasBias)
                     {
@@ -425,12 +425,21 @@ namespace GraphRuntime {
                             std::cout <<"[graph factory] pSumFracBits cannot be less than 0 when preparing bias!"<<std::endl;
                             throw;
                         }
+                        float tolerance = 1.0f / (float)(1 << pSumFracBits);
                         std::fesetround(FE_TONEAREST); //round to even
                         std::vector<float> biasVector = pLayerLocal->getBiases();
                         for (int i=0; i<biasVector.size(); i++)
                         {
                             float bias = biasVector.at(i);
-                            pBiasVector->at(i) = (t_bias) (std::nearbyint(bias * (float) (1 << pSumFracBits )) );
+                            //pBiasVector->at(i) = (t_bias) (std::round(bias * (float) (1 << pSumFracBits )) );
+                            t_bias quantBias = (t_bias) (std::nearbyint(bias * (float) (1 << pSumFracBits )) );
+                            pBiasVector->at(i) = quantBias;
+                            float diff = std::fabs(bias - (float) quantBias / (float) (1 << pSumFracBits));
+                            //std::cout <<"Bias quantization error: "<<diff<<std::endl;
+                            if (diff > tolerance) {
+                                std::cout <<"Warning: quantization error of bias is larger than tolerance. "
+                                         <<"Difference, tolerance: "<<diff<<" "<<tolerance<<std::endl;
+                            }
                         }
                     }
 
