@@ -55,7 +55,7 @@ std::vector<cl_short, boost::alignment::aligned_allocator<cl_short, aocl_utils_c
 t_aligned_short_vector*/
 
 typedef
-std::vector<cl_, boost::alignment::aligned_allocator<cl_int, aocl_utils_cpp::AOCL_ALIGNMENT>>
+std::vector<cl_int, boost::alignment::aligned_allocator<cl_int, aocl_utils_cpp::AOCL_ALIGNMENT>>
 t_aligned_bias_vector;
 //typedef
 //std::vector<cl_short, boost::alignment::aligned_allocator<cl_short, aocl_utils_cpp::AOCL_ALIGNMENT>>
