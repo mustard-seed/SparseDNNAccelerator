@@ -21,7 +21,8 @@ std::string keys =
     "{ image i     |                        | Required if flag val is NOT set. Path to the single image for testing.}"
     "{ preproc p   | preprocess.yaml        | Required. Path to the preprocessing configuration YAML file. }"
     "{ model m     | <none>                 | Required. Path to the model trace YAML file.}"
-    "{ param w     | <none>                 | Required. Path the the model parameter NPZ file.}";
+    "{ param w     | <none>                 | Required. Path the the model parameter NPZ file.}"
+    "{ numSamples n| 50000                 | Optional. Number of samples to run if flag val is set.}";
 
 using namespace cv;
 using namespace dnn;
@@ -44,7 +45,13 @@ typedef struct {
 t_preprocess parsePreProcess(YAML::Node &_node);
 
 std::vector<t_prediction> inference(AcceleratorWrapper &_accelerator, t_preprocess _preprocess, std::string _imgPath, int _k);
-int inferenceOnValidationSet(AcceleratorWrapper &_accelerator, std::string _groundTruthFile, std::string _valFolderPath, t_preprocess _preprocess, YAML::Node &_legend);
+int inferenceOnValidationSet(
+        AcceleratorWrapper &_accelerator,
+        std::string _groundTruthFile,
+        std::string _valFolderPath,
+        t_preprocess _preprocess,
+        YAML::Node &_legend,
+        int _numSamples=500000);
 int inferenceOnSingleImage(AcceleratorWrapper &_accelerator, std::string _imagePath, t_preprocess _preprocess, YAML::Node &_legend);
 
 int main(int argc, char** argv)
@@ -111,7 +118,8 @@ int main(int argc, char** argv)
     if (parser.has("val")) {
         std::string groundTruthFile = parser.get<String>("truth");
         std::string valFolder = parser.get<String>("folder");
-        return inferenceOnValidationSet(accelerator, groundTruthFile, valFolder, preprocess, legendNode);
+        int numSamples = parser.get<int>("numSamples");
+        return inferenceOnValidationSet(accelerator, groundTruthFile, valFolder, preprocess, legendNode, numSamples);
     }
     else {
         std::string imagePath = parser.get<String>("image");
@@ -228,11 +236,20 @@ std::vector<t_prediction> inference(AcceleratorWrapper &_accelerator, t_preproce
     return topK;
 }
 
-int inferenceOnValidationSet(AcceleratorWrapper &_accelerator, std::string _groundTruthFile, std::string _valFolderPath, t_preprocess _preprocess, YAML::Node &_legend)
+int inferenceOnValidationSet(
+        AcceleratorWrapper &_accelerator,
+        std::string _groundTruthFile,
+        std::string _valFolderPath,
+        t_preprocess _preprocess,
+        YAML::Node &_legend,
+        int _numSamples)
 {
     YAML::Node groundTruth = YAML::LoadFile(_groundTruthFile);
-    int num = groundTruth.size();
+    int num = std::min((int) groundTruth.size(), _numSamples);
     int count = 0;
+
+    std::cout <<"Running inferences on the validation set. "
+              <<"Number of inferences to run: "<<num<<std::endl;
 
     typedef struct {
         std::string path;
@@ -244,6 +261,9 @@ int inferenceOnValidationSet(AcceleratorWrapper &_accelerator, std::string _grou
     int posTop1Count = 0;
     int posTop5Count = 0;
     for (auto it=groundTruth.begin(); it!=groundTruth.end(); it++) {
+        if (count == num) {
+            break;
+        }
         std::string fileName = it->first.as<std::string>();
         int trueLabel = it->second.as<int>();
         std::string filePath = _valFolderPath + "/" + fileName;

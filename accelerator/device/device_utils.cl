@@ -197,12 +197,14 @@ t_filter_streamer_control dramBlock2FilterStreamerControl (t_weight_dram_block b
         = ( ( ( (short) (block.values[4]) ) & 0xFF )
             | ( (((short) (block.values[5])) & 0xFF) << 8));
 
-    control.bias
-            = ( ( ( (t_bias) (block.values[6]) ) & 0xFF )
-                | ( (((t_bias) (block.values[7])) & 0xFF) << 8));
+    control.maxPeCols = (unsigned char) block.values[6];
+    control.flagIsReal = (unsigned char) block.values[7]; 
 
-    control.maxPeCols = (unsigned char) block.values[8];
-    control.flagIsReal = (unsigned char) block.values[9]; 
+    control.bias
+        = ( ( ( (t_bias) (block.values[8]) ) & 0xFF )
+            | ( (((t_bias) (block.values[9])) & 0xFF) << 8)
+            | ( (((t_bias) (block.values[10])) & 0xFF) << 16)
+            | ( (((t_bias) (block.values[11])) & 0xFF) << 24));
 
     //Recover bias
     // #if ((PE_SIMD_SIZE * CLUSTER_SIZE) <= 4)
@@ -238,11 +240,14 @@ t_weight_dram_block filterStreamerControl2dramBlock (t_filter_streamer_control c
     block.values[4] = control.numTransferBlocks & 0xFF;
     block.values[5] = ((control.numTransferBlocks >> 8) & 0xFF);
 
-    block.values[6] = control.bias & 0xFF;
-    block.values[7] = ((control.bias >> 8) & 0xFF);
     //block.transferBlocks[2].values[0].cluster_values[0] = control.destinationRow;
-    block.values[8] = (char) control.maxPeCols;
-    block.values[9] = (char) control.flagIsReal;
+    block.values[6] = (char) control.maxPeCols;
+    block.values[7] = (char) control.flagIsReal;
+
+    block.values[8] = control.bias & 0xFF;
+    block.values[9] = ((control.bias >> 8) & 0xFF);
+    block.values[10] = ((control.bias >> 16) & 0xFF);
+    block.values[11] = ((control.bias >> 24) & 0xFF);
 
     // #if ( (PE_SIMD_SIZE * CLUSTER_SIZE) <= 4)
     //     block.transferBlocks[1].values[0] = control.bias & 0xFF;
