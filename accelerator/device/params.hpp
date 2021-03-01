@@ -43,14 +43,14 @@
 	// #define PE_ROWS_PER_GROUP 4
 	// #define PE_ROW_GROUPS 2
 	// #define MISC_COLS 1
-	#define PE_COLS 1
-	#define PE_ROWS_PER_GROUP 16
-	#define PE_ROW_GROUPS 1
-	#define MISC_COLS 1
 	// #define PE_COLS 1
-	// #define PE_ROWS_PER_GROUP 1
+	// #define PE_ROWS_PER_GROUP 16
 	// #define PE_ROW_GROUPS 1
 	// #define MISC_COLS 1
+	#define PE_COLS 1
+	#define PE_ROWS_PER_GROUP 1
+	#define PE_ROW_GROUPS 1
+	#define MISC_COLS 1
 	// #define PE_COLS 7
 	// #define PE_ROWS_PER_GROUP 8
 	// #define PE_ROW_GROUPS 6
@@ -268,7 +268,7 @@
 #define OA_CACHE_DEPTH (OA_CACHE_SIZE_BYTE/ACTIVATION_BURST_SIZE_BYTE)
 
 //Accumulator width
-#define ACCUMULATOR_WIDTH 32
+#define ACCUMULATOR_WIDTH 28
 #if defined(EMULATOR)
 #pragma message("WARNING: IN EMULATOR MODE, ACCUMULATOR_WIDTH IS FIXED TO 32")
 #define ACCUM_MASK 0x0FFFFFFFF
@@ -278,6 +278,10 @@
 #define ACCUM_MASK 0x0FFFFFFFF
 #define MULT_MASK 0x0FFFFFFFF
 #define ACCUM_MIN 0x80000000
+#elif (ACCUMULATOR_WIDTH == 28)
+#define ACCUM_MASK 0x00FFFFFFF
+#define MULT_MASK 0x00FFFFFFF
+#define ACCUM_MIN 0x08000000
 #elif (ACCUMULATOR_WIDTH == 24)
 #define ACCUM_MASK 0x00FFFFFF
 #define MULT_MASK 0x00FFFFFF
@@ -291,7 +295,37 @@
 #define MULT_MASK 0x0FFFF
 #define ACCUM_MIN 0x00008000
 #else
-#error Accumulator width should be from 32-bit, 24-bit, 20-bit, and 16-bit
+#error Accumulator width should be from 32-bit, 28-bit, 24-bit, 20-bit, and 16-bit
+#endif
+
+#define MISC_ACCUMULATOR_WIDTH 16
+#if defined(EMULATOR)
+#pragma message("WARNING: IN EMULATOR MODE, MISC_ACCUMULATOR_WIDTH IS FIXED TO 32")
+#define MISC_ACCUM_MASK 0x0FFFFFFFF
+#define MISC_MULT_MASK 0x0FFFFFFFF
+#define MISC_ACCUM_MIN 0x80000000
+#elif (MISC_ACCUMULATOR_WIDTH == 32)
+#define MISC_ACCUM_MASK 0x0FFFFFFFF
+#define MISC_MULT_MASK 0x0FFFFFFFF
+#define MISC_ACCUM_MIN 0x80000000
+#elif (MISC_ACCUMULATOR_WIDTH == 28)
+#define MISC_ACCUM_MASK 0x00FFFFFFF
+#define MISC_MULT_MASK 0x00FFFFFFF
+#define MISC_ACCUM_MIN 0x08000000
+#elif (MISC_ACCUMULATOR_WIDTH == 24)
+#define MISC_ACCUM_MASK 0x00FFFFFF
+#define MISC_MULT_MASK 0x00FFFFFF
+#define MISC_ACCUM_MIN 0x00800000
+#elif (MISC_ACCUMULATOR_WIDTH == 20)
+#define MISC_ACCUM_MASK 0x000FFFFF
+#define MISC_MULT_MASK 0x000FFFFF
+#define MISC_ACCUM_MIN 0x00080000
+#elif (MISC_ACCUMULATOR_WIDTH == 16)
+#define MISC_ACCUM_MASK 0x0FFFF
+#define MISC_MULT_MASK 0x0FFFF
+#define MISC_ACCUM_MIN 0x00008000
+#else
+#error Misc accumulator width should be from 32-bit, 28-bit,  24-bit, 20-bit, and 16-bit
 #endif
 
 

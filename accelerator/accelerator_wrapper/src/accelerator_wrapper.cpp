@@ -47,6 +47,7 @@ namespace GraphRuntime {
         int index = 0;
         for (auto& fpVal: fpVector)
         {
+            //std::cout <<"Fixed point value at i, val: "<<index<<" "<<(int) fpVal.getBits()<<std::endl;
             result.at(index++) = fpVal.convert2Float();
         }
         return result;

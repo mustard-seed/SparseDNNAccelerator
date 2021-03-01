@@ -74,6 +74,8 @@ Types involved in operations
 typedef signed int t_accumulator;
 #elif (ACCUMULATOR_WIDTH == 32)
 typedef signed int t_accumulator;
+#elif (ACCUMULATOR_WIDTH == 28)
+typedef int28_t t_accumulator;
 #elif (ACCUMULATOR_WIDTH == 24)
 typedef int24_t t_accumulator;
 #elif (ACCUMULATOR_WIDTH == 20)
@@ -81,7 +83,23 @@ typedef int20_t t_accumulator;
 #elif (ACCUMULATOR_WIDTH == 16)
 typedef signed short t_accumulator;
 #else
-#error Accumulator width should be from 32-bit, 24-bit, 20-bit, and 16-bit
+#error Accumulator width should be from 32-bit, 28-bit, 24-bit, 20-bit, and 16-bit
+#endif
+
+#if defined(EMULATOR)
+typedef signed int t_misc_accum;
+#elif (MISC_ACCUMULATOR_WIDTH == 32)
+typedef signed int t_misc_accum;
+#elif (MISC_ACCUMULATOR_WIDTH == 28)
+typedef int28_t t_misc_accum;
+#elif (MISC_ACCUMULATOR_WIDTH == 24)
+typedef int24_t t_misc_accum;
+#elif (MISC_ACCUMULATOR_WIDTH == 20)
+typedef int20_t t_misc_accum;
+#elif (MISC_ACCUMULATOR_WIDTH == 16)
+typedef signed short t_misc_accum;
+#else
+#error MISC accumulator width should be from 32-bit, 28-bit, 24-bit, 20-bit, and 16-bit
 #endif
 
 typedef struct {

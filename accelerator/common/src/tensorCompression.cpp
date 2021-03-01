@@ -421,7 +421,7 @@ FlexibleDirectCompressedTensor::FlexibleDirectCompressedTensor (
                          iChannelInGroup++) {
                         //Float to fixed point conversion
                         fixedPointNumber fpNumber = fixedPointVector.at(iFullVector);
-                        char fpValue = ( (fpNumber.getBits()) & (fpNumber.getMask()) );
+                        signed char fpValue = ( (fpNumber.getBits()) & (fpNumber.getMask()) );
 
                         //std::cout <<"iFullVector is "<<iFullVector<<std::endl;
                         //std::cout <<"iScalarInCompressionBlock is "<<iScalarInCompressionBlock<<std::endl;

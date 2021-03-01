@@ -11,18 +11,19 @@ fixedPointNumber::fixedPointNumber (float _realNumber
     assert (_fracWidth + _intWidth < 8);
 
     //Find the precision
-    if (_fracWidth > 0)
-    {
-        resolution = 1.0f / (float) (1 << _fracWidth);
-    }
-    else
-    {
-        resolution = 1 << ((-1) * (_fracWidth));
-    }
+//    if (_fracWidth > 0)
+//    {
+//        resolution = 1.0f / (float) (1 << _fracWidth);
+//    }
+//    else
+//    {
+//        resolution = 1 << ((-1) * (_fracWidth));
+//    }
+    resolution = std::pow(2.0f, (float) _fracWidth * -1.00f);
     //int fullBits = (int) round(_realNumber / resolution);
     std::fesetround(FE_TONEAREST); //round to even
     int fullBits = (int) std::nearbyint(_realNumber / resolution);
-//    int fullBits = (int) std::round(_realNumber / resolution);
+    //int fullBits = (int) std::round(_realNumber / resolution);
     int totalWidth = _fracWidth + _intWidth;
     int minimum = -1 * (1 << totalWidth);
     int maximum = (1 << totalWidth) - 1;
@@ -49,14 +50,15 @@ fixedPointNumber::fixedPointNumber (signed char _bits,
     bits = _bits & (~ (0xFF << (_fracWidth + _intWidth + 1)) );
     fractionWidth = _fracWidth;
     integerWidth = _intWidth;
-    if (_fracWidth > 0)
-    {
-        resolution = 1.0f / (float) (1 << _fracWidth);
-    }
-    else
-    {
-        resolution = 1 << ((-1) * (_fracWidth));
-    }
+//    if (_fracWidth > 0)
+//    {
+//        resolution = 1.0f / (float) (1 << _fracWidth);
+//    }
+//    else
+//    {
+//        resolution = 1 << ((-1) * (_fracWidth));
+//    }
+    resolution = std::pow(2.0f, (float) _fracWidth * -1.00f);
 }
 
 signed char fixedPointNumber::getBits() {

@@ -31,6 +31,14 @@ t_operand modifyOutput (
 		uint1_t enableRelu
 		);
 
+t_operand modifyMiscOutput (
+		t_misc_accum accumulator,
+		//Bit [6:0] Shift amount
+		//Bit [7] Flag for left/right shift. 0 for right, 1 for left
+		unsigned char shiftDirectionCatShiftAmount,
+		uint1_t enableRelu
+		);
+
 signed char modifyCharOutput (
 		signed char input,
 		//Bit [6:0] Shift amount

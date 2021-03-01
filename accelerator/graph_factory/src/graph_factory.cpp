@@ -434,6 +434,9 @@ namespace GraphRuntime {
                             //pBiasVector->at(i) = (t_bias) (std::round(bias * (float) (1 << pSumFracBits )) );
                             t_bias quantBias = (t_bias) (std::nearbyint(bias * (float) (1 << pSumFracBits )) );
                             pBiasVector->at(i) = quantBias;
+                            //std::cout<<"Layer ID, i, bias, quant bias, rounded bias: "
+                            //        <<pLayerLocal->getLayerID()<<" "<<i<<" "<<bias<<" "<<(int) quantBias
+                            //        <<" "<<(float) quantBias / (float) (1 << pSumFracBits) << std::endl;
                             float diff = std::fabs(bias - (float) quantBias / (float) (1 << pSumFracBits));
                             //std::cout <<"Bias quantization error: "<<diff<<std::endl;
                             if (diff > tolerance) {

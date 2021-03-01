@@ -2041,16 +2041,16 @@ __kernel void kernelMisc ()
 			for (unsigned short iOutput=0; iOutput < numOutputBlocks; iOutput++)
 			{
 				#if (defined(ARRIA10) || defined(STRATIX10))
-					t_accumulator reductionBlock[ACTIVATION_BURST_SIZE_BYTE] __attribute__((__register__));
+					t_misc_accum reductionBlock[ACTIVATION_BURST_SIZE_BYTE] __attribute__((__register__));
 				#else
-					t_accumulator reductionBlock[ACTIVATION_BURST_SIZE_BYTE];
+					t_misc_accum reductionBlock[ACTIVATION_BURST_SIZE_BYTE];
 				#endif
 				//Initialize the reductionBlock
 				#pragma unroll
 				for (int iVal=0; iVal < ACTIVATION_BURST_SIZE_BYTE; iVal++)
 				{
 					//If max pooling, then intialize the values to the minimum, else zero
-					t_accumulator min = ACCUM_MIN;
+					t_misc_accum min = MISC_ACCUM_MIN;
 					reductionBlock[iVal] = (opcode == ((uint2_t) 0x01)) ? 
 						min : 0x0000;
 				}
@@ -2084,15 +2084,15 @@ __kernel void kernelMisc ()
 						#pragma speculated_iterations 0
 						for (int iValue=0; iValue < ACTIVATION_BURST_SIZE_BYTE; iValue++)
 						{
-							t_accumulator rawInputValue = (t_accumulator) 
+							t_misc_accum rawInputValue = (t_misc_accum) 
 									inputDramBlock.values[iValue];
 
 							//Left-shift input
-							t_accumulator inputValue = rawInputValue << numLeftShiftAmount;
+							t_misc_accum inputValue = rawInputValue << numLeftShiftAmount;
 
-							t_accumulator currentValue = reductionBlock[iValue];
+							t_misc_accum currentValue = reductionBlock[iValue];
 
-							t_accumulator newValue;
+							t_misc_accum newValue;
 							if (opcode == ((uint2_t) 0x00))
 							{
 								newValue = inputValue + currentValue;
@@ -2119,7 +2119,7 @@ __kernel void kernelMisc ()
 				#pragma unroll
 				for (int i=0; i<ACTIVATION_BURST_SIZE_BYTE; i++)
 				{
-					outputTagged.dramBlock.values[i] = modifyOutput(
+					outputTagged.dramBlock.values[i] = modifyMiscOutput(
 							reductionBlock[i],
 							shiftDirectionCatShiftAmount,
 							enableRelu
