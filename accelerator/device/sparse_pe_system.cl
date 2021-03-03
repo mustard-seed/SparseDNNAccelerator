@@ -143,6 +143,8 @@ __kernel void kernelIAMover (
 				unsigned char token = read_channel_nb_intel(channel_activation_sync, &instructionProceed);
 			}
 
+			mem_fence(CLK_GLOBAL_MEM_FENCE | CLK_CHANNEL_MEM_FENCE);
+
 			if (instructionProceed == true)
 			{
 				//iterate over IA tile height
