@@ -138,13 +138,15 @@ __kernel void kernelIAMover (
 
 			bool instructionProceed = true;
 			unsigned char token = TRUE;
-			//Synchornization with the OA mover
-			if (flagWaitForSync == TRUE)
-			{
-				token = read_channel_nb_intel(channel_activation_sync, &instructionProceed);
-			}
+			#if defined (HW_SYNC)
+				//Synchornization with the OA mover
+				if (flagWaitForSync == TRUE)
+				{
+					token = read_channel_nb_intel(channel_activation_sync, &instructionProceed);
+				}
 
-			mem_fence(CLK_GLOBAL_MEM_FENCE | CLK_CHANNEL_MEM_FENCE);
+				mem_fence(CLK_GLOBAL_MEM_FENCE | CLK_CHANNEL_MEM_FENCE);
+			#endif
 
 			if ((instructionProceed == true) && (token == TRUE))
 			{
@@ -2201,12 +2203,14 @@ __kernel void kernelOAMover (
 			//signed int addrOAGroupContribution = 0;
 
 			bool instructionProceed = true;
-			if (enableSendSync == TRUE)
-			{
-				instructionProceed = write_channel_nb_intel(channel_activation_sync, (unsigned char ) 0x01);
-			}
+			#if defined(HW_SYNC)
+				if (enableSendSync == TRUE)
+				{
+					instructionProceed = write_channel_nb_intel(channel_activation_sync, (unsigned char ) 0x01);
+				}
 
-			mem_fence(CLK_GLOBAL_MEM_FENCE | CLK_CHANNEL_MEM_FENCE);
+				mem_fence(CLK_GLOBAL_MEM_FENCE | CLK_CHANNEL_MEM_FENCE);
+			#endif
 
 			if (instructionProceed == true)
 			{

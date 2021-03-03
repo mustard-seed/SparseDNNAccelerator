@@ -8,6 +8,7 @@
 //#define WMOVER_STREAM_CACHE
 //#define OAMOVER_TB_STREAM_CACHE
 //#define WMOVER_WEIGHT_COALESCE_CACHE
+//#define HW_SYNC
 
 #define NOOP
 #if defined(SPW_TEST)
@@ -43,14 +44,14 @@
 	// #define PE_ROWS_PER_GROUP 4
 	// #define PE_ROW_GROUPS 2
 	// #define MISC_COLS 1
+	#define PE_COLS 7
+	#define PE_ROWS_PER_GROUP 4
+	#define PE_ROW_GROUPS 11
+	#define MISC_COLS 1
 	// #define PE_COLS 1
-	// #define PE_ROWS_PER_GROUP 16
+	// #define PE_ROWS_PER_GROUP 1
 	// #define PE_ROW_GROUPS 1
 	// #define MISC_COLS 1
-	#define PE_COLS 1
-	#define PE_ROWS_PER_GROUP 1
-	#define PE_ROW_GROUPS 1
-	#define MISC_COLS 1
 	// #define PE_COLS 7
 	// #define PE_ROWS_PER_GROUP 8
 	// #define PE_ROW_GROUPS 6
@@ -248,7 +249,7 @@
 
 
 #define WMOVER_FILTER_DRAM_BLOCK_ACCESS_UNROLL_FACTOR 4
-#define KERNEL_CACHE_SIZE_VALUE_BYTE 8192
+#define KERNEL_CACHE_SIZE_VALUE_BYTE 32768
 #define KERNEL_CACHE_DEPTH (KERNEL_CACHE_SIZE_VALUE_BYTE / WEIGHT_BURST_SIZE_VALUE_BYTE)
 
 #define MAX_OUTPUT_TILE_WIDTH_PER_COL 8 

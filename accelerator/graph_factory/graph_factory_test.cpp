@@ -45,17 +45,28 @@ typedef struct {
 
 std::vector<t_topK_elem> getTopK(std::vector<float> _vec, int k=10);
 #if defined(PLAY) //focus on one test
-TEST_F(testFixture, resnet50_conv_1)
+TEST_F(testFixture, vgg16_dummy)
 {
-    std::string traceFileName = "resnet50_imagenet_trace.yaml";
-    std::string traceParameterFile = "resnet50_imagenet_parameters.npz";
-    std::string inoutFile = "resnet50_imagenet_inout_img00000008_1.yaml";
+    std::string traceFileName = "vgg16_imagenet_dummy_trace.yaml";
+    std::string traceParameterFile = "vgg16_imagenet_dummy_parameters.npz";
+    std::string inoutFile = "vgg16_imagenet_dummy_inout.yaml";
     bool scatterInput = true;
     std::map<std::string, std::string> traceName2BlobName;
     traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
-    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_2", "output"));
-    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName, scatterInput, 1);
+    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_22", "output"));
+    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName, scatterInput, -1);
 }
+//TEST_F(testFixture, resnet50_conv_1)
+//{
+//    std::string traceFileName = "resnet50_imagenet_trace.yaml";
+//    std::string traceParameterFile = "resnet50_imagenet_parameters.npz";
+//    std::string inoutFile = "resnet50_imagenet_inout_img00000008_end.yaml";
+//    bool scatterInput = true;
+//    std::map<std::string, std::string> traceName2BlobName;
+//    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
+//    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_73", "output"));
+//    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName, scatterInput, -1);
+//}
 //TEST_F(testFixture, resnet50_conv_nobias)
 //{
 //    std::string traceFileName = "resnet50_imagenet_nobias_trace.yaml";
