@@ -137,15 +137,16 @@ __kernel void kernelIAMover (
 			signed int offsetIADramBlockRow = 0;
 
 			bool instructionProceed = true;
+			unsigned char token = TRUE;
 			//Synchornization with the OA mover
 			if (flagWaitForSync == TRUE)
 			{
-				unsigned char token = read_channel_nb_intel(channel_activation_sync, &instructionProceed);
+				token = read_channel_nb_intel(channel_activation_sync, &instructionProceed);
 			}
 
 			mem_fence(CLK_GLOBAL_MEM_FENCE | CLK_CHANNEL_MEM_FENCE);
 
-			if (instructionProceed == true)
+			if ((instructionProceed == true) && (token == TRUE))
 			{
 				//iterate over IA tile height
 				for (
