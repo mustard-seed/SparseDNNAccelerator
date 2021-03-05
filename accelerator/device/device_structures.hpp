@@ -107,7 +107,7 @@ typedef struct {
 } t_cluster;
 
 // typedef signed short t_bias;
-typedef signed int t_bias;
+typedef signed short t_bias;
 #else
 // #if (ACCUMULATOR_WIDTH == 32)
 // typedef signed int t_accumulator;
@@ -124,7 +124,7 @@ typedef struct {
 typedef cl_ushort t_streamblock_address;
 
 // typedef signed short t_bias;
-typedef signed int t_bias;
+typedef signed short t_bias;
 #endif
 
 

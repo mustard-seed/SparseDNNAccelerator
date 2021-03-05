@@ -286,9 +286,13 @@ t_filter_streamer_control dramBlock2FilterStreamerControl (t_weight_dram_block b
 
     control.bias
         = ( ( ( (t_bias) (block.values[8]) ) & 0xFF )
-            | ( (((t_bias) (block.values[9])) & 0xFF) << 8)
-            | ( (((t_bias) (block.values[10])) & 0xFF) << 16)
-            | ( (((t_bias) (block.values[11])) & 0xFF) << 24));
+            | ( (((t_bias) (block.values[9])) & 0xFF) << 8));
+
+    // control.bias
+    //     = ( ( ( (t_bias) (block.values[8]) ) & 0xFF )
+    //         | ( (((t_bias) (block.values[9])) & 0xFF) << 8)
+    //         | ( (((t_bias) (block.values[10])) & 0xFF) << 16)
+    //         | ( (((t_bias) (block.values[11])) & 0xFF) << 24));
 
     //Recover bias
     // #if ((PE_SIMD_SIZE * CLUSTER_SIZE) <= 4)
@@ -330,8 +334,8 @@ t_weight_dram_block filterStreamerControl2dramBlock (t_filter_streamer_control c
 
     block.values[8] = control.bias & 0xFF;
     block.values[9] = ((control.bias >> 8) & 0xFF);
-    block.values[10] = ((control.bias >> 16) & 0xFF);
-    block.values[11] = ((control.bias >> 24) & 0xFF);
+    // block.values[10] = ((control.bias >> 16) & 0xFF);
+    // block.values[11] = ((control.bias >> 24) & 0xFF);
 
     // #if ( (PE_SIMD_SIZE * CLUSTER_SIZE) <= 4)
     //     block.transferBlocks[1].values[0] = control.bias & 0xFF;
