@@ -55,6 +55,7 @@ namespace GraphRuntime {
         int     isComputeBound;
         int     ddrLatency;
         float     weightSparsity;
+        int     kernelSize;
         unsigned int ops;
     } t_layer_info;
 

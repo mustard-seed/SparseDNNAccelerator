@@ -829,6 +829,7 @@ namespace GraphRuntime {
                            .isComputeBound = latInfo.isComputeBound ? 1 : 0,
                            .ddrLatency = latInfo.ddrLatency,
                            .weightSparsity = weightSparsity,
+                           .kernelSize = kernelSize,
                            .ops = ops
                             });
                        offsetIAMoverInstruction += numIAMoverInstructions;
