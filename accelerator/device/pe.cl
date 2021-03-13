@@ -54,35 +54,34 @@ t_accumulator madd (t_simd_operand activations, t_simd_operand weights) {
 	return output;
 }
 
-t_accumulator chain_maddx8 (t_simd_operand activations, t_simd_operand weights) {
-	#if ((PE_SIMD_SIZE * CLUSTER_SIZE) != 8)
-	#error When using chain_maddx8, PE_SIMD_SIZE * CLUSTER_SIZE must be 8
-	#endif
-	
-	t_accumulator output;
+t_accumulator chain_maddx8 (t_simd_operand activations, t_simd_operand weights) {	
+	t_accumulator output = 0x00 & MULT_MASK;
 
 	#if defined (ARRIA10)
-	output = MULT_MASK & ((t_accumulator)
-			a10_chain_madd_8bitx8(
-					activations.values[0],
-					weights.values[0],
-					activations.values[1],
-					weights.values[1],
-					activations.values[2],
-					weights.values[2],
-					activations.values[3],
-					weights.values[3],
-					activations.values[4],
-					weights.values[4],
-					activations.values[5],
-					weights.values[5],
-					activations.values[6],
-					weights.values[6],
-					activations.values[7],
-					weights.values[7]
-				)
-		);
-	#else
+		#pragma unroll
+		for(int i=0; i<PE_SIMD_SIZE*CLUSTER_SIZE/8; i++){
+			//output += input.data[i]*weights.data[i];
+			// use packed DSP blocks to improve efficiency
+				output += MULT_MASK & ((t_accumulator) a10_chain_madd_8bitx8(
+						activations.values[i*8+0],
+						weights.values[i*8+0],
+						activations.values[i*8+1],
+						weights.values[i*8+1],
+						activations.values[i*8+2],
+						weights.values[i*8+2],
+						activations.values[i*8+3],
+						weights.values[i*8+3],
+						activations.values[i*8+4],
+						weights.values[i*8+4],
+						activations.values[i*8+5],
+						weights.values[i*8+5],
+						activations.values[i*8+6],
+						weights.values[i*8+6],
+						activations.values[i*8+7],
+						weights.values[i*8+7]
+					));
+		}
+		#else
 	#error Unsupported FPGA type!
 	#endif
 

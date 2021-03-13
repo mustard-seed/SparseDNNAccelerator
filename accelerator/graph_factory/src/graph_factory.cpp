@@ -908,7 +908,7 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
              {
                 t_latency_info tileLat = _convLayer.deriveLatency(candidateTileInfo);
 
-                if (tileLat.totalLatency < (minLatency * 0.9f))
+                if (((float) tileLat.totalLatency) < ( (float) minLatency * 0.90f))
                 {
                     minLatency = tileLat.totalLatency;
                     bestTileInfo = candidateTileInfo;
