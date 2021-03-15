@@ -110,6 +110,13 @@ void instruction_generator(//Type of the operation
     unsigned int sizeOutputTileFullHeight = ((op == CONVOLUTION) || (op == ELT_ADD) || (op == CONCATENATION) ) ?
                 _sizeOutputTileFullHeight : 1;
 
+    //Patch for POOLING in order to reduce the number of instructions if possible
+    if ((op == MAX_POOL) || (op == AVG_POOL)) {
+        if ((unsigned int) kernelStride >= (unsigned int) kernelSize) {
+            sizeOutputTileFullHeight = MAX_OUTPUT_TILE_HEIGHT;
+        }
+    }
+
     unsigned int sizeOutputTileFullWidthPerCol = ( (op == CONVOLUTION)  || (op == ELT_ADD) || (op == CONCATENATION) ) ?
                 _sizeOutputTileFullWidthPerCol : 1;
 
