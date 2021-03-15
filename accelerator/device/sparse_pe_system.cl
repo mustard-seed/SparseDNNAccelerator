@@ -142,10 +142,11 @@ __kernel void kernelIAMover (
 				//Synchornization with the OA mover
 				if (flagWaitForSync == TRUE)
 				{
+					mem_fence(CLK_GLOBAL_MEM_FENCE | CLK_CHANNEL_MEM_FENCE);
 					token = read_channel_nb_intel(channel_activation_sync, &instructionProceed);
+					mem_fence(CLK_GLOBAL_MEM_FENCE | CLK_CHANNEL_MEM_FENCE);
 				}
 
-				mem_fence(CLK_GLOBAL_MEM_FENCE | CLK_CHANNEL_MEM_FENCE);
 			#endif
 
 			if ((instructionProceed == true) && (token == TRUE))
@@ -235,9 +236,11 @@ __kernel void kernelIAMover (
 										(unsigned int) destinationMisc));
 
 							unsigned char iterInputDramblockInterleave = 0x0;
+							unsigned short iterTransfer = 0;
 							#pragma ii 1
 							#pragma speculated_iterations 0
-							for (unsigned short iterTransfer=0; iterTransfer<numTransferActions; iterTransfer++)
+							//for (unsigned short iterTransfer=0; iterTransfer<numTransferActions; iterTransfer++)
+							while (iterTransfer<numTransferActions)
 							{
 								t_dram_block_ia_tagged iaBlock;
 
@@ -296,11 +299,17 @@ __kernel void kernelIAMover (
 									{
 										iaBlock.miscLeftShiftAmount = input1LeftShiftAmount;
 									}
-									//Toggle between 0 and 1
-									iterInputDramblockInterleave = (iterInputDramblockInterleave + 0x01) & 0x01;
+									// iterInputDramblockInterleave = (iterInputDramblockInterleave + 0x01) & 0x01;
 								}
 
-								write_channel_intel(channel_ia_wide[0], iaBlock);
+								bool writeSuccess = write_channel_nb_intel(channel_ia_wide[0], iaBlock);
+								if (writeSuccess == true) {
+									iterTransfer += 1;
+									//Toggle between 0 and 1
+									if (inputArrangement == 0x01) {
+										iterInputDramblockInterleave = (iterInputDramblockInterleave + 0x01) & 0x01;
+									}
+								}
 							}
 
 							EMULATOR_PRINT(("[kernelIAMover] FINISHED strip transfer.\n\n"));
@@ -2206,10 +2215,11 @@ __kernel void kernelOAMover (
 			#if defined(HW_SYNC)
 				if (enableSendSync == TRUE)
 				{
+					mem_fence(CLK_GLOBAL_MEM_FENCE | CLK_CHANNEL_MEM_FENCE);
 					instructionProceed = write_channel_nb_intel(channel_activation_sync, (unsigned char ) 0x01);
+					mem_fence(CLK_GLOBAL_MEM_FENCE | CLK_CHANNEL_MEM_FENCE);
 				}
 
-				mem_fence(CLK_GLOBAL_MEM_FENCE | CLK_CHANNEL_MEM_FENCE);
 			#endif
 
 			if (instructionProceed == true)

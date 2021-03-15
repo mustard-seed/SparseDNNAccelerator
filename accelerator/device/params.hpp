@@ -8,7 +8,7 @@
 //#define WMOVER_STREAM_CACHE
 //#define OAMOVER_TB_STREAM_CACHE
 //#define WMOVER_WEIGHT_COALESCE_CACHE
-//#define HW_SYNC
+#define HW_SYNC
 
 #define NOOP
 #if defined(SPW_TEST)
@@ -44,9 +44,9 @@
 	// #define PE_ROWS_PER_GROUP 4
 	// #define PE_ROW_GROUPS 2
 	// #define MISC_COLS 1
-	#define PE_COLS 7
+	#define PE_COLS 1
 	#define PE_ROWS_PER_GROUP 8
-	#define PE_ROW_GROUPS 3
+	#define PE_ROW_GROUPS 1
 	#define MISC_COLS 1
 	// #define PE_COLS 1
 	// #define PE_ROWS_PER_GROUP 1
