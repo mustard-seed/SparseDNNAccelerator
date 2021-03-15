@@ -46,7 +46,7 @@
 	// #define MISC_COLS 1
 	#define PE_COLS 7
 	#define PE_ROWS_PER_GROUP 8
-	#define PE_ROW_GROUPS 1
+	#define PE_ROW_GROUPS 3
 	#define MISC_COLS 1
 	// #define PE_COLS 1
 	// #define PE_ROWS_PER_GROUP 1
@@ -239,9 +239,9 @@
 #endif
 #define ACTIVATION_WIDE_SIZE_IN_PE_ROW_GROUP_MASK ((1 << ACTIVATION_BURST_SIZE_IN_PE_ROW_GROUP_OFFSET) - 1)
 
-#define WEIGHT_WIDE_SIZE 2
-#define WEIGHT_WIDE_SIZE_OFFSET 0x1 //Numnber of bits to shift the transfer block index to the right in order to recover the wide offset
-#define WEIGHT_WIDE_SIZE_REMAINDER_MASK 0x1
+#define WEIGHT_WIDE_SIZE 4
+#define WEIGHT_WIDE_SIZE_OFFSET 0x2 //Numnber of bits to shift the transfer block index to the right in order to recover the wide offset
+#define WEIGHT_WIDE_SIZE_REMAINDER_MASK 0x3
 #define WEIGHT_BURST_SIZE_VALUE_BYTE (WEIGHT_WIDE_SIZE * PE_SIMD_SIZE * CLUSTER_SIZE)
 #if defined(SPW_SYSTEM)
 #define WEIGHT_BURST_SIZE_INDEX_BYTE (WEIGHT_WIDE_SIZE*INDEX_CHAR_ARRAY_SIZE)

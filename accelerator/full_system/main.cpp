@@ -28,11 +28,10 @@
 
 #define DIVIDE_CEIL(x, y) (1 + (x-1) / (y))
 #define SEED 27
-
-#define PLAY
+//#define PLAY
 //#define PERF_TEST
 //#define THROUGHPUT_DIAGNOSTIC
-//#define VALIDATE
+#define VALIDATE
 //#define TEST1_20201126
 //#define TEST2_20201126
 //#define ELTADD7_202021129
