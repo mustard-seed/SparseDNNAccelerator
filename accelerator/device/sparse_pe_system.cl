@@ -66,7 +66,7 @@ __kernel void kernelNoop ()
 __attribute__((max_global_work_dim(0)))
 __kernel void kernelIAMover (
 		// Memory port for input activations
-		VOLATILE __global const signed char* restrict pIA,
+		__global volatile const signed char* restrict pIA,
 
 		//Memory port for transfer instructions
 		VOLATILE __global const t_ia_mover_instruction* restrict pInstruction,
@@ -2163,7 +2163,7 @@ __kernel void kernelMisc ()
 #ifdef MEMORY_WRITER
 __attribute__((max_global_work_dim(0)))
 __kernel void kernelOAMover (
-		VOLATILE __global signed char* restrict pOA,
+		__global volatile signed char* restrict pOA,
 
 		VOLATILE __global const t_oa_mover_instruction* restrict pInstruction,
 		unsigned int numInstruction,
