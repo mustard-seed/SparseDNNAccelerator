@@ -2218,7 +2218,7 @@ __kernel void kernelOAMover (
 				{
 					mem_fence(CLK_GLOBAL_MEM_FENCE | CLK_CHANNEL_MEM_FENCE);
 					//instructionProceed = write_channel_nb_intel(channel_activation_sync, (unsigned char ) 0x01);
-					write_channel_intel(channel_activation_sync);
+					write_channel_intel(channel_activation_sync, (unsigned char ) 0x01);
 					mem_fence(CLK_GLOBAL_MEM_FENCE | CLK_CHANNEL_MEM_FENCE);
 				}
 
