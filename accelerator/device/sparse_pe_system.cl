@@ -77,7 +77,6 @@ __kernel void kernelIAMover (
 		unsigned int offsetInstruction
 	)
 {
-	#pragma max_concurrency 1
 	for (unsigned int iInst=0; iInst < numInstruction; iInst += 8)
 	{
 		t_ia_mover_instruction cacheInstruction[8];
@@ -90,6 +89,7 @@ __kernel void kernelIAMover (
 		}
 
 		unsigned char iInstTile = 0;
+		#pragma max_concurrency 1
 		while (iInstTile<numInstInTile)
 		{
 			//Read the instruction
@@ -143,7 +143,8 @@ __kernel void kernelIAMover (
 				if (flagWaitForSync == TRUE)
 				{
 					mem_fence(CLK_GLOBAL_MEM_FENCE | CLK_CHANNEL_MEM_FENCE);
-					token = read_channel_nb_intel(channel_activation_sync, &instructionProceed);
+					// token = read_channel_nb_intel(channel_activation_sync, &instructionProceed);
+					token = read_channel_intel(channel_activation_sync);
 					mem_fence(CLK_GLOBAL_MEM_FENCE | CLK_CHANNEL_MEM_FENCE);
 				}
 
@@ -2172,7 +2173,6 @@ __kernel void kernelOAMover (
 	)
 {
 	//Use while loop instead of for-loop
-	#pragma max_concurrency 1
 	for (unsigned int iInst=0; iInst < numInstruction; iInst += 8)
 	{
 		t_oa_mover_instruction cacheInstruction[8];
@@ -2185,6 +2185,7 @@ __kernel void kernelOAMover (
 		}
 
 		unsigned char iInstTile = 0;
+		#pragma max_concurrency 1
 		while (iInstTile < numInstInTile)
 		{
 			/*! Read the instruction and decode the packed field*/
@@ -2216,7 +2217,8 @@ __kernel void kernelOAMover (
 				if (enableSendSync == TRUE)
 				{
 					mem_fence(CLK_GLOBAL_MEM_FENCE | CLK_CHANNEL_MEM_FENCE);
-					instructionProceed = write_channel_nb_intel(channel_activation_sync, (unsigned char ) 0x01);
+					//instructionProceed = write_channel_nb_intel(channel_activation_sync, (unsigned char ) 0x01);
+					write_channel_intel(channel_activation_sync);
 					mem_fence(CLK_GLOBAL_MEM_FENCE | CLK_CHANNEL_MEM_FENCE);
 				}
 
