@@ -143,8 +143,8 @@ __kernel void kernelIAMover (
 				if (flagWaitForSync == TRUE)
 				{
 					mem_fence(CLK_GLOBAL_MEM_FENCE | CLK_CHANNEL_MEM_FENCE);
-					// token = read_channel_nb_intel(channel_activation_sync, &instructionProceed);
-					token = read_channel_intel(channel_activation_sync);
+					token = read_channel_nb_intel(channel_activation_sync, &instructionProceed);
+					//token = read_channel_intel(channel_activation_sync);
 					mem_fence(CLK_GLOBAL_MEM_FENCE | CLK_CHANNEL_MEM_FENCE);
 				}
 
@@ -265,14 +265,14 @@ __kernel void kernelIAMover (
 											pIA[addressIADramBlockDDR+i];
 									}
 
-									if (iterInputDramblockInterleave == 0x0)
-									{
-										addressIADramBlockDDR0 += ACTIVATION_BURST_SIZE_BYTE;
-									}
-									else
-									{
-										addressIADramBlockDDR1 += ACTIVATION_BURST_SIZE_BYTE;
-									}
+									// if (iterInputDramblockInterleave == 0x0)
+									// {
+									// 	addressIADramBlockDDR0 += ACTIVATION_BURST_SIZE_BYTE;
+									// }
+									// else
+									// {
+									// 	addressIADramBlockDDR1 += ACTIVATION_BURST_SIZE_BYTE;
+									// }
 								}
 								else  //Strip is padding
 								{
@@ -306,6 +306,16 @@ __kernel void kernelIAMover (
 								bool writeSuccess = write_channel_nb_intel(channel_ia_wide[0], iaBlock);
 								if (writeSuccess == true) {
 									iterTransfer += 1;
+									if (realStrip == true) {
+										if (iterInputDramblockInterleave == 0x0)
+										{
+											addressIADramBlockDDR0 += ACTIVATION_BURST_SIZE_BYTE;
+										}
+										else
+										{
+											addressIADramBlockDDR1 += ACTIVATION_BURST_SIZE_BYTE;
+										}
+									}
 									//Toggle between 0 and 1
 									if (inputArrangement == 0x01) {
 										iterInputDramblockInterleave = (iterInputDramblockInterleave + 0x01) & 0x01;
@@ -2217,8 +2227,8 @@ __kernel void kernelOAMover (
 				if (enableSendSync == TRUE)
 				{
 					mem_fence(CLK_GLOBAL_MEM_FENCE | CLK_CHANNEL_MEM_FENCE);
-					//instructionProceed = write_channel_nb_intel(channel_activation_sync, (unsigned char ) 0x01);
-					write_channel_intel(channel_activation_sync, (unsigned char ) 0x01);
+					instructionProceed = write_channel_nb_intel(channel_activation_sync, (unsigned char ) 0x01);
+					//write_channel_intel(channel_activation_sync, (unsigned char ) 0x01);
 					mem_fence(CLK_GLOBAL_MEM_FENCE | CLK_CHANNEL_MEM_FENCE);
 				}
 
