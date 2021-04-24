@@ -734,6 +734,7 @@ namespace GraphRuntime {
                 weightTransferElapsedTimeUs += (cl_double)((endTime - startTime)*(cl_double)(1e-3));
             }
 
+            std::cout <<"Transferred "<<weightTransferBytes<<" bytes weights to the accelerator."<<std::endl;
             std::cout <<"Transfer the filter weight tensors took "<<weightTransferElapsedTimeUs<<" us"<<std::endl;
         }
 
@@ -1119,7 +1120,9 @@ namespace GraphRuntime {
             #if defined(HOST_DEBUG)
                 std::cout<<"Launching layer "<<vecLayerInfo.at(i).layerName<<std::endl;
             #endif
-                //std::cout<<"Launching layer "<<vecLayerInfo.at(i).layerName<<std::endl;
+//             std::cout<<"Launching layer "<<vecLayerInfo.at(i).layerName<<std::endl;
+//             std::cout<<"Number of IA instructions: "<<vecLayerInfo.at(i).numIAMoverInstruction<<std::endl;
+//             std::cout<<"Number of OA instructions: "<<vecLayerInfo.at(i).numOAMoverInstructions<<std::endl;
             #if defined(SPARSE_SYSTEM)
                 cl_uint oaArgIdx = 3;
             #else
@@ -1131,6 +1134,10 @@ namespace GraphRuntime {
             //unsigned int offsetInstruction
             kernelOAMover.setArg(oaArgIdx++, (cl_uint) vecLayerInfo.at(i).offsetOAMoverInstruction);
 
+//            std::vector<cl::Event> dependencies;
+//            if (i > 0) {
+//                dependencies.push_back(vecOAFinishes.at(i-1));
+//            }
             status = clCQOAMover.enqueueTask(kernelOAMover, NULL, &(vecOAFinishes.at(i)));
             #if defined(HOST_DEBUG)
             aocl_utils_cpp::checkError(status, "Failed to launch kernelOAMover!");

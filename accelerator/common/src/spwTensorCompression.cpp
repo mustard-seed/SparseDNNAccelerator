@@ -312,12 +312,23 @@ static bool absCompare(signed char a, signed char b)
  * \param _group
  * \return The L_inf norm of the vector
  */
-signed char getLInfNorm(
+int getLInfNorm(
         const std::vector<signed char>& _group
         )
 {
     auto iter = std::max_element(_group.begin(), _group.end(), absCompare);
         return std::abs(*iter);
+}
+
+int getL1Norm (
+        const std::vector <signed char>& _group
+        )
+{
+    int sum = 0;
+    for (auto & val: _group) {
+        sum += std::abs(val);
+    }
+    return sum;
 }
 DeviceSpWTensor::DeviceSpWTensor(
         int _outputChannel,
@@ -414,7 +425,7 @@ DeviceSpWTensor::DeviceSpWTensor(
                     //Scatter the top-ranked clusters to the weight dram blocks
                     for (int iPruneRange=0; iPruneRange < _peSimdSize; iPruneRange++)
                     {
-                        std::vector<signed char> lInfNorms(numClustersInPruningRange, 0);
+                        std::vector<int> norms(numClustersInPruningRange, 0);
                         //Calculate the L1 norms of the clusters in a pruning range
                         for (int iCluster=0; iCluster<numClustersInPruningRange; iCluster++)
                         {
@@ -440,8 +451,9 @@ DeviceSpWTensor::DeviceSpWTensor(
                                 }
                             }
 
-                            signed char norm = getLInfNorm(vecCluster);
-                            lInfNorms.at(iCluster) = norm;
+                            //int norm = getLInfNorm(vecCluster);
+                            int norm = getL1Norm(vecCluster);
+                            norms.at(iCluster) = norm;
                         }
 
                         /*
@@ -453,7 +465,7 @@ DeviceSpWTensor::DeviceSpWTensor(
                         std::iota(indices.begin(), indices.end(), 0);
                         //Use the lambda expression to sort the indices based on the Linf norm non-ascending order
                         std::stable_sort(indices.begin(), indices.end(),
-                                         [&lInfNorms](int i1, int i2) {return lInfNorms.at(i1) > lInfNorms.at(i2);});
+                                         [&norms](int i1, int i2) {return norms.at(i1) > norms.at(i2);});
 
 
                         /*!
