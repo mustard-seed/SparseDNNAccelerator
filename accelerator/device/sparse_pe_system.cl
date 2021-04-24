@@ -265,14 +265,14 @@ __kernel void kernelIAMover (
 											pIA[addressIADramBlockDDR+i];
 									}
 
-									// if (iterInputDramblockInterleave == 0x0)
-									// {
-									// 	addressIADramBlockDDR0 += ACTIVATION_BURST_SIZE_BYTE;
-									// }
-									// else
-									// {
-									// 	addressIADramBlockDDR1 += ACTIVATION_BURST_SIZE_BYTE;
-									// }
+									if (iterInputDramblockInterleave == 0x0)
+									{
+										addressIADramBlockDDR0 += ACTIVATION_BURST_SIZE_BYTE;
+									}
+									else
+									{
+										addressIADramBlockDDR1 += ACTIVATION_BURST_SIZE_BYTE;
+									}
 								}
 								else  //Strip is padding
 								{
@@ -300,27 +300,30 @@ __kernel void kernelIAMover (
 									{
 										iaBlock.miscLeftShiftAmount = input1LeftShiftAmount;
 									}
-									// iterInputDramblockInterleave = (iterInputDramblockInterleave + 0x01) & 0x01;
+									iterInputDramblockInterleave = (iterInputDramblockInterleave + 0x01) & 0x01;
 								}
 
-								bool writeSuccess = write_channel_nb_intel(channel_ia_wide[0], iaBlock);
-								if (writeSuccess == true) {
-									iterTransfer += 1;
-									if (realStrip == true) {
-										if (iterInputDramblockInterleave == 0x0)
-										{
-											addressIADramBlockDDR0 += ACTIVATION_BURST_SIZE_BYTE;
-										}
-										else
-										{
-											addressIADramBlockDDR1 += ACTIVATION_BURST_SIZE_BYTE;
-										}
-									}
-									//Toggle between 0 and 1
-									if (inputArrangement == 0x01) {
-										iterInputDramblockInterleave = (iterInputDramblockInterleave + 0x01) & 0x01;
-									}
-								}
+								write_channel_intel(channel_ia_wide[0], iaBlock);
+								iterTransfer++;
+
+								// bool writeSuccess = write_channel_nb_intel(channel_ia_wide[0], iaBlock);
+								// if (writeSuccess == true) {
+								// 	iterTransfer += 1;
+								// 	if (realStrip == true) {
+								// 		if (iterInputDramblockInterleave == 0x0)
+								// 		{
+								// 			addressIADramBlockDDR0 += ACTIVATION_BURST_SIZE_BYTE;
+								// 		}
+								// 		else
+								// 		{
+								// 			addressIADramBlockDDR1 += ACTIVATION_BURST_SIZE_BYTE;
+								// 		}
+								// 	}
+								// 	//Toggle between 0 and 1
+								// 	if (inputArrangement == 0x01) {
+								// 		iterInputDramblockInterleave = (iterInputDramblockInterleave + 0x01) & 0x01;
+								// 	}
+								// }
 							}
 
 							EMULATOR_PRINT(("[kernelIAMover] FINISHED strip transfer.\n\n"));
