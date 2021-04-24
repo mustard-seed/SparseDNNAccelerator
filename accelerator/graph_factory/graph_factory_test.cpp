@@ -13,21 +13,25 @@
 //#define RESNET50_IMAGENET_C2R4
 //#define RESNET50_IMAGENET_C1R4
 //#define RESNET50_IMAGENET_C4R4
-#define RESNET50_DUMMY_C2R4
+//#define RESNET50_DUMMY_C2R4
 //#define RESNET50_DUMMY_C1R4
 //#define RESNET50_DUMMY_C4R4
 //#define VGG16_IMAGENET_C2R4
 //#define VGG16_IMAGENET_C1R4
 //#define VGG16_IMAGENET_C4R4
-#define VGG16_DUMMY_C2R4
+//#define VGG16_DUMMY_C2R4
 //#define VGG16_DUMMY_C1R4
 //#define VGG16_DUMMY_C4R4
 #ifndef C5SOC
 //#define EMULATE
 #endif
-#define INFERENCE_REPEAT 50
-#define WARMUP 50
-#define CHECKOUTPUT
+//#define INFERENCE_REPEAT 50
+//#define WARMUP 50
+#define INFERENCE_REPEAT 1
+#define WARMUP 0
+//Define checkoutput 0 means compare the output blob with the reference
+//1 means simply printing the output
+#define CHECKOUTPUT 1
 //#define PROFILE
 
 class testFixture : public ::testing::Test {
@@ -35,7 +39,8 @@ protected:
     std::string aocxBinaryFile;
     GraphRuntime::AcceleratorWrapper accelerator;
     //TODO: change the path in anounymous submission
-    std::string testPrefix = "/home/jamesliu/thesis/SparseDNNAccelerator/accelerator/test0/FPL_traces/";
+    //std::string testPrefix = "/home/jamesliu/thesis/SparseDNNAccelerator/accelerator/test0/FPL_traces/";
+    std::string testPrefix = "/home/jamesliu/thesis/SparseDNNAccelerator/accelerator/test0/gcp_traces/traces/";
 
     void SetUp() override;
 
@@ -54,7 +59,30 @@ typedef struct {
 
 std::vector<t_topK_elem> getTopK(std::vector<float> _vec, int k=10);
 #if defined(PLAY) //focus on one test
+//TEST_F(testFixture, resnet50_imagenet_c2r4p75)
+//{
 
+//    std::string traceFileName = "resnet56_cifar_trace.yaml";
+//    std::string traceParameterFile = "resnet56_cifar_parameters.npz";
+////    std::string inoutFile = "resnet50_imagenet_pretrained_quantize_bias_inout_img00000008_1.yaml";
+//     std::string inoutFile = "resnet56_cifar_inout.yaml";
+//    bool scatterInput = true;
+//    std::map<std::string, std::string> traceName2BlobName;
+//    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
+//    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_87", "output"));
+//    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName, scatterInput);
+//}
+TEST_F(testFixture, vgg16_imagenet_c2r4p75)
+{
+    std::string traceFileName = "vgg16_imagenet_c2r4p75_trace.yaml";
+    std::string traceParameterFile = "vgg16_imagenet_c2r4p75_parameters.npz";
+    std::string inoutFile = "vgg16_imagenet_c2r4p75_inout_img00000008.yaml";
+    bool scatterInput = true;
+    std::map<std::string, std::string> traceName2BlobName;
+    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
+    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_20", "output"));
+    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName, scatterInput, 19);
+}
 #endif
 
 #if defined(RESNET50_IMAGENET_C2R4)
@@ -63,7 +91,7 @@ TEST_F(testFixture, resnet50_imagenet_c2r4p75)
 
     std::string traceFileName = "resnet50_imagenet_c2r4p75_trace.yaml";
     std::string traceParameterFile = "resnet50_imagenet_c2r4p75_parameters.npz";
-    std::string inoutFile = "resnet50_imagenet_c2r4p75_inout_img00000008_end.yaml";
+    std::string inoutFile = "resnet50_imagenet_c2r4p75_inout_img00000008.yaml";
     bool scatterInput = true;
     std::map<std::string, std::string> traceName2BlobName;
     traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
@@ -159,6 +187,20 @@ TEST_F(testFixture, vgg16_dummy_c4r4p75)
     std::string traceFileName = "vgg16_dummy_c4r4p75_trace.yaml";
     std::string traceParameterFile = "vgg16_dummy_c4r4p75_parameters.npz";
     std::string inoutFile = "vgg16_dummy_c4r4p75_inout.yaml";
+    bool scatterInput = true;
+    std::map<std::string, std::string> traceName2BlobName;
+    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
+    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_22", "output"));
+    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName, scatterInput, -1);
+}
+#endif
+
+#if defined(VGG16_IMAGENET_C2R4)
+TEST_F(testFixture, vgg16_imagenet_c2r4p75)
+{
+    std::string traceFileName = "vgg16_imagenet_c2r4p75_trace.yaml";
+    std::string traceParameterFile = "vgg16_imagenet_c2r4p75_parameters.npz";
+    std::string inoutFile = "vgg16_imagenet_c2r4p75_inout_img00000008.yaml";
     bool scatterInput = true;
     std::map<std::string, std::string> traceName2BlobName;
     traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
@@ -279,7 +321,7 @@ void testFixture::launch(std::string _traceFileName,
            int iter=0;
            //float tolerance = std::pow(2.0f, -1.0 * blobInfo.numFracBits);
            float tolerance = 1e-6;
-           #if defined(CHECKOUTPUT)
+           #if defined(CHECKOUTPUT) && (CHECKOUTPUT == 0)
            for (int h=0; h<blobInfo.height; h++)
            {
                for (int w=0; w<blobInfo.width; w++)
@@ -301,8 +343,6 @@ void testFixture::launch(std::string _traceFileName,
                }
            }
            std::cout <<"Tolerance is "<<tolerance<<std::endl;
-           #endif //CHECKOUTPUT
-
            //Compare the top-10 from each output
            int K = 5;
            std::vector<t_topK_elem> referenceTopK = getTopK(blob, K);
@@ -327,6 +367,25 @@ void testFixture::launch(std::string _traceFileName,
                std::cout<<iter<<". [ch="<<ch<<", row="<<row<<", col="<<col<<"]: "<<elem.val<<std::endl;
                iter++;
            }
+           #elif defined(CHECKOUTPUT) && (CHECKOUTPUT == 1)
+           for (int h=0; h<blobInfo.height; h++)
+           {
+               for (int w=0; w<blobInfo.width; w++)
+               {
+                   for (int c=0; c<blobInfo.channel; c++)
+                   {
+                       float actual = actualResult.at(iter++);
+                       //The computation is like adding two signed numbers with numFracBits
+                       //hence the difference's number of frac bits is numFracBits - 1
+                       std::cout <<"Inference output at [tensor, channel, height, col]: ["
+                                <<blobID<<" "<<c<<" "<<h<<" "<<w<<"]"<<std::endl
+                                <<"Actual: "<<actual<<std::endl;
+                   }
+               }
+           }
+           #endif //CHECKOUTPUT
+
+
            blobID++;
        }
     }
