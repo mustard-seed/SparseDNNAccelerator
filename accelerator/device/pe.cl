@@ -147,8 +147,8 @@ __kernel void kernelSpWPE ()
 	/**
 	 * Data registers
 	 */
-	t_accumulator regPSums[PE_ROWS_PER_GROUP];
-	t_char regActivations[PE_SIMD_SIZE][PRUNE_RANGE_IN_CLUSTER][CLUSTER_SIZE];
+	t_accumulator  __attribute__((register)) regPSums[PE_ROWS_PER_GROUP];
+	t_char  __attribute__((register)) regActivations [PE_SIMD_SIZE][PRUNE_RANGE_IN_CLUSTER][CLUSTER_SIZE];
 	t_flag regIsLastRowGroup = FALSE;
 
 	/**
@@ -162,7 +162,8 @@ __kernel void kernelSpWPE ()
 	{
 		t_spw_pe_state sigState = regState;
 		t_flag sigIsLastRowGroup = regIsLastRowGroup;
-		t_char nextActivations[PE_SIMD_SIZE][PRUNE_RANGE_IN_CLUSTER][CLUSTER_SIZE];
+		// Need the attribute
+		t_char __attribute__((register))  nextActivations [PE_SIMD_SIZE][PRUNE_RANGE_IN_CLUSTER][CLUSTER_SIZE];
 		t_flag nextLoadActivation = regLoadActivation;
 
 		#pragma unroll
@@ -363,11 +364,13 @@ __kernel void kernelSpWPE ()
 					#pragma unroll
 					for (int v=0; v<CLUSTER_SIZE; v++)
 					{
-						nextActivations[s][c][v] = 
-							sigABlocks.values[
+						char val = sigABlocks.values[
 								s*PRUNE_RANGE_IN_CLUSTER*CLUSTER_SIZE 
 								+ c*CLUSTER_SIZE
 								+ v];
+						nextActivations[s][c][v] = val;
+
+						//regActivations[s][c][v] = val;
 					}
 				}
 			}
