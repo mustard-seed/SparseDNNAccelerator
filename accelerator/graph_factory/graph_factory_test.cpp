@@ -13,12 +13,14 @@
 //#define RESNET50_IMAGENET_C2R4
 //#define RESNET50_IMAGENET_C1R4
 //#define RESNET50_IMAGENET_C4R4
+//#define RESNET50_IMAGENET_DENSE_C2R4
 //#define RESNET50_DUMMY_C2R4
 //#define RESNET50_DUMMY_C1R4
 //#define RESNET50_DUMMY_C4R4
 //#define VGG16_IMAGENET_C2R4
 //#define VGG16_IMAGENET_C1R4
 //#define VGG16_IMAGENET_C4R4
+//#define VGG16_IMAGENET_DENSE_C2R4
 //#define VGG16_DUMMY_C2R4
 //#define VGG16_DUMMY_C1R4
 //#define VGG16_DUMMY_C4R4
@@ -40,7 +42,8 @@ protected:
     GraphRuntime::AcceleratorWrapper accelerator;
     //TODO: change the path in anounymous submission
     //std::string testPrefix = "/home/jamesliu/thesis/SparseDNNAccelerator/accelerator/test0/FPL_traces/";
-    std::string testPrefix = "/home/jamesliu/thesis/SparseDNNAccelerator/accelerator/test0/gcp_traces/traces/";
+    //std::string testPrefix = "/home/jamesliu/thesis/SparseDNNAccelerator/accelerator/test0/gcp_traces/traces/";
+    std::string testPrefix = "/home/jamesliu/thesis/SparseDNNAccelerator/Build_A10Ref/graph_factory/";
 
     void SetUp() override;
 
@@ -83,6 +86,33 @@ TEST_F(testFixture, vgg16_imagenet_c2r4p75)
     traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_20", "output"));
     launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName, scatterInput, 19);
 }
+
+TEST_F(testFixture, vgg16_imagenet_dense_c2r4)
+{
+    std::string traceFileName = "vgg16_imagenet_dense_c2r4_trace.yaml";
+    std::string traceParameterFile = "vgg16_imagenet_dense_c2r4_parameters.npz";
+    std::string inoutFile = "vgg16_imagenet_dense_c2r4_inout_img00000008.yaml";
+    bool scatterInput = true;
+    std::map<std::string, std::string> traceName2BlobName;
+    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
+    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_20", "output"));
+    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName, scatterInput, 19);
+}
+#endif
+
+#if defined(RESNET50_IMAGENET_C1R4)
+TEST_F(testFixture, resnet50_imagenet_c1r4p75)
+{
+
+    std::string traceFileName = "resnet50_imagenet_c1r4p75_trace.yaml";
+    std::string traceParameterFile = "resnet50_imagenet_c1r4p75_parameters.npz";
+    std::string inoutFile = "resnet50_imagenet_c1r4p75_inout_img00000008.yaml";
+    bool scatterInput = true;
+    std::map<std::string, std::string> traceName2BlobName;
+    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
+    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_73", "output"));
+    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName, scatterInput);
+}
 #endif
 
 #if defined(RESNET50_IMAGENET_C2R4)
@@ -106,6 +136,20 @@ TEST_F(testFixture, resnet50_imagenet_c4r4p75)
     std::string traceFileName = "resnet50_imagenet_c4r4p75_trace.yaml";
     std::string traceParameterFile = "resnet50_imagenet_c4r4p75_parameters.npz";
     std::string inoutFile = "resnet50_imagenet_c4r4p75_inout_img00000008.yaml";
+    bool scatterInput = true;
+    std::map<std::string, std::string> traceName2BlobName;
+    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
+    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_73", "output"));
+    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName, scatterInput);
+}
+#endif
+#if defined(RESNET50_IMAGENET_DENSE_C2R4)
+TEST_F(testFixture, resnet50_imagenet_dense_c2r4)
+{
+
+    std::string traceFileName = "resnet50_imagenet_dense_c2r4_trace.yaml";
+    std::string traceParameterFile = "resnet50_imagenet_dense_c2r4_parameters.npz";
+    std::string inoutFile = "resnet50_imagenet_dense_c2r4_inout_img00000008.yaml";
     bool scatterInput = true;
     std::map<std::string, std::string> traceName2BlobName;
     traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
@@ -201,6 +245,34 @@ TEST_F(testFixture, vgg16_imagenet_c2r4p75)
     std::string traceFileName = "vgg16_imagenet_c2r4p75_trace.yaml";
     std::string traceParameterFile = "vgg16_imagenet_c2r4p75_parameters.npz";
     std::string inoutFile = "vgg16_imagenet_c2r4p75_inout_img00000008.yaml";
+    bool scatterInput = true;
+    std::map<std::string, std::string> traceName2BlobName;
+    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
+    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_22", "output"));
+    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName, scatterInput, -1);
+}
+#endif
+
+#if defined(VGG16_IMAGENET_C1R4)
+TEST_F(testFixture, vgg16_imagenet_c1r4p75)
+{
+    std::string traceFileName = "vgg16_imagenet_c1r4p75_trace.yaml";
+    std::string traceParameterFile = "vgg16_imagenet_c1r4p75_parameters.npz";
+    std::string inoutFile = "vgg16_imagenet_c1r4p75_inout_img00000008.yaml";
+    bool scatterInput = true;
+    std::map<std::string, std::string> traceName2BlobName;
+    traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));
+    traceName2BlobName.insert(std::pair<std::string, std::string>("dequant_22", "output"));
+    launch(traceFileName, traceParameterFile, inoutFile, traceName2BlobName, scatterInput, -1);
+}
+#endif
+
+#if defined(VGG16_IMAGENET_DENSE_C2R4)
+TEST_F(testFixture, vgg16_imagenet_dense_c2r4)
+{
+    std::string traceFileName = "vgg16_imagenet_dense_c2r4_trace.yaml";
+    std::string traceParameterFile = "vgg16_imagenet_dense_c2r4_parameters.npz";
+    std::string inoutFile = "vgg16_imagenet_dense_c2r4_inout_img00000008.yaml";
     bool scatterInput = true;
     std::map<std::string, std::string> traceName2BlobName;
     traceName2BlobName.insert(std::pair<std::string, std::string>("quant_0", "input"));

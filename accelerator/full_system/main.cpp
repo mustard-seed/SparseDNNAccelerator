@@ -28,21 +28,21 @@
 
 #define DIVIDE_CEIL(x, y) (1 + (x-1) / (y))
 #define SEED 27
-//#define PLAY
+#define PLAY
 //#define PERF_TEST
 //#define THROUGHPUT_DIAGNOSTIC
-#define VALIDATE
+//#define VALIDATE
 //#define TEST1_20201126
 //#define TEST2_20201126
 //#define ELTADD7_202021129
 //Some how if repeat is 100, bad things will happen on concat
 #define REPEAT 1
 #ifndef C5SOC
-#define EMULATE
+//#define EMULATE
 #endif
 //#define PERF_TEST
 //#NOOP
-//#define PROFILE
+#define PROFILE
 
 #define FRAC_WIDTH 4
 #define INT_WIDTH 3
@@ -140,22 +140,22 @@ protected:
 }; //testFixture
 
 #ifdef PLAY
-TEST_F (testFixture, conv_quantization)
+TEST_F (testFixture, large_layer)
 {
-    unsigned char inputWidth = 1;
-    unsigned char inputHeight = 1;
-    unsigned char numInputChannel = 1;
-    unsigned char numOutputChannel = 1;
+    unsigned int inputWidth = 7;
+    unsigned int inputHeight = 7;
+    unsigned int numInputChannel = 512;
+    unsigned int numOutputChannel = 4096;
     unsigned char numInputGroup = 1;
     unsigned char inputHeightSPUnitSize = 1;
     unsigned char inputWidthSPUnitSize = 1;
     unsigned char sizeOutputTileWidthPerColFull = 1;
     unsigned char sizeOutputTileHeight = 1;
-    unsigned char kernelSize = 1;
+    unsigned char kernelSize = 7;
     bool flagEnableRelu = false;
     OPERATION op = CONVOLUTION;
     float bias = 0.172176f;
-    float denseProb = 0.0f;
+    float denseProb = 0.25f;
 
     launch(
                 inputWidth,
@@ -1976,7 +1976,7 @@ std::vector<float> testFixture::generateInputTensor(
             for (unsigned int c=0; c<_numInputChannel; c++)
             {
                 signed char fpBits = ((w % 2 == 1) && _alternateSign)
-                        ? -1*((signed char) c) : c;
+                        ? -1*(((signed int) c) % 128) : ((signed int) c) % 128;
 //                signed char fpBits = 0x0;
                 fixedPointNumber fpNumber(fpBits, FRAC_WIDTH, INT_WIDTH);
                 inputVector.push_back(fpNumber.convert2Float());
@@ -2940,9 +2940,12 @@ void testFixture::launch (unsigned short _inputWidth,
                                     if ((colIsReal == true) && (rowIsReal == true))
                                     {
                                         unsigned int inputCol = iCol / inputWidthSPUnitSize;
-                                        unsigned char iChGlobal = iGroup*numOutputChannelPerGroup + iCh;
+                                        unsigned int iChGlobal = (iGroup*numOutputChannelPerGroup + iCh) % 128;
                                         expectedFloat = (inputCol % 2 == 0) ? iChGlobal*unitFloat : -1.0f*iChGlobal*unitFloat;
                                         expectedFloat += _bias;
+                                        if ((_flagEnableRelu == true) && (expectedFloat < 0)) {
+                                            expectedFloat = 0;
+                                        }
                                     }
                                     else
                                     {

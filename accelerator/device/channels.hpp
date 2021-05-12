@@ -49,7 +49,7 @@ Weight transporation channels linking the memory reader to the buffers
 ===========================================================
 */
 channel t_dram_block_w_tagged channel_weight_wide[PE_ROWS] __attribute__((depth(0))); //communication between filter streamer kernels
-channel t_weight_dram_block channel_weight_wide_local[PE_ROWS] __attribute__((depth(0))); //communication between filter tee and streamer
+channel t_dram_block_w_tagged channel_weight_wide_local[PE_ROWS] __attribute__((depth(0))); //communication between filter tee and streamer
 
 #endif //WEIGHT_MEMORY_INTERCONNECT
 

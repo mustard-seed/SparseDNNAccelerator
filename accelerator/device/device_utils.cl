@@ -264,6 +264,9 @@ signed char modifyCharOutput (
 #ifdef INTELFPGA_CL
 t_filter_streamer_control dramBlock2FilterStreamerControl (t_weight_dram_block block)
 {
+    #if (WEIGHT_BURST_SIZE_VALUE_BYTE < 8)
+        #error WEIGHT bus needs to be at least 8 words wide!
+    #endif
     t_filter_streamer_control control;
     #if defined(SPW_SYSTEM)
         control.numNZClustersPerPruneRange = block.indices[0];
@@ -284,38 +287,14 @@ t_filter_streamer_control dramBlock2FilterStreamerControl (t_weight_dram_block b
     control.maxPeCols = (unsigned char) block.values[6];
     control.flagIsReal = (unsigned char) block.values[7]; 
 
-    control.bias
-        = ( ( ( (t_bias) (block.values[8]) ) & 0xFF )
-            | ( (((t_bias) (block.values[9])) & 0xFF) << 8));
-
-    // control.bias
-    //     = ( ( ( (t_bias) (block.values[8]) ) & 0xFF )
-    //         | ( (((t_bias) (block.values[9])) & 0xFF) << 8)
-    //         | ( (((t_bias) (block.values[10])) & 0xFF) << 16)
-    //         | ( (((t_bias) (block.values[11])) & 0xFF) << 24));
-
-    //Recover bias
-    // #if ((PE_SIMD_SIZE * CLUSTER_SIZE) <= 4)
-    //     control.bias
-    //         = ( ( ( (t_bias) (block.transferBlocks[1].values[0]) ) & 0xFF )
-    //             | ( (((t_bias) (block.transferBlocks[1].values[1])) & 0xFF) << 8));
-
-    //     control.maxPeCols = (unsigned char) block.transferBlocks[1].values[2];
-    //     contro.flagIsReal = (unsigned char) block.transferBlocks[1].values[3];
-    // #else
-    //     control.bias
-    //         = ( ( ( (t_bias) (block.transferBlocks[0].values[4]) ) & 0xFF )
-    //             | ( (((t_bias) (block.transferBlocks[0].values[5])) & 0xFF) << 8));
-
-    //     control.maxPeCols = (unsigned char) block.transferBlocks[0].values[6];
-    //     control.flagIsReal = (unsigned char) block.transferBlocks[0].values[7]; 
-    // #endif
-    
     return control;
 }
 
 t_weight_dram_block filterStreamerControl2dramBlock (t_filter_streamer_control control)
 {
+    #if (WEIGHT_BURST_SIZE_VALUE_BYTE < 8)
+        #error WEIGHT bus needs to be at least 8 words wide!
+    #endif
     t_weight_dram_block block;
     #if defined(SPW_SYSTEM)
         block.indices[0] = control.numNZClustersPerPruneRange;
@@ -331,25 +310,6 @@ t_weight_dram_block filterStreamerControl2dramBlock (t_filter_streamer_control c
     //block.transferBlocks[2].values[0].cluster_values[0] = control.destinationRow;
     block.values[6] = (char) control.maxPeCols;
     block.values[7] = (char) control.flagIsReal;
-
-    block.values[8] = control.bias & 0xFF;
-    block.values[9] = ((control.bias >> 8) & 0xFF);
-    // block.values[10] = ((control.bias >> 16) & 0xFF);
-    // block.values[11] = ((control.bias >> 24) & 0xFF);
-
-    // #if ( (PE_SIMD_SIZE * CLUSTER_SIZE) <= 4)
-    //     block.transferBlocks[1].values[0] = control.bias & 0xFF;
-    //     block.transferBlocks[1].values[1] = ((control.bias >> 8) & 0xFF);
-    //     //block.transferBlocks[2].values[0].cluster_values[0] = control.destinationRow;
-    //     block.transferBlocks[1].values[2] = (char) control.maxPeCols;
-    //     block.transferBlocks[1].values[3] = (char) control.flagIsReal;
-    // #else
-    //     block.transferBlocks[0].values[4] = control.bias & 0xFF;
-    //     block.transferBlocks[0].values[5] = ((control.bias >> 8) & 0xFF);
-    //     //block.transferBlocks[2].values[0].cluster_values[0] = control.destinationRow;
-    //     block.transferBlocks[0].values[6] = (char) control.maxPeCols;
-    //     block.transferBlocks[0].values[7] = (char) control.flagIsReal;
-    // #endif
 
     return block;
 }
@@ -380,136 +340,6 @@ unsigned char generateOutputModifier (unsigned char numBitsToRightShift, unsigne
 }
 
 
-// t_dram_block transferBlockCount2DramBlock (t_streamblock_address transferBlockCount)
-// {
-//     t_dram_block dramBlock;
-//     dramBlock.transferBlocks[0].values[0] = (char) (transferBlockCount & 0xFF);
-//     dramBlock.transferBlocks[0].values[1] = (char) ((transferBlockCount >> 8) & 0xFF);
 
-//     return dramBlock;
-// }
-
-// t_streamblock_address dramBlock2TransferBlockCount (t_dram_block dramBlock)
-// {
-//     char countLow = dramBlock.transferBlocks[0].values[0];
-//     char countHigh = dramBlock.transferBlocks[0].values[1];
-
-//     t_streamblock_address count = 
-//         ((((t_streamblock_address) countHigh) & 0xFF) << 8)
-//         | ((((t_streamblock_address) countLow) & 0xFF));
-
-//     return count;
-// }
-
-// t_dram_block iaMetadata2DramBlock (unsigned short tbCount, unsigned char colSPWidth, unsigned char colSPStride, signed char iColInSPTile)
-// {
-//     t_dram_block dramBlock;
-//     dramBlock.transferBlocks[0].values[0] = (signed char) (tbCount & 0xFF);
-//     dramBlock.transferBlocks[0].values[1] = (signed char) ((tbCount >> 8) & 0x0FF);
-//     dramBlock.transferBlocks[0].values[2] = (signed char) colSPWidth;
-//     dramBlock.transferBlocks[0].values[3] = (signed char) colSPStride;
-// #if (WIDE_SIZE >= 2)
-//     dramBlock.transferBlocks[1].values[0] = (signed char) iColInSPTile;
-// #else
-//     dramBlock.transferBlocks[0].values[4] = (signed char) iColInSPTile;
-// #endif
-
-//     return dramBlock;
-// }
-
-// unsigned char getColSPWidth(t_dram_block block)
-// {
-//     return block.transferBlocks[0].values[2];
-// }
-
-// unsigned char getColSPStride(t_dram_block block)
-// {
-//     return block.transferBlocks[0].values[3];
-// }
-
-// unsigned short getTBCount(t_dram_block block)
-// {
-//     char countLow = block.transferBlocks[0].values[0];
-//     char countHigh = block.transferBlocks[0].values[1];
-
-//     t_streamblock_address count = 
-//         ((((unsigned short) countHigh) & 0xFF) << 8)
-//         | ((((unsigned short) countLow) & 0xFF));
-
-//     return count;
-// }
-
-// signed char getColSPIndex(t_dram_block block)
-// {
-// #if (WIDE_SIZE >= 2)
-//     return block.transferBlocks[1].values[0];
-// #else
-//     return block.transferBlocks[0].values[4];
-// #endif
-    
-// }
-
-// t_output_dram_block clusterCount2OutputDramBlock (unsigned short clusterCount)
-// {
-//     t_output_dram_block outputDramBlock;
-//     outputDramBlock.clusters[0].cluster_values[0] = (char) (clusterCount & 0xFF);
-//     #if (CLUSTER_SIZE > 1)
-//         outputDramBlock.clusters[0].cluster_values[1] = (char) ((clusterCount >> 8) & 0xFF);
-//     #else
-//         outputDramBlock.clusters[1].cluster_values[0] = (char) ((clusterCount >> 8) & 0xFF);
-//     #endif
-//     return outputDramBlock;
-// }
-
-// unsigned short outputDramBlock2ClusterCount (t_output_dram_block outputDramBlock)
-// {
-//     char countLow = outputDramBlock.clusters[0].cluster_values[0];
-//     #if (CLUSTER_SIZE > 1)
-//         char countHigh = outputDramBlock.clusters[0].cluster_values[1];
-//     #else
-//         char countHigh = outputDramBlock.clusters[1].cluster_values[0];
-//     #endif
-
-//     unsigned short count = 
-//         ((((t_streamblock_address) countHigh) & 0xFF) << 8)
-//         | ((((t_streamblock_address) countLow) & 0xFF));
-
-//     return count;
-// }
-
-// unsigned char getIsLast(t_transferblock_tagged blockTagged)
-// {
-//     return (((blockTagged.isLastConcatMaxTransportID) >> 7) & 0x01);
-// }
-
-// unsigned char getMaxTransferID(t_transferblock_tagged blockTagged)
-// {
-//     return (blockTagged.isLastConcatMaxTransportID & 0x07F);
-// }
-
-// void setIsLast (t_transferblock_tagged* pBlockTagged, unsigned char isLast)
-// {
-//     pBlockTagged->isLastConcatMaxTransportID &= 0x07F;
-//     pBlockTagged->isLastConcatMaxTransportID |= ((unsigned char)((isLast << 7) & 0x080));
-// }
-
-// void setMaxTransferID (t_transferblock_tagged* pBlockTagged, unsigned char maxTransferID)
-// {
-//     pBlockTagged->isLastConcatMaxTransportID &= 0x080;
-//     pBlockTagged->isLastConcatMaxTransportID |= ((unsigned char)(maxTransferID & 0x07F));
-// }
-
-// void initialize_dramblock(t_dram_block* pDramBlock)
-// {
-//     #pragma unroll
-//     for (int itb=0; itb<WIDE_SIZE; itb++)
-//     {
-//         #pragma unroll
-//         for (int iVal=0; iVal<(TRANSFER_SIZE*CLUSTER_SIZE); iVal++)
-//         {
-//             pDramBlock->transferBlocks[itb].values[iVal] = 0x0;
-//         }
-//     }
-// }
 
 #endif

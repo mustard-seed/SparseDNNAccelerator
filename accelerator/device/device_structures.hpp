@@ -190,25 +190,8 @@ typedef signed short t_bias;
     } t_activation_dram_block;
 #endif
 
-// typedef struct {
-//     t_char values [TRANSFER_SIZE*CLUSTER_SIZE];
-// } t_transfer_block;
-
-// typedef struct {
-//     t_transfer_block transferBlocks[WIDE_SIZE];
-// } t_dram_block;
-
-
-// typedef struct {
-//    t_char values[PE_SIMD_SIZE * CLUSTER_SIZE];
-//     #if defined(SPW_SYSTEM)
-//         t_uchar indices[INDEX_CHAR_ARRAY_SIZE];
-//     #endif
-// } t_weight_transfer_block;
-
 
 typedef struct __attribute__((packed)) {
-    //t_weight_transfer_block transferBlocks[WEIGHT_WIDE_SIZE];
     t_char values [WEIGHT_BURST_SIZE_VALUE_BYTE];
     #if defined(SPW_SYSTEM)
     t_uchar indices[WEIGHT_BURST_SIZE_INDEX_BYTE];
@@ -475,16 +458,16 @@ Datatypes relevant to the filter transportation system
 ========================================================================
 */
 //Raw data packet travelling on the channels that link the WeightTees.
-typedef struct {
+typedef struct __attribute__((packed)){
     t_weight_dram_block dramBlock;
     unsigned char destinationRow;
+    t_bias bias;
 } t_dram_block_w_tagged;
 
 //Control packet for the weight buffers
 typedef struct __attribute__((packed)) {
     unsigned int numOutputsXNumTransferBlocks;
     unsigned short numTransferBlocks;
-    t_bias bias; //short
     unsigned char maxPeCols; //Number of PE COLS that is activated
     t_flag flagIsReal; //Whether this filter row should stream zero padding
     #if defined(SPW_SYSTEM)
@@ -698,49 +681,6 @@ typedef struct __attribute__((packed)) {
     t_activation_dram_block dramBlock;
     t_flag isFromLastColumn;
 } t_output_activation_dram_block_tagged;
-// typedef struct __attribute__((packed)) {
-//     //TODO: HANDLE MULTI-BYTE MASK
-//     t_cluster cluster;
-//     //unsigned char numSurvivingClusters;  //Number of surviving data cluster (not including the bitmask) in the window
-//     //bool isLastWindowInStrip; //Whether this is the last window in a strip
-
-//     //Status bits
-//     //Bit 0: Enable sparsification
-//     //Bit 1: Is last cluster in the strip
-//     //Bit 2: Is last cluster in window
-//     unsigned char statusBits;
-// } t_cluster_to_compressor;
-// //Used to send data to the tee
-// typedef struct __attribute__((packed)) {
-//     t_cluster cluster;
-//     bool isLastInStrip;
-
-// } t_output_cluster_tagged;
-
-// //Output of the OA coalescer
-// typedef struct {
-//     t_cluster clusters[NUM_CLUSTER_IN_DRAM_SIZE];
-// } t_output_dram_block;
-
-// typedef struct __attribute__((packed)) {
-//     t_output_dram_block block;
-
-//     //Bit 0: Is issued by the last column
-//     //Bit 1: Is valid block
-//     //Bit 2: Read by sparse only. Is last valid dram block in strip.
-//     unsigned char flags;
-//     #if defined(SPARSE_SYSTEM)
-//     unsigned short clusterCount;
-//     #endif 
-// } t_output_dram_block_tagged;
-
-// typedef struct __attribute__((packed)) {
-//     t_output_dram_block outputDramBlock;
-//     #if defined(SPARSE_SYSTEM)
-//     unsigned short numClustersInStrip;
-//     #endif
-//     bool isLastInStrip;
-// } t_output_coalescer_packet;
 #endif
 //#endif
 

@@ -22,6 +22,7 @@ std::string keys =
     "{ preproc p   | preprocess.yaml        | Required. Path to the preprocessing configuration YAML file. }"
     "{ model m     | <none>                 | Required. Path to the model trace YAML file.}"
     "{ param w     | <none>                 | Required. Path the the model parameter NPZ file.}"
+    "{ cvThreads t | 4                      | Optional. Number of OpenCV Threads.}"
     "{ numSamples n| 50000                 | Optional. Number of samples to run if flag val is set.}";
 
 using namespace cv;
@@ -113,6 +114,10 @@ int main(int argc, char** argv)
     t_preprocess preprocess = parsePreProcess(preprocessNode);
     std::string legendFile = parser.get<String>("legend");
     YAML::Node legendNode = LoadFile(legendFile);
+
+    int numCVThreads = parser.get<int>("cvThreads");
+    std::cout<<"Setting OpenCV num threads to "<<numCVThreads<<std::endl;
+    cv::setNumThreads(numCVThreads);
 
     //Run on validation set
     if (parser.has("val")) {

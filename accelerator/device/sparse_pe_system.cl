@@ -418,8 +418,13 @@ __kernel void kernelWMover (
 		//to the number NZ clusters per pruning range.
 		unsigned short numTransferBlockInFilter = inst.numTBPerFilter;
 
-		unsigned short numDramBlockInActualFilter = 
-			((numTransferBlockInFilter-1) >> WEIGHT_WIDE_SIZE_OFFSET) + 1;
+		#if (WEIGHT_BURST_SIZE_GEQ_PE_SIZE == TRUE)
+			unsigned short numDramBlockInActualFilter = 
+				((numTransferBlockInFilter-1) >> WEIGHT_WIDE_SIZE_OFFSET) + 1;
+		#else
+			unsigned short numDramBlockInActualFilter = 
+				(numTransferBlockInFilter << WEIGHT_WIDE_SIZE_OFFSET);
+		#endif
 
 		unsigned char iFilterRowDestination = 0;
 		for (
@@ -445,7 +450,6 @@ __kernel void kernelWMover (
 			//Setup the control bias
 			t_filter_streamer_control control;
 			control.numOutputsXNumTransferBlocks = (unsigned int) inst.filterReuse * (unsigned int) numTransferBlockInFilter;
-			control.bias = bias;
 			control.numTransferBlocks = numTransferBlockInFilter;
 			control.flagIsReal = (isRealFilter == TRUE) ? TRUE : FALSE;
 			control.maxPeCols = (inst.numActivePeCols - 1);
@@ -523,6 +527,7 @@ __kernel void kernelWMover (
 				t_dram_block_w_tagged taggedBlock;
 				taggedBlock.dramBlock = block;
 				taggedBlock.destinationRow = iFilterRowDestination;
+				taggedBlock.bias = bias;
 
 				write_channel_intel(channel_weight_wide[0], taggedBlock);
 			} // for over iTransmitCount
@@ -3854,7 +3859,7 @@ __kernel void kernelFilterTee ()
 
 		if (destinationRow == rowID)
 		{
-			write_channel_intel(channel_weight_wide_local[rowID], taggedBlock.dramBlock);
+			write_channel_intel(channel_weight_wide_local[rowID], taggedBlock);
 		}
 		else
 		{
@@ -3872,7 +3877,14 @@ __kernel void kernelFilterTee ()
 
 #define STATE_FILTER_STREAMER_READ_CACHE_WAIT 0X0
 #define STATE_FILTER_STREAMER_READ_CACHE_READ 0X1
-//#define STATE_FILTER_STREAMER_READ_CACHE_WAIT 0X4
+
+#if (WEIGHT_BURST_SIZE_GEQ_PE_SIZE == TRUE)
+	#define FILTER_STREAMER_WEIGHT_CACHE_BANK_COUNT 1
+	#define FILTER_STREAMER_INDEX_CACHE_BANK_COUNT 1
+#else
+	#define FILTER_STREAMER_WEIGHT_CACHE_BANK_COUNT WEIGHT_WIDE_SIZE
+#define FILTER_STREAMER_INDEX_CACHE_BANK_COUNT WEIGHT_WIDE_SIZE
+#endif
 
 /*! kernelFilterStreamer
 	\brief Stream filter values to the PE array
@@ -3890,19 +3902,33 @@ __kernel void kernelFilterBuffer ()
 	typedef struct {
     	t_char values[WEIGHT_BURST_SIZE_VALUE_BYTE];
 	} t_weight_dram_block_values;
-	//important to size the bankwidth, otherwise the default 32 bit will be used, resulting in complex store logic
-	t_weight_dram_block_values cacheNzBlocks [2][KERNEL_CACHE_DEPTH] __attribute__((bankwidth(WEIGHT_BURST_SIZE_VALUE_BYTE))); 
+
+	t_weight_dram_block_values cacheNzBlocks0 [KERNEL_CACHE_DEPTH] __attribute__((
+		bankwidth(WEIGHT_BURST_SIZE_VALUE_BYTE),
+		numbanks(FILTER_STREAMER_WEIGHT_CACHE_BANK_COUNT),
+		singlepump)); 
+	t_weight_dram_block_values cacheNzBlocks1 [KERNEL_CACHE_DEPTH] __attribute__((
+		bankwidth(WEIGHT_BURST_SIZE_VALUE_BYTE),
+		numbanks(FILTER_STREAMER_WEIGHT_CACHE_BANK_COUNT),
+		singlepump));
 	#if defined(SPW_SYSTEM)
-	typedef struct {
-    	t_uchar indices[WEIGHT_WIDE_SIZE*INDEX_CHAR_ARRAY_SIZE];
-	} t_weight_dram_block_indices;
-	t_weight_dram_block_indices cacheIndices [2][KERNEL_CACHE_DEPTH] __attribute__((bankwidth(WEIGHT_WIDE_SIZE*INDEX_CHAR_ARRAY_SIZE))); 
+		typedef struct {
+	    	t_uchar indices[WEIGHT_BURST_SIZE_INDEX_BYTE];
+		} t_weight_dram_block_indices;
+		t_weight_dram_block_indices cacheIndices0 [KERNEL_CACHE_DEPTH] __attribute__((
+			bankwidth(WEIGHT_BURST_SIZE_INDEX_BYTE),
+			numbanks(FILTER_STREAMER_INDEX_CACHE_BANK_COUNT),
+			singlepump)); 
+		t_weight_dram_block_indices cacheIndices1 [KERNEL_CACHE_DEPTH] __attribute__((
+			bankwidth(WEIGHT_BURST_SIZE_INDEX_BYTE),
+			numbanks(FILTER_STREAMER_INDEX_CACHE_BANK_COUNT),
+			singlepump)); 
 	#endif
+
 	uint1_t regWriteSide = 0x0;
 	unsigned int regOutputxTransferBlocks[2];
-	//unsigned char maxOutputHeightTileSize[2]; //maxTP
-	//unsigned char maxOutputWidthTileSize[2]; //maxTQ 
-	unsigned short maxTransferBlockInFilter[2]; //maxCg
+	unsigned short numTransferBlockInFilter[2]; //maxCg
+	unsigned short numDramBlockInFilter[2];
 
 	unsigned char maxPeCols[2];
 	t_bias cacheBias[2];
@@ -3913,13 +3939,11 @@ __kernel void kernelFilterBuffer ()
 
 	//=================Write into cache variables=================
 	t_filter_streamer_write_state stateWriteCache = STATE_FILTER_STREAMER_WRITE_CACHE_SETUP_CONTROL;
-	unsigned short iTransferBlockInFilterWrite; //iCg
+	unsigned short iDramBlockInFilterWrite; //iCg
 
 	//=================Read from cache variables=================
 	t_filter_streamer_read_state stateReadCache = STATE_FILTER_STREAMER_READ_CACHE_WAIT;
 	unsigned short iTransferBlockInFilterRead = 0; //iCg
-	//unsigned char iWidthInOutputTileRead; //pq*A
-	//unsigned char iHeightInOutputTileRead; //p
 	unsigned int iOutputXTransferBlocksRead = 0;
 	#if defined(SPW_SYSTEM)
 	unsigned char iNZClusterInPruneRange = 0;
@@ -3937,17 +3961,19 @@ __kernel void kernelFilterBuffer ()
 		t_filter_streamer_write_state nextStateWriteCache = stateWriteCache;
 		{
 			bool success = false;
-			t_weight_dram_block writeBlock;
+			t_dram_block_w_tagged writeBlockTagged;
+
 			if ( (stateWriteCache == STATE_FILTER_STREAMER_WRITE_CACHE_SETUP_CONTROL)
 				|| (stateWriteCache == STATE_FILTER_STREAMER_WRITE_CACHE_WRITE) )
 			{
-				writeBlock = read_channel_nb_intel(channel_weight_wide_local[rowID], &success);
+				writeBlockTagged = read_channel_nb_intel(channel_weight_wide_local[rowID], &success);
 			}
 			
 			if (stateWriteCache == STATE_FILTER_STREAMER_WRITE_CACHE_SETUP_CONTROL)
 			{
 				if (success)
 				{
+					t_weight_dram_block writeBlock = writeBlockTagged.dramBlock;
 					t_filter_streamer_control control = 
 						dramBlock2FilterStreamerControl(writeBlock);
 
@@ -3955,15 +3981,23 @@ __kernel void kernelFilterBuffer ()
 					//maxOutputWidthTileSize[regWriteSide] = control.maxOutputWidthTileSize;
 					regOutputxTransferBlocks[regWriteSide] = control.numOutputsXNumTransferBlocks;
 					maxPeCols[regWriteSide] = control.maxPeCols;
-					maxTransferBlockInFilter[regWriteSide] = control.numTransferBlocks;
-					cacheBias[regWriteSide] = control.bias;
+					numTransferBlockInFilter[regWriteSide] = control.numTransferBlocks;
+					cacheBias[regWriteSide] = writeBlockTagged.bias;
 					t_flag flagIsReal = (t_flag) control.flagIsReal;
 					regIsRealFilter[regWriteSide] = flagIsReal;
 					#if defined(SPW_SYSTEM)
 					regNumNZClustersInPruneRange[regWriteSide] = control.numNZClustersPerPruneRange;
 					#endif
+
+					#if (WEIGHT_BURST_SIZE_GEQ_PE_SIZE == TRUE)
+						numDramBlockInFilter[regWriteSide] = 
+							((control.numTransferBlocks-1) >> WEIGHT_WIDE_SIZE) + 1;
+					#else
+						numDramBlockInFilter[regWriteSide] = 
+							control.numTransferBlocks << WEIGHT_WIDE_SIZE;
+					#endif
 					
-					iTransferBlockInFilterWrite = 0;
+					iDramBlockInFilterWrite = 0;
 
 
 					EMULATOR_PRINT(("[kernelFilterBuffer %d] Received setup packet for a new filter. Number of transfer blocks to follow: %d\n\n", rowID, control.numTransferBlocks));
@@ -3979,10 +4013,9 @@ __kernel void kernelFilterBuffer ()
 			else if (stateWriteCache == STATE_FILTER_STREAMER_WRITE_CACHE_WRITE)
 			{
 				if (success)
-				{
-					unsigned short dramBlockIndex = (iTransferBlockInFilterWrite >> WEIGHT_WIDE_SIZE_OFFSET);
-					
+				{					
 					t_weight_dram_block_values values;
+					t_weight_dram_block writeBlock = writeBlockTagged.dramBlock;
 
 					#pragma unroll
 					for (unsigned char i=0; i<WEIGHT_BURST_SIZE_VALUE_BYTE; i++)
@@ -3991,7 +4024,12 @@ __kernel void kernelFilterBuffer ()
 					}
 
 
-					cacheNzBlocks[regWriteSide][dramBlockIndex] = values;
+					if (regWriteSide == (t_flag) 0x0) {
+						cacheNzBlocks0[iDramBlockInFilterWrite] = values;
+					}
+					else {
+						cacheNzBlocks1[iDramBlockInFilterWrite] = values;
+					}
 
 					#if defined(SPW_SYSTEM)
 						t_weight_dram_block_indices indices;
@@ -4000,11 +4038,17 @@ __kernel void kernelFilterBuffer ()
 						{
 							indices.indices[i] = writeBlock.indices[i];
 						}
-						cacheIndices[regWriteSide][dramBlockIndex] = indices;
+
+						if (regWriteSide == (t_flag) 0x0) {
+							cacheIndices0[iDramBlockInFilterWrite] = indices;
+						}
+						else {
+							cacheIndices1[iDramBlockInFilterWrite] = indices;
+						}
 					#endif
 
-					iTransferBlockInFilterWrite += WEIGHT_WIDE_SIZE;
-					if (iTransferBlockInFilterWrite >= maxTransferBlockInFilter[regWriteSide])
+					iDramBlockInFilterWrite += 1;
+					if (iDramBlockInFilterWrite >= numDramBlockInFilter[regWriteSide])
 					{
 						nextStateWriteCache = STATE_FILTER_STREAMER_WRITE_CACHE_WAIT;
 					}
@@ -4013,23 +4057,7 @@ __kernel void kernelFilterBuffer ()
 		} // WRITE
 
 		t_filter_streamer_read_state nextStateReadCache = stateReadCache;
-		//t_transferblock_tagged weightBlockTagged;
 		
-		// if (stateReadCache == STATE_FILTER_STREAMER_READ_CACHE_SETUP)
-		// {
-		// 	iTransferBlockInFilterRead = 0;
-		// 	if (iOutputRead == maxOutputCount[(~regWriteSide) & 0x1])
-		// 	{
-		// 		nextStateReadCache = STATE_FILTER_STREAMER_READ_CACHE_WAIT;
-		// 		iOutputRead = 0;
-		// 		EMULATOR_PRINT(("[kernelFilterBuffer %d] FINISHED stream all the weights in the buffer for the tile.\n\n", rowID));
-		// 	}
-		// 	else
-		// 	{
-		// 		nextStateReadCache = STATE_FILTER_STREAMER_READ_CACHE_READ;
-		// 		//iOutputRead++;
-		// 	}
-		// } // STATE_FILTER_STREAMER_READ_CACHE_SETUP
 		// Send bias, then followed by the clusters
 		if ( stateReadCache == STATE_FILTER_STREAMER_READ_CACHE_READ)
 		{
@@ -4040,23 +4068,27 @@ __kernel void kernelFilterBuffer ()
 				t_flag tempIsLastBlockInPruneRange = FALSE; 
 			#endif
 
-			// if (iTransferBlockInFilterRead > 0)
-			// {
-				// unsigned short dramIndex = (iTransferBlockInFilterRead - 1) >> WEIGHT_WIDE_SIZE_OFFSET;
-				// unsigned short indexInDramBlock = (iTransferBlockInFilterRead - 1) & WEIGHT_WIDE_SIZE_REMAINDER_MASK;
+			#if (WEIGHT_BURST_SIZE_GEQ_PE_SIZE == TRUE)
 				unsigned short dramIndex = iTransferBlockInFilterRead >> WEIGHT_WIDE_SIZE_OFFSET;
 				unsigned short indexInDramBlock = iTransferBlockInFilterRead & WEIGHT_WIDE_SIZE_REMAINDER_MASK;
 
-				t_weight_dram_block_values valueBlock = cacheNzBlocks[(~regWriteSide) & 0x1][dramIndex];
+				t_weight_dram_block_values valueBlock;
+
+				if (regWriteSide == 0x0) {
+					valueBlock = cacheNzBlocks1[dramIndex];
+				}
+				else {
+					valueBlock = cacheNzBlocks0[dramIndex];
+				}
 				//Bridge the weight values
 				#pragma unroll 
-				for (int v=0; v<PE_SIMD_SIZE*CLUSTER_SIZE; v++)
+				for (int v=0; v<PE_WEIGHT_BLOCK_SIZE_IN_WORD; v++)
 				{
 					//Handle zero-padded filter
 					if (regIsRealFilter[(~regWriteSide) & 0x1] == TRUE)
 					{
 						peWeightBlock.values[v] = valueBlock.values[
-							(indexInDramBlock << (PE_SIMD_SIZE_CLUSTER_OFFSET + VALUE_TO_CLUSTER_SHIFT)) + v
+							(indexInDramBlock << PE_WEIGHT_BLOCK_SIZE_IN_WORD_OFFSET) + v
 							];
 					}
 					else
@@ -4066,7 +4098,13 @@ __kernel void kernelFilterBuffer ()
 				}
 
 				#if defined(SPW_SYSTEM)
-					t_weight_dram_block_indices indicesBlock = cacheIndices[(~regWriteSide) & 0x1][dramIndex];
+					t_weight_dram_block_indices indicesBlock;
+					if (regWriteSide == 0x0) {
+						indicesBlock = cacheIndices1[dramIndex];
+					}
+					else {
+						indicesBlock = cacheIndices0[dramIndex];
+					}
 					#pragma unroll
 					for (unsigned char iChar=0; iChar<INDEX_CHAR_ARRAY_SIZE; iChar++)
 					{
@@ -4089,26 +4127,81 @@ __kernel void kernelFilterBuffer ()
 						}
 					}
 				#endif
+			#else  //WEIGHT_BURST_SIZE_GEQ_PE_SIZE == FALSE
+				for (unsigned short iDramBlockInPeBlock=0; iDramBlockInPeBlock<WEIGHT_WIDE_SIZE; iDramBlockInPeBlock++) {
+					//Assign values for the PE weight values
+					unsigned short dramIndex = (iTransferBlockInFilterRead << WEIGHT_WIDE_SIZE_OFFSET) + iDramBlockInPeBlock;
+					t_weight_dram_block_values valueBlock;
 
-				//The comparsion is greater or equal to 
-				//since iTransferBlockInFilterRead is also incremented to transmitting the bias
-				tempIsLastBlockInFilter = 
-					((iTransferBlockInFilterRead + (unsigned short) 1) >= maxTransferBlockInFilter[(~regWriteSide) & 0x1]) ?
+					if (regWriteSide == 0x0) {
+						valueBlock = cacheNzBlocks1[dramIndex];
+					}
+					else {
+						valueBlock = cacheNzBlocks0[dramIndex];
+					}
+
+					for (int v=0; v<WEIGHT_BURST_SIZE_VALUE_BYTE; v++) {
+						//Handle zero-padded filter
+						if (regIsRealFilter[(~regWriteSide) & 0x1] == TRUE)
+						{
+							unsigned char byteIndexInPEBlock = 
+								(iDramBlockInPeBlock << WEIGHT_BURST_SIZE_VALUE_BYTE_OFFSET) + v;
+
+							peWeightBlock.values[byteIndexInPEBlock] = valueBlock.values[v];
+						}
+						else
+						{
+							peWeightBlock.values[v] = 0x0;
+						}
+					}
+
+					#if defined(SPW_SYSTEM)
+						t_weight_dram_block_indices indicesBlock;
+						if (regWriteSide == 0x0) {
+							indicesBlock = cacheIndices1[dramIndex];
+						}
+						else {
+							indicesBlock = cacheIndices0[dramIndex];
+						}
+						#pragma unroll
+						for (unsigned char iChar=0; iChar<WEIGHT_BURST_SIZE_INDEX_BYTE; iChar++)
+						{
+							unsigned char val = indicesBlock.indices[iChar];
+
+							t_spw_index val0 = val & CHAR_TO_SPW_INDEX_MASK;
+							t_spw_index val1 = (val >> 0x04) & CHAR_TO_SPW_INDEX_MASK;
+
+							unsigned char index0 = 
+								((iDramBlockInPeBlock << WEIGHT_BURST_SIZE_INDEX_BYTE_OFFSET)
+								+ iChar) << 1; //*2
+							unsigned char index1 = 
+								(((iDramBlockInPeBlock << WEIGHT_BURST_SIZE_INDEX_BYTE_OFFSET)
+								+ iChar) << 1) + 1; //*2 + 1
+							if (index0 < PE_SIMD_SIZE)
+							{
+								peWeightBlock.indices[index0] = val0;
+							}
+							if (index1 < PE_SIMD_SIZE)
+							{
+								peWeightBlock.indices[index1] = val1;
+							}
+						}
+					#endif
+				} //end-for iDramBlockInPeBlock
+			#endif //WEIGHT_BURST_SIZE_GEQ_PE_SIZE
+
+			
+
+			//The comparsion is greater or equal to 
+			//since iTransferBlockInFilterRead is also incremented to transmitting the bias
+			tempIsLastBlockInFilter = 
+				((iTransferBlockInFilterRead + (unsigned short) 1) >= numTransferBlockInFilter[(~regWriteSide) & 0x1]) ?
+				TRUE : FALSE;
+			#if defined(SPW_SYSTEM)
+				tempIsLastBlockInPruneRange = 
+					((iNZClusterInPruneRange + (unsigned short) 1) == regNumNZClustersInPruneRange[(~regWriteSide) & 0x1]) ?
 					TRUE : FALSE;
-				#if defined(SPW_SYSTEM)
-					tempIsLastBlockInPruneRange = 
-						((iNZClusterInPruneRange + (unsigned short) 1) == regNumNZClustersInPruneRange[(~regWriteSide) & 0x1]) ?
-						TRUE : FALSE;
-				#endif
-			// }
-			// else //Bias
-			// {
-			// 	t_bias bias = (regIsRealFilter[(~regWriteSide) & 0x1] == TRUE) ?
-			// 		cacheBias[(~regWriteSide) & 0x1] : 0x0;
-			// 	peWeightBlock.values[0] = bias & 0x0FF;
-			// 	peWeightBlock.values[1] = (bias >> 0x08) & 0x0FF;
-			// 	//weightBlockTagged.isLast = false;
-			// }
+			#endif
 			peWeightBlock.bias = (regIsRealFilter[(~regWriteSide) & 0x1] == TRUE) ?
 					cacheBias[(~regWriteSide) & 0x1] : 0x0;
 			//Set the control signals for the block
