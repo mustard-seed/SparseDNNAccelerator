@@ -500,6 +500,7 @@ namespace GraphRuntime {
                        (int) std::ceil( (1.0f - getWeightSparsity()) * PRUNE_RANGE_IN_CLUSTER),
                        WEIGHT_BURST_SIZE_VALUE_BYTE
                    );
+        //Need to adjust the weight latency by taking the index into account
         weightDDRLatency = deriveSparseConvWeightTransferLatency(
                    _tileCandidate,
                    inputChannelsPerGroup,
@@ -512,6 +513,7 @@ namespace GraphRuntime {
                    (int) std::ceil( (1.0f - getWeightSparsity()) * PRUNE_RANGE_IN_CLUSTER),
                    DDR_BYTES_PER_CYCLE
                );
+        weightDDRLatency = (unsigned int) ((float) weightDDRLatency * (1.0f + (float) WEIGHT_BURST_SIZE_INDEX_BYTE / (float) WEIGHT_BURST_SIZE_VALUE_BYTE));
 #else
         computeLatency = deriveDenseConvComputationLatency(
                     _tileCandidate,
@@ -620,7 +622,7 @@ namespace GraphRuntime {
                    .computeLatencyWithOverhead = computeLatencyWithOverhead,
                    .ddrLatency = totalDDRLatency,
                    .totalLatency = totalLatency,
-                   .isComputeBound = computeLatencyWithOverhead > totalLatency
+                   .isComputeBound = computeLatencyWithOverhead >= totalLatency
        };
 
        return latInfo;

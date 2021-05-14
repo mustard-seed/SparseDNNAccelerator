@@ -13,8 +13,11 @@
 //#define EMULATE
 #endif
 #define INFERENCE_REPEAT 100
-#define WARMUP 100
-#define CHECKOUTPUT
+#define WARMUP 50
+//#define THESIS_DATA_20210513_LATENCY_MODEL_EXP1
+//#define THESIS_DATA_20210513_LATENCY_MODEL_EXP2
+#define THESIS_DATA_20210513_LATENCY_MODEL_EXP3
+//#define THESIS_DATA_20210513_LATENCY_MODEL_EXP4
 //#define PROFILE
 
 using namespace GraphRuntime;
@@ -47,11 +50,104 @@ protected:
     int launch(
                 t_conv_spec _convInfo,
                 int sizeOutputFullTileHeight,
-                int sizeOutputFullTileWidthPerCol
+                int sizeOutputFullTileWidthPerCol,
+                bool _dumpRuntime=false,
+                std::string _runtimeFilePath="runtime.csv"
             );
 };
 
-TEST_F(testFixture, 128x128x3x3x56x56)
+//TEST_F(testFixture, 128x128x3x3x56x56)
+//{
+//    testFixture::t_conv_spec spec {
+//        .inputChannel=128,
+//        .outputChannel=128,
+//        .inputWidth=56,
+//        .inputHeight=56,
+//        .borderPadding=1,
+//        .kernel=3,
+//        .stride=1,
+//        .transConvPadding=0,
+//        .numGroups=1,
+//        .numSourceGroups=1,
+//        .relu=true,
+//        .inputFracBits=2,
+//        .weightFracBits=2,
+//        .outputFracBits=2,
+//        .sparsity=0.0
+//    };
+
+//    typedef struct {
+//        int sizeOutputFullTileHeight;
+//        int sizeOutputFullTileWidthPerCol;
+//    } t_tile;
+
+//    std::vector<t_tile> vecTileConfigs {
+//        {.sizeOutputFullTileHeight = 28, .sizeOutputFullTileWidthPerCol = 4},
+//        {.sizeOutputFullTileHeight = 14, .sizeOutputFullTileWidthPerCol = 4},
+//        {.sizeOutputFullTileHeight = 7, .sizeOutputFullTileWidthPerCol = 4},
+//        {.sizeOutputFullTileHeight = 1, .sizeOutputFullTileWidthPerCol = 4},
+//        {.sizeOutputFullTileHeight = 28, .sizeOutputFullTileWidthPerCol = 2},
+//        {.sizeOutputFullTileHeight = 14, .sizeOutputFullTileWidthPerCol = 2},
+//        {.sizeOutputFullTileHeight = 7, .sizeOutputFullTileWidthPerCol = 2},
+//        {.sizeOutputFullTileHeight = 1, .sizeOutputFullTileWidthPerCol = 2},
+//        {.sizeOutputFullTileHeight = 28, .sizeOutputFullTileWidthPerCol = 1},
+//        {.sizeOutputFullTileHeight = 14, .sizeOutputFullTileWidthPerCol = 1},
+//        {.sizeOutputFullTileHeight = 7, .sizeOutputFullTileWidthPerCol = 1},
+//        {.sizeOutputFullTileHeight = 1, .sizeOutputFullTileWidthPerCol = 1},
+//    };
+
+//    for (auto &config : vecTileConfigs) {
+//        launch(spec, config.sizeOutputFullTileHeight, config.sizeOutputFullTileWidthPerCol);
+//    }
+//}
+
+//TEST_F(testFixture, 128x128x1x1x56x56)
+//{
+//    testFixture::t_conv_spec spec {
+//        .inputChannel=128,
+//        .outputChannel=128,
+//        .inputWidth=56,
+//        .inputHeight=56,
+//        .borderPadding=1,
+//        .kernel=1,
+//        .stride=1,
+//        .transConvPadding=0,
+//        .numGroups=1,
+//        .numSourceGroups=1,
+//        .relu=true,
+//        .inputFracBits=2,
+//        .weightFracBits=2,
+//        .outputFracBits=2,
+//        .sparsity=0.0
+//    };
+
+//    typedef struct {
+//        int sizeOutputFullTileHeight;
+//        int sizeOutputFullTileWidthPerCol;
+//    } t_tile;
+
+//    std::vector<t_tile> vecTileConfigs {
+//        {.sizeOutputFullTileHeight = 28, .sizeOutputFullTileWidthPerCol = 4},
+//        {.sizeOutputFullTileHeight = 14, .sizeOutputFullTileWidthPerCol = 4},
+//        {.sizeOutputFullTileHeight = 7, .sizeOutputFullTileWidthPerCol = 4},
+//        {.sizeOutputFullTileHeight = 1, .sizeOutputFullTileWidthPerCol = 4},
+//        {.sizeOutputFullTileHeight = 28, .sizeOutputFullTileWidthPerCol = 2},
+//        {.sizeOutputFullTileHeight = 14, .sizeOutputFullTileWidthPerCol = 2},
+//        {.sizeOutputFullTileHeight = 7, .sizeOutputFullTileWidthPerCol = 2},
+//        {.sizeOutputFullTileHeight = 1, .sizeOutputFullTileWidthPerCol = 2},
+//        {.sizeOutputFullTileHeight = 28, .sizeOutputFullTileWidthPerCol = 1},
+//        {.sizeOutputFullTileHeight = 14, .sizeOutputFullTileWidthPerCol = 1},
+//        {.sizeOutputFullTileHeight = 7, .sizeOutputFullTileWidthPerCol = 1},
+//        {.sizeOutputFullTileHeight = 1, .sizeOutputFullTileWidthPerCol = 1},
+//    };
+
+//    for (auto &config : vecTileConfigs) {
+//        launch(spec, config.sizeOutputFullTileHeight, config.sizeOutputFullTileWidthPerCol);
+//    }
+//}
+
+#if defined(THESIS_DATA_20210513_LATENCY_MODEL_EXP1)
+TEST_F(testFixture, _THESIS_DATA_20210513_LATENCY_MODEL_EXP1)
 {
     testFixture::t_conv_spec spec {
         .inputChannel=128,
@@ -77,26 +173,24 @@ TEST_F(testFixture, 128x128x3x3x56x56)
     } t_tile;
 
     std::vector<t_tile> vecTileConfigs {
-        {.sizeOutputFullTileHeight = 28, .sizeOutputFullTileWidthPerCol = 4},
-        {.sizeOutputFullTileHeight = 14, .sizeOutputFullTileWidthPerCol = 4},
-        {.sizeOutputFullTileHeight = 7, .sizeOutputFullTileWidthPerCol = 4},
-        {.sizeOutputFullTileHeight = 1, .sizeOutputFullTileWidthPerCol = 4},
-        {.sizeOutputFullTileHeight = 28, .sizeOutputFullTileWidthPerCol = 2},
-        {.sizeOutputFullTileHeight = 14, .sizeOutputFullTileWidthPerCol = 2},
-        {.sizeOutputFullTileHeight = 7, .sizeOutputFullTileWidthPerCol = 2},
-        {.sizeOutputFullTileHeight = 1, .sizeOutputFullTileWidthPerCol = 2},
-        {.sizeOutputFullTileHeight = 28, .sizeOutputFullTileWidthPerCol = 1},
-        {.sizeOutputFullTileHeight = 14, .sizeOutputFullTileWidthPerCol = 1},
-        {.sizeOutputFullTileHeight = 7, .sizeOutputFullTileWidthPerCol = 1},
-        {.sizeOutputFullTileHeight = 1, .sizeOutputFullTileWidthPerCol = 1},
+        {.sizeOutputFullTileHeight = 4, .sizeOutputFullTileWidthPerCol = 1},
+        {.sizeOutputFullTileHeight = 4, .sizeOutputFullTileWidthPerCol = 2},
+        {.sizeOutputFullTileHeight = 4, .sizeOutputFullTileWidthPerCol = 3},
+        {.sizeOutputFullTileHeight = 4, .sizeOutputFullTileWidthPerCol = 4},
+        {.sizeOutputFullTileHeight = 4, .sizeOutputFullTileWidthPerCol = 5},
+        {.sizeOutputFullTileHeight = 4, .sizeOutputFullTileWidthPerCol = 6},
+        {.sizeOutputFullTileHeight = 4, .sizeOutputFullTileWidthPerCol = 7},
+        {.sizeOutputFullTileHeight = 4, .sizeOutputFullTileWidthPerCol = 8}
     };
 
     for (auto &config : vecTileConfigs) {
         launch(spec, config.sizeOutputFullTileHeight, config.sizeOutputFullTileWidthPerCol);
     }
 }
+#endif
 
-TEST_F(testFixture, 128x128x1x1x56x56)
+#if defined(THESIS_DATA_20210513_LATENCY_MODEL_EXP2)
+TEST_F(testFixture, _THESIS_DATA_20210513_LATENCY_MODEL_EXP2)
 {
     testFixture::t_conv_spec spec {
         .inputChannel=128,
@@ -104,6 +198,49 @@ TEST_F(testFixture, 128x128x1x1x56x56)
         .inputWidth=56,
         .inputHeight=56,
         .borderPadding=1,
+        .kernel=3,
+        .stride=1,
+        .transConvPadding=0,
+        .numGroups=1,
+        .numSourceGroups=1,
+        .relu=true,
+        .inputFracBits=2,
+        .weightFracBits=2,
+        .outputFracBits=2,
+        .sparsity=0.75
+    };
+
+    typedef struct {
+        int sizeOutputFullTileHeight;
+        int sizeOutputFullTileWidthPerCol;
+    } t_tile;
+
+    std::vector<t_tile> vecTileConfigs {
+        {.sizeOutputFullTileHeight = 4, .sizeOutputFullTileWidthPerCol = 1},
+        {.sizeOutputFullTileHeight = 4, .sizeOutputFullTileWidthPerCol = 2},
+        {.sizeOutputFullTileHeight = 4, .sizeOutputFullTileWidthPerCol = 3},
+        {.sizeOutputFullTileHeight = 4, .sizeOutputFullTileWidthPerCol = 4},
+        {.sizeOutputFullTileHeight = 4, .sizeOutputFullTileWidthPerCol = 5},
+        {.sizeOutputFullTileHeight = 4, .sizeOutputFullTileWidthPerCol = 6},
+        {.sizeOutputFullTileHeight = 4, .sizeOutputFullTileWidthPerCol = 7},
+        {.sizeOutputFullTileHeight = 4, .sizeOutputFullTileWidthPerCol = 8}
+    };
+
+    for (auto &config : vecTileConfigs) {
+        launch(spec, config.sizeOutputFullTileHeight, config.sizeOutputFullTileWidthPerCol);
+    }
+}
+#endif
+
+#if defined(THESIS_DATA_20210513_LATENCY_MODEL_EXP3)
+TEST_F(testFixture, _THESIS_DATA_20210513_LATENCY_MODEL_EXP3)
+{
+    testFixture::t_conv_spec spec {
+        .inputChannel=128,
+        .outputChannel=512,
+        .inputWidth=56,
+        .inputHeight=56,
+        .borderPadding=0,
         .kernel=1,
         .stride=1,
         .transConvPadding=0,
@@ -122,24 +259,64 @@ TEST_F(testFixture, 128x128x1x1x56x56)
     } t_tile;
 
     std::vector<t_tile> vecTileConfigs {
-        {.sizeOutputFullTileHeight = 28, .sizeOutputFullTileWidthPerCol = 4},
-        {.sizeOutputFullTileHeight = 14, .sizeOutputFullTileWidthPerCol = 4},
-        {.sizeOutputFullTileHeight = 7, .sizeOutputFullTileWidthPerCol = 4},
-        {.sizeOutputFullTileHeight = 1, .sizeOutputFullTileWidthPerCol = 4},
-        {.sizeOutputFullTileHeight = 28, .sizeOutputFullTileWidthPerCol = 2},
-        {.sizeOutputFullTileHeight = 14, .sizeOutputFullTileWidthPerCol = 2},
-        {.sizeOutputFullTileHeight = 7, .sizeOutputFullTileWidthPerCol = 2},
-        {.sizeOutputFullTileHeight = 1, .sizeOutputFullTileWidthPerCol = 2},
-        {.sizeOutputFullTileHeight = 28, .sizeOutputFullTileWidthPerCol = 1},
-        {.sizeOutputFullTileHeight = 14, .sizeOutputFullTileWidthPerCol = 1},
-        {.sizeOutputFullTileHeight = 7, .sizeOutputFullTileWidthPerCol = 1},
-        {.sizeOutputFullTileHeight = 1, .sizeOutputFullTileWidthPerCol = 1},
+        {.sizeOutputFullTileHeight = 4, .sizeOutputFullTileWidthPerCol = 1},
+        {.sizeOutputFullTileHeight = 4, .sizeOutputFullTileWidthPerCol = 2},
+        {.sizeOutputFullTileHeight = 4, .sizeOutputFullTileWidthPerCol = 3},
+        {.sizeOutputFullTileHeight = 4, .sizeOutputFullTileWidthPerCol = 4},
+        {.sizeOutputFullTileHeight = 4, .sizeOutputFullTileWidthPerCol = 5},
+        {.sizeOutputFullTileHeight = 4, .sizeOutputFullTileWidthPerCol = 6},
+        {.sizeOutputFullTileHeight = 4, .sizeOutputFullTileWidthPerCol = 7},
+        {.sizeOutputFullTileHeight = 4, .sizeOutputFullTileWidthPerCol = 8}
     };
 
     for (auto &config : vecTileConfigs) {
         launch(spec, config.sizeOutputFullTileHeight, config.sizeOutputFullTileWidthPerCol);
     }
 }
+#endif
+
+#if defined(THESIS_DATA_20210513_LATENCY_MODEL_EXP4)
+TEST_F(testFixture, _THESIS_DATA_20210513_LATENCY_MODEL_EXP4)
+{
+    testFixture::t_conv_spec spec {
+        .inputChannel=128,
+        .outputChannel=512,
+        .inputWidth=56,
+        .inputHeight=56,
+        .borderPadding=0,
+        .kernel=1,
+        .stride=1,
+        .transConvPadding=0,
+        .numGroups=1,
+        .numSourceGroups=1,
+        .relu=true,
+        .inputFracBits=2,
+        .weightFracBits=2,
+        .outputFracBits=2,
+        .sparsity=0.75
+    };
+
+    typedef struct {
+        int sizeOutputFullTileHeight;
+        int sizeOutputFullTileWidthPerCol;
+    } t_tile;
+
+    std::vector<t_tile> vecTileConfigs {
+        {.sizeOutputFullTileHeight = 4, .sizeOutputFullTileWidthPerCol = 1},
+        {.sizeOutputFullTileHeight = 4, .sizeOutputFullTileWidthPerCol = 2},
+        {.sizeOutputFullTileHeight = 4, .sizeOutputFullTileWidthPerCol = 3},
+        {.sizeOutputFullTileHeight = 4, .sizeOutputFullTileWidthPerCol = 4},
+        {.sizeOutputFullTileHeight = 4, .sizeOutputFullTileWidthPerCol = 5},
+        {.sizeOutputFullTileHeight = 4, .sizeOutputFullTileWidthPerCol = 6},
+        {.sizeOutputFullTileHeight = 4, .sizeOutputFullTileWidthPerCol = 7},
+        {.sizeOutputFullTileHeight = 4, .sizeOutputFullTileWidthPerCol = 8}
+    };
+
+    for (auto &config : vecTileConfigs) {
+        launch(spec, config.sizeOutputFullTileHeight, config.sizeOutputFullTileWidthPerCol);
+    }
+}
+#endif
 
 void testFixture::SetUp()
 {
@@ -169,7 +346,9 @@ void testFixture::SetUp()
 
 int testFixture::launch(t_conv_spec _convInfo,
                          int sizeOutputFullTileHeight,
-                         int sizeOutputFullTileWidthPerCol)
+                         int sizeOutputFullTileWidthPerCol,
+                         bool _dumpRuntime,
+                         std::string _runtimeFilePath)
 {
     int stepCount = 1;
     const int convInputLocation = 0, convOutputLocation = 1;
@@ -239,6 +418,7 @@ int testFixture::launch(t_conv_spec _convInfo,
     pConv->setWeightSparsity(_convInfo.sparsity);
     pConv->loadWeights(vecWeights.data());
     pConv->loadBiases(vecBiases.data());
+    pConv->setIsAfterInput(true);
     t_graph_output_tile_info tileConfig = deriveConvOutputTileShape(
                     convOutputHeight,
                     convOutputWidth,
@@ -292,4 +472,7 @@ int testFixture::launch(t_conv_spec _convInfo,
 
     std::cout <<"Step "<<stepCount++<<": Performance counts"<<std::endl;
     std::cout <<accelerator.reportRuntime();
+    if (_dumpRuntime) {
+        accelerator.dumpRuntimeToCSV(_runtimeFilePath);
+    }
 }

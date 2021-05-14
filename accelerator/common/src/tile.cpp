@@ -152,6 +152,7 @@ unsigned int deriveSparseConvComputationLatency(
         )
 {
     int latency;
+    //Full height, full width
     latency = deriveSparseComputeLatencyOneTile(
                     _numInputChannelsPerGroup,
                     PE_SIMD_SIZE,
@@ -165,6 +166,7 @@ unsigned int deriveSparseConvComputationLatency(
                     PE_ROWS
                 )
                 * _outputTileInfo.numFullOutputTileAlongHeight * _outputTileInfo.numFullOutputTileAlongWidth;
+    //Full height, partial width
     latency += deriveSparseComputeLatencyOneTile(
                 _numInputChannelsPerGroup,
                 PE_SIMD_SIZE,
@@ -172,12 +174,13 @@ unsigned int deriveSparseConvComputationLatency(
                 PRUNE_RANGE_IN_CLUSTER,
                 _pruningRangeSizeActual,
                 _sizeKernel,
-                _outputTileInfo.sizeOutputTileFullWidthPerCol,
+                _outputTileInfo.sizeOutputTilePartialWidthPerCol,
                 _outputTileInfo.sizeOutputTileFullHeight,
                 _numOutputChannelsPerGroup,
                 PE_ROWS
             )
                 * _outputTileInfo.numFullOutputTileAlongHeight * (_outputTileInfo.numOutputTileAlongWidth - _outputTileInfo.numFullOutputTileAlongWidth);
+    //Partial height, full width
     latency += deriveSparseComputeLatencyOneTile(
                 _numInputChannelsPerGroup,
                 PE_SIMD_SIZE,
@@ -186,7 +189,7 @@ unsigned int deriveSparseConvComputationLatency(
                 _pruningRangeSizeActual,
                 _sizeKernel,
                 _outputTileInfo.sizeOutputTileFullWidthPerCol,
-                _outputTileInfo.sizeOutputTileFullHeight,
+                _outputTileInfo.sizeOutputTilePartialHeight,
                 _numOutputChannelsPerGroup,
                 PE_ROWS
             )
@@ -198,8 +201,8 @@ unsigned int deriveSparseConvComputationLatency(
                 PRUNE_RANGE_IN_CLUSTER,
                 _pruningRangeSizeActual,
                 _sizeKernel,
-                _outputTileInfo.sizeOutputTileFullWidthPerCol,
-                _outputTileInfo.sizeOutputTileFullHeight,
+                _outputTileInfo.sizeOutputTilePartialWidthPerCol,
+                _outputTileInfo.sizeOutputTilePartialHeight,
                 _numOutputChannelsPerGroup,
                 PE_ROWS
             )
