@@ -297,6 +297,12 @@ namespace GraphRuntime {
         int outputChannel = Layer::getOutputChannel();
         int inputChannel = Layer::getInputChannels().at(0);
         int kernelSize = getKernelSize();
+        bool needToPermuteWeight = true;
+        if (node["needToPermuteWeight"]) {
+            if (node["needToPermuteWeight"].as<bool>() == false) {
+                needToPermuteWeight = false;
+            }
+        }
 
         vecWeights.resize(outputChannel*inputChannel*kernelSize*kernelSize);
 
@@ -315,10 +321,21 @@ namespace GraphRuntime {
                     vecWeights.at(weightLocalIndex) = _pWeights[weightTraceIndex];
                     //std::cout <<"[oc, ic, k, weight]"<<oc<<" "<<ic<<" "<<k<<" "<<pWeights[weightTraceIndex]<<std::endl;
 
-                    weightLocalIndexPlanarContrib += inputChannel;
+                    if (needToPermuteWeight) {
+                        weightLocalIndexPlanarContrib += inputChannel;
+                    }
+                    else {
+                        weightLocalIndexPlanarContrib++;
+                    }
                     weightTraceIndex++;
                 }
-                weightLocalIndexICContrib++;
+                if (needToPermuteWeight) {
+                    weightLocalIndexICContrib++;
+                }
+                else
+                {
+                    weightLocalIndexICContrib += kernelSize*kernelSize;
+                }
             }
             weightLocalIndexOCContrib += kernelSize*kernelSize*inputChannel;
         }
