@@ -16,8 +16,11 @@
 #define WARMUP 50
 //#define THESIS_DATA_20210513_LATENCY_MODEL_EXP1
 //#define THESIS_DATA_20210513_LATENCY_MODEL_EXP2
-#define THESIS_DATA_20210513_LATENCY_MODEL_EXP3
+//#define THESIS_DATA_20210513_LATENCY_MODEL_EXP3
 //#define THESIS_DATA_20210513_LATENCY_MODEL_EXP4
+#define THESIS_DATA_20210517_SPARSITY_EXP0
+#define THESIS_DATA_20210517_SPARSITY_EXP1
+#define THESIS_DATA_20210517_SPARSITY_EXP2
 //#define PROFILE
 
 using namespace GraphRuntime;
@@ -314,6 +317,93 @@ TEST_F(testFixture, _THESIS_DATA_20210513_LATENCY_MODEL_EXP4)
 
     for (auto &config : vecTileConfigs) {
         launch(spec, config.sizeOutputFullTileHeight, config.sizeOutputFullTileWidthPerCol);
+    }
+}
+#endif
+
+#if defined(THESIS_DATA_20210517_SPARSITY_EXP0)
+TEST_F(testFixture, _THESIS_DATA_20210517_SPARSITY_EXP0)
+{
+    testFixture::t_conv_spec spec {
+        .inputChannel=256,
+        .outputChannel=256,
+        .inputWidth=56,
+        .inputHeight=56,
+        .borderPadding=1,
+        .kernel=3,
+        .stride=1,
+        .transConvPadding=0,
+        .numGroups=1,
+        .numSourceGroups=1,
+        .relu=true,
+        .inputFracBits=2,
+        .weightFracBits=2,
+        .outputFracBits=2,
+        .sparsity=0.00
+    };
+
+    std::vector<float> vecSparsity {0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0};
+    for (auto &sparsity : vecSparsity) {
+        spec.sparsity = sparsity;
+        launch(spec, 4, 4);
+    }
+}
+#endif
+
+#if defined(THESIS_DATA_20210517_SPARSITY_EXP1)
+TEST_F(testFixture, _THESIS_DATA_20210517_SPARSITY_EXP1)
+{
+    testFixture::t_conv_spec spec {
+        .inputChannel=512,
+        .outputChannel=512,
+        .inputWidth=56,
+        .inputHeight=56,
+        .borderPadding=0,
+        .kernel=1,
+        .stride=1,
+        .transConvPadding=0,
+        .numGroups=1,
+        .numSourceGroups=1,
+        .relu=true,
+        .inputFracBits=2,
+        .weightFracBits=2,
+        .outputFracBits=2,
+        .sparsity=0.00
+    };
+
+    std::vector<float> vecSparsity {0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0};
+    for (auto &sparsity : vecSparsity) {
+        spec.sparsity = sparsity;
+        launch(spec, 4, 4);
+    }
+}
+#endif
+
+#if defined(THESIS_DATA_20210517_SPARSITY_EXP2)
+TEST_F(testFixture, _THESIS_DATA_20210517_SPARSITY_EXP2)
+{
+    testFixture::t_conv_spec spec {
+        .inputChannel=4096,
+        .outputChannel=4096,
+        .inputWidth=1,
+        .inputHeight=1,
+        .borderPadding=0,
+        .kernel=1,
+        .stride=1,
+        .transConvPadding=0,
+        .numGroups=1,
+        .numSourceGroups=1,
+        .relu=true,
+        .inputFracBits=2,
+        .weightFracBits=2,
+        .outputFracBits=2,
+        .sparsity=0.00
+    };
+
+    std::vector<float> vecSparsity {0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0};
+    for (auto &sparsity : vecSparsity) {
+        spec.sparsity = sparsity;
+        launch(spec, 1, 1);
     }
 }
 #endif
