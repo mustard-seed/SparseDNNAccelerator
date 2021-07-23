@@ -878,8 +878,6 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
     t_graph_output_tile_info bestTileInfo;
     unsigned int minLatency = 0xFFFFFFFF;
     t_latency_info bestLatInfo;
-    bool isComputeBound = true;
-
     for (;outputTileWidthPerCol > 0; outputTileWidthPerCol--)
     {
         //Generate a candidate tile configuration
@@ -912,7 +910,6 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
                 {
                     minLatency = tileLat.totalLatency;
                     bestTileInfo = candidateTileInfo;
-                    isComputeBound = (tileLat.totalLatency <= tileLat.computeLatencyWithOverhead);
                     bestLatInfo = tileLat;
                 }
 

@@ -35,8 +35,8 @@
 // #define PACKET_SIZE 1
 
 //Assume on Arria 10 Dev Kit, the memory bandwidth is on
-#define DDR_BANDWIDTH_GBS_INT 10
-#define FMAX_MHZ 226
+#define DDR_BANDWIDTH_GBS_INT 17
+#define FMAX_MHZ 221
 #define DDR_BYTES_PER_CYCLE ((DDR_BANDWIDTH_GBS_INT * 1000 - 1) / FMAX_MHZ + 1)
 
 #if defined(FULL_SYSTEM)

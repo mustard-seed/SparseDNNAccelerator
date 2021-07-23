@@ -1,6 +1,7 @@
 #include "tile.hpp"
 #include "params.hpp"
 
+
 #define DIVIDE_CEIL(x, y) (1 + (x-1) / (y))
 
 t_graph_output_tile_info deriveConvOutputTileShape(
@@ -152,6 +153,7 @@ unsigned int deriveSparseConvComputationLatency(
         )
 {
     int latency;
+    //Full height, full width
     latency = deriveSparseComputeLatencyOneTile(
                     _numInputChannelsPerGroup,
                     PE_SIMD_SIZE,
@@ -165,6 +167,7 @@ unsigned int deriveSparseConvComputationLatency(
                     PE_ROWS
                 )
                 * _outputTileInfo.numFullOutputTileAlongHeight * _outputTileInfo.numFullOutputTileAlongWidth;
+    //Full height, partial width
     latency += deriveSparseComputeLatencyOneTile(
                 _numInputChannelsPerGroup,
                 PE_SIMD_SIZE,
@@ -172,12 +175,13 @@ unsigned int deriveSparseConvComputationLatency(
                 PRUNE_RANGE_IN_CLUSTER,
                 _pruningRangeSizeActual,
                 _sizeKernel,
-                _outputTileInfo.sizeOutputTileFullWidthPerCol,
+                _outputTileInfo.sizeOutputTilePartialWidthPerCol,
                 _outputTileInfo.sizeOutputTileFullHeight,
                 _numOutputChannelsPerGroup,
                 PE_ROWS
             )
                 * _outputTileInfo.numFullOutputTileAlongHeight * (_outputTileInfo.numOutputTileAlongWidth - _outputTileInfo.numFullOutputTileAlongWidth);
+    //Partial height, full width
     latency += deriveSparseComputeLatencyOneTile(
                 _numInputChannelsPerGroup,
                 PE_SIMD_SIZE,
@@ -186,7 +190,7 @@ unsigned int deriveSparseConvComputationLatency(
                 _pruningRangeSizeActual,
                 _sizeKernel,
                 _outputTileInfo.sizeOutputTileFullWidthPerCol,
-                _outputTileInfo.sizeOutputTileFullHeight,
+                _outputTileInfo.sizeOutputTilePartialHeight,
                 _numOutputChannelsPerGroup,
                 PE_ROWS
             )
@@ -198,8 +202,8 @@ unsigned int deriveSparseConvComputationLatency(
                 PRUNE_RANGE_IN_CLUSTER,
                 _pruningRangeSizeActual,
                 _sizeKernel,
-                _outputTileInfo.sizeOutputTileFullWidthPerCol,
-                _outputTileInfo.sizeOutputTileFullHeight,
+                _outputTileInfo.sizeOutputTilePartialWidthPerCol,
+                _outputTileInfo.sizeOutputTilePartialHeight,
                 _numOutputChannelsPerGroup,
                 PE_ROWS
             )
@@ -442,6 +446,8 @@ int deriveDenseComputeLatencyOneTile(int _numIC,
     int numTranferBlockPerInputGroup =
             DIVIDE_CEIL(_numIC, _interClusterPara * _clusteSize);
     int numTransfersPerConvWindow = numTranferBlockPerInputGroup * _kernelSize * _kernelSize;
+
+    // Total latency
     int latency = numTransfersPerConvWindow * _outputTileWidthPerCol * _outputTileHeightPerCol * numPERowFoldPerGroup;
 
     return latency;
@@ -463,7 +469,20 @@ int deriveSparseComputeLatencyOneTile(int _numIC,
                 _interPruningRangePara * _clusteSize :
             DIVIDE_CEIL(_numIC, _interPruningRangePara * _clusteSize * _pruningRangeSizeFull)
                 * _interPruningRangePara * _clusteSize * _pruningRangeSizeActual;
-    return deriveDenseComputeLatencyOneTile(
+    int numPERowFoldPerGroup =
+            DIVIDE_CEIL(_outputChannel, _numPeRows);
+    unsigned int numActivationTransferBlocksPerStrip =  
+            DIVIDE_CEIL(_numIC, _interPruningRangePara * _clusteSize * _pruningRangeSizeFull);
+
+
+    //The mininum number of cycles it takes the IB to stream the transfer blocks for one tile
+    int inputBufferLatency = 
+        _outputTileWidthPerCol * _outputTileHeightPerCol * numActivationTransferBlocksPerStrip * numPERowFoldPerGroup;
+
+    inputBufferLatency = (_kernelSize == 1) ?
+        inputBufferLatency + _outputTileHeightPerCol * numPERowFoldPerGroup
+        : inputBufferLatency + _outputTileHeightPerCol * _outputTileWidthPerCol * _kernelSize * numPERowFoldPerGroup;
+    int computeLatency =  deriveDenseComputeLatencyOneTile(
                     effectiveIC,
                     _clusteSize,
                     _interPruningRangePara,
@@ -473,6 +492,9 @@ int deriveSparseComputeLatencyOneTile(int _numIC,
                     _outputChannel,
                     _numPeRows
                 );
+
+    int latency = (computeLatency > inputBufferLatency) ? computeLatency : inputBufferLatency;
+    return latency;
 }
 
 int deriveInputTranserLatencyOneTile(

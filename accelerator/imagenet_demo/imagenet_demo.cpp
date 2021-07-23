@@ -344,7 +344,7 @@ int inferenceOnValidationSet(
         std::cout<<"Correct label: "<<neg.correctLabel<<", ";
         std::cout<<"Acutal label: "<<neg.incorrectLabel<<std::endl;
     }
-    std::cout <<_accelerator.reportRuntime();
+    //std::cout <<_accelerator.reportRuntime();
     return 0;
 }
 

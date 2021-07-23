@@ -297,6 +297,12 @@ namespace GraphRuntime {
         int outputChannel = Layer::getOutputChannel();
         int inputChannel = Layer::getInputChannels().at(0);
         int kernelSize = getKernelSize();
+        bool needToPermuteWeight = true;
+        if (node["needToPermuteWeight"]) {
+            if (node["needToPermuteWeight"].as<bool>() == false) {
+                needToPermuteWeight = false;
+            }
+        }
 
         vecWeights.resize(outputChannel*inputChannel*kernelSize*kernelSize);
 
@@ -315,10 +321,21 @@ namespace GraphRuntime {
                     vecWeights.at(weightLocalIndex) = _pWeights[weightTraceIndex];
                     //std::cout <<"[oc, ic, k, weight]"<<oc<<" "<<ic<<" "<<k<<" "<<pWeights[weightTraceIndex]<<std::endl;
 
-                    weightLocalIndexPlanarContrib += inputChannel;
+                    if (needToPermuteWeight) {
+                        weightLocalIndexPlanarContrib += inputChannel;
+                    }
+                    else {
+                        weightLocalIndexPlanarContrib++;
+                    }
                     weightTraceIndex++;
                 }
-                weightLocalIndexICContrib++;
+                if (needToPermuteWeight) {
+                    weightLocalIndexICContrib++;
+                }
+                else
+                {
+                    weightLocalIndexICContrib += kernelSize*kernelSize;
+                }
             }
             weightLocalIndexOCContrib += kernelSize*kernelSize*inputChannel;
         }
@@ -500,6 +517,7 @@ namespace GraphRuntime {
                        (int) std::ceil( (1.0f - getWeightSparsity()) * PRUNE_RANGE_IN_CLUSTER),
                        WEIGHT_BURST_SIZE_VALUE_BYTE
                    );
+        //Need to adjust the weight latency by taking the index into account
         weightDDRLatency = deriveSparseConvWeightTransferLatency(
                    _tileCandidate,
                    inputChannelsPerGroup,
@@ -512,6 +530,7 @@ namespace GraphRuntime {
                    (int) std::ceil( (1.0f - getWeightSparsity()) * PRUNE_RANGE_IN_CLUSTER),
                    DDR_BYTES_PER_CYCLE
                );
+        weightDDRLatency = (unsigned int) ((float) weightDDRLatency * (1.0f + (float) WEIGHT_BURST_SIZE_INDEX_BYTE / (float) WEIGHT_BURST_SIZE_VALUE_BYTE));
 #else
         computeLatency = deriveDenseConvComputationLatency(
                     _tileCandidate,
@@ -620,7 +639,7 @@ namespace GraphRuntime {
                    .computeLatencyWithOverhead = computeLatencyWithOverhead,
                    .ddrLatency = totalDDRLatency,
                    .totalLatency = totalLatency,
-                   .isComputeBound = computeLatencyWithOverhead > totalLatency
+                   .isComputeBound = computeLatencyWithOverhead >= totalLatency
        };
 
        return latInfo;
