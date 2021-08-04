@@ -678,13 +678,13 @@ void instruction_generator(//Type of the operation
                                     (t_ushort) DIVIDE_CEIL(numIAMoverInputChannelsPerGroup0, PE_ACTIVATION_BLOCK_SIZE_IN_WORD);
                             #if (ACTIVATION_DRAM_SIZE_GEQ_PE_SIZE == TRUE)
                                 instructionIA.numDramBlockPerStrip = (t_ushort) DIVIDE_CEIL(
-                                                DIVIDE_CEIL(numIAMoverInputChannelsPerGroup1, PE_ACTIVATION_BLOCK_SIZE_IN_WORD),
+                                                DIVIDE_CEIL(numIAMoverInputChannelsPerGroup0, PE_ACTIVATION_BLOCK_SIZE_IN_WORD),
                                                 ACTIVATION_WIDE_SIZE
                                             );
                             #else
                                 instructionIA.numDramBlockPerStrip = (t_ushort)
                                     ACTIVATION_WIDE_SIZE *
-                                    DIVIDE_CEIL(numIAMoverInputChannelsPerGroup1, PE_ACTIVATION_BLOCK_SIZE_IN_WORD);
+                                    DIVIDE_CEIL(numIAMoverInputChannelsPerGroup0, PE_ACTIVATION_BLOCK_SIZE_IN_WORD);
                             #endif
                         }
                         else if (op == ELT_ADD) {
@@ -693,13 +693,13 @@ void instruction_generator(//Type of the operation
                                     (t_ushort) DIVIDE_CEIL(numIAMoverInputChannelsPerGroup0, PE_ACTIVATION_BLOCK_SIZE_IN_WORD);
                             #if (ACTIVATION_DRAM_SIZE_GEQ_PE_SIZE == TRUE)
                                 instructionIA.numDramBlockPerStrip = (t_ushort) DIVIDE_CEIL(
-                                                DIVIDE_CEIL(numIAMoverInputChannelsPerGroup1, PE_ACTIVATION_BLOCK_SIZE_IN_WORD),
+                                                DIVIDE_CEIL(numIAMoverInputChannelsPerGroup0, PE_ACTIVATION_BLOCK_SIZE_IN_WORD),
                                                 ACTIVATION_WIDE_SIZE
                                             ) * 2;
                             #else
                                 instructionIA.numDramBlockPerStrip = (t_ushort)
                                     ACTIVATION_WIDE_SIZE * 2 *
-                                    DIVIDE_CEIL(numIAMoverInputChannelsPerGroup1, PE_ACTIVATION_BLOCK_SIZE_IN_WORD);
+                                    DIVIDE_CEIL(numIAMoverInputChannelsPerGroup0, PE_ACTIVATION_BLOCK_SIZE_IN_WORD);
                             #endif
                         }
                         else {//pooling
