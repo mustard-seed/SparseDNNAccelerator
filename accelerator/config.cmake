@@ -18,7 +18,7 @@ if (NOT GLOBAL_CONFIG_SET)
 # RelWithDebInfo
 ###############################################
 
-    set(CMAKE_BUILD_TYPE Release)
+    set(CMAKE_BUILD_TYPE Debug)
     
     set(CMAKE_EXPORT_COMPILE_COMMANDS TRUE)
     if (CMAKE_BUILD_TYPE MATCHES "Debug")
@@ -48,6 +48,8 @@ endif()
 
 if (NOT ${PROJECT_NAME}_CONFIG_SET)
     set(${PROJECT_NAME}_CONFIG_SET TRUE)
+    message (STATUS "C Compiler: ${CMAKE_C_COMPILER}")
+    message (STATUS "C++ Compiler: ${CMAKE_CXX_COMPILER}")
 else(NOT ${PROJECT_NAME}_CONFIG_SET)
     message(WARNING "config.cmake was included twice for the same project - make sure that the `include(config.cmake)` call happens after calling project(...).")
 endif(NOT ${PROJECT_NAME}_CONFIG_SET)

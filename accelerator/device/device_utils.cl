@@ -264,7 +264,7 @@ signed char modifyCharOutput (
 #ifdef INTELFPGA_CL
 t_filter_streamer_control dramBlock2FilterStreamerControl (t_weight_dram_block block)
 {
-    #if (WEIGHT_BURST_SIZE_VALUE_BYTE < 8)
+    #if (WEIGHT_DRAM_SIZE_VALUE_BYTE < 8)
         #error WEIGHT bus needs to be at least 8 words wide!
     #endif
     t_filter_streamer_control control;
@@ -292,7 +292,7 @@ t_filter_streamer_control dramBlock2FilterStreamerControl (t_weight_dram_block b
 
 t_weight_dram_block filterStreamerControl2dramBlock (t_filter_streamer_control control)
 {
-    #if (WEIGHT_BURST_SIZE_VALUE_BYTE < 8)
+    #if (WEIGHT_DRAM_SIZE_VALUE_BYTE < 8)
         #error WEIGHT bus needs to be at least 8 words wide!
     #endif
     t_weight_dram_block block;

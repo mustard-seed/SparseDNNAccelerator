@@ -628,7 +628,7 @@ namespace GraphRuntime {
                                     .channel = numOutputChannels,
                                     .height=pLayerLocal->getOutputHeight(),
                                     .width=pLayerLocal->getOutputWidth(),
-                                    .stripStrideSeenBySource= DIVIDE_CEIL(numChannels, ACTIVATION_BURST_SIZE_BYTE) * ACTIVATION_BURST_SIZE_BYTE,
+                                    .stripStrideSeenBySource= DIVIDE_CEIL(numChannels, ACTIVATION_DRAM_SIZE_BYTE) * ACTIVATION_DRAM_SIZE_BYTE,
                                     .numFracBits=pLayerLocal->getOutputFracBits(),
                                     .blobName="quant_"+to_string(pLayerLocal->getLayerID()),
                                     .flagInputScatter = flagInputScatter
@@ -646,7 +646,7 @@ namespace GraphRuntime {
                                     .channel = numOutputChannels,
                                     .height=pLayerLocal->getInputHeights().at(0),
                                     .width=pLayerLocal->getInputWidths().at(0),
-                                    .stripStrideSeenBySource= DIVIDE_CEIL(numOutputChannels, ACTIVATION_BURST_SIZE_BYTE) * ACTIVATION_BURST_SIZE_BYTE,
+                                    .stripStrideSeenBySource= DIVIDE_CEIL(numOutputChannels, ACTIVATION_DRAM_SIZE_BYTE) * ACTIVATION_DRAM_SIZE_BYTE,
                                     .numFracBits=pLayerLocal->getInputFracBits().at(0),
                                     .blobName="dequant_"+to_string(pLayerLocal->getLayerID())
                                     }
@@ -671,10 +671,10 @@ namespace GraphRuntime {
                         numInputChannel0 / pLayer->getInputGroupsSeenBySource().at(0);
                 memIA0ColStride =
                         ((pLayer->getInputGroupsSeenBySource().at(0)) - 1) * numChannelsPerGroupSeenBySource0
-                        + DIVIDE_CEIL(numChannelsPerGroupSeenBySource0, ACTIVATION_BURST_SIZE_BYTE) * ACTIVATION_BURST_SIZE_BYTE;
+                        + DIVIDE_CEIL(numChannelsPerGroupSeenBySource0, ACTIVATION_DRAM_SIZE_BYTE) * ACTIVATION_DRAM_SIZE_BYTE;
 
                 memOAColStride = (numGroupCurrentLayer - 1) * numOutputChannelPerGroup
-                        + DIVIDE_CEIL(numOutputChannelPerGroup, ACTIVATION_BURST_SIZE_BYTE) * ACTIVATION_BURST_SIZE_BYTE;
+                        + DIVIDE_CEIL(numOutputChannelPerGroup, ACTIVATION_DRAM_SIZE_BYTE) * ACTIVATION_DRAM_SIZE_BYTE;
 
                 if (pLayer->getInputMemoryLocations().size() > 1)
                 {
@@ -682,7 +682,7 @@ namespace GraphRuntime {
                             numInputChannel1 / pLayer->getInputGroupsSeenBySource().at(1);
                     memIA1ColStride =
                             ((pLayer->getInputGroupsSeenBySource().at(0)) - 1) * numChannelsPerGroupSeenBySource1
-                            + DIVIDE_CEIL(numChannelsPerGroupSeenBySource1, ACTIVATION_BURST_SIZE_BYTE) * ACTIVATION_BURST_SIZE_BYTE;
+                            + DIVIDE_CEIL(numChannelsPerGroupSeenBySource1, ACTIVATION_DRAM_SIZE_BYTE) * ACTIVATION_DRAM_SIZE_BYTE;
                 }
                 else
                 {
@@ -882,7 +882,7 @@ t_tile_pair calculateTileSizePerUnit(ConvLayer& _convLayer)
     {
         //Generate a candidate tile configuration
         unsigned int sizeOutputFullTileHeightTemp =
-                OA_CACHE_DEPTH * ACTIVATION_BURST_SIZE_BYTE /
+                OA_CACHE_DEPTH * ACTIVATION_DRAM_SIZE_BYTE /
                 (outputTileWidthPerCol * (DIVIDE_CEIL(outputChannels, PE_ROWS_PER_GROUP) * PE_ROWS_PER_GROUP));
         sizeOutputFullTileHeightTemp = sizeOutputFullTileHeightTemp < outputHeight ?
                     sizeOutputFullTileHeightTemp : outputHeight;

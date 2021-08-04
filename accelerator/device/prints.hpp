@@ -1,8 +1,11 @@
 #ifndef PRINTS_HPP
 #define PRINTS_HPP
-#include "params.hpp"
 //#define HW_DEBUG
-#define EMUPRINT
+//#define EMUPRINT
+
+//MACRO Stringification
+#define _IN_QUOTES(x) #x
+#define IN_QUOTES(x) _IN_QUOTES(x)
 /*
 printf enabled during SW emulation
 */

@@ -11,7 +11,7 @@
 
 #option(ENABLE_STATIC "Build static (.a) library" ON)
 if (ZLIB_ROOT)
-    message (STATUS "ZLIB_ROOT is set to ${ZLIB_ROOT}")
+    message (DEBUG "ZLIB_ROOT is set to ${ZLIB_ROOT}")
 endif()
 find_package(ZLIB REQUIRED)
 

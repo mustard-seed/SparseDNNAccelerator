@@ -186,15 +186,15 @@ typedef signed short t_bias;
     // } t_activation_transfer_block;
 
     typedef struct {
-        t_char values [ACTIVATION_BURST_SIZE_BYTE];
+        t_char values [ACTIVATION_DRAM_SIZE_BYTE];
     } t_activation_dram_block;
 #endif
 
 
 typedef struct __attribute__((packed)) {
-    t_char values [WEIGHT_BURST_SIZE_VALUE_BYTE];
+    t_char values [WEIGHT_DRAM_SIZE_VALUE_BYTE];
     #if defined(SPW_SYSTEM)
-    t_uchar indices[WEIGHT_BURST_SIZE_INDEX_BYTE];
+    t_uchar indices[WEIGHT_DRAM_SIZE_INDEX_BYTE];
     #endif
 } t_weight_dram_block;
 
@@ -236,7 +236,10 @@ typedef struct __attribute__((packed)) __attribute__((aligned(64)))
     t_int memBlockRowStripStride;
 
 
-    //Problem parameter: Number of PE activation block along the strip
+    //Problem parameter: Number of off-chip memory activation block along the strip
+    t_ushort numDramBlockPerStrip;
+
+    //Problem parameter: Number of PE transfer block along the strip
     t_ushort numTBPerStrip;
 
     //Problem parameter: memory input tile stretched padded height. Includes padding.
@@ -325,6 +328,7 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
     //Address is counted in weight dram block
     t_int memWeightFilterStride;
 
+    //Number of PE blocks per filter
     t_uint numTBPerFilter;
 
     #if defined(SPW_SYSTEM)
@@ -373,7 +377,7 @@ typedef struct __attribute__((packed)) __attribute__((aligned(32)))
     t_uchar numLocalTilePerColHxW;
 
     //Number of ROUNDED channels per group
-    //rounded to a multiple of ACTIVATION_BURST_SIZE
+    //rounded to a multiple of ACTIVATION_DRAM_SIZE
     t_ushort numBurstAlignedChannelsPerCurrentGroup;
 
     //Number of compute drain instructions for a tile with
@@ -555,7 +559,7 @@ typedef struct __attribute__((packed))
     /**
      * Address information of the IA cache
      * counted in units of activation dram block
-     * i.e. char [ACTIVATION_BURST_SIZE_BYTE]
+     * i.e. char [ACTIVATION_DRAM_SIZE_BYTE]
      */
     unsigned short iaDramBlockAddressBase;
     unsigned short iaDramBlockColStride;

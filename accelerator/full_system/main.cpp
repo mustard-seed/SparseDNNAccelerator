@@ -28,10 +28,10 @@
 
 #define DIVIDE_CEIL(x, y) (1 + (x-1) / (y))
 #define SEED 27
-#define PLAY
+//#define PLAY
 //#define PERF_TEST
 //#define THROUGHPUT_DIAGNOSTIC
-//#define VALIDATE
+#define VALIDATE
 //#define TEST1_20201126
 //#define TEST2_20201126
 //#define ELTADD7_202021129
@@ -2395,7 +2395,7 @@ void testFixture::launch (unsigned short _inputWidth,
 
     //Stride across activation tensor strip in terms of activation words
     signed int memIAColStride =
-            DIVIDE_CEIL(numInputChannel0, ACTIVATION_BURST_SIZE_BYTE) * ACTIVATION_BURST_SIZE_BYTE;
+            DIVIDE_CEIL(numInputChannel0, ACTIVATION_DRAM_SIZE_BYTE) * ACTIVATION_DRAM_SIZE_BYTE;
     std::cout <<"memIA0ColStride: "<<memIAColStride<<std::endl;
 
     signed int memOAColStride;
@@ -2403,13 +2403,13 @@ void testFixture::launch (unsigned short _inputWidth,
     {
         memOAColStride =
                 numInputChannel0
-                + DIVIDE_CEIL(numInputChannel1, ACTIVATION_BURST_SIZE_BYTE) * ACTIVATION_BURST_SIZE_BYTE;
+                + DIVIDE_CEIL(numInputChannel1, ACTIVATION_DRAM_SIZE_BYTE) * ACTIVATION_DRAM_SIZE_BYTE;
     }
     else
     {
         memOAColStride =
             (numGroupCurrentLayer - 1) * numOutputChannelPerGroup
-                + DIVIDE_CEIL(numOutputChannelPerGroup, ACTIVATION_BURST_SIZE_BYTE) * ACTIVATION_BURST_SIZE_BYTE;
+                + DIVIDE_CEIL(numOutputChannelPerGroup, ACTIVATION_DRAM_SIZE_BYTE) * ACTIVATION_DRAM_SIZE_BYTE;
     }
 
     std::cout <<"memOAColStride: "<<memOAColStride<<std::endl;
@@ -2493,7 +2493,7 @@ void testFixture::launch (unsigned short _inputWidth,
 //        int numTBPerCB = COMPRESSION_WINDOW_SIZE / TRANSFER_SIZE + 1;
         int intermediateAColStride =
                 (numGroupCurrentLayer-1) * numOutputChannelPerGroup
-                + DIVIDE_CEIL(numOutputChannelPerGroup, ACTIVATION_BURST_SIZE_BYTE) * ACTIVATION_BURST_SIZE_BYTE;
+                + DIVIDE_CEIL(numOutputChannelPerGroup, ACTIVATION_DRAM_SIZE_BYTE) * ACTIVATION_DRAM_SIZE_BYTE;
         int intermediateARowStride = intermediateAColStride * _inputWidth;
         //First set of instructions
         instruction_generator(
@@ -2852,13 +2852,13 @@ void testFixture::launch (unsigned short _inputWidth,
     {
         oaStripStrideSeenBySource =
                 numInputChannel0
-                + DIVIDE_CEIL(numInputChannel1, ACTIVATION_BURST_SIZE_BYTE) * ACTIVATION_BURST_SIZE_BYTE;
+                + DIVIDE_CEIL(numInputChannel1, ACTIVATION_DRAM_SIZE_BYTE) * ACTIVATION_DRAM_SIZE_BYTE;
     }
     else
     {
         oaStripStrideSeenBySource =
             numOutputChannelPerGroup * (numGroupCurrentLayer - 1)
-            + DIVIDE_CEIL(numOutputChannelPerGroup, ACTIVATION_BURST_SIZE_BYTE) * ACTIVATION_BURST_SIZE_BYTE;
+            + DIVIDE_CEIL(numOutputChannelPerGroup, ACTIVATION_DRAM_SIZE_BYTE) * ACTIVATION_DRAM_SIZE_BYTE;
     }
 
     graph.vecOutputInfo.emplace_back(

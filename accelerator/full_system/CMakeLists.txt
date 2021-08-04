@@ -103,6 +103,7 @@ INCLUDE_DIRECTORIES (${rtl_directory})
 #add_definitions(-DUSE_OPENCV)
 
 find_package (Boost 1.56 REQUIRED)
+message (STATUS "Boost include directories are ${Boost_INCLUDE_DIRS}")
 INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIRS})
 #####################################
 ##Add unit test for the host library below

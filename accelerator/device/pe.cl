@@ -82,7 +82,7 @@ t_accumulator chain_maddx8 (t_simd_operand activations, t_simd_operand weights) 
 					));
 		}
 		#else
-	#error Unsupported FPGA type!
+	#warning MADD with chain cascade currently only supports Arria 10. Make sure it is not used for other FPGAs.
 	#endif
 
 	return output;
@@ -416,7 +416,11 @@ __kernel void kernelSpWPE ()
 					} //unroll-for CLUSTER_SIZE
 				} //unroll-for PE_SIMD_SIZE
 
-				t_accumulator tempPSum = chain_maddx8(activations, weights);
+				#if defined(ARRIA10)
+					t_accumulator tempPSum = chain_maddx8(activations, weights);
+				#else
+					t_accumulator tempPSum = madd(activations, weights);
+				#endif
 				if (regState == SPW_PE_INSTRUCTION_READ_BIAS) {
 					regPSums[row] = 
 						(((t_accumulator) ACCUM_MASK) & ((t_accumulator) sigWBlocks[row].bias)) + tempPSum;
@@ -800,7 +804,12 @@ __kernel void kernelDensePE ()
 					activations.values[v] = sigActivationTB.values[v];
 				} //unroll-for PE_SIMD_SIZE * CLUSTER_SIZE
 
-				t_accumulator tempPSum = chain_maddx8(activations, weights);
+				#if defined(ARRIA10)
+					t_accumulator tempPSum = chain_maddx8(activations, weights);
+				#else
+					t_accumulator tempPSum = madd(activations, weights);
+				#endif
+
 				if (regInstruction == DENSE_PE_INSTRUCTION_READ_BIAS) {
 					regPSums[row] = 
 						(((t_accumulator) ACCUM_MASK) & ((t_accumulator) sigWeightTB[row].bias)) + tempPSum;

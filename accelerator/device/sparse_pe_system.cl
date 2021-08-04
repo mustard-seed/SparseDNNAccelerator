@@ -77,23 +77,35 @@ __kernel void kernelIAMover (
 		unsigned int offsetInstruction
 	)
 {
-	for (unsigned int iInst=0; iInst < numInstruction; iInst += 8)
+	#if !(defined(ARRIA10) || defined(STRATIX10))
+		#define IA_MOVER_INSTRUCTION_CACHE_SIZE 1
+	#else
+		#define IA_MOVER_INSTRUCTION_CACHE_SIZE 8
+	#endif
+	for (unsigned int iInst=0; iInst < numInstruction; iInst += IA_MOVER_INSTRUCTION_CACHE_SIZE)
 	{
-		t_ia_mover_instruction cacheInstruction[8];
-		unsigned char numInstInTile = (iInst + 8) < numInstruction ? 
-			8 : numInstruction - iInst;
+	#if (defined(ARRIA10) || defined(STRATIX10))
+		t_ia_mover_instruction cacheInstruction[IA_MOVER_INSTRUCTION_CACHE_SIZE];
+		unsigned char numInstInTile = (iInst + IA_MOVER_INSTRUCTION_CACHE_SIZE) < numInstruction ? 
+			IA_MOVER_INSTRUCTION_CACHE_SIZE : numInstruction - iInst;
 		#pragma unroll 
-		for (unsigned char i=0; i<8; i++)
+		for (unsigned char i=0; i<IA_MOVER_INSTRUCTION_CACHE_SIZE; i++)
 		{
 			cacheInstruction[i] = pInstruction[i+iInst+offsetInstruction];
 		}
-
 		unsigned char iInstTile = 0;
 		#pragma max_concurrency 1
 		while (iInstTile<numInstInTile)
+	#else
+		unsigned char iInstTile = 0;
+	#endif
 		{
-			//Read the instruction
-			t_ia_mover_instruction inst = cacheInstruction[iInstTile];
+			#if (defined(ARRIA10) || defined(STRATIX10))
+				//Read the instruction
+				t_ia_mover_instruction inst = cacheInstruction[iInstTile];
+			#else
+				t_ia_mover_instruction inst = pInstruction[iInst+offsetInstruction];
+			#endif
 
 			/*! Unpackethe concatenated fields of the instruction */
 			//Number of compute columns that are active in this transfer
@@ -192,17 +204,25 @@ __kernel void kernelIAMover (
 							int addressIADramBlockDDR1 = 
 								((t_int) inst.memBlockStart1) + offsetIADramBlockCol + offsetIADramBlockRow;
 
-							unsigned short numTBInStrip = (t_ushort) inst.numTBPerStrip;
+							//unsigned short numTBInStrip = (t_ushort) inst.numTBPerStrip;
 
 							//dramBlockCount = ceil(numTBInStrip / WIDE_SIZE)
 							//Compute the number of dram block transfers needed for the strip
-							unsigned short dramBlockCount = (numInputInterleavePerDramblock == 0x01) ?
-								 1 + ( (numTBInStrip-1) >> ACTIVATION_WIDE_SIZE_OFFSET )
-								: (1 + ( (numTBInStrip-1) >> ACTIVATION_WIDE_SIZE_OFFSET )) << 1;
+							// #if (ACTIVATION_DRAM_SIZE_GEQ_PE_SIZE == TRUE)
+							// 	unsigned short dramBlockCount = (numInputInterleavePerDramblock == 0x01) ?
+							// 		 1 + ( (numTBInStrip-1) >> ACTIVATION_WIDE_SIZE_OFFSET )
+							// 		: (1 + ( (numTBInStrip-1) >> ACTIVATION_WIDE_SIZE_OFFSET )) << 1;
+							// #else
+							// 	unsigned short dramBlockCount = (numInputInterleavePerDramblock == 0x01) ?
+							// 		numTBPerStrip << ACTIVATION_WIDE_SIZE_OFFSET
+							// 		: (numTBPerStrip << ACTIVATION_WIDE_SIZE_OFFSET) << 1;
+							// #endif
+
+							//unsigned short dramBlockCount = (t_ushort) inst.numDramBlockPerStrip;
 							//The actual number of transfer is one more than the number of DRAM block.
 							//The extra block is in the beginning, and it contains routing information
 							//as well as the number of TB count, which is required by the convolution PE array
-							unsigned short numTransferActions = dramBlockCount;
+							unsigned short numTransferActions = (t_ushort) inst.numDramBlockPerStrip;
 
 							EMULATOR_PRINT(("[kernelIAMover] START strip transfer. "
 										"offsetInstruction=%d, "
@@ -229,7 +249,7 @@ __kernel void kernelIAMover (
 										colIsDense,
 										inputArrangement,
 										numInputInterleavePerDramblock,
-										numTBInStrip,
+										inst.numTBPerStrip,
 										numActiveCols,
 										(unsigned int) addressIADramBlockDDR0,
 										(unsigned int) addressIADramBlockDDR1,
@@ -248,7 +268,7 @@ __kernel void kernelIAMover (
 								iaBlock.colSPWidth = inst.columnSPWidth;
 								iaBlock.colSPStride = inst.columnWidthStride;
 								iaBlock.iColInSPTile = iColInSPTile;
-								iaBlock.numTB = numTBInStrip;
+								iaBlock.numTB = inst.numTBPerStrip;
 								if (realStrip == true)
 								{
 									// iaBlock.dramBlock = (memRegion == 0x0) ? 
@@ -259,7 +279,7 @@ __kernel void kernelIAMover (
 
 									//Burst coalesced access
 									#pragma unroll
-									for (unsigned int i=0; i<ACTIVATION_BURST_SIZE_BYTE; i++)
+									for (unsigned int i=0; i<ACTIVATION_DRAM_SIZE_BYTE; i++)
 									{
 										iaBlock.dramBlock.values[i] = 
 											pIA[addressIADramBlockDDR+i];
@@ -267,18 +287,18 @@ __kernel void kernelIAMover (
 
 									if (iterInputDramblockInterleave == 0x0)
 									{
-										addressIADramBlockDDR0 += ACTIVATION_BURST_SIZE_BYTE;
+										addressIADramBlockDDR0 += ACTIVATION_DRAM_SIZE_BYTE;
 									}
 									else
 									{
-										addressIADramBlockDDR1 += ACTIVATION_BURST_SIZE_BYTE;
+										addressIADramBlockDDR1 += ACTIVATION_DRAM_SIZE_BYTE;
 									}
 								}
 								else  //Strip is padding
 								{
 									//Prepare a DRAM block with 0
 									#pragma unroll
-									for (unsigned int i=0; i<ACTIVATION_BURST_SIZE_BYTE; i++)
+									for (unsigned int i=0; i<ACTIVATION_DRAM_SIZE_BYTE; i++)
 									{
 										iaBlock.dramBlock.values[i] = 0x0;
 									}
@@ -312,11 +332,11 @@ __kernel void kernelIAMover (
 								// 	if (realStrip == true) {
 								// 		if (iterInputDramblockInterleave == 0x0)
 								// 		{
-								// 			addressIADramBlockDDR0 += ACTIVATION_BURST_SIZE_BYTE;
+								// 			addressIADramBlockDDR0 += ACTIVATION_DRAM_SIZE_BYTE;
 								// 		}
 								// 		else
 								// 		{
-								// 			addressIADramBlockDDR1 += ACTIVATION_BURST_SIZE_BYTE;
+								// 			addressIADramBlockDDR1 += ACTIVATION_DRAM_SIZE_BYTE;
 								// 		}
 								// 	}
 								// 	//Toggle between 0 and 1
@@ -357,8 +377,9 @@ __kernel void kernelIAMover (
 						}
 					}
 				} // for over iRowInSPTile
-
+				#if !(defined(ARRIA10) || defined(STRATIX10))
 				iInstTile++;
+				#endif
 			} // if proceed
 		} //while over iInstTile
 	} // for over iInst
@@ -406,19 +427,20 @@ __kernel void kernelWMover (
 		//Number of filters in the group
 		unsigned short numActualFiltersInGroup = inst.numFiltersInGroup;
 
-		//Number of filters to be sent to the array
-		//Include padding
+		//The number of filters to be sent to the array
+		//must be an integer multiples of the number rows in side a coalescing group
+		//so padding is necessary
 		unsigned short numFiltersSentToArray =
 			(1 + ((numActualFiltersInGroup - 1) >> DIVIDE_BY_PE_ROWS_PER_GROUP_SHIFT)) << DIVIDE_BY_PE_ROWS_PER_GROUP_SHIFT;
 
 
-		//Number of weight blocks seen by the PEs
+		//The number of PE transfer blocks
 		//in each filter
-		//For SpW weight block, this is proporational
+		//For a SpW weight block, this is proporational
 		//to the number NZ clusters per pruning range.
 		unsigned short numTransferBlockInFilter = inst.numTBPerFilter;
 
-		#if (WEIGHT_BURST_SIZE_GEQ_PE_SIZE == TRUE)
+		#if (WEIGHT_DRAM_SIZE_GEQ_PE_SIZE == TRUE)
 			unsigned short numDramBlockInActualFilter = 
 				((numTransferBlockInFilter-1) >> WEIGHT_WIDE_SIZE_OFFSET) + 1;
 		#else
@@ -669,7 +691,8 @@ void updateIABufferWriter (
 
 		//Modified buffer and buffers
 		unsigned short numTBPerStrip[2],
-		t_activation_dram_block cacheIABlocks [2][IA_CACHE_DEPTH],
+		t_activation_dram_block cacheIABlocks_0 [IA_CACHE_DEPTH],
+		t_activation_dram_block cacheIABlocks_1 [IA_CACHE_DEPTH],
 		t_ia_buffer_w_state* pCurrentState,
 		t_ia_buffer_write_registers* pCurrentRegisters,
 
@@ -725,7 +748,8 @@ void getIABufferReaderOutput (
 
 		//Buffers to read from
 		unsigned short numTBPerStrip[],
-		t_activation_dram_block cacheIABlocks [2][IA_CACHE_DEPTH],
+		t_activation_dram_block cacheIABlocks_0 [IA_CACHE_DEPTH],
+		t_activation_dram_block cacheIABlocks_1 [IA_CACHE_DEPTH],
 
 		//Outputs
 		t_flag* pOutAcceptInstruction,
@@ -821,9 +845,39 @@ __kernel void kernelIABuffer ()
 	#endif
 	int colID = get_compute_id(0);
 
-	t_activation_dram_block cacheIABlocks [2][IA_CACHE_DEPTH] __attribute__((bankwidth(ACTIVATION_BURST_SIZE_BYTE)));
+	#if (ACTIVATION_DRAM_SIZE_GEQ_PE_SIZE==TRUE)
+		t_activation_dram_block 
+			__attribute__((
+				bankwidth(ACTIVATION_DRAM_SIZE_BYTE),
+				singlepump
+				))
+			cacheIABlocks_0 [IA_CACHE_DEPTH];
 
-	//Number of activation transfer blocks per 1x1 strip
+		t_activation_dram_block 
+			__attribute__((
+				bankwidth(ACTIVATION_DRAM_SIZE_BYTE),
+				singlepump
+				))
+			cacheIABlocks_1 [IA_CACHE_DEPTH];
+	#else
+		t_activation_dram_block 
+			__attribute__((
+				bankwidth(ACTIVATION_DRAM_SIZE_BYTE), 
+				numbanks(ACTIVATION_WIDE_SIZE),
+				singlepump
+				))
+			cacheIABlocks_0 [IA_CACHE_DEPTH]; 
+
+		t_activation_dram_block 
+			__attribute__((
+				bankwidth(ACTIVATION_DRAM_SIZE_BYTE), 
+				numbanks(ACTIVATION_WIDE_SIZE),
+				singlepump
+				))
+			cacheIABlocks_1 [IA_CACHE_DEPTH]; 
+	#endif
+
+	//Number of activation PE transfer blocks per 1x1 strip
 	t_streamblock_address numTBPerStrip [2];
 
 	/**
@@ -940,7 +994,8 @@ __kernel void kernelIABuffer ()
 			regReaderContext,
 
 			numTBPerStrip,
-			cacheIABlocks,
+			cacheIABlocks_0,
+			cacheIABlocks_1,
 
 			&readerReadyForInstruction,
 
@@ -1063,7 +1118,8 @@ __kernel void kernelIABuffer ()
 			writerBlockValid,
 
 			numTBPerStrip,	
-			cacheIABlocks,
+			cacheIABlocks_0,
+			cacheIABlocks_1,
 			&regWriterState,
 			&regWriterContext,
 
@@ -1126,9 +1182,7 @@ void getIABufferWriterOutput (
 	}
 
 	//Driver for the dram block interface's READY signal
-	if 	(
-			(currentState == IA_BUFFER_WRITE_STATE_ACCESS) 
-		)
+	if 	(currentState == IA_BUFFER_WRITE_STATE_ACCESS)
 	{
 		*pOutAcceptData = TRUE;
 	}
@@ -1144,7 +1198,8 @@ void updateIABufferWriter (
 
 		//Modified buffer and buffers
 		unsigned short numTBPerStrip[],
-		t_activation_dram_block cacheIABlocks [2][IA_CACHE_DEPTH],
+		t_activation_dram_block cacheIABlocks_0 [IA_CACHE_DEPTH],
+		t_activation_dram_block cacheIABlocks_1 [IA_CACHE_DEPTH],
 		t_ia_buffer_w_state* pCurrentState,
 		t_ia_buffer_write_registers* pCurrentRegisters,
 
@@ -1207,11 +1262,21 @@ void updateIABufferWriter (
 
 				numTBPerStrip[(pCurrentRegisters->accessBank) & 0x01] = numIATransferBlocks;
 
-				cacheIABlocks[(pCurrentRegisters->accessBank) & 0x01]
-					[(pCurrentRegisters->iterAccess) 
-						+ (pCurrentRegisters->iaBlockInfo.addressBase)
-						+ (pCurrentRegisters->iaBlockInfo.colContribution)]
-					= dramBlock;
+				if (((pCurrentRegisters->accessBank) & 0x01) == 0x0) {
+					cacheIABlocks_0
+						[(pCurrentRegisters->iterAccess) 
+							+ (pCurrentRegisters->iaBlockInfo.addressBase)
+							+ (pCurrentRegisters->iaBlockInfo.colContribution)]
+						= dramBlock;
+				}
+				else {
+					cacheIABlocks_1
+						[(pCurrentRegisters->iterAccess) 
+							+ (pCurrentRegisters->iaBlockInfo.addressBase)
+							+ (pCurrentRegisters->iaBlockInfo.colContribution)]
+						= dramBlock;
+				}
+				
 
 				EMULATOR_PRINT(("[kernelIABuffer Writer %d] Writing new dram block to bank %d, "
 							"iterAccess=%d, "
@@ -1277,7 +1342,8 @@ void getIABufferReaderOutput (
 
 		//Buffers to read from
 		unsigned short numTBPerStrip[],
-		t_activation_dram_block cacheIABlocks [2][IA_CACHE_DEPTH],
+		t_activation_dram_block cacheIABlocks_0 [IA_CACHE_DEPTH],
+		t_activation_dram_block cacheIABlocks_1 [IA_CACHE_DEPTH],
 
 		//Outputs
 		t_flag* pOutAcceptInstruction,
@@ -1298,26 +1364,49 @@ void getIABufferReaderOutput (
 	{
 		*pSendTransferBlock = TRUE;
 		
-		t_activation_dram_block dramBlock = cacheIABlocks[(currentRegisters.accessBank) & 0x01]
-			[currentRegisters.iaBlockInfo.addressBase 
-				+ currentRegisters.iaBlockInfo.colContribution 
-				+ ((unsigned short)(currentRegisters.iterAccess >> ACTIVATION_WIDE_SIZE_OFFSET))];	
+		#if (ACTIVATION_DRAM_SIZE_GEQ_PE_SIZE == TRUE)
+			t_activation_dram_block dramBlock;
+			if (((currentRegisters.accessBank) & 0x01) == 0x0) {
+				dramBlock = cacheIABlocks_0 [currentRegisters.iaBlockInfo.addressBase 
+					+ currentRegisters.iaBlockInfo.colContribution 
+					+ ((unsigned short)(currentRegisters.iterAccess >> ACTIVATION_WIDE_SIZE_OFFSET))];	
+			}
+			else {
+				dramBlock = cacheIABlocks_1 [currentRegisters.iaBlockInfo.addressBase 
+					+ currentRegisters.iaBlockInfo.colContribution 
+					+ ((unsigned short)(currentRegisters.iterAccess >> ACTIVATION_WIDE_SIZE_OFFSET))];
+			}
 
-		//TODO: Change this
-		// unsigned char isLastTemp =  (
-		// 	((currentRegisters.iterAccess + 1) == currentRegisters.numTBPerStrip) 
-		// 	&& (currentRegisters.stripUpdateMode == IA_BUFFER_READ_STRIP_UPDATE_DONE) 
-		// 	&& (currentRegisters.flagIsLastRow == TRUE))
-		// 	? TRUE : FALSE;
+			unsigned char idxTBInDramBlock = (currentRegisters.iterAccess) & ACTIVATION_WIDE_SIZE_REMAINDER_MASK;
+			#pragma unroll
+			for (int i=0; i<PE_ACTIVATION_BLOCK_SIZE_IN_WORD; i++)
+			{
+				unsigned char idxValueInDramBlock = (idxTBInDramBlock << PE_ACTIVATION_BLOCK_SIZE_IN_WORD_OFFSET) + i;
+				(*pTaggedBlock).values[i] = dramBlock.values[idxValueInDramBlock];
 
-		unsigned char idxTBInDramBlock = (currentRegisters.iterAccess) & ACTIVATION_WIDE_SIZE_REMAINDER_MASK;
-		#pragma unroll PE_ACTIVATION_BLOCK_SIZE_IN_WORD
-		for (int i=0; i<PE_ACTIVATION_BLOCK_SIZE_IN_WORD; i++)
-		{
-			unsigned char idxValueInDramBlock = (idxTBInDramBlock << PE_ACTIVATION_BLOCK_SIZE_IN_WORD_OFFSET) + i;
-			(*pTaggedBlock).values[i] = dramBlock.values[idxValueInDramBlock];
-
-		}
+			}
+		#else //ACTIVATION_DRAM_SIZE_GEQ_PE_SIZE == FALSE
+			unsigned short addressBase = (currentRegisters.iaBlockInfo.addressBase 
+							+ currentRegisters.iaBlockInfo.colContribution 
+							+ ((unsigned short)(currentRegisters.iterAccess << ACTIVATION_WIDE_SIZE_OFFSET)))
+							& (~((unsigned short) ACTIVATION_WIDE_SIZE_REMAINDER_MASK));
+			#pragma unroll
+			for (int i=0; i<ACTIVATION_WIDE_SIZE; i++) {
+				t_activation_dram_block dramBlock;
+				if (((currentRegisters.accessBank) & 0x01) == 0x0) {
+					dramBlock = cacheIABlocks_0 [addressBase + i];
+				}
+				else {
+					dramBlock = cacheIABlocks_1 [addressBase + i];
+				}
+				#pragma unroll
+				for (int j=0; j<ACTIVATION_DRAM_SIZE_BYTE; j++)
+				{
+					(*pTaggedBlock).values[(i << ACTIVATION_DRAM_SIZE_BYTE_OFFSET) + j] 
+						= dramBlock.values[j];
+				}
+			}
+		#endif
 
 		// setMaxTransferID(pTaggedBlock, currentRegisters.maxPeRowID);
 		// setIsLast(pTaggedBlock, isLastTemp);
@@ -2067,20 +2156,20 @@ __kernel void kernelMisc ()
 							numOutputBlocks, 
 							numDramBlocksToReduce));
 
-			//Limit the concurrency if BURST_SIZE_BYTE > 16
-			// #if (BURST_SIZE_BYTE > 16)
+            //Limit the concurrency if DRAM_SIZE_BYTE > 16
+            // #if (DRAM_SIZE_BYTE > 16)
 			// #pragma max_concurrency 2
 			// #endif
 			for (unsigned short iOutput=0; iOutput < numOutputBlocks; iOutput++)
 			{
 				#if (defined(ARRIA10) || defined(STRATIX10))
-					t_misc_accum reductionBlock[ACTIVATION_BURST_SIZE_BYTE] __attribute__((__register__));
+					t_misc_accum reductionBlock[ACTIVATION_DRAM_SIZE_BYTE] __attribute__((__register__));
 				#else
-					t_misc_accum reductionBlock[ACTIVATION_BURST_SIZE_BYTE];
+					t_misc_accum reductionBlock[ACTIVATION_DRAM_SIZE_BYTE];
 				#endif
 				//Initialize the reductionBlock
 				#pragma unroll
-				for (int iVal=0; iVal < ACTIVATION_BURST_SIZE_BYTE; iVal++)
+				for (int iVal=0; iVal < ACTIVATION_DRAM_SIZE_BYTE; iVal++)
 				{
 					//If max pooling, then intialize the values to the minimum, else zero
 					t_misc_accum min = MISC_ACCUM_MIN;
@@ -2112,10 +2201,10 @@ __kernel void kernelMisc ()
 							inputDramBlock.values[2] & 0xFF, 
 							inputDramBlock.values[3] & 0xFF));
 
-						#pragma unroll ACTIVATION_BURST_SIZE_BYTE
+						#pragma unroll
 						#pragma ii 1
 						#pragma speculated_iterations 0
-						for (int iValue=0; iValue < ACTIVATION_BURST_SIZE_BYTE; iValue++)
+						for (int iValue=0; iValue < ACTIVATION_DRAM_SIZE_BYTE; iValue++)
 						{
 							t_misc_accum rawInputValue = (t_misc_accum) 
 									inputDramBlock.values[iValue];
@@ -2150,7 +2239,7 @@ __kernel void kernelMisc ()
 				//Modify the output
 				t_output_activation_dram_block_tagged outputTagged;
 				#pragma unroll
-				for (int i=0; i<ACTIVATION_BURST_SIZE_BYTE; i++)
+				for (int i=0; i<ACTIVATION_DRAM_SIZE_BYTE; i++)
 				{
 					outputTagged.dramBlock.values[i] = modifyMiscOutput(
 							reductionBlock[i],
@@ -2190,14 +2279,20 @@ __kernel void kernelOAMover (
 		unsigned int offsetInstruction
 	)
 {
+	#if (defined(ARRIA10) || defined(STRATIX10))
+		#define OA_MOVER_INSTRUCTION_CACHE_SIZE 8
+	#else
+		#define OA_MOVER_INSTRUCTION_CACHE_SIZE 1
+	#endif
 	//Use while loop instead of for-loop
-	for (unsigned int iInst=0; iInst < numInstruction; iInst += 8)
+	for (unsigned int iInst=0; iInst < numInstruction; iInst += OA_MOVER_INSTRUCTION_CACHE_SIZE)
 	{
-		t_oa_mover_instruction cacheInstruction[8];
-		unsigned char numInstInTile = (iInst + 8) < numInstruction ? 
-			8 : numInstruction - iInst;
+	#if (defined(ARRIA10) || defined(STRATIX10))
+		t_oa_mover_instruction cacheInstruction[OA_MOVER_INSTRUCTION_CACHE_SIZE];
+		unsigned char numInstInTile = (iInst + OA_MOVER_INSTRUCTION_CACHE_SIZE) < numInstruction ? 
+			OA_MOVER_INSTRUCTION_CACHE_SIZE : numInstruction - iInst;
 		#pragma unroll 
-		for (unsigned char i=0; i<8; i++)
+		for (unsigned char i=0; i<OA_MOVER_INSTRUCTION_CACHE_SIZE; i++)
 		{
 			cacheInstruction[i] = pInstruction[i+iInst+offsetInstruction];
 		}
@@ -2205,9 +2300,16 @@ __kernel void kernelOAMover (
 		unsigned char iInstTile = 0;
 		#pragma max_concurrency 1
 		while (iInstTile < numInstInTile)
+	#else
+		unsigned char iInstTile = 0;
+	#endif
 		{
 			/*! Read the instruction and decode the packed field*/
+			#if (defined(ARRIA10) || defined(STRATIX10))
 			t_oa_mover_instruction inst = cacheInstruction[iInstTile];
+			#else
+			t_oa_mover_instruction inst = pInstruction[iInst+offsetInstruction];
+			#endif
 			t_flag enableSendSync = (inst.memSelectCatSparseFlagCatSyncFlagCatNumActiveCols >> 4) & 0x01;
 			unsigned char numActivePeCols = inst.memSelectCatSparseFlagCatSyncFlagCatNumActiveCols & 0x0F;
 			
@@ -2292,7 +2394,7 @@ __kernel void kernelOAMover (
 						int addrOA = 
 							addrOABase 
 							+ addrOAPeColContribution 
-							+ (((int) iNominalDramBlockInStrip) << ACTIVATION_BURST_SIZE_BYTE_OFFSET);
+							+ (((int) iNominalDramBlockInStrip) << ACTIVATION_DRAM_SIZE_BYTE_OFFSET);
 
 						bool readSuccess = false;
 						t_output_activation_dram_block_tagged receivedBlock 
@@ -2320,7 +2422,7 @@ __kernel void kernelOAMover (
 							 * Use loop unrolling to coalescing the access
 							 */
 							#pragma unroll
-							for (unsigned int i=0; i<ACTIVATION_BURST_SIZE_BYTE; i++)
+							for (unsigned int i=0; i<ACTIVATION_DRAM_SIZE_BYTE; i++)
 							{
 								pOA[addrOA+i] = receivedBlock.dramBlock.values[i];
 							}
@@ -2358,7 +2460,9 @@ __kernel void kernelOAMover (
 				} //iterOutputTileHeightxWidthPerCol 
 
 				//Increment the instruction count.
-				iInstTile++;
+				#if !(defined(ARRIA10) || defined(STRATIX10))
+					iInstTile++;
+				#endif
 			} // if proceed
 		} //while. over instruction
 	}
@@ -2466,8 +2570,8 @@ void updateOABufferWriter (
 	t_flag _validValueFromPE,
 
 	//Modified buffers
-	t_oa_buffer_access_block cacheOutputActivations0[OA_CACHE_DEPTH][ACTIVATION_BURST_SIZE_IN_PE_ROW_GROUP],
-	t_oa_buffer_access_block cacheOutputActivations1[OA_CACHE_DEPTH][ACTIVATION_BURST_SIZE_IN_PE_ROW_GROUP],
+	t_oa_buffer_access_block cacheOutputActivations0[OA_CACHE_DEPTH][ACTIVATION_DRAM_SIZE_IN_PE_ROW_GROUP],
+	t_oa_buffer_access_block cacheOutputActivations1[OA_CACHE_DEPTH][ACTIVATION_DRAM_SIZE_IN_PE_ROW_GROUP],
 
 	//State variables
 	t_oa_buffer_writer_info *pRegisters,
@@ -2522,8 +2626,8 @@ void getOABufferReaderOutput (
 	t_flag* pOutAcceptInstruction,
 
 	//Buffer, read only
-	const t_oa_buffer_access_block cacheOutputActivations0[OA_CACHE_DEPTH][ACTIVATION_BURST_SIZE_IN_PE_ROW_GROUP],
-	const t_oa_buffer_access_block cacheOutputActivations1[OA_CACHE_DEPTH][ACTIVATION_BURST_SIZE_IN_PE_ROW_GROUP],
+	const t_oa_buffer_access_block cacheOutputActivations0[OA_CACHE_DEPTH][ACTIVATION_DRAM_SIZE_IN_PE_ROW_GROUP],
+	const t_oa_buffer_access_block cacheOutputActivations1[OA_CACHE_DEPTH][ACTIVATION_DRAM_SIZE_IN_PE_ROW_GROUP],
 
 	//Interface with the channel to OA Tee
 	t_flag* pToOATeeValid,
@@ -2584,10 +2688,10 @@ __kernel void kernelOABuffer ()
 	 * Activation buffer
 	 * TODO: might need to change the indexing in order to get the BRAM arrangement
 	 */
-	t_oa_buffer_access_block cacheOutputActivations0 [OA_CACHE_DEPTH][ACTIVATION_BURST_SIZE_IN_PE_ROW_GROUP] __attribute__((
-                   numbanks(ACTIVATION_BURST_SIZE_IN_PE_ROW_GROUP), bankwidth(PE_ROWS_PER_GROUP), singlepump));
-	t_oa_buffer_access_block cacheOutputActivations1 [OA_CACHE_DEPTH][ACTIVATION_BURST_SIZE_IN_PE_ROW_GROUP] __attribute__((
-                   numbanks(ACTIVATION_BURST_SIZE_IN_PE_ROW_GROUP), bankwidth(PE_ROWS_PER_GROUP), singlepump));
+	t_oa_buffer_access_block cacheOutputActivations0 [OA_CACHE_DEPTH][ACTIVATION_DRAM_SIZE_IN_PE_ROW_GROUP] __attribute__((
+                   numbanks(ACTIVATION_DRAM_SIZE_IN_PE_ROW_GROUP), bankwidth(PE_ROWS_PER_GROUP), singlepump));
+	t_oa_buffer_access_block cacheOutputActivations1 [OA_CACHE_DEPTH][ACTIVATION_DRAM_SIZE_IN_PE_ROW_GROUP] __attribute__((
+                   numbanks(ACTIVATION_DRAM_SIZE_IN_PE_ROW_GROUP), bankwidth(PE_ROWS_PER_GROUP), singlepump));
 
 	/**
 	 * Writer state and registers
@@ -2891,8 +2995,8 @@ void updateOABufferWriter (
 	t_flag _validValueFromPE,
 
 	//Modified buffers
-	t_oa_buffer_access_block cacheOutputActivations0 [OA_CACHE_DEPTH][ACTIVATION_BURST_SIZE_IN_PE_ROW_GROUP],
-	t_oa_buffer_access_block cacheOutputActivations1 [OA_CACHE_DEPTH][ACTIVATION_BURST_SIZE_IN_PE_ROW_GROUP],
+	t_oa_buffer_access_block cacheOutputActivations0 [OA_CACHE_DEPTH][ACTIVATION_DRAM_SIZE_IN_PE_ROW_GROUP],
+	t_oa_buffer_access_block cacheOutputActivations1 [OA_CACHE_DEPTH][ACTIVATION_DRAM_SIZE_IN_PE_ROW_GROUP],
 
 	//State variables
 	t_oa_buffer_writer_info *pRegisters,
@@ -2975,7 +3079,7 @@ void updateOABufferWriter (
 			if (_validValueFromPE == TRUE)
 			{
 				unsigned int idxDramBlock = 
-					((*pRegisters).accessInfo.indexOutput >> ACTIVATION_BURST_SIZE_BYTE_OFFSET);
+					((*pRegisters).accessInfo.indexOutput >> ACTIVATION_DRAM_SIZE_BYTE_OFFSET);
 				unsigned int idxOABlockInDramBlock = 
 					((*pRegisters).accessInfo.indexOutput >> DIVIDE_BY_PE_ROWS_PER_GROUP_SHIFT) 
 						& ACTIVATION_WIDE_SIZE_IN_PE_ROW_GROUP_MASK;
@@ -3106,7 +3210,7 @@ void updateOABufferReader (
 				(*pRegisters).accessInfo.iStrip = 0x0;
 				(*pRegisters).accessInfo.accessBank = (_control.controlBits >> 9) & 0x01;
 				(*pRegisters).accessInfo.numLoopsPerStip = 
-					1 + ((_control.numOutputsPerStrip - 1) >> ACTIVATION_BURST_SIZE_BYTE_OFFSET);
+					1 + ((_control.numOutputsPerStrip - 1) >> ACTIVATION_DRAM_SIZE_BYTE_OFFSET);
 				(*pRegisters).accessInfo.iLoopPerStip = 0x0;
 				
 
@@ -3149,7 +3253,7 @@ void updateOABufferReader (
 		break;
 		case (OA_BUFFER_READER_STATE_ACCESS): {
 			if (_writeSuccessOATee == TRUE) {
-				(*pRegisters).accessInfo.indexOutput += ACTIVATION_BURST_SIZE_BYTE;
+				(*pRegisters).accessInfo.indexOutput += ACTIVATION_DRAM_SIZE_BYTE;
 				(*pRegisters).accessInfo.iLoopPerStip += 0x01;
 			}
 			// else
@@ -3179,8 +3283,8 @@ void getOABufferReaderOutput (
 	t_flag* pOutAcceptInstruction,
 
 	//Buffer, read only
-	const t_oa_buffer_access_block cacheOutputActivations0 [OA_CACHE_DEPTH][ACTIVATION_BURST_SIZE_IN_PE_ROW_GROUP],
-	const t_oa_buffer_access_block cacheOutputActivations1 [OA_CACHE_DEPTH][ACTIVATION_BURST_SIZE_IN_PE_ROW_GROUP],
+	const t_oa_buffer_access_block cacheOutputActivations0 [OA_CACHE_DEPTH][ACTIVATION_DRAM_SIZE_IN_PE_ROW_GROUP],
+	const t_oa_buffer_access_block cacheOutputActivations1 [OA_CACHE_DEPTH][ACTIVATION_DRAM_SIZE_IN_PE_ROW_GROUP],
 
 	//Interface with the channel to OA Tee
 	t_flag* pToOATeeValid,
@@ -3203,10 +3307,10 @@ void getOABufferReaderOutput (
 
 			int addressBase = ((_currentContext.accessInfo.accessBank & 0x01) == 0x00) ?
 					0x0 : OA_CACHE_DEPTH;
-			int idxDramBlock = (_currentContext.accessInfo.indexOutput >> ACTIVATION_BURST_SIZE_BYTE_OFFSET);
+			int idxDramBlock = (_currentContext.accessInfo.indexOutput >> ACTIVATION_DRAM_SIZE_BYTE_OFFSET);
 			//fetch the cluster
 			#pragma unroll
-			for (unsigned char i=0; i<ACTIVATION_BURST_SIZE_IN_PE_ROW_GROUP; i++)
+			for (unsigned char i=0; i<ACTIVATION_DRAM_SIZE_IN_PE_ROW_GROUP; i++)
 			{
 				t_oa_buffer_access_block block = ((_currentContext.accessInfo.accessBank & 0x01) == 0x00) ?
 					cacheOutputActivations0
@@ -3878,7 +3982,8 @@ __kernel void kernelFilterTee ()
 #define STATE_FILTER_STREAMER_READ_CACHE_WAIT 0X0
 #define STATE_FILTER_STREAMER_READ_CACHE_READ 0X1
 
-#if (WEIGHT_BURST_SIZE_GEQ_PE_SIZE == TRUE)
+// Number of banks in the weight buffer and the index buffer
+#if (WEIGHT_DRAM_SIZE_GEQ_PE_SIZE == 1)
 	#define FILTER_STREAMER_WEIGHT_CACHE_BANK_COUNT 1
 	#define FILTER_STREAMER_INDEX_CACHE_BANK_COUNT 1
 #else
@@ -3900,27 +4005,27 @@ __kernel void kernelFilterBuffer ()
 	typedef uint1_t t_filter_streamer_read_state;
 
 	typedef struct {
-    	t_char values[WEIGHT_BURST_SIZE_VALUE_BYTE];
+    	t_char values[WEIGHT_DRAM_SIZE_VALUE_BYTE];
 	} t_weight_dram_block_values;
 
 	t_weight_dram_block_values cacheNzBlocks0 [KERNEL_CACHE_DEPTH] __attribute__((
-		bankwidth(WEIGHT_BURST_SIZE_VALUE_BYTE),
+		bankwidth(WEIGHT_DRAM_SIZE_VALUE_BYTE),
 		numbanks(FILTER_STREAMER_WEIGHT_CACHE_BANK_COUNT),
 		singlepump)); 
 	t_weight_dram_block_values cacheNzBlocks1 [KERNEL_CACHE_DEPTH] __attribute__((
-		bankwidth(WEIGHT_BURST_SIZE_VALUE_BYTE),
+		bankwidth(WEIGHT_DRAM_SIZE_VALUE_BYTE),
 		numbanks(FILTER_STREAMER_WEIGHT_CACHE_BANK_COUNT),
 		singlepump));
 	#if defined(SPW_SYSTEM)
 		typedef struct {
-	    	t_uchar indices[WEIGHT_BURST_SIZE_INDEX_BYTE];
+	    	t_uchar indices[WEIGHT_DRAM_SIZE_INDEX_BYTE];
 		} t_weight_dram_block_indices;
 		t_weight_dram_block_indices cacheIndices0 [KERNEL_CACHE_DEPTH] __attribute__((
-			bankwidth(WEIGHT_BURST_SIZE_INDEX_BYTE),
+			bankwidth(WEIGHT_DRAM_SIZE_INDEX_BYTE),
 			numbanks(FILTER_STREAMER_INDEX_CACHE_BANK_COUNT),
 			singlepump)); 
 		t_weight_dram_block_indices cacheIndices1 [KERNEL_CACHE_DEPTH] __attribute__((
-			bankwidth(WEIGHT_BURST_SIZE_INDEX_BYTE),
+			bankwidth(WEIGHT_DRAM_SIZE_INDEX_BYTE),
 			numbanks(FILTER_STREAMER_INDEX_CACHE_BANK_COUNT),
 			singlepump)); 
 	#endif
@@ -3989,7 +4094,7 @@ __kernel void kernelFilterBuffer ()
 					regNumNZClustersInPruneRange[regWriteSide] = control.numNZClustersPerPruneRange;
 					#endif
 
-					#if (WEIGHT_BURST_SIZE_GEQ_PE_SIZE == TRUE)
+					#if (WEIGHT_DRAM_SIZE_GEQ_PE_SIZE == TRUE)
 						numDramBlockInFilter[regWriteSide] = 
 							((control.numTransferBlocks-1) >> WEIGHT_WIDE_SIZE) + 1;
 					#else
@@ -4018,7 +4123,7 @@ __kernel void kernelFilterBuffer ()
 					t_weight_dram_block writeBlock = writeBlockTagged.dramBlock;
 
 					#pragma unroll
-					for (unsigned char i=0; i<WEIGHT_BURST_SIZE_VALUE_BYTE; i++)
+					for (unsigned char i=0; i<WEIGHT_DRAM_SIZE_VALUE_BYTE; i++)
 					{
 						values.values[i] = writeBlock.values[i];
 					}
@@ -4034,7 +4139,7 @@ __kernel void kernelFilterBuffer ()
 					#if defined(SPW_SYSTEM)
 						t_weight_dram_block_indices indices;
 						#pragma unroll
-						for (unsigned char i=0; i<WEIGHT_BURST_SIZE_INDEX_BYTE; i++)
+						for (unsigned char i=0; i<WEIGHT_DRAM_SIZE_INDEX_BYTE; i++)
 						{
 							indices.indices[i] = writeBlock.indices[i];
 						}
@@ -4068,7 +4173,7 @@ __kernel void kernelFilterBuffer ()
 				t_flag tempIsLastBlockInPruneRange = FALSE; 
 			#endif
 
-			#if (WEIGHT_BURST_SIZE_GEQ_PE_SIZE == TRUE)
+			#if (WEIGHT_DRAM_SIZE_GEQ_PE_SIZE == TRUE)
 				unsigned short dramIndex = iTransferBlockInFilterRead >> WEIGHT_WIDE_SIZE_OFFSET;
 				unsigned short indexInDramBlock = iTransferBlockInFilterRead & WEIGHT_WIDE_SIZE_REMAINDER_MASK;
 
@@ -4127,7 +4232,8 @@ __kernel void kernelFilterBuffer ()
 						}
 					}
 				#endif
-			#else  //WEIGHT_BURST_SIZE_GEQ_PE_SIZE == FALSE
+			#else  //WEIGHT_DRAM_SIZE_GEQ_PE_SIZE == FALSE, WEIGHT DRAM BLOCK SIZE is smaller than PE BLOCK SIZE
+				#pragma unroll
 				for (unsigned short iDramBlockInPeBlock=0; iDramBlockInPeBlock<WEIGHT_WIDE_SIZE; iDramBlockInPeBlock++) {
 					//Assign values for the PE weight values
 					unsigned short dramIndex = (iTransferBlockInFilterRead << WEIGHT_WIDE_SIZE_OFFSET) + iDramBlockInPeBlock;
@@ -4140,12 +4246,13 @@ __kernel void kernelFilterBuffer ()
 						valueBlock = cacheNzBlocks0[dramIndex];
 					}
 
-					for (int v=0; v<WEIGHT_BURST_SIZE_VALUE_BYTE; v++) {
+					#pragma unroll
+					for (int v=0; v<WEIGHT_DRAM_SIZE_VALUE_BYTE; v++) {
 						//Handle zero-padded filter
 						if (regIsRealFilter[(~regWriteSide) & 0x1] == TRUE)
 						{
 							unsigned char byteIndexInPEBlock = 
-								(iDramBlockInPeBlock << WEIGHT_BURST_SIZE_VALUE_BYTE_OFFSET) + v;
+								(iDramBlockInPeBlock << WEIGHT_DRAM_SIZE_VALUE_BYTE_OFFSET) + v;
 
 							peWeightBlock.values[byteIndexInPEBlock] = valueBlock.values[v];
 						}
@@ -4164,7 +4271,7 @@ __kernel void kernelFilterBuffer ()
 							indicesBlock = cacheIndices0[dramIndex];
 						}
 						#pragma unroll
-						for (unsigned char iChar=0; iChar<WEIGHT_BURST_SIZE_INDEX_BYTE; iChar++)
+						for (unsigned char iChar=0; iChar<WEIGHT_DRAM_SIZE_INDEX_BYTE; iChar++)
 						{
 							unsigned char val = indicesBlock.indices[iChar];
 
@@ -4172,10 +4279,10 @@ __kernel void kernelFilterBuffer ()
 							t_spw_index val1 = (val >> 0x04) & CHAR_TO_SPW_INDEX_MASK;
 
 							unsigned char index0 = 
-								((iDramBlockInPeBlock << WEIGHT_BURST_SIZE_INDEX_BYTE_OFFSET)
+								((iDramBlockInPeBlock << WEIGHT_DRAM_SIZE_INDEX_BYTE_OFFSET)
 								+ iChar) << 1; //*2
 							unsigned char index1 = 
-								(((iDramBlockInPeBlock << WEIGHT_BURST_SIZE_INDEX_BYTE_OFFSET)
+								(((iDramBlockInPeBlock << WEIGHT_DRAM_SIZE_INDEX_BYTE_OFFSET)
 								+ iChar) << 1) + 1; //*2 + 1
 							if (index0 < PE_SIMD_SIZE)
 							{
@@ -4188,7 +4295,7 @@ __kernel void kernelFilterBuffer ()
 						}
 					#endif
 				} //end-for iDramBlockInPeBlock
-			#endif //WEIGHT_BURST_SIZE_GEQ_PE_SIZE
+			#endif //WEIGHT_DRAM_SIZE_GEQ_PE_SIZE
 
 			
 
@@ -4225,7 +4332,7 @@ __kernel void kernelFilterBuffer ()
 						"isLastInFilter: %#03x, maxTransportID: %#04x.\n",
 						rowID, 
 						iTransferBlockInFilterRead, 
-						maxTransferBlockInFilter[(~regWriteSide) & 0x1], 
+						numTransferBlockInFilter[(~regWriteSide) & 0x1], 
 						iOutputXTransferBlocksRead, 
 						regOutputxTransferBlocks[(~regWriteSide) & 0x1],
 						peWeightBlock.values[0],
@@ -4243,7 +4350,7 @@ __kernel void kernelFilterBuffer ()
 						"isLastInFilter: %#03x, isLastInPruneRange: %#03x, maxTransportID: %#04x.\n",
 						rowID, 
 						iTransferBlockInFilterRead, 
-						maxTransferBlockInFilter[(~regWriteSide) & 0x1], 
+						numTransferBlockInFilter[(~regWriteSide) & 0x1], 
 						iOutputXTransferBlocksRead, 
 						regOutputxTransferBlocks[(~regWriteSide) & 0x1],
 						peWeightBlock.values[0],

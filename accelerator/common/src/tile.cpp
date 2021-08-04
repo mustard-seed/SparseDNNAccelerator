@@ -72,7 +72,7 @@ unsigned int deriveNumActivationDramBlockPerStrip(
         unsigned int _numInputChannelsPerGroup
     )
 {
-    unsigned int numDramBlockPerStrip = DIVIDE_CEIL(_numInputChannelsPerGroup, ACTIVATION_BURST_SIZE_BYTE);
+    unsigned int numDramBlockPerStrip = DIVIDE_CEIL(_numInputChannelsPerGroup, ACTIVATION_DRAM_SIZE_BYTE);
     return numDramBlockPerStrip;
 }
 
@@ -400,7 +400,7 @@ unsigned int deriveFirstTileConvInputTransferLatency(
                     sizeFirstTileInputWidth,
                     sizeFirstTileInputHeight,
                     _numInputChannelsPerGroup,
-                    ACTIVATION_BURST_SIZE_BYTE
+                    ACTIVATION_DRAM_SIZE_BYTE
                 );
 }
 
@@ -428,7 +428,7 @@ unsigned int deriveLastTileOutputTransferLatency(
                 sizeLastTileOutputWidthPerCol * numActiveColsLastTile,
                 sizeLastTileOutputHeight,
                 _numOutputChannelsPerGroup,
-                ACTIVATION_BURST_SIZE_BYTE
+                ACTIVATION_DRAM_SIZE_BYTE
             );
 }
 
@@ -557,7 +557,7 @@ int oa_cache_boundary_check(
       int numChannels
         )
 {
-    int numBlocksPerStrip = DIVIDE_CEIL(numChannels, ACTIVATION_BURST_SIZE_BYTE);
+    int numBlocksPerStrip = DIVIDE_CEIL(numChannels, ACTIVATION_DRAM_SIZE_BYTE);
     return (heightTile*widthTile* numBlocksPerStrip);
 }
 
@@ -573,7 +573,11 @@ int filter_cache_boundary_check(
     //Nubmer of dram blocks required to store one filter
     int numTBPerStrip = DIVIDE_CEIL(inputChannelSize, peBlockSize * numClustersInPruningRange)
             * numNZClustersInPruningRange;
-    int requirement = DIVIDE_CEIL(numTBPerStrip * kernelSize * kernelSize, WEIGHT_WIDE_SIZE);
+    #if (WEIGHT_DRAM_SIZE_GEQ_PE_SIZE)
+        int requirement = DIVIDE_CEIL(numTBPerStrip * kernelSize * kernelSize, WEIGHT_WIDE_SIZE);
+    #else
+        int requirement = numTBPerStrip * kernelSize * kernelSize * WEIGHT_WIDE_SIZE;
+    #endif
     return requirement;
 }
 

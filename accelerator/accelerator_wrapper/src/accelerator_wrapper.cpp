@@ -976,8 +976,8 @@ namespace GraphRuntime {
                 int activationOffsetByte =
                         blobInfo.memoryRegionID
                         * MEM_ACTIVATION_REGION_SIZE_PER_SLICE
-                        * ACTIVATION_BURST_SIZE_BYTE;
-                if (valueVectorSizeBytes > (ACTIVATION_BURST_SIZE_BYTE * MEM_ACTIVATION_REGION_SIZE_PER_SLICE))
+                        * ACTIVATION_DRAM_SIZE_BYTE;
+                if (valueVectorSizeBytes > (ACTIVATION_DRAM_SIZE_BYTE * MEM_ACTIVATION_REGION_SIZE_PER_SLICE))
                 {
                     std::cout << "Too many input activation bytes to fit inside the global memory."<<std::endl;
                     throw;
@@ -1245,8 +1245,8 @@ namespace GraphRuntime {
                 int activationOffsetByte =
                         blobInfo.memoryRegionID
                         * MEM_ACTIVATION_REGION_SIZE_PER_SLICE
-                        * ACTIVATION_BURST_SIZE_BYTE;
-                if (valueVectorSizeBytes > (ACTIVATION_BURST_SIZE_BYTE * MEM_ACTIVATION_REGION_SIZE_PER_SLICE))
+                        * ACTIVATION_DRAM_SIZE_BYTE;
+                if (valueVectorSizeBytes > (ACTIVATION_DRAM_SIZE_BYTE * MEM_ACTIVATION_REGION_SIZE_PER_SLICE))
                 {
                     std::cout << "Too many output activation bytes to read from global memory."<<std::endl;
                     throw;

@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 3.1)
+cmake_minimum_required (VERSION 3.15)
 
 set (PROJECT_NAME "sparseDNNAccel")
 
@@ -23,8 +23,8 @@ add_subdirectory(common)
 add_subdirectory(model_container)
 add_subdirectory(accelerator_wrapper)
 add_subdirectory(graph_factory)
-add_subdirectory(prototype_pe_test)
-add_subdirectory(flexible_bitmask_compression_test)
+# add_subdirectory(prototype_pe_test)
+# add_subdirectory(flexible_bitmask_compression_test)
 add_subdirectory(full_system)
 add_subdirectory(spw_pe_test)
 add_subdirectory(spw_tensor_test)

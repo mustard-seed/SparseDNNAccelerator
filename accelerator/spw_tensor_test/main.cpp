@@ -101,8 +101,8 @@ TEST_F(spwTensorTest, dense_filter_test)
     int height = 4;
     int width = 4;
     int inputChannels = 13;
-    int peSimdSize = 4;
-    int clusterSize = 2;
+    int peSimdSize = PE_SIMD_SIZE;
+    int clusterSize = CLUSTER_SIZE;
 
     launch_dense_weight_test (
         outputChannels,
@@ -122,16 +122,25 @@ TEST_F(spwTensorTest, spw_filter_test)
     int height = 4;
     int width = 4;
     int inputChannels = 13;
-    int peSimdSize = 4;
-    int clusterSize = 2;
+    int peSimdSize = PE_SIMD_SIZE;
+    int clusterSize = CLUSTER_SIZE;
     int numClustersInPruningRange = 4;
     int numNZClustersInPruningRange = 2;
+//    int outputChannels = 1;
+//    int height = 1;
+//    int width = 1;
+//    int inputChannels = 13;
+//    int peSimdSize = PE_SIMD_SIZE;
+//    int clusterSize = CLUSTER_SIZE;
+//    int numClustersInPruningRange = 4;
+//    int numNZClustersInPruningRange = 2;
+
 
     launch_sparse_weight_test (
         outputChannels,
+        inputChannels,
         height,
         width,
-        inputChannels,
         peSimdSize,
         clusterSize,
         numClustersInPruningRange,
@@ -201,6 +210,8 @@ spwTensorTest::launch_dense_weight_test (
     std::cout <<"width: "<<_width<<std::endl;
     std::cout <<"inputChannels: "<<_inputChannels<<std::endl;
     std::cout <<"peSimdSize: "<<_peSimdSize<<std::endl;
+    std::cout <<"WEIGHT_WIDE_SIZE: "<<WEIGHT_WIDE_SIZE<<std::endl;
+    std::cout <<"WEIGHT_DRAM_SIZE_GEQ_PE_SIZE: "<<WEIGHT_DRAM_SIZE_GEQ_PE_SIZE<<std::endl;
     std::cout <<"clusterSize: "<<_clusterSize<<std::endl;
 
     int tensorSize = _outputChannels * _height * _width * _inputChannels;
@@ -318,6 +329,8 @@ spwTensorTest::launch_sparse_weight_test(
     std::cout <<"inputChannels: "<<_inputChannel<<std::endl;
     std::cout <<"peSimdSize: "<<_peSimdSize<<std::endl;
     std::cout <<"clusterSize: "<<_clusterSize<<std::endl;
+    std::cout <<"WEIGHT_WIDE_SIZE: "<<WEIGHT_WIDE_SIZE<<std::endl;
+    std::cout <<"WEIGHT_DRAM_SIZE_GEQ_PE_SIZE: "<<WEIGHT_DRAM_SIZE_GEQ_PE_SIZE<<std::endl;
     std::cout <<"numClustersInPruningRange: "<<_numClustersInPruningRange<<std::endl;
     std::cout <<"numNZClustersPerPruningRange: "<<_numNZClustersPerPruningRange<<std::endl;
 

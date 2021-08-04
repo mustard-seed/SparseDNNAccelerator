@@ -120,7 +120,7 @@ DeviceWeightTensor::DeviceWeightTensor (
     height = _height;
     int sizeTB = _peSimdSize * _clusterSize;
     numTBPerStrip = DIVIDE_CEIL(_inputChannel, sizeTB);
-#if (WEIGHT_BURST_SIZE_GEQ_PE_SIZE == 0X1)
+#if (WEIGHT_DRAM_SIZE_GEQ_PE_SIZE == 0X1)
     numDramBlocksPerFilter = DIVIDE_CEIL(numTBPerStrip * width * height, WEIGHT_WIDE_SIZE);
 #else
     numDramBlocksPerFilter = numTBPerStrip * width * height * WEIGHT_WIDE_SIZE;
@@ -128,7 +128,7 @@ DeviceWeightTensor::DeviceWeightTensor (
     paddedInputChannel = numTBPerStrip* sizeTB;
     numWeightsInPaddedFilter = paddedInputChannel * width * height;
     t_weight_dram_block emptyBlock;
-    for (int i=0; i<WEIGHT_BURST_SIZE_VALUE_BYTE; i++)
+    for (int i=0; i<WEIGHT_DRAM_SIZE_VALUE_BYTE; i++)
     {
         emptyBlock.values[i] = 0x0;
     }
@@ -172,7 +172,7 @@ DeviceWeightTensor:: DeviceWeightTensor(
                                + idxPaddedChannel;
                        if (idxPaddedChannel <inputChannel)
                        {
-#if (WEIGHT_BURST_SIZE_GEQ_PE_SIZE == 1)
+#if (WEIGHT_DRAM_SIZE_GEQ_PE_SIZE == 1)
                            int idxDeviceTensorDramBlock =
                                    iOC*numDramBlocksPerFilter
                                   + (idxTBInFilter / WEIGHT_WIDE_SIZE);
@@ -182,8 +182,8 @@ DeviceWeightTensor:: DeviceWeightTensor(
                            int idxDeviceTensorDramBlock =
                                    iOC*numDramBlocksPerFilter
                                   + (idxTBInFilter * WEIGHT_WIDE_SIZE)
-                                  + v / WEIGHT_BURST_SIZE_VALUE_BYTE;
-                           int idxInDramBlock = v % WEIGHT_BURST_SIZE_VALUE_BYTE;
+                                  + v / WEIGHT_DRAM_SIZE_VALUE_BYTE;
+                           int idxInDramBlock = v % WEIGHT_DRAM_SIZE_VALUE_BYTE;
 #endif
                            valueVector.at(idxDeviceTensorDramBlock).values[idxInDramBlock]
                                    = _vecFixedPoint.at(idxFullVector).getBits();
@@ -223,7 +223,7 @@ DeviceWeightTensor :: decodeTensor(
                                 + idxPaddedChannel;
                         if (idxPaddedChannel <inputChannel)
                         {
-#if (WEIGHT_BURST_SIZE_GEQ_PE_SIZE == 1)
+#if (WEIGHT_DRAM_SIZE_GEQ_PE_SIZE == 1)
                             int idxDeviceTensorDramBlock =
                                     iOC*numDramBlocksPerFilter
                                    + (idxTBInFilter / WEIGHT_WIDE_SIZE);
@@ -233,8 +233,8 @@ DeviceWeightTensor :: decodeTensor(
                             int idxDeviceTensorDramBlock =
                                     iOC*numDramBlocksPerFilter
                                    + (idxTBInFilter * WEIGHT_WIDE_SIZE)
-                                   + v / WEIGHT_BURST_SIZE_VALUE_BYTE;
-                            int idxInDramBlock = v % WEIGHT_BURST_SIZE_VALUE_BYTE;
+                                   + v / WEIGHT_DRAM_SIZE_VALUE_BYTE;
+                            int idxInDramBlock = v % WEIGHT_DRAM_SIZE_VALUE_BYTE;
 #endif
 
                             signed char bits = valueVector.at(idxDeviceTensorDramBlock).values[idxInDramBlock];
@@ -286,7 +286,7 @@ DeviceWeightTensor::getPaddedInputChannel() const
 int
 DeviceWeightTensor::getNumWeightsInPaddedFilter() const
 {
-    return numDramBlocksPerFilter*WEIGHT_BURST_SIZE_VALUE_BYTE;
+    return numDramBlocksPerFilter*WEIGHT_DRAM_SIZE_VALUE_BYTE;
 }
 
 int
@@ -391,7 +391,7 @@ DeviceSpWTensor::DeviceSpWTensor(
     numTBPerStrip =
             DIVIDE_CEIL(_inputChannel, sizeTB * numClustersInPruningRange)
             * numNZClustersInPruningRange;
-#if (WEIGHT_BURST_SIZE_GEQ_PE_SIZE == 1)
+#if (WEIGHT_DRAM_SIZE_GEQ_PE_SIZE == 1)
     numDramBlocksPerFilter = DIVIDE_CEIL(numTBPerStrip * height * width, WEIGHT_WIDE_SIZE);
 #else
     numDramBlocksPerFilter = numTBPerStrip * height * width * WEIGHT_WIDE_SIZE;
@@ -399,11 +399,11 @@ DeviceSpWTensor::DeviceSpWTensor(
     paddedInputChannel = numTBPerStrip* sizeTB;
     numWeightsInPaddedFilter = paddedInputChannel * width * height;
     t_weight_dram_block emptyBlock;
-    for (int i=0; i<WEIGHT_BURST_SIZE_VALUE_BYTE; i++)
+    for (int i=0; i<WEIGHT_DRAM_SIZE_VALUE_BYTE; i++)
     {
         emptyBlock.values[i] = 0x0;
     }
-    for (int j=0; j<WEIGHT_BURST_SIZE_INDEX_BYTE; j++)
+    for (int j=0; j<WEIGHT_DRAM_SIZE_INDEX_BYTE; j++)
     {
         emptyBlock.indices[j] = 0x0;
     }
@@ -513,7 +513,7 @@ DeviceSpWTensor::DeviceSpWTensor(
                                             + iHeight * width * inputChannel
                                             + iWidth * inputChannel
                                             + idxChannelInDenseVector;
-#if (WEIGHT_BURST_SIZE_GEQ_PE_SIZE == 1)
+#if (WEIGHT_DRAM_SIZE_GEQ_PE_SIZE == 1)
                                     int idxWeightDramBlock =
                                             iOC * numDramBlocksPerFilter
                                             + (idxTBInCompressedFilter / WEIGHT_WIDE_SIZE);
@@ -521,11 +521,13 @@ DeviceSpWTensor::DeviceSpWTensor(
                                             (idxTBInCompressedFilter % WEIGHT_WIDE_SIZE) * sizeTB
                                             + iPruneRange*_clusterSize + v;
 #else
+                                    int idxInTB = iPruneRange*_clusterSize + v;
                                     int idxWeightDramBlock =
                                             iOC * numDramBlocksPerFilter
-                                            + (idxTBInCompressedFilter * WEIGHT_WIDE_SIZE);
+                                            + (idxTBInCompressedFilter * WEIGHT_WIDE_SIZE)
+                                            + idxInTB / WEIGHT_DRAM_SIZE_VALUE_BYTE;
                                     int idxInDramBlock =
-                                          (iPruneRange*_clusterSize + v) % WEIGHT_BURST_SIZE_VALUE_BYTE;
+                                          idxInTB % WEIGHT_DRAM_SIZE_VALUE_BYTE;
 #endif
                                     valueVector.at(idxWeightDramBlock).values[idxInDramBlock] = _vecFixedPoint.at(idxFullVector).getBits();
                                 }
@@ -533,7 +535,7 @@ DeviceSpWTensor::DeviceSpWTensor(
 
                             //Assign the bitmasks
                             int idxMaskInTB = iPruneRange / 2;
-#if (WEIGHT_BURST_SIZE_GEQ_PE_SIZE == 1)
+#if (WEIGHT_DRAM_SIZE_GEQ_PE_SIZE == 1)
                                 int idxWeightDramBlock =
                                         iOC * numDramBlocksPerFilter
                                         + (idxTBInCompressedFilter / WEIGHT_WIDE_SIZE);
@@ -541,11 +543,13 @@ DeviceSpWTensor::DeviceSpWTensor(
                                         (idxTBInCompressedFilter % WEIGHT_WIDE_SIZE) * INDEX_CHAR_ARRAY_SIZE
                                         + idxMaskInTB;
 #else
+                                //Find out the weight DRAM block the index belongs to
                                 int idxWeightDramBlock =
                                         iOC * numDramBlocksPerFilter
-                                        + (idxTBInCompressedFilter * WEIGHT_WIDE_SIZE);
+                                        + idxTBInCompressedFilter * WEIGHT_WIDE_SIZE
+                                        + idxMaskInTB / WEIGHT_DRAM_SIZE_INDEX_BYTE;
                                 int idxMaskByteInCompressedBlock =
-                                        idxMaskInTB % WEIGHT_BURST_SIZE_INDEX_BYTE;
+                                        idxMaskInTB % WEIGHT_DRAM_SIZE_INDEX_BYTE;
 #endif
 
                             if (iPruneRange % 2 == 0)
@@ -604,7 +608,7 @@ DeviceSpWTensor :: decodeTensor(
                                     (iHeight * width + iWidth) * numTBPerStrip
                                     + iCompressionWindow * numNZClustersInPruningRange + iTopCluster;
                             int idxMaskInTB = iPruneRange / 2;
-#if (WEIGHT_BURST_SIZE_GEQ_PE_SIZE == 1)
+#if (WEIGHT_DRAM_SIZE_GEQ_PE_SIZE == 1)
                             int idxWeightDramBlock =
                                     iOC * numDramBlocksPerFilter
                                     + (idxTBInCompressedFilter / WEIGHT_WIDE_SIZE);
@@ -612,16 +616,17 @@ DeviceSpWTensor :: decodeTensor(
                                     (idxTBInCompressedFilter % WEIGHT_WIDE_SIZE) * INDEX_CHAR_ARRAY_SIZE
                                     + idxMaskInTB;
 #else
+                            int idxInTB = iPruneRange*clusterSize;
                             int idxWeightDramBlock =
                                     iOC * numDramBlocksPerFilter
-                                    + (idxTBInCompressedFilter * WEIGHT_WIDE_SIZE);
+                                    + (idxTBInCompressedFilter * WEIGHT_WIDE_SIZE)
+                                    + idxInTB / WEIGHT_DRAM_SIZE_VALUE_BYTE;
                             int idxMaskByteInCompressedBlock =
-                                    idxMaskInTB % WEIGHT_BURST_SIZE_INDEX_BYTE;
+                                    idxMaskInTB % WEIGHT_DRAM_SIZE_INDEX_BYTE;
 #endif
                             int idxClusterInPruneRange;
                             if (iPruneRange % 2 == 0)
                             {
-
                                 idxClusterInPruneRange
                                         = valueVector.at(idxWeightDramBlock).indices[idxMaskByteInCompressedBlock]
                                         & CHAR_TO_SPW_INDEX_MASK;
@@ -647,9 +652,14 @@ DeviceSpWTensor :: decodeTensor(
                                             + iHeight * width * inputChannel
                                             + iWidth * inputChannel
                                             + idxChannelInDenseVector;
+#if (WEIGHT_DRAM_SIZE_GEQ_PE_SIZE == TRUE)
                                     int idxInDramBlock =
                                             (idxTBInCompressedFilter % WEIGHT_WIDE_SIZE) * sizeTB
                                             + iPruneRange*clusterSize + v;
+#else
+                                    int idxInDramBlock =
+                                            (iPruneRange*clusterSize + v) % WEIGHT_DRAM_SIZE_VALUE_BYTE;
+#endif
                                     signed char bits = valueVector.at(idxWeightDramBlock).values[idxInDramBlock];
                                     fixedPointNumber fpValue(bits, _fracWidth, _intWidth);
                                     fullVector.at(idxFullVector) = fpValue;

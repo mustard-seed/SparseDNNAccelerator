@@ -454,13 +454,13 @@ namespace GraphRuntime {
                 ia_cache_boundary_check(
                     sizeInputTileFullHeight,
                     sizeInputTileFullWidthPerCol,
-                    DIVIDE_CEIL(getInputChannels().at(0), ACTIVATION_BURST_SIZE_BYTE)
+                    DIVIDE_CEIL(getInputChannels().at(0), ACTIVATION_DRAM_SIZE_BYTE)
                     );
         int iaCachePerPartialColRequirement =
                 ia_cache_boundary_check(
                     sizeInputTileFullHeight,
                     sizeInputTilePartialWidthPerCol,
-                    DIVIDE_CEIL(getInputChannels().at(0), ACTIVATION_BURST_SIZE_BYTE)
+                    DIVIDE_CEIL(getInputChannels().at(0), ACTIVATION_DRAM_SIZE_BYTE)
                     );
         //TODO: Change the arguments to the OA cache requirement checker
         int oaCachePerColRequirement =
@@ -515,7 +515,7 @@ namespace GraphRuntime {
                        CLUSTER_SIZE,
                        PRUNE_RANGE_IN_CLUSTER,
                        (int) std::ceil( (1.0f - getWeightSparsity()) * PRUNE_RANGE_IN_CLUSTER),
-                       WEIGHT_BURST_SIZE_VALUE_BYTE
+                       WEIGHT_DRAM_SIZE_VALUE_BYTE
                    );
         //Need to adjust the weight latency by taking the index into account
         weightDDRLatency = deriveSparseConvWeightTransferLatency(
@@ -530,7 +530,7 @@ namespace GraphRuntime {
                    (int) std::ceil( (1.0f - getWeightSparsity()) * PRUNE_RANGE_IN_CLUSTER),
                    DDR_BYTES_PER_CYCLE
                );
-        weightDDRLatency = (unsigned int) ((float) weightDDRLatency * (1.0f + (float) WEIGHT_BURST_SIZE_INDEX_BYTE / (float) WEIGHT_BURST_SIZE_VALUE_BYTE));
+        weightDDRLatency = (unsigned int) ((float) weightDDRLatency * (1.0f + (float) WEIGHT_DRAM_SIZE_INDEX_BYTE / (float) WEIGHT_DRAM_SIZE_VALUE_BYTE));
 #else
         computeLatency = deriveDenseConvComputationLatency(
                     _tileCandidate,
@@ -545,7 +545,7 @@ namespace GraphRuntime {
                     outputChannelsPerCurrentGroup,
                     getCurrentNumberGroups(),
                     getKernelSize(),
-                     WEIGHT_BURST_SIZE_VALUE_BYTE
+                     WEIGHT_DRAM_SIZE_VALUE_BYTE
                     );
         weightDDRLatency = deriveDenseConvWeightTransferLatency(
                     _tileCandidate,
@@ -563,7 +563,7 @@ namespace GraphRuntime {
                    getKernelSize(),
                    getKernelStride(),
                    true,
-                   ACTIVATION_BURST_SIZE_BYTE
+                   ACTIVATION_DRAM_SIZE_BYTE
                    );
        unsigned int inputDDRLatency = deriveInputTransferLatency(
                    _tileCandidate,
@@ -581,7 +581,7 @@ namespace GraphRuntime {
                    outputChannelsPerCurrentGroup,
                    getCurrentNumberGroups(),
                    true,
-                   ACTIVATION_BURST_SIZE_BYTE
+                   ACTIVATION_DRAM_SIZE_BYTE
                    );
        unsigned int outputDDRLatency = deriveOutputTransferLatency(
                    _tileCandidate,
@@ -702,20 +702,20 @@ namespace GraphRuntime {
                         1, //output tile width per col
                         false //not conv
                     );
-        int numEffectiveGroups = DIVIDE_CEIL(getOutputChannel(), ACTIVATION_BURST_SIZE_BYTE);
+        int numEffectiveGroups = DIVIDE_CEIL(getOutputChannel(), ACTIVATION_DRAM_SIZE_BYTE);
 
         int inputOnChipLatency = deriveInputTransferLatency(
                         _tileCandidate,
-                        ACTIVATION_BURST_SIZE_BYTE,
+                        ACTIVATION_DRAM_SIZE_BYTE,
                         numEffectiveGroups,
                         getKernelSize(),
                         getKernelStride(),
                         false,
-                        ACTIVATION_BURST_SIZE_BYTE
+                        ACTIVATION_DRAM_SIZE_BYTE
                     );
         int inputDDRLatency = deriveInputTransferLatency(
                         _tileCandidate,
-                        ACTIVATION_BURST_SIZE_BYTE,
+                        ACTIVATION_DRAM_SIZE_BYTE,
                         numEffectiveGroups,
                         getKernelSize(),
                         getKernelStride(),
@@ -725,15 +725,15 @@ namespace GraphRuntime {
         int outputOnChipLatency = deriveOutputTransferLatency(
                         _tileCandidate,
                         getOutputHeight(),
-                        ACTIVATION_BURST_SIZE_BYTE,
+                        ACTIVATION_DRAM_SIZE_BYTE,
                         numEffectiveGroups,
                         false,
-                        ACTIVATION_BURST_SIZE_BYTE
+                        ACTIVATION_DRAM_SIZE_BYTE
                     );
         int outputDDRLatency = deriveOutputTransferLatency(
                     _tileCandidate,
                     getOutputHeight(),
-                    ACTIVATION_BURST_SIZE_BYTE,
+                    ACTIVATION_DRAM_SIZE_BYTE,
                     numEffectiveGroups,
                     false,
                     DDR_BYTES_PER_CYCLE
@@ -816,20 +816,20 @@ namespace GraphRuntime {
                         1, //output tile width per col
                         false //not conv
                     );
-        int numEffectiveGroups = DIVIDE_CEIL(getOutputChannel(), ACTIVATION_BURST_SIZE_BYTE);
+        int numEffectiveGroups = DIVIDE_CEIL(getOutputChannel(), ACTIVATION_DRAM_SIZE_BYTE);
 
         int inputOnChipLatency = deriveInputTransferLatency(
                         _tileCandidate,
-                        ACTIVATION_BURST_SIZE_BYTE,
+                        ACTIVATION_DRAM_SIZE_BYTE,
                         numEffectiveGroups,
                         getKernelSize(),
                         getKernelStride(),
                         false,
-                        ACTIVATION_BURST_SIZE_BYTE
+                        ACTIVATION_DRAM_SIZE_BYTE
                     );
         int inputDDRLatency = deriveInputTransferLatency(
                         _tileCandidate,
-                        ACTIVATION_BURST_SIZE_BYTE,
+                        ACTIVATION_DRAM_SIZE_BYTE,
                         numEffectiveGroups,
                         getKernelSize(),
                         getKernelStride(),
@@ -839,15 +839,15 @@ namespace GraphRuntime {
         int outputOnChipLatency = deriveOutputTransferLatency(
                         _tileCandidate,
                         getOutputHeight(),
-                        ACTIVATION_BURST_SIZE_BYTE,
+                        ACTIVATION_DRAM_SIZE_BYTE,
                         numEffectiveGroups,
                         false,
-                        ACTIVATION_BURST_SIZE_BYTE
+                        ACTIVATION_DRAM_SIZE_BYTE
                     );
         int outputDDRLatency = deriveOutputTransferLatency(
                     _tileCandidate,
                     getOutputHeight(),
-                    ACTIVATION_BURST_SIZE_BYTE,
+                    ACTIVATION_DRAM_SIZE_BYTE,
                     numEffectiveGroups,
                     false,
                     DDR_BYTES_PER_CYCLE
@@ -894,20 +894,20 @@ namespace GraphRuntime {
                         1, //output tile width per col
                         false //not conv
                     );
-        int numEffectiveGroups = DIVIDE_CEIL(getOutputChannel(), ACTIVATION_BURST_SIZE_BYTE);
+        int numEffectiveGroups = DIVIDE_CEIL(getOutputChannel(), ACTIVATION_DRAM_SIZE_BYTE);
 
         int inputOnChipLatency = deriveInputTransferLatency(
                         _tileCandidate,
-                        ACTIVATION_BURST_SIZE_BYTE,
+                        ACTIVATION_DRAM_SIZE_BYTE,
                         numEffectiveGroups,
                         1,
                         1,
                         false,
-                        ACTIVATION_BURST_SIZE_BYTE
+                        ACTIVATION_DRAM_SIZE_BYTE
                     ) * 2;
         int inputDDRLatency = deriveInputTransferLatency(
                         _tileCandidate,
-                        ACTIVATION_BURST_SIZE_BYTE,
+                        ACTIVATION_DRAM_SIZE_BYTE,
                         numEffectiveGroups,
                         1,
                         1,
@@ -917,15 +917,15 @@ namespace GraphRuntime {
         int outputOnChipLatency = deriveOutputTransferLatency(
                         _tileCandidate,
                         getOutputHeight(),
-                        ACTIVATION_BURST_SIZE_BYTE,
+                        ACTIVATION_DRAM_SIZE_BYTE,
                         numEffectiveGroups,
                         false,
-                        ACTIVATION_BURST_SIZE_BYTE
+                        ACTIVATION_DRAM_SIZE_BYTE
                     );
         int outputDDRLatency = deriveOutputTransferLatency(
                     _tileCandidate,
                     getOutputHeight(),
-                    ACTIVATION_BURST_SIZE_BYTE,
+                    ACTIVATION_DRAM_SIZE_BYTE,
                     numEffectiveGroups,
                     false,
                     DDR_BYTES_PER_CYCLE

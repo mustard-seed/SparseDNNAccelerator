@@ -11,9 +11,9 @@ endif()
 ###########################################################
 if (BOARD_NAME MATCHES "DE10Standard")
     ##Add library directories for DE10Standard
-    message (STATUS "Linking against DE10-Standard libraries")
-    message (STATUS "$ENV{INTELFPGAOCLSDKROOT}/host/arm32/lib")
-    message (STATUS "$ENV{INTELFPGAOCLSDKROOT}/board/de10_standard/arm32/lib")
+    message (DEBUG "Linking against DE10-Standard libraries")
+    message (DEBUG "$ENV{INTELFPGAOCLSDKROOT}/host/arm32/lib")
+    message (DEBUG "$ENV{INTELFPGAOCLSDKROOT}/board/de10_standard/arm32/lib")
     file (GLOB intelfpga_host_libraries
         $ENV{INTELFPGAOCLSDKROOT}/host/arm32/lib/*.so
         )
@@ -26,25 +26,25 @@ elseif (BOARD_NAME MATCHES "A10REF")
     ##Add library directories for a10_ref
     add_definitions(-DARRIA10)
     list (APPEND PREPROCESSOR_DEFS -DARRIA10)
-    message (STATUS "Linking against A10-Ref libraries")
+    message (DEBUG "Linking against A10-Ref libraries")
 elseif (BOARD_NAME MATCHES "A10PAC")
     add_definitions(-DARRIA10 -DA10PAC)
     ##Add library directories for a10_pac
     list (APPEND PREPROCESSOR_DEFS -DARRIA10)
-    message (STATUS "Linking against A10-Pac libraries")
+    message (DEBUG "Linking against A10-Pac libraries")
 elseif (BOARD_NAME MATCHES "DE5ANET")
     add_definitions(-DARRIA10)
     ##Add library directories for de5a_net
     list (APPEND PREPROCESSOR_DEFS -DARRIA10)
-    message (STATUS "Linking against DE5A-NET libraries")
+    message (DEBUG "Linking against DE5A-NET libraries")
 else()
-    message (STATUS "The board is ${BOARD_NAME}")
+    message (DEBUG "The board is ${BOARD_NAME}")
     message (FATAL_ERROR "Unsupported board!")
 endif()
 
 #Find Boost
 find_package (Boost 1.56 REQUIRED)
-
+message(DEBUG "Found Boost Include Directories: ${Boost_INCLUDE_DIRS}")
 set (PREPROCESSOR_DEFS
 #        -DWEIGHT_MEMORY_TEST
 #        -DHW_DEBUG

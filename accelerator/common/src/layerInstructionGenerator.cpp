@@ -239,7 +239,7 @@ void instruction_generator(//Type of the operation
             numOAGroupsCurrentLayer = numEffectiveGroups;
             numOAChannelsPerGroup = numOutputChannels / numEffectiveGroups;
             numNominalDramBlocksPerOutputStrip0 =
-                   (t_ushort) DIVIDE_CEIL(numOAChannelsPerGroup, ACTIVATION_BURST_SIZE_BYTE);
+                   (t_ushort) DIVIDE_CEIL(numOAChannelsPerGroup, ACTIVATION_DRAM_SIZE_BYTE);
             numIAMoverInputChannelsPerGroup0 = numInputChannels0 / numGroupsCurrentLayer;
             numIAMoverInputChannelsPerGroup1  = 0;
             numIAMoverGroup0 = numEffectiveGroups;
@@ -300,15 +300,15 @@ void instruction_generator(//Type of the operation
             numIAMoverInputChannelsPerGroup1 = numInputChannels1;
             numIAMoverGroup0 = 1;
             numIAMoverGroup1 = 1;
-            numActiveElementsInFullComputeFold = ACTIVATION_BURST_SIZE_BYTE;
+            numActiveElementsInFullComputeFold = ACTIVATION_DRAM_SIZE_BYTE;
             numOutputChannelsBlob0MK = numInputChannels0;
             numOutputChannelsBlob1MK = numInputChannels1;
-//            numOutputBlocksBlob0MK = 1+ (numOutputChannelsBlob0MK-1) / BURST_SIZE_BYTE;
-//            numOutputBlocksBlob1MK = 1+ (numOutputChannelsBlob1MK-1) / BURST_SIZE_BYTE;
-            numOutputBlocksBlob0PerStripMK = DIVIDE_CEIL(numOutputChannelsBlob0MK, ACTIVATION_BURST_SIZE_BYTE);
-            numOutputBlocksBlob1PerStripMK = DIVIDE_CEIL(numOutputChannelsBlob1MK, ACTIVATION_BURST_SIZE_BYTE);
-            numNominalDramBlocksPerOutputStrip0 = DIVIDE_CEIL(numInputChannels0, ACTIVATION_BURST_SIZE_BYTE);
-            numNominalDramBlocksPerOutputStrip1 = DIVIDE_CEIL(numInputChannels1, ACTIVATION_BURST_SIZE_BYTE);
+//            numOutputBlocksBlob0MK = 1+ (numOutputChannelsBlob0MK-1) / DRAM_SIZE_BYTE;
+//            numOutputBlocksBlob1MK = 1+ (numOutputChannelsBlob1MK-1) / DRAM_SIZE_BYTE;
+            numOutputBlocksBlob0PerStripMK = DIVIDE_CEIL(numOutputChannelsBlob0MK, ACTIVATION_DRAM_SIZE_BYTE);
+            numOutputBlocksBlob1PerStripMK = DIVIDE_CEIL(numOutputChannelsBlob1MK, ACTIVATION_DRAM_SIZE_BYTE);
+            numNominalDramBlocksPerOutputStrip0 = DIVIDE_CEIL(numInputChannels0, ACTIVATION_DRAM_SIZE_BYTE);
+            numNominalDramBlocksPerOutputStrip1 = DIVIDE_CEIL(numInputChannels1, ACTIVATION_DRAM_SIZE_BYTE);
             numDramBlocksToReduceMK = 1;
         }
         break;
@@ -325,16 +325,16 @@ void instruction_generator(//Type of the operation
                              "but the number of groups of current layer is not 1."<<std::endl;
                 throw;
             }
-            numOAChannelsPerGroup = ACTIVATION_BURST_SIZE_BYTE;
+            numOAChannelsPerGroup = ACTIVATION_DRAM_SIZE_BYTE;
             numNominalDramBlocksPerOutputStrip0 = 1;
             numEffectiveGroups = DIVIDE_CEIL(numOutputChannels, numOAChannelsPerGroup);
-            numIAMoverInputChannelsPerGroup0 = ACTIVATION_BURST_SIZE_BYTE;
+            numIAMoverInputChannelsPerGroup0 = ACTIVATION_DRAM_SIZE_BYTE;
             numIAMoverInputChannelsPerGroup1 = 0;
             numIAMoverGroup0 = numEffectiveGroups;
             numIAMoverGroup1 = 0;
-            numActiveElementsInFullComputeFold = ACTIVATION_BURST_SIZE_BYTE;
+            numActiveElementsInFullComputeFold = ACTIVATION_DRAM_SIZE_BYTE;
             numOAGroupsCurrentLayer = numEffectiveGroups;
-            numOutputChannelsBlob0MK = ACTIVATION_BURST_SIZE_BYTE;
+            numOutputChannelsBlob0MK = ACTIVATION_DRAM_SIZE_BYTE;
             numOutputChannelsBlob1MK = 0;
             numOutputBlocksBlob0PerStripMK = 1;
             numOutputBlocksBlob1PerStripMK = 0;
@@ -366,16 +366,16 @@ void instruction_generator(//Type of the operation
             numOAGroupsCurrentLayer = numEffectiveGroups;
             numOAChannelsPerGroup = numOutputChannels;
             numNominalDramBlocksPerOutputStrip0 =
-                   (t_ushort) DIVIDE_CEIL(numOAChannelsPerGroup, ACTIVATION_BURST_SIZE_BYTE);
+                   (t_ushort) DIVIDE_CEIL(numOAChannelsPerGroup, ACTIVATION_DRAM_SIZE_BYTE);
             numIAMoverInputChannelsPerGroup0 = numInputChannels0;
             numIAMoverInputChannelsPerGroup1 = numInputChannels1;
             numIAMoverGroup0 = 1;
             numIAMoverGroup1 = 0;;
-            numActiveElementsInFullComputeFold = ACTIVATION_BURST_SIZE_BYTE;
+            numActiveElementsInFullComputeFold = ACTIVATION_DRAM_SIZE_BYTE;
             numOAGroupsCurrentLayer = 1;
             numOutputChannelsBlob0MK = numInputChannels0;
             numOutputChannelsBlob1MK = 0;
-            numOutputBlocksBlob0PerStripMK = DIVIDE_CEIL(numOutputChannelsBlob0MK, ACTIVATION_BURST_SIZE_BYTE);
+            numOutputBlocksBlob0PerStripMK = DIVIDE_CEIL(numOutputChannelsBlob0MK, ACTIVATION_DRAM_SIZE_BYTE);
             numOutputBlocksBlob1PerStripMK = 0;
             numDramBlocksToReduceMK = 2;
         }
@@ -393,17 +393,17 @@ void instruction_generator(//Type of the operation
                              "but the number of groups of current layer is not 1."<<std::endl;
                 throw;
             }
-            numOAChannelsPerGroup = ACTIVATION_BURST_SIZE_BYTE;
+            numOAChannelsPerGroup = ACTIVATION_DRAM_SIZE_BYTE;
             numNominalDramBlocksPerOutputStrip0 = 1;
-            numIAMoverInputChannelsPerGroup0 = ACTIVATION_BURST_SIZE_BYTE;
+            numIAMoverInputChannelsPerGroup0 = ACTIVATION_DRAM_SIZE_BYTE;
             numIAMoverInputChannelsPerGroup1 = 0;
             numEffectiveGroups = DIVIDE_CEIL(numOutputChannels, numOAChannelsPerGroup);
             numOAGroupsCurrentLayer = numEffectiveGroups;
             numIAMoverGroup0 = numEffectiveGroups;
             numIAMoverGroup1 = 0;
-            numActiveElementsInFullComputeFold = ACTIVATION_BURST_SIZE_BYTE;
+            numActiveElementsInFullComputeFold = ACTIVATION_DRAM_SIZE_BYTE;
             numOAGroupsCurrentLayer = 1;
-            numOutputChannelsBlob0MK = ACTIVATION_BURST_SIZE_BYTE;
+            numOutputChannelsBlob0MK = ACTIVATION_DRAM_SIZE_BYTE;
             numOutputChannelsBlob1MK = 0;
             numOutputBlocksBlob0PerStripMK = 1;
             numOutputBlocksBlob1PerStripMK = 0;
@@ -474,8 +474,12 @@ void instruction_generator(//Type of the operation
 
                     int numIATBInCachePerStrip =
                             DIVIDE_CEIL(numIAMoverInputChannelsPerGroup0, PE_ACTIVATION_BLOCK_SIZE_IN_WORD);
-                    int numIABurstBlocksPerStrip =
-                            DIVIDE_CEIL(numIATBInCachePerStrip, ACTIVATION_WIDE_SIZE);
+                    #if (ACTIVATION_DRAM_SIZE_GEQ_PE_SIZE == TRUE)
+                        int numIABurstBlocksPerStrip =
+                                DIVIDE_CEIL(numIATBInCachePerStrip, ACTIVATION_WIDE_SIZE);
+                    #else
+                        int numIABurstBlocksPerStrip = numIATBInCachePerStrip * ACTIVATION_WIDE_SIZE;
+                    #endif
                     int iaCacheRequirementInDramBlock = ia_cache_boundary_check(
                                 //heightTile
                                 maxTM,
@@ -509,7 +513,7 @@ void instruction_generator(//Type of the operation
                                 ((t_uchar) numActiveCols & 0x0F)
                                 | ((((t_uchar) actualFlagOutputSync) & 0x01) << 0x04);
                         instructionOA.memOAStart = (t_int)
-                                (memOADramBlockStartIndex * ACTIVATION_BURST_SIZE_BYTE
+                                (memOADramBlockStartIndex * ACTIVATION_DRAM_SIZE_BYTE
                                   + (   (unsigned int) iterPGlobal*outputWidth +
                                         (unsigned int) iterQGlobal
                                     ) * memOAColStride
@@ -527,7 +531,7 @@ void instruction_generator(//Type of the operation
                         {
                             instructionOA.numNominalDramBlocksPerStrip = (t_ushort) numNominalDramBlocksPerOutputStrip1;
                             instructionOA.memOAStart = (t_int)
-                                    (memOADramBlockStartIndex * ACTIVATION_BURST_SIZE_BYTE
+                                    (memOADramBlockStartIndex * ACTIVATION_DRAM_SIZE_BYTE
                                       + (   (unsigned int) iterPGlobal*outputWidth +
                                             (unsigned int) iterQGlobal
                                         ) * memOAColStride
@@ -569,8 +573,8 @@ void instruction_generator(//Type of the operation
                         instructionOAControl.numLocalTilePerColHxW = (t_uchar)(maxTQPerCol*maxTP);
                         instructionOAControl.numBurstAlignedChannelsPerCurrentGroup =
                                 (t_ushort) (
-                                    DIVIDE_CEIL(numOAChannelsPerGroup, ACTIVATION_BURST_SIZE_BYTE)
-                                    * ACTIVATION_BURST_SIZE_BYTE);
+                                    DIVIDE_CEIL(numOAChannelsPerGroup, ACTIVATION_DRAM_SIZE_BYTE)
+                                    * ACTIVATION_DRAM_SIZE_BYTE);
                         instructionOAControl.numDrainInstructions = (t_ushort) numComputeFoldPerGroup;
                         instructionOAControl.numFoldsInGroupCurrentLayer = (t_ushort) numComputeFoldPerGroup;
                         instructionOAControl.numFullFoldsInCurrentLayer = (t_ushort) numFullComputeFoldPerGroup;
@@ -647,13 +651,13 @@ void instruction_generator(//Type of the operation
                         t_uchar inputShiftAmounts = ((numIA1ShiftAmount & 0x0F) << 0x04) | (numIA0ShiftAmount & 0x0F);
                         instructionIA.inputShiftAmounts = inputShiftAmounts;
                         instructionIA.memBlockStart0 = (t_int) (
-                                    memIA0DramBlockStartIndex * ACTIVATION_BURST_SIZE_BYTE
+                                    memIA0DramBlockStartIndex * ACTIVATION_DRAM_SIZE_BYTE
                                     + memIA0RowStride * iterMDense
                                     + memIA0ColStride * iterNDense
                                     + iterGroup * numIAMoverInputChannelsPerGroup0);
 
                         instructionIA.memBlockStart1 = (t_int) (
-                                    memIA1DramBlockStartIndex * ACTIVATION_BURST_SIZE_BYTE
+                                    memIA1DramBlockStartIndex * ACTIVATION_DRAM_SIZE_BYTE
                                     + memIA1RowStride * iterMDense
                                     + memIA1ColStride * iterNDense
                                     + iterGroup * numIAMoverInputChannelsPerGroup1);
@@ -666,9 +670,48 @@ void instruction_generator(//Type of the operation
 //                        instructionIA.numTBPerStrip = (op == CONVOLUTION) ?
 //                                    (t_ushort) DIVIDE_CEIL(numIAMoverInputChannelsPerGroup0, PE_ACTIVATION_BLOCK_SIZE_IN_WORD)
 //                                  : ACTIVATION_WIDE_SIZE;
-                        instructionIA.numTBPerStrip = ((op == CONVOLUTION) || (op == ELT_ADD) || (op == CONCATENATION)) ?
+                        instructionIA.numDramBlockPerStrip = ((op == CONVOLUTION) || (op == ELT_ADD) || (op == CONCATENATION)) ?
                                     (t_ushort) DIVIDE_CEIL(numIAMoverInputChannelsPerGroup0, PE_ACTIVATION_BLOCK_SIZE_IN_WORD)
                                   : ACTIVATION_WIDE_SIZE;
+                        if (op==CONVOLUTION || op == CONCATENATION) {
+                            instructionIA.numTBPerStrip =
+                                    (t_ushort) DIVIDE_CEIL(numIAMoverInputChannelsPerGroup0, PE_ACTIVATION_BLOCK_SIZE_IN_WORD);
+                            #if (ACTIVATION_DRAM_SIZE_GEQ_PE_SIZE == TRUE)
+                                instructionIA.numDramBlockPerStrip = (t_ushort) DIVIDE_CEIL(
+                                                DIVIDE_CEIL(numIAMoverInputChannelsPerGroup1, PE_ACTIVATION_BLOCK_SIZE_IN_WORD),
+                                                ACTIVATION_WIDE_SIZE
+                                            );
+                            #else
+                                instructionIA.numDramBlockPerStrip = (t_ushort)
+                                    ACTIVATION_WIDE_SIZE *
+                                    DIVIDE_CEIL(numIAMoverInputChannelsPerGroup1, PE_ACTIVATION_BLOCK_SIZE_IN_WORD);
+                            #endif
+                        }
+                        else if (op == ELT_ADD) {
+                            //MISC operations do not really care about the nubmer of TB per strip
+                            instructionIA.numTBPerStrip =
+                                    (t_ushort) DIVIDE_CEIL(numIAMoverInputChannelsPerGroup0, PE_ACTIVATION_BLOCK_SIZE_IN_WORD);
+                            #if (ACTIVATION_DRAM_SIZE_GEQ_PE_SIZE == TRUE)
+                                instructionIA.numDramBlockPerStrip = (t_ushort) DIVIDE_CEIL(
+                                                DIVIDE_CEIL(numIAMoverInputChannelsPerGroup1, PE_ACTIVATION_BLOCK_SIZE_IN_WORD),
+                                                ACTIVATION_WIDE_SIZE
+                                            ) * 2;
+                            #else
+                                instructionIA.numDramBlockPerStrip = (t_ushort)
+                                    ACTIVATION_WIDE_SIZE * 2 *
+                                    DIVIDE_CEIL(numIAMoverInputChannelsPerGroup1, PE_ACTIVATION_BLOCK_SIZE_IN_WORD);
+                            #endif
+                        }
+                        else {//pooling
+                            //MISC operations do not really care about the nubmer of TB per strip
+                            instructionIA.numTBPerStrip =
+                                    (t_ushort) DIVIDE_CEIL(numIAMoverInputChannelsPerGroup0, PE_ACTIVATION_BLOCK_SIZE_IN_WORD);
+                            #if (ACTIVATION_DRAM_SIZE_GEQ_PE_SIZE == TRUE)
+                                instructionIA.numDramBlockPerStrip = ACTIVATION_WIDE_SIZE;
+                            #else
+                                instructionIA.numDramBlockPerStrip = 1;
+                            #endif
+                        }
                         instructionIA.tileSPHeight = (t_uchar) maxTM;
                         instructionIA.tileSPWidth = (t_uchar) maxTN;
                         unsigned char inputTileLeftPadding = (iterNGlobal < inputWidthPadding) ?
@@ -702,12 +745,22 @@ void instruction_generator(//Type of the operation
                         if (iInst == 1)
                         {
                             instructionIA.memBlockStart0 = (t_int) (
-                                    memIA1DramBlockStartIndex * ACTIVATION_BURST_SIZE_BYTE
+                                    memIA1DramBlockStartIndex * ACTIVATION_DRAM_SIZE_BYTE
                                     + memIA1RowStride * iterMDense
                                     + memIA1ColStride * iterNDense
                                     + iterGroup * numIAMoverInputChannelsPerGroup1);
-                            instructionIA.numTBPerStrip
-                                    = (t_ushort) DIVIDE_CEIL(numIAMoverInputChannelsPerGroup1, PE_ACTIVATION_BLOCK_SIZE_IN_WORD);
+                            #if (ACTIVATION_DRAM_SIZE_GEQ_PE_SIZE == TRUE)
+                                instructionIA.numDramBlockPerStrip
+                                        = (t_ushort) DIVIDE_CEIL(
+                                            DIVIDE_CEIL(numIAMoverInputChannelsPerGroup1, PE_ACTIVATION_BLOCK_SIZE_IN_WORD),
+                                            ACTIVATION_WIDE_SIZE
+                                            );
+                            #else
+                                instructionIA.numDramBlockPerStrip
+                                        = (t_ushort)
+                                        ACTIVATION_WIDE_SIZE *
+                                        DIVIDE_CEIL(numIAMoverInputChannelsPerGroup1, PE_ACTIVATION_BLOCK_SIZE_IN_WORD);
+                            #endif
                             instructionIA.memBlockColStripStride = (t_ushort)memIA1ColStride;
                             instructionIA.memBlockRowStripStride = (t_ushort)memIA1RowStride;
                         }
@@ -741,7 +794,11 @@ void instruction_generator(//Type of the operation
                         //Number of TBs in a strip seen by the IA buffer
                         //(not the same as an IA strip seen by the IA mover when performing multi-grouped convolution
                         unsigned short cacheIAStripColStrideTBCount = DIVIDE_CEIL(numIAMoverInputChannelsPerGroup0, PE_ACTIVATION_BLOCK_SIZE_IN_WORD);
-                        instructionIAControl.cacheIAStripColStride = DIVIDE_CEIL(cacheIAStripColStrideTBCount, ACTIVATION_WIDE_SIZE);
+                        #if (ACTIVATION_DRAM_SIZE_GEQ_PE_SIZE)
+                            instructionIAControl.cacheIAStripColStride = DIVIDE_CEIL(cacheIAStripColStrideTBCount, ACTIVATION_WIDE_SIZE);
+                        #else
+                            instructionIAControl.cacheIAStripColStride = cacheIAStripColStrideTBCount * ACTIVATION_WIDE_SIZE;
+                        #endif
                         instructionIAControl.cacheIAStripColStrideMultiplier = (kernelSize == 1) ?
                                     kernelStride : 1;
                         instructionIAControl.numStripsToPEPerInstruction = (kernelSize == 1) ?

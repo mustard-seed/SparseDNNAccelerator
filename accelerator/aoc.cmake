@@ -60,9 +60,9 @@ function (add_aoc_target)
     #Check whether a valid build type is selected
     if ("${add_aoc_target_TARGET_TYPE}" STREQUAL "EMULATION")
         if ("${add_aoc_target_BOARD_NAME}" MATCHES "DE10Standard")
-            message (STATUS "Board is DE10, so no emulation target is generated.")
+            message (DEBUG "Board is DE10, so no emulation target is generated.")
         else()
-            message (STATUS "Generating the emulation AOC target")
+            message (DEBUG "Generating the emulation AOC target")
             set (target_name_local "${add_aoc_target_TARGET_NAME}_aoc_emulation")
 
                 list (APPEND occflags
@@ -73,7 +73,7 @@ function (add_aoc_target)
                      )
          endif()
     elseif("${add_aoc_target_TARGET_TYPE}" STREQUAL "RTL_ONLY")
-        message (STATUS "Generating the RTL_ONLY AOC target")
+        message (DEBUG "Generating the RTL_ONLY AOC target")
         set (target_name_local "${add_aoc_target_TARGET_NAME}_aoc_rtl_only")
         if ("${add_aoc_target_BOARD_NAME}" MATCHES "DE10Standard")
             list (APPEND occflags
@@ -90,7 +90,7 @@ function (add_aoc_target)
                   )
          endif()
     elseif("${add_aoc_target_TARGET_TYPE}" STREQUAL "PROFILE_HW")
-        message (STATUS "Generating the PROFILE_HW AOC target")
+        message (DEBUG "Generating the PROFILE_HW AOC target")
         set (target_name_local "${add_aoc_target_TARGET_NAME}_aoc_profile_hw")
         list (APPEND occflags 
                 -profile
@@ -100,7 +100,7 @@ function (add_aoc_target)
                 ${SEED}
              )
      elseif("${add_aoc_target_TARGET_TYPE}" STREQUAL "FAST_COMPILE_HW")
-         message (STATUS "Generating the FAST_COMPILE_HW AOC target")
+         message (DEBUG "Generating the FAST_COMPILE_HW AOC target")
          set (target_name_local "${add_aoc_target_TARGET_NAME}_aoc_fast_compile_hw")
          list (APPEND occflags
                  -fast-compile
@@ -109,7 +109,7 @@ function (add_aoc_target)
                 ${SEED}
               )
     elseif("${add_aoc_target_TARGET_TYPE}" STREQUAL "NORMAL_HW")
-        message (STATUS "Generating the NORMAL_HW AOC target")
+        message (DEBUG "Generating the NORMAL_HW AOC target")
         set (target_name_local "${add_aoc_target_TARGET_NAME}_aoc_normal_hw")
         list (APPEND occflags
 #                -o ${target_name_local}
@@ -117,7 +117,7 @@ function (add_aoc_target)
                 ${SEED}
              )
     elseif("${add_aoc_target_TARGET_TYPE}" STREQUAL "RELEASE_HW")
-        message (STATUS "Generating the RELEASE_HW AOC target")
+        message (DEBUG "Generating the RELEASE_HW AOC target")
         set (target_name_local "${add_aoc_target_TARGET_NAME}_aoc_release_hw")
         list (APPEND occflags 
                 -high-effort
@@ -136,7 +136,7 @@ function (add_aoc_target)
       list (APPEND occflags
                      -no-interleaving=default
                   )
-      message (STATUS "Disabling global memory burst-interleaving for HW compilation on PACs")
+      message (DEBUG "Disabling global memory burst-interleaving for HW compilation on PACs")
     endif ()
 
     #Add the library for custom RTL if needed
@@ -153,6 +153,6 @@ function (add_aoc_target)
         )
     endif()
 
-    #message (STATUS ${occflags})
+    #message (DEBUG ${occflags})
     
 endfunction()
