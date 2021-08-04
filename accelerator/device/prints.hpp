@@ -1,7 +1,7 @@
 #ifndef PRINTS_HPP
 #define PRINTS_HPP
 //#define HW_DEBUG
-//#define EMUPRINT
+#define EMUPRINT
 
 //MACRO Stringification
 #define _IN_QUOTES(x) #x

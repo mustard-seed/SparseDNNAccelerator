@@ -377,7 +377,7 @@ __kernel void kernelIAMover (
 						}
 					}
 				} // for over iRowInSPTile
-				#if !(defined(ARRIA10) || defined(STRATIX10))
+				#if (defined(ARRIA10) || defined(STRATIX10))
 				iInstTile++;
 				#endif
 			} // if proceed
