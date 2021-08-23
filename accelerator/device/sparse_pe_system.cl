@@ -388,9 +388,9 @@ __kernel void kernelIAMover (
 __attribute__((max_global_work_dim(0)))
 __kernel void kernelWMover (
 		//Memory port for instructions
-		__global const t_weight_mover_instruction* restrict pInst,
-		__global const t_weight_dram_block* restrict pW,
-		__global const t_bias* restrict pBias,
+		VOLATILE __global const t_weight_mover_instruction* restrict pInst,
+		VOLATILE __global const t_weight_dram_block* restrict pW,
+		VOLATILE __global const t_bias* restrict pBias,
 		unsigned int numInstruction
 	)
 {
@@ -1978,7 +1978,7 @@ __kernel void kernelIATee ()
 #if defined(MISC_ENGINE)
 __attribute__((max_global_work_dim(0)))
 __kernel void kernelMiscControlMover (
-		__global t_misc_instruction* restrict pInstruction,
+		VOLATILE __global t_misc_instruction* restrict pInstruction,
 		unsigned int numInstruction
 	)
 {
@@ -2460,7 +2460,7 @@ __kernel void kernelOAMover (
 				} //iterOutputTileHeightxWidthPerCol 
 
 				//Increment the instruction count.
-				#if !(defined(ARRIA10) || defined(STRATIX10))
+				#if (defined(ARRIA10) || defined(STRATIX10))
 					iInstTile++;
 				#endif
 			} // if proceed
@@ -4096,10 +4096,10 @@ __kernel void kernelFilterBuffer ()
 
 					#if (WEIGHT_DRAM_SIZE_GEQ_PE_SIZE == TRUE)
 						numDramBlockInFilter[regWriteSide] = 
-							((control.numTransferBlocks-1) >> WEIGHT_WIDE_SIZE) + 1;
+							((control.numTransferBlocks-1) >> WEIGHT_WIDE_SIZE_OFFSET) + 1;
 					#else
 						numDramBlockInFilter[regWriteSide] = 
-							control.numTransferBlocks << WEIGHT_WIDE_SIZE;
+							control.numTransferBlocks << WEIGHT_WIDE_SIZE_OFFSET;
 					#endif
 					
 					iDramBlockInFilterWrite = 0;

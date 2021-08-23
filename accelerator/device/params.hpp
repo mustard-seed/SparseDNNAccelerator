@@ -36,8 +36,15 @@
 // #define PACKET_SIZE 1
 
 //Assume on Arria 10 Dev Kit, the memory bandwidth is on
-#define DDR_BANDWIDTH_GBS_INT 17
-#define FMAX_MHZ 221
+// #if defined(ARRIA10)
+// #define DDR_BANDWIDTH_GBS_INT 17
+// #define FMAX_MHZ 221
+// #elif defined(C5SOC)
+// #define DDR_BANDWIDTH_GBS_INT 6
+// #define FMAX_MHZ 130
+// #endif
+#define DDR_BANDWIDTH_GBS_INT 6
+#define FMAX_MHZ 130
 #define DDR_BYTES_PER_CYCLE ((DDR_BANDWIDTH_GBS_INT * 1000 - 1) / FMAX_MHZ + 1)
 
 #if defined(FULL_SYSTEM)
@@ -317,7 +324,9 @@
 //==============End of derived marcos for weights
 
 #define WMOVER_FILTER_DRAM_BLOCK_ACCESS_UNROLL_FACTOR 4
-#define KERNEL_CACHE_SIZE_VALUE_BYTE 32768
+//Arria 10GX1150
+//#define KERNEL_CACHE_SIZE_VALUE_BYTE 32768
+#define KERNEL_CACHE_SIZE_VALUE_BYTE 16384
 #define KERNEL_CACHE_DEPTH (KERNEL_CACHE_SIZE_VALUE_BYTE / WEIGHT_DRAM_SIZE_VALUE_BYTE)
 
 #define MAX_OUTPUT_TILE_WIDTH_PER_COL 8 

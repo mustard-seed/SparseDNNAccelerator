@@ -18,7 +18,7 @@ if (NOT GLOBAL_CONFIG_SET)
 # RelWithDebInfo
 ###############################################
 
-    set(CMAKE_BUILD_TYPE Debug)
+    set(CMAKE_BUILD_TYPE Release)
     
     set(CMAKE_EXPORT_COMPILE_COMMANDS TRUE)
     if (CMAKE_BUILD_TYPE MATCHES "Debug")

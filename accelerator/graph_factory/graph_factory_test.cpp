@@ -40,10 +40,14 @@ class testFixture : public ::testing::Test {
 protected:
     std::string aocxBinaryFile;
     GraphRuntime::AcceleratorWrapper accelerator;
+#if !defined(C5SOC)
     //TODO: change the path in anounymous submission
     //std::string testPrefix = "/home/jamesliu/thesis/SparseDNNAccelerator/accelerator/test0/FPL_traces/";
     //std::string testPrefix = "/home/jamesliu/thesis/SparseDNNAccelerator/accelerator/test0/gcp_traces/traces/";
     std::string testPrefix = "/home/jamesliu/thesis/SparseDNNAccelerator/Build_A10Ref/graph_factory/";
+#else
+    std::string testPrefix = "/home/root/";
+#endif
 
     void SetUp() override;
 
@@ -455,7 +459,7 @@ TEST_F(testFixture, vgg16_imagenet_dense_c2r4)
 void testFixture::SetUp()
 {
 #ifdef C5SOC
-    aocxBinaryFile = "device_utils.aocx";
+    aocxBinaryFile = "sparse_pe_system.aocx";
 #else
 #if defined(EMULATE)
     aocxBinaryFile = "c5_mac8bitx4_c_model.aocx";

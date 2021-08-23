@@ -670,10 +670,7 @@ void instruction_generator(//Type of the operation
 //                        instructionIA.numTBPerStrip = (op == CONVOLUTION) ?
 //                                    (t_ushort) DIVIDE_CEIL(numIAMoverInputChannelsPerGroup0, PE_ACTIVATION_BLOCK_SIZE_IN_WORD)
 //                                  : ACTIVATION_WIDE_SIZE;
-                        instructionIA.numDramBlockPerStrip = ((op == CONVOLUTION) || (op == ELT_ADD) || (op == CONCATENATION)) ?
-                                    (t_ushort) DIVIDE_CEIL(numIAMoverInputChannelsPerGroup0, PE_ACTIVATION_BLOCK_SIZE_IN_WORD)
-                                  : ACTIVATION_WIDE_SIZE;
-                        if (op==CONVOLUTION || op == CONCATENATION) {
+                        if (op==CONVOLUTION) {
                             instructionIA.numTBPerStrip =
                                     (t_ushort) DIVIDE_CEIL(numIAMoverInputChannelsPerGroup0, PE_ACTIVATION_BLOCK_SIZE_IN_WORD);
                             #if (ACTIVATION_DRAM_SIZE_GEQ_PE_SIZE == TRUE)
@@ -687,27 +684,36 @@ void instruction_generator(//Type of the operation
                                     DIVIDE_CEIL(numIAMoverInputChannelsPerGroup0, PE_ACTIVATION_BLOCK_SIZE_IN_WORD);
                             #endif
                         }
-                        else if (op == ELT_ADD) {
+                        else if (op == CONCATENATION) {
                             //MISC operations do not really care about the nubmer of TB per strip
-                            instructionIA.numTBPerStrip =
-                                    (t_ushort) DIVIDE_CEIL(numIAMoverInputChannelsPerGroup0, PE_ACTIVATION_BLOCK_SIZE_IN_WORD);
-                            #if (ACTIVATION_DRAM_SIZE_GEQ_PE_SIZE == TRUE)
-                                instructionIA.numDramBlockPerStrip = (t_ushort) DIVIDE_CEIL(
-                                                DIVIDE_CEIL(numIAMoverInputChannelsPerGroup0, PE_ACTIVATION_BLOCK_SIZE_IN_WORD),
-                                                ACTIVATION_WIDE_SIZE
-                                            ) * 2;
-                            #else
-                                instructionIA.numDramBlockPerStrip = (t_ushort)
-                                    ACTIVATION_WIDE_SIZE * 2 *
-                                    DIVIDE_CEIL(numIAMoverInputChannelsPerGroup0, PE_ACTIVATION_BLOCK_SIZE_IN_WORD);
-                            #endif
+                            instructionIA.numDramBlockPerStrip = (t_ushort) DIVIDE_CEIL(
+                                        numIAMoverInputChannelsPerGroup0,
+                                        ACTIVATION_DRAM_SIZE_BYTE
+                                        );
+                        }
+                        else if (op == ELT_ADD) {
+                            //MISC operations do not really care about the nubmer of TB per striP
+//                            #if (ACTIVATION_DRAM_SIZE_GEQ_PE_SIZE == TRUE)
+//                                instructionIA.numDramBlockPerStrip = (t_ushort) DIVIDE_CEIL(
+//                                                DIVIDE_CEIL(numIAMoverInputChannelsPerGroup0, PE_ACTIVATION_BLOCK_SIZE_IN_WORD),
+//                                                ACTIVATION_WIDE_SIZE
+//                                            ) * 2;
+//                            #else
+//                                instructionIA.numDramBlockPerStrip = (t_ushort)
+//                                    ACTIVATION_WIDE_SIZE * 2 *
+//                                    DIVIDE_CEIL(numIAMoverInputChannelsPerGroup0, PE_ACTIVATION_BLOCK_SIZE_IN_WORD);
+//                            #endif
+                                instructionIA.numDramBlockPerStrip = (t_ushort) 2 * DIVIDE_CEIL(
+                                            numIAMoverInputChannelsPerGroup0,
+                                            ACTIVATION_DRAM_SIZE_BYTE
+                                            );
                         }
                         else {//pooling
                             //MISC operations do not really care about the nubmer of TB per strip
                             instructionIA.numTBPerStrip =
                                     (t_ushort) DIVIDE_CEIL(numIAMoverInputChannelsPerGroup0, PE_ACTIVATION_BLOCK_SIZE_IN_WORD);
                             #if (ACTIVATION_DRAM_SIZE_GEQ_PE_SIZE == TRUE)
-                                instructionIA.numDramBlockPerStrip = ACTIVATION_WIDE_SIZE;
+                                instructionIA.numDramBlockPerStrip = 1;
                             #else
                                 instructionIA.numDramBlockPerStrip = 1;
                             #endif
@@ -749,18 +755,10 @@ void instruction_generator(//Type of the operation
                                     + memIA1RowStride * iterMDense
                                     + memIA1ColStride * iterNDense
                                     + iterGroup * numIAMoverInputChannelsPerGroup1);
-                            #if (ACTIVATION_DRAM_SIZE_GEQ_PE_SIZE == TRUE)
-                                instructionIA.numDramBlockPerStrip
-                                        = (t_ushort) DIVIDE_CEIL(
-                                            DIVIDE_CEIL(numIAMoverInputChannelsPerGroup1, PE_ACTIVATION_BLOCK_SIZE_IN_WORD),
-                                            ACTIVATION_WIDE_SIZE
-                                            );
-                            #else
-                                instructionIA.numDramBlockPerStrip
-                                        = (t_ushort)
-                                        ACTIVATION_WIDE_SIZE *
-                                        DIVIDE_CEIL(numIAMoverInputChannelsPerGroup1, PE_ACTIVATION_BLOCK_SIZE_IN_WORD);
-                            #endif
+                            instructionIA.numDramBlockPerStrip = (t_ushort) DIVIDE_CEIL(
+                                        numIAMoverInputChannelsPerGroup0,
+                                        ACTIVATION_DRAM_SIZE_BYTE
+                                        );
                             instructionIA.memBlockColStripStride = (t_ushort)memIA1ColStride;
                             instructionIA.memBlockRowStripStride = (t_ushort)memIA1RowStride;
                         }

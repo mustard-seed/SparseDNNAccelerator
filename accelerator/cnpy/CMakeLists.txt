@@ -10,10 +10,14 @@
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 
 #option(ENABLE_STATIC "Build static (.a) library" ON)
+
 if (ZLIB_ROOT)
     message (DEBUG "ZLIB_ROOT is set to ${ZLIB_ROOT}")
+    message (DEBUG "ZLIB_INCLUDE_DIRS is set to ${ZLIB_INCLUDE_DIRS}")
+    message (DEBUG "ZLIB_LIBRARIES is set to ${ZLIB_LIBRARIES}")
+else()
+    find_package(ZLIB REQUIRED)
 endif()
-find_package(ZLIB REQUIRED)
 
 if (BOARD_NAME MATCHES "DE10Standard")
     find_package (Boost 1.56 REQUIRED)
