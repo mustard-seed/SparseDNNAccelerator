@@ -12,17 +12,17 @@ This repository contains the source code of the CNN inference accelerator. Below
 ```
 accelerator/
 ├── accelerator_wrapper 	# Host-side encapsulation of the accelerator
-├── cnpy 					# 3rd party library for loading NumPy data into C++
-├── common 					# Host-side utilities. Include: value quantization, sparse tensor compression, and accelerator instruction generation.
-├── device 					# Description of the accelerator in OpenCL (mostly) and Verilog.
-├── full_system 			# Tests that cover the correctness of the accelerator, instruciton generation, and the accelerator
-├── graph_factory 			# Encapsulation of CNN model
-├── imagenet_demo 			# Demo that runs inference on ImageNet
+├── cnpy 					        # 3rd party library for loading NumPy data into C++
+├── common 					      # Host-side utilities. Include: value quantization, sparse tensor compression, and accelerator instruction generation.
+├── device 					      # Description of the accelerator in OpenCL (mostly) and Verilog.
+├── full_system 			    # Tests that cover the correctness of the accelerator, instruciton generation, and the accelerator
+├── graph_factory 			  # Encapsulation of CNN model
+├── imagenet_demo 			  # Demo that runs inference on ImageNet
 ├── latency_model_validation # Tests that cover the correctness of the latency model, which is part of the instruction generation process.
-├── model_container 		# Data structures useful for loadiing CNN layer descriptions from YAML files.
-├── spw_pe_test 			# Tests that focus on the PE correctness.
-├── spw_tensor_test 		# Tests that validate the correcctness of the tensor compression and decompression.
-└── yaml-cpp 				# 3rd party library for loading YAML file into C++.
+├── model_container 		  # Data structures useful for loadiing CNN layer descriptions from YAML files.
+├── spw_pe_test 			    # Tests that focus on the PE correctness.
+├── spw_tensor_test 		  # Tests that validate the correcctness of the tensor compression and decompression.
+└── yaml-cpp 				      # 3rd party library for loading YAML file into C++.
 ```
 
 ## How to Run the Tests
