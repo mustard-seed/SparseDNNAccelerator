@@ -8,7 +8,8 @@ SET(CMAKE_SYSTEM_VERSION 1)
 SET(CMAKE_C_COMPILER   arm-linux-gnueabihf-gcc)
 SET(CMAKE_CXX_COMPILER arm-linux-gnueabihf-g++)
 
-# where is the target environment
+# where is the complier environment
+# PLEASE MODIFY SO THAT THE PATH REFLECTS THE SITUATION ON YOUR PLATFORM
 SET(CMAKE_FIND_ROOT_PATH  /home/jamesliu/intelFPGA/18.0/embedded/ds-5/sw/gcc/arm-linux-gnueabihf CACHE STRING "Path to the ARM environment")
 
 # search for programs in the build host directories
