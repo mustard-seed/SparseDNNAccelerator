@@ -11,95 +11,109 @@ This repository contains the source code of the CNN inference accelerator. Below
 ## File Organization
 ```
 accelerator/
-├── accelerator_wrapper 	# Host-side encapsulation of the accelerator
-├── cnpy 					        # 3rd party library for loading NumPy data into C++
+├── accelerator_wrapper 		  # Host-side encapsulation of the accelerator
+├── cnpy 					      # 3rd party library for loading NumPy data into C++
 ├── common 					      # Host-side utilities. Include: value quantization, sparse tensor compression, and accelerator instruction generation.
 ├── device 					      # Description of the accelerator in OpenCL (mostly) and Verilog.
-├── full_system 			    # Tests that cover the correctness of the accelerator, instruciton generation, and the accelerator
-├── graph_factory 			  # Encapsulation of CNN model
-├── imagenet_demo 			  # Demo that runs inference on ImageNet
-├── latency_model_validation # Tests that cover the correctness of the latency model, which is part of the instruction generation process.
-├── model_container 		  # Data structures useful for loadiing CNN layer descriptions from YAML files.
-├── spw_pe_test 			    # Tests that focus on the PE correctness.
-├── spw_tensor_test 		  # Tests that validate the correcctness of the tensor compression and decompression.
+├── full_system 			      # Tests that cover the correctness of the accelerator, instruciton generation, and the accelerator
+├── graph_factory 			  	  # Encapsulation of CNN model
+├── imagenet_demo 			  	  # Demo that runs inference on ImageNet
+├── latency_model_validation 	  # Tests that cover the correctness of the latency model, which is part of the instruction generation process.
+├── model_container 		  	  # Data structures useful for loadiing CNN layer descriptions from YAML files.
+├── spw_pe_test 			      # Tests that focus on the PE correctness.
+├── spw_tensor_test 		      # Tests that validate the correcctness of the tensor compression and decompression.
 └── yaml-cpp 				      # 3rd party library for loading YAML file into C++.
 ```
 
-## How to Run the Tests
+## How to build and run the tests?
+
 ### Prerequisites
+
+	- Boost 1.56
+	- zlib
+  
+   In addition, OpenCV 4.0.0 or above is required if you need to run the ImageNet demo. Moreover, if you intend to cross-compile the project's software (e.g. for the ARM SoC on DE10-Standard), these libraries should be cross-compiled too.
+
+   To compile FPGA bitstreams, please make sure you have setted-up Intel FPGA SDK for OpenCL and BSP for the target boards.
+ 
+### Clone this repository and the submodules
+```
+git clone git@github.com:mustard-seed/SparseDNNAccelerator.git
+cd SparseDNNAccelerator
+git submodule update --init --recursive
+```
+
+### Initialize a build directory and invoke CMake
+
+In the examples below, let us assume the initial path is SparseDNNAccelerator.
+
+Example 1: Host software will run on an x86 platform. Target board is Intel Arria 10 FPGA Dev. Kit.
+
+```
+mkdir build
+cd build
+cmake -DCMAKE_TOOLCHAIN_FILE=../accelerator/a10ref.cmake \
+	-DBOARD_NAME=A10REF \
+	-DOpenCV_DIR=<path to OpenCV> \
+	../accelerator
+```
+
+The flag **CMAKE_TOOLCHAIN_FILE** is mandatory. It must point to a CMake configuration file that specifies the C++ compiler. See [accelerator/a10ref.cmake](../accelerator/a10ref.cmake), [accelerator/a10pac.cmake](../accelerator/a10pac.cmake), and [accelerator/de10standard.cmake](../accelerator/de10standard.cmake)
+
+The flag **BOARD_NAME** is mandatory. Currently, the supported values are DE10Standard, A10PAC, and A10REF. These correspond to Terasic DE10-Standard, Intel FPGA Arria 10 PAC, and Intel FPGA Arria 10 Dev. Kit, respectively. Under the hood, these flags are used by some targets' CMakeLists to link the correct Intel FPGA libraries to the host-side software. For instance, see [accelerator/full_system/CMakeLists.txt](accelerator/full_system/CMakeLists.txt).
+
+Example 2: Host software will run on a DE10-Standard, which has ARM processors. Cross-compilation is required.
+Make sure to modify the CMAKE_FIND_ROOT_PATH variable in accelerator/de10standard.cmake first.
+
+```
+mkdir build
+cd build
+cmake -DOpenCV_DIR=<path to OpenCV> \
+	-DBOOST_ROOT=<path to Boost> \
+	-DBOOST_INCLUDEDIR=<path to Boost headers> \
+	-DBOOST_LIBRARYDIR=<path to Boost libraries> \
+	-DBoost_NO_SYSTEM_PATHS=ON -DZLIB_ROOT=<path to zlib>  \
+	-DZLIB_LIBRARIES=<path to the zlib static library (.a)> \
+	-DZLIB_INCLUDE_DIRS=<path to zlib headers> \
+	-DCMAKE_TOOLCHAIN_FILE=../accelerator/de10standard.cmake \
+	-DBOARD_NAME=DE10Standard \
+	./accelerator
+```
+
 ### ImageNet Demo
-### Graph Factory Test
-### Validation Tests
+We assume that test is run on an x86 host that is equipped with an Intel Arria 10 FPGA Dev. Kit. First, change path to the build directory and build the ImageNet Demo.
 
-## Design of the Sparse CNN Inference Accelerator
-### Overview of the Accelerator
+```
+make imagenet_demo -j8
+```
 
-![System architecture](docs/system_architecture.png)
+This will create a binary, imagenet_demo, under 
+```
+build/imagenet_demo
+```
 
-The accelerator is made of OpenCL kernels connected by *channels*, which are FIFO-like features supported by Intel FPGA SDK for OpenCL. The modules are grouped into blocks according to their functionalities, and we briefly describe the blocks below:
+Then, download the accelerator bitstreams and CNN models according to the [instructions](docs/bitstreams_and_models.md).
 
-- **Convolution Engine (CONV Engine)** processes convolutional (CONV) and fully-connected layers (FC). 
-- **Miscellaneous Engine (MISC Engine)** processes max-pooling, average-pooling, concatenation, and element-wse addition layers.
-- **Input Tile Controller (ITC)** and **Output Tile Controller (OTC)** control data access of buffers inside the CONV engine.
-- **MISC Tile Controller (MTC)** guides the MISC engine to perform operations in a tile-by-tile fashion.
-- **Input Reader, Weight Reader, and Output Writer** move data (weights, neurons) between the accelerator and the off-chip memory (DRAM).
+Next, copy the bitstream that you are interested in testing into the work directory, where the image\_demo binary is, and rename the bitstream file to "sparse_pe_system.aocx". Alternatively, one can modify the variable "std::string aocxBinaryFile" inside image_demo.cpp, but doing so requires re-compiling the code.
 
-All OpenCL kernels are implemented in [accelerator/device/sparse_pe_system.cl](accelerator/device/sparse_pe_system.cl)
+Also copy [accelerator/imagenet_demo/caffe_words.yaml](accelerator/imagenet_demo/caffe_words.yaml), [accelerator/imagenet_demo/demo_ground_truth.yaml](accelerator/imagenet_demo/demo_ground_truth.yaml), and [accelerator/imagenet_demo/preprocess.yaml](accelerator/imagenet_demo/preprocess.yaml) into the work directory.
 
-A CPU-host is responsible for converting a given CNN into instructions for the accelerator blocks, and transfer the instructions as well as weights/biases to the accelerator before making any inference call. All instructions and weights are stored on the off-chip DRAM. At the start of each inference call, the host transfers the input neurons to the off-chip DRAM. For the execution of each layer, the host directs the accelerator to access instructions from the off-chip DRAM. Although the accelerator leverages data-reuse opportunity within each layer by buffering data on the on-chip memory, the intermediate results that proceed from each layer are buffered in the off-chip DRAM. At the end of each inference call, the host transfers the results from the off-chip DRAM to the host-side.
+Finally, to test the accelerator on one image (not necessarily from ImageNet dataset):
+```
+./imagenet_demo --model=<path to the model topology file, *_trace.yaml> \
+  --param=<path to the model parameter file, *_parameters.npz> \
+  --image=<path to the image>
+```
 
-### The Convolution Engine
-![Convolution Engine](docs/sys_conv_engine.png)
+Alternatively, to validate the inference accelerator on the entire ImageNet validation set:
+```
+./imagenet_demo --model=<path to the model topology file, *_trace.yaml> \
+  --param=<path to the model parameter file, *_parameters.npz> \
+  --val=true \
+  --folder=<path to the ImageNet validation folder> \
+  --numSamples=<number of samples to validate on. If not specified, then the entire validation set is used>
+```
 
-The convolution engine consists of a systolic-array of processing elements (PEs), weight buffers, input neuron buffers, and output neuron buffers. Weights and input neurons are propagated along the rows and columns, respectively. The topology is inspired by the work of Wei et al. [2]. Each PE performs MAC operations between weights and input neurons in a SIMD fashion. MAC operation results are shifted out of the systolic-array along the columns into the output neuron buffers, where ReLU activation function is applied.  
-
-The buffers are implemented as ping-pong buffers to overlap data access from off-chip DRAM with transfers to and from the systolic array.
-
-Since the size of input and output neuron tensors are large in typicial convolutional and fully-connected layers, tiling is used to breakdown the tensors. Please refer to the author's thesis (will be made available by November 2021) for details. 
-### Micro-range Clustered Bank-Balanced Sparsity
-There are two challenges that we need to address in order to reap gains from weight sparsity.
-
-1. Gathering the right input neurons to the sparse weights at the right cycles. This is trivial if both weights and neurons are dense. However, in the presence of weight sparsity, crossbars are required for selecting the right input neurons to be multiplied with the weights. The fewer the constraints on the pattern of weight sparsity, the more complex the crossbars are.
-
-2. Balancing the workload across several rows of PE. Without any constraint, some PE rows might see more sparse weights than the rest, and the overall latency of the systolic array is limited by the slowest-moving rows.
-
-We propose a fine-grained constraint on the sparsity pattern, Micro-range Clustered Bank-Balanced Sparsity (MCBBS), to address these issues. MCBBS is inspired by Bank-Balanced Sparsity [3], which is proposed for a 1D systolic array accelerator for long short-term memories (LSTMs).
-
-Below is a toy example on how MCBBS is enforced on 4 1x1 filters. Note that other filter sizes are actually more common, but we choose 1x1 for simplicity.
-
-1. The filters before pruning:
-
-![1. The filters before pruning](docs/mcbbs_dense.png) 
-
-2. Grouping adjacent weights into clusters, and grouping consecutive clusters into pruning ranges:
-
-![2. Forming clusters and pruning ranges](docs/mcbbs_pruning_ranges.png)
-
-3. Rank the clusters in each pruning range according to their L1 norms, and prune the least significant clusters. All the prunings ranges of filtes from the same layer are pruned with the same sparsity level.
-
-![3. Prune each pruning range](docs/mcbbs_prune.png)
-
-4. After pruning, all filters retain the same number of sparse weights. Morever, the matching input neuron of each sparse weight is guaranteed to reside in a relative small window that has the same size as a pruning range.
-
-![4. After MCBBS pruning](docs/mcbbs_result.png)
-
-Generally, MCBBS is parametrized by the following values:
-
-- C: The size of each cluster in terms of the number of weights.
-- R: The size of each pruning range in terms of the number of clusters.
-
-
-The purpose of clustering is to allow consecutive sparse weights to share indices, which are used by the PEs to select the right input neurons for multiplication with the weights. On the other hand, pruning ranges narrows the selection window of input neurons for each sparse weight.
-
-### Supporting MCBBS in PEs
-To support MCBBS in each systolic array PE, we introduce neuron registers to buffer input neurons and multiplexer to select neurons that should be multiplied with incoming sparse weights. The SIMD MAC operations in each PE is spread over several consecutive pruning ranges, which form a *processing window*. The number of multipliers inside a PE is the product between the cluster size and the processing window size: C \* P. Sparse weights arrive at each PE as weight fetch blocks. Each weight fetch blocks is made of interleaving weight clusters from pruning ranges inside the same processing window. We also assign an index to each weight cluster. The value of the index is the position of the cluster inside its pruning range. The PE uses weight indices as selection signals for the neuron multiplexer. The neuron registers buffer all the input neurons that span over one processing window, an they are updated as weights from a new processing window arrives. The following figure shows a PE performing MAC operations between a sparse filter and dense neuron from the convolution window:
-
-![pe_processing.png](docs/pe_processing.png)
-
-### Optimization: Coalescing Adjacent PEs in the same Systolic Array Column
-Since PEs in the same systolic array column see the same input neurons, and all take the same number of cycles to processing filters that pass through them, we can coalescing adjacent PEs in the same systolic array column. This enables the PEs to share neuron registers, neuron FIFO connections, and control logic across the coalesced PEs, leading to FPGA resource saving. The number of PEs that are packed to the same group is denoted as *G*. 
-
-![pe_groups.png](docs/pe_groups.png)
 
 ## Results
 |    Configurations    |  ALM       |  DSP      |  M20K     |  fMax (MHz)  | VGG-16 Latency (ms)        | ResNet-50 v1.5 Latency (ms)    |
@@ -122,6 +136,14 @@ Details of the CNN models:
 - Weight and neuron precisions: INT8
 - VGG-16: Retains 30% of the MAC operations after pruning. 
 - ResNet-50 v1.5: Retains 40% of the MAC operations after pruning. The average-pooling layer is modified to divide the sum of each feature map by 64 instead of the size of the feature map. 
+
+## How to modify the accelerator?
+First, play around with the accelerator configurations in [accelerator/device/params.hpp](accelerator/device/params.hpp). Please see the [detailed explanation](docs/accelerator_configuration.md) of the user-configurable flags.
+
+For a more detailed understanding of the design, please consult our FPL2021 paper and the M.A.Sc. thesis on this project (will be released by November 2021). We have also included a [short description](docs/accelerator_design.md) in this repository.
+
+## Known Issues
+To be added.
 
 ## Citation
 If your research benefits from this work, please kindly cite it as below:
