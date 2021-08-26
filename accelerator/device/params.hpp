@@ -5,9 +5,6 @@
 //#define SPW_SYSTEM
 #define DENSE_SYSTEM
 #define OA_PING_PONG
-//#define WMOVER_STREAM_CACHE
-//#define OAMOVER_TB_STREAM_CACHE
-//#define WMOVER_WEIGHT_COALESCE_CACHE
 //#define HW_SYNC
 
 #define NOOP
@@ -62,7 +59,6 @@
 	#define PE_ROW_GROUPS 1
 	#define MISC_COLS 1
 #endif
-#define MISC_UNROLL 16
 
 #define PE_ROWS (PE_ROWS_PER_GROUP * PE_ROW_GROUPS)
 //Derived parameter
@@ -92,10 +88,6 @@
 #define CHANNEL_DEPTH 1
 #define OA_DRAIN_CHANNEL_DEPTH 1
 
-#define SIMD_SIZE 2
-#define SYNC_SIZE 8
-#define MAX_SIMD_BLOCK_INDEX 0x0FF
-
 //Activation memory region offsets
 //in terms of DRAM blocks
 //TB count memory region offsets
@@ -105,13 +97,6 @@
 #define MEM_ACTIVATION_TB_REGION_SIZE_PER_SLICE (1 << 18)
 
 
-//TODO: Change COMPRESSION_WINDOW_SIZE, TRANSFER_SIZE, CLUSTER_SIZE, and related offsets and masks if compression configuration changes
-//#define COMPRESSION_WINDOW_SIZE 8 //compression window size in terms of clusters
-#define CLUSTER_TO_WINDOW_SHIFT 0X3
-#define CLUSTER_TO_WINDOW_REMAINDER_MASK 0x07
-//#define TRANSFER_SIZE 2 //transfer block size in terms of clusters
-//#define CLUSTER_TO_TRANSFER_SIZE_SHIFT 0X1
-//#define CLUSTER_TO_TRANSEFER_SIZE_REMAINDER 0X1
 #define CLUSTER_SIZE 2 //cluster size in terms of values
 
 #if (CLUSTER_SIZE == 1)
@@ -203,28 +188,9 @@
 #endif
 #define PE_ACTIVATION_BLOCK_SIZE_IN_WORD_MASK ((1 << PE_ACTIVATION_BLOCK_SIZE_IN_WORD_OFFSET) - 1)
 
-/**
- * Small buffer operand filterign related
- */
-//#define BITMASK_LENGTH COMPRESSION_WINDOW_SIZE
-//#define MAX_NUM_OUTPUT TRANSFER_SIZE
-//#define BITMASK_ACCUM_COUNT_BITWIDTH 2 //$rtoi($clog2(MAX_NUM_OUTPUT) + 1.0)
-//#define BITMASK_INDEX_BITWIDTH 3 //$rtoi($ceil($clog2(COMPRESSION_WINDOW_SIZE)))
-//#define NUM_BITMASK_BYTES 1
-//#define NUM_ACCUM_BITMASK_BYTES 2
-
-//=========================================
 
 #define SURVIVING_COUNT_CLUSTER_INDEX 0X1
 #define SURVIVING_COUNT_TRANSFER_BLOCK_INDEX 0x1
-
-//#define BURST_SIZE_BYTE 32
-//TODO: Change WIDE_SIZE and related offsets when compression configuration changes
-//#define WIDE_SIZE (BURST_SIZE_BYTE/CLUSTER_SIZE/TRANSFER_SIZE)  //Each transfer block takes 4 bytes, so need 8 transfer blocks to populate 256 bits
-//#define WIDE_SIZE_OFFSET 0x2 //Numnber of bits to shift the transfer block index to the right in order to recover the wide offset
-//#define WIDE_SIZE_REMAINDER_MASK 0x3
-
-//#define NUM_CLUSTER_IN_DRAM_SIZE BURST_SIZE_BYTE/CLUSTER_SIZE
 
 #define ACTIVATION_WIDE_SIZE 4
 #define ACTIVATION_WIDE_SIZE_OFFSET 0x2 //Numnber of bits to shift the transfer block index to the right in order to recover the wide offset
